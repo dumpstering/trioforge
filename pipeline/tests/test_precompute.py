@@ -34,9 +34,11 @@ from types import SimpleNamespace
 
 import highspy
 import pytest
+from after_an_add import AfterAnAdd
 
 from trioforge import precompute as pc
 from trioforge.data import catalog as catalog_module
+from trioforge.data.jsonio import load_strict
 from trioforge.data.races import RACE_NAMES
 from trioforge.model import formulas as fm
 from trioforge.model import weapons as wp
@@ -1906,14 +1908,28 @@ def find_catalog():
     return grid.find_catalog()
 
 
-def test_the_real_catalog_gives_the_pool_the_design_expects_for_the_milestone_trio():
+@pytest.fixture(scope="module")
+def after_an_add(tmp_path_factory):
+    """The real catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh."""
     path = find_catalog()
+    if path is None:
+        pytest.skip("derived/catalog.json is not built")
+    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), load_strict(path))
+
+
+@pytest.mark.parametrize("after", [False, True], ids=["the committed catalog", "the catalog after an accepted report"])
+def test_the_real_catalog_gives_the_pool_the_design_expects_for_the_milestone_trio(request, after):
+    path = request.getfixturevalue("after_an_add").path if after else find_catalog()
     if path is None:
         pytest.skip("derived/catalog.json is not built")
     config, meta = grid.load_inputs(TRIO, catalog_path=path)
     wiki = [i for i in config.items if config.levels[i["key"]] in ("strict", "wiki") and i["deity"] is None]
     assert 1000 < len(wiki) < 3000
-    assert not [i for i in config.items if config.levels[i["key"]] == "strict"]  # no seen flags: the strict pool is empty
-    assert config.default_evidence == "wiki" and meta.data_release.startswith("data-")
+    strict = [i for i in config.items if config.levels[i["key"]] == "strict"]
+    for item in strict:  # no seen flags and no listing: what is strict rests on a report, which is public
+        found = {reason["code"] for reason in item["evidence"]["reasons"]}
+        assert "community-report" in found and not found & {"seen-in-game", "eql-catalog"}, item["key"]
+    strict_pool = [i for i in strict if i["deity"] is None]
+    assert config.default_evidence == ("strict" if strict_pool else "wiki") and meta.data_release.startswith("data-")  # (the strict view is the default once its pool is not empty)
     ctx = grid.Context(config)
-    assert len(ctx.pool("wiki", 4)) == len(wiki) and ctx.pool("strict", 4) == []
+    assert len(ctx.pool("wiki", 4)) == len(wiki) and len(ctx.pool("strict", 4)) == len(strict_pool)

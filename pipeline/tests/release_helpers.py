@@ -26,6 +26,7 @@ PLACES = (
 )
 SHA_A = "a1" * 32
 SHA_B = "b2" * 32
+NO_ENTRIES = {"reports": [], "retracted": []}  # a release that lists its community entries and has none
 #: the rules of the invented releases: ids of the real rules file with invented values, enough to say which rule a change is about
 RULES = {
     "buffs.max_slots": {"value": 15, "status": "open"},
@@ -62,6 +63,7 @@ def make_release(destination: Path, **over: Any) -> Path:
         tag="data-2026-10-10", catalog_date="2026-10-14", catalog_sha256=SHA_A, rules_version="2026-10-13", rules=copy.deepcopy(RULES), code_hash=SHA_B,
         solver={"canonical": True, "mip_rel_gap": 0.0, "highs": "1.15.1"}, build_options={"any_rule": "all", "haste_assumed": None}, level=50,
         game_patch="2026-09-22", trios={SLUG: tiers}, evidence=assemble.evidence_map(table), snapshot_id="cd" * 16, parity_sample="0/36",
+        community=copy.deepcopy(NO_ENTRIES),
     )  # fmt: skip
     values.update(over)
     assemble.write_release_json(destination, assemble.release_document(**values))
@@ -72,6 +74,28 @@ def change_release_json(folder: Path, **over: Any) -> None:
     """Change fields of a release folder's ``release.json`` (a field name of the document, as ``release_document`` writes it)."""
     document = assemble.read_release_json(folder)
     document.update(over)
+    assemble.write_release_json(folder, document)
+
+
+def report_entry(key: str, issue: int, *, kind: str = "seen", date: str = "2026-10-14") -> dict[str, Any]:
+    """An entry of ``reports`` as the committed list of reports holds it (an invented key)."""
+    return {"key": key, "kind": kind, "issue": issue, "date": date, "check": "item-window-screenshot"}
+
+
+def retraction_entry(key: str, issue: int, *, reason: str = "withdrawn", date: str = "2026-10-15") -> dict[str, Any]:
+    """An entry of ``retracted`` as the committed list of reports holds it."""
+    return {"key": key, "issue": issue, "date": date, "reason": reason}
+
+
+def set_community(folder: Path, reports: Sequence[Mapping[str, Any]] = (), retracted: Sequence[Mapping[str, Any]] = ()) -> None:
+    """The community entries that the ``release.json`` of a release records (the release must have the field: a legacy one does not)."""
+    change_release_json(folder, community={"reports": [dict(entry) for entry in reports], "retracted": [dict(entry) for entry in retracted]})
+
+
+def drop_community(folder: Path) -> None:
+    """Make a release a legacy one: its ``release.json`` has no ``community`` field, as the release.json of a release made before the entries were recorded."""
+    document = assemble.read_release_json(folder)
+    document.pop("community", None)
     assemble.write_release_json(folder, document)
 
 

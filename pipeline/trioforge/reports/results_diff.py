@@ -39,12 +39,27 @@ A trio or a tier that only one release has is **one** record (``trio``, ``tier``
   made from: the strict pool holds the items of level strict, the wiki pool those of level strict or wiki, so an item that moves from wiki to strict changes
   the strict picks and none of the wiki picks, and one that moves from strict to wiki changes the strict picks only;
 * ``community``: such an item changed its evidence level because a community entry was added (it became strict) or retracted (it stopped being so), and the
-  move changes its membership of the pool of the pick (the same rule);
+  move changes its membership of the pool of the pick (the same rule). **A report that stood outweighed and counts now** is a community cause too: an item that players
+  reported and the wiki marks as gone, or whose zones are closed, stays hidden with the reason ``community-report-outweighed``; when the wiki takes the mark off, or the zone
+  is opened, the item is strict by the report that was in the file already. The cause is the data (the wiki's edit let the report through) **and** the community (nothing else
+  makes the item strict), so one report cannot reach the kits through a later edit of the wiki without the report saying so. An item that moves from strict to hidden because
+  a mark of the wiki came while the report stands is the data's alone (it is listed all the same among the items that stopped being strict, as outweighed);
 * ``new``: a trio or a tier the old release did not have.
 
 A bundle's ``inputs`` field is one hash over the whole rules file and the catalog's levels, so a bundle that differs in that field alone is explained by any input
 change (a rule or a new version of the rules, the catalog, an item record, the patch); a bundle that differs anywhere else is explained only by the code, the rules
 and the patch (the source text of an item is no input of it).
+
+**The community entries** are not inferred from the reason codes of the item table, which a retraction can leave as they were (a duplicate retracted while another report of
+the item stands, a second report of an item already reported, an entry on an item that a patch or research removed). ``release.json`` records them
+(:mod:`trioforge.precompute.assemble`: ``community``, the entries as the committed list holds them), and the report compares them by item and issue: the ones **added**, the ones
+**retracted**, the ones **taken out of the file with no retraction**, and the ones **changed** in place (the fields that differ). A release made before the field existed lists
+none: the report says so once ("the previous release does not list its community entries"), and takes no entry for added or retracted. The entries of the release that follows it
+are listed as **recorded in this release for the first time** (``first``: the reports and the retractions, each entry, and the Markdown counts them): they were recorded before,
+and nothing says when. What the entries did to the evidence is a
+separate list: the items that are strict now because of a report (``strict_gained``) and the ones that stopped being so (``strict_lost``), each with ``why``: the report was
+``retracted``, or it is ``outweighed`` and ``by`` which codes (the marks of the wiki, the reasons that say every zone is closed, a removal by a patch or by research; the report
+stands in the file). Both lists are read from the reason codes of the public catalog and not from the levels of the item table, which have the maintainer's private flags merged.
 
 **A change nothing explains is a solver diff**: the same inputs gave another answer. It is a bug unless the value ties (the same ``F``, or the same swaps
 in another order): ``flag`` is ``tie`` for that, and ``solver-diff`` for the bug. The Markdown puts the solver diffs before everything else.
@@ -52,7 +67,7 @@ in another order): ``flag`` is ``tie`` for that, and ``solver-diff`` for the bug
 The Markdown shows the counts and the 20 largest changes of ``F``. The JSON lists every change; nothing is cut, and what the Markdown leaves out it says.
 
 **What is public.** The Markdown is committed, so it names no item whose evidence changed: counts by kind and by cause, the rules and inputs that changed, the
-solver diffs, the largest changes of ``F`` with their causes and no item, and the community entries (public, in ``rules/community-seen.json``). The JSON lists
+solver diffs, the largest changes of ``F`` with their causes and no item, and the community entries (public, in ``rules/community-seen.json``, with their issues). The JSON lists
 the items of every change and the evidence level of every item record that moved, which tells the maintainer's private list of seen items; it is for the
 maintainer and stays in ``build/``.
 """
@@ -71,6 +86,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from trioforge.community import REPORT_FIELDS, RETRACTED_FIELDS
+from trioforge.data.evidence import REMOVAL_CODES, WIKI_MARK_CODES, ZONE_CLOSED_CODES
 from trioforge.data.jsonio import JsonFileError, load_strict, render
 from trioforge.precompute import assemble, shards
 
@@ -88,6 +105,9 @@ GAIN_SLACK = 0.0201  # F and the gain are kept to two decimals, each rounded on 
 SOLVER_FIELDS = ("slots", "classes", "races", "deity", "lore", "stats", "sv", "weight10", "weapon", "item_type", "tier_rule", "owned_only")
 SHOWN_FIELDS = ("id", "name", "match_name", "aliases", "source", "item_type_source")
 COMMUNITY = "community-report"  # the reason code of a strict item that rests on a report from players
+OUTWEIGHED = "community-report-outweighed"  # ... and of an item that players reported but the wiki marks as gone or whose zones are closed: it stays hidden, and the report is only noted
+COMMUNITY_CODES = (COMMUNITY, OUTWEIGHED)  # a community entry is in the record of an item by either
+OUTWEIGHING = WIKI_MARK_CODES | ZONE_CLOSED_CODES  # what the ladder records beside the report it outweighed (a removal by a patch or research records no report: REMOVAL_CODES)
 NOT_FOR_BIS = "not-for-bis"
 #: the rules that decide the arrival tier of an item (shards.arrival_tier)
 ARRIVAL_RULES = frozenset({"tier.max_fresh_drop", "tier.arrival"})
@@ -225,6 +245,14 @@ class Release:
     def tiers(self, slug: str) -> tuple[int, ...]:
         return tuple(self.meta["trios"].get(slug, ()))
 
+    @property
+    def community(self) -> dict[str, dict[tuple[str, int], dict[str, Any]]] | None:
+        """The community entries that ``release.json`` records, ``reports`` and ``retracted`` by ``(key, issue)``; None for a release made before they were recorded."""
+        recorded = self.meta.get("community")
+        if recorded is None:
+            return None
+        return {name: {(entry["key"], entry["issue"]): entry for entry in recorded[name]} for name in ("reports", "retracted")}
+
     def items(self) -> dict[str, dict[str, Any]]:
         """The records of the item table by key, each with the table's defaults filled in and the evidence read as ``{"level", "codes"}``."""
         if self._items is None:
@@ -352,9 +380,17 @@ class ItemChange:
     """How the record of one item differs between the releases, and what that explains.
 
     ``fields`` are the fields that differ (``record`` for an item that only one release has), ``community`` is ``added`` or ``removed`` when the
-    ``community-report`` reason came or went, ``solver_fields`` says that a field the solver reads differs (it explains every pick that wears the item), ``levels``
-    are the evidence level before and after (it explains a pick only where it changes the item's membership of the pool the pick was made from), ``moves_level``
-    that the community entry is why the evidence level moved, and ``causes`` why the record itself changed (in the order of precedence)."""
+    ``community-report`` reason (or ``community-report-outweighed``, which an item the wiki marks as gone or whose zones are closed has instead) came or went, or is ``lifted``
+    when a report that stood outweighed counts now (the item is strict by it and was not), ``solver_fields`` says that a field the solver reads differs (it explains every pick
+    that wears the item), ``levels`` are the evidence level before and after (it explains a pick only where it changes the item's membership of the pool the pick was made
+    from), ``moves_level`` that the community entry is why the evidence level moved, ``data_moves_level`` that a change of the data let it (the mark or the zone that
+    outweighed the report went: the data is a cause of the picks too) and ``causes`` why the record itself changed (in the order of precedence).
+
+    ``gained`` and ``lost`` are what the committed report says of the item, so they are read from the reason codes of the public catalog and never from the levels, which
+    have the maintainer's private flags merged: ``gained`` is that a report made the item strict (``community-report`` is among its codes now and was not), ``lost`` that the
+    report that made it strict no longer does (it was among the codes and is not now). Were they read from the levels, an item the maintainer has
+    seen, whose level does not move, would be missing from a Markdown that is public, and the gap would tell which items they have seen. ``lost_why`` says why it no longer
+    does: ``outweighed`` (``lost_by`` are the codes that outweigh it) or ``retracted`` (see :func:`_why_not_strict`)."""
 
     key: str
     change: str  # "changed", "added" or "removed"
@@ -364,6 +400,11 @@ class ItemChange:
     solver_fields: bool
     moves_level: bool
     causes: list[str]
+    data_moves_level: bool = False
+    gained: bool = False
+    lost: bool = False
+    lost_why: str | None = None
+    lost_by: tuple[str, ...] = ()
 
 
 def _in_pool(level: str | None, pool: str) -> bool:
@@ -385,35 +426,67 @@ def _codes(record: Mapping[str, Any]) -> tuple[str, ...]:
     return record["evidence"]["codes"]
 
 
+def _why_not_strict(codes: set[str], stands: bool | None) -> tuple[str, tuple[str, ...]]:
+    """Why an item that a report made strict is not any more, from the codes it has now: ``outweighed`` and by which codes, or ``retracted``. The ladder records
+    ``community-report-outweighed`` beside the mark of the wiki or the closed zone that outweighs a report it received, and the codes beside it are the marks and the closed zones
+    only; a removal by a patch or by research hides the item before reports are looked at, and records none, so it outweighs the report only if the report stands in the file
+    (``stands``: whether the file of the new release has a report of the item; None when the release does not list its entries, and the removal is taken to outweigh it).
+    Anything else is the report gone: retracted."""
+    if OUTWEIGHED in codes:
+        return "outweighed", tuple(sorted(codes & OUTWEIGHING))
+    removal = codes & REMOVAL_CODES
+    if removal and stands is not False:
+        return "outweighed", tuple(sorted(removal))
+    return "retracted", ()
+
+
 def _item_changes(
     old: Release, new: Release, old_rows: Mapping[str, set[tuple[Any, Any]]], new_rows: Mapping[str, set[tuple[Any, Any]]], inputs: Inputs
 ) -> dict[str, ItemChange]:
     before, after = old.items(), new.items()
     arrival_rule = bool(ARRIVAL_RULES & set(inputs.rules))
+    entries = new.community
+    reported = None if entries is None else {key for key, _ in entries["reports"]}  # (the items that have a report in the file of the new release)
     found: dict[str, ItemChange] = {}
     for key in sorted(set(before) | set(after)):
         a, b = before.get(key), after.get(key)
         if a is None or b is None:
             levels = ((a or {}).get("evidence", {}).get("level"), (b or {}).get("evidence", {}).get("level"))
-            found[key] = ItemChange(key, "added" if a is None else "removed", ["record"], levels, None, False, False, ["data"])
+            # a record that is new, and carries a community code, is a community change as well: the report was recorded already (a new entry is listed as one), the page is new
+            community = "added" if a is None and any(code in COMMUNITY_CODES for code in _codes(b)) else None
+            gained = a is None and COMMUNITY in _codes(b)
+            moves = gained and levels[1] == "strict"
+            found[key] = ItemChange(
+                key, "added" if a is None else "removed", ["record"], levels, community, False, moves, ["data", "community"] if community else ["data"],
+                data_moves_level=moves, gained=gained,
+            )  # fmt: skip
             continue
         fields = [name for name in (*SOLVER_FIELDS, *SHOWN_FIELDS) if a.get(name) != b.get(name)]
         old_level, new_level = a["evidence"]["level"], b["evidence"]["level"]
-        had, has = COMMUNITY in _codes(a), COMMUNITY in _codes(b)
+        had, has = any(code in COMMUNITY_CODES for code in _codes(a)), any(code in COMMUNITY_CODES for code in _codes(b))
         community = "added" if has and not had else "removed" if had and not has else None
-        moves = (community == "added" and new_level == "strict" and old_level != "strict") or (
+        # a report that stood outweighed (by a mark of the wiki, by a zone that was closed) counts now: the item is strict by it and was not
+        lifted = community is None and COMMUNITY in _codes(b) and new_level == "strict" and old_level != "strict"
+        if lifted:
+            community = "lifted"
+        moves = (community in ("added", "lifted") and new_level == "strict" and old_level != "strict") or (
             community == "removed" and old_level == "strict" and new_level != "strict"
         )
         if a["evidence"] != b["evidence"]:
             fields.append("evidence")
         if not fields:
             continue
-        other_codes = {c for c in _codes(a) if c != COMMUNITY} != {c for c in _codes(b) if c != COMMUNITY}
+        other_codes = {c for c in _codes(a) if c not in COMMUNITY_CODES} != {c for c in _codes(b) if c not in COMMUNITY_CODES}
         level_unexplained = old_level != new_level and not moves
         solver_fields = any(name in SOLVER_FIELDS for name in fields) or ((NOT_FOR_BIS in _codes(a)) != (NOT_FOR_BIS in _codes(b)))
         data = any(name not in ("evidence", "arrival") for name in fields) or level_unexplained or other_codes
         causes = [name for name, applies in (("data", data), ("community", community is not None)) if applies]
-        found[key] = ItemChange(key, "changed", sorted(fields), (old_level, new_level), community, solver_fields, moves, causes)
+        lost = COMMUNITY in _codes(a) and COMMUNITY not in _codes(b)  # (the report made the item strict, and does not any more: retracted, or outweighed)
+        lost_why, lost_by = _why_not_strict(set(_codes(b)), None if reported is None else key in reported) if lost else (None, ())
+        found[key] = ItemChange(
+            key, "changed", sorted(fields), (old_level, new_level), community, solver_fields, moves, causes, data_moves_level=lifted,
+            gained=COMMUNITY in _codes(b) and COMMUNITY not in _codes(a), lost=lost, lost_why=lost_why, lost_by=lost_by,
+        )  # fmt: skip
     for key in sorted(set(old_rows) & set(new_rows)):
         shown = [
             name
@@ -436,6 +509,44 @@ def _item_changes(
     return found
 
 
+# ---- the community entries -----------------------------------------------------------------------------------------------------------------
+
+
+def _entry_changes(old: Release | None, new: Release) -> dict[str, Any]:
+    """The community entries that differ between two releases, from what ``release.json`` records, compared by ``(key, issue)``: ``added`` (reports the new release has and the
+    old one lacks), ``retracted`` (retractions it has and the old one lacks, with the reason), ``deleted`` (entries of the old release that the new file lists in neither list,
+    and retractions that it no longer lists), ``changed`` (the same item and issue with other fields) and ``note``: the sentence that says a release does not list its entries,
+    if one does not (then nothing is taken for added or retracted: a release without the field is not a release without entries). When it is the previous release that does not,
+    the entries of the new one are ``first``: recorded in this release for the first time, never additions or retractions. A first release has nothing to compare."""
+    found: dict[str, Any] = {"added": [], "retracted": [], "deleted": [], "changed": [], "first": {"reports": [], "retracted": []}, "note": None}
+    if old is None:
+        return found
+    before, after = old.community, new.community
+    if before is None or after is None:
+        found["note"] = f"the {'previous' if before is None else 'new'} release does not list its community entries"
+        if before is None and after is not None:
+            found["first"] = {
+                "reports": [{"key": key, "issue": issue} for key, issue in sorted(after["reports"])],
+                "retracted": [{"key": key, "issue": issue, "reason": after["retracted"][key, issue]["reason"]} for key, issue in sorted(after["retracted"])],
+            }
+        return found
+    found["added"] = [{"key": key, "issue": issue} for key, issue in sorted(set(after["reports"]) - set(before["reports"]))]
+    found["retracted"] = [
+        {"key": key, "issue": issue, "reason": after["retracted"][key, issue]["reason"]} for key, issue in sorted(set(after["retracted"]) - set(before["retracted"]))
+    ]
+    gone_reports = sorted(set(before["reports"]) - set(after["reports"]) - set(after["retracted"]))
+    gone_retractions = sorted(set(before["retracted"]) - set(after["retracted"]))
+    found["deleted"] = [{"key": key, "issue": issue, "was": "report"} for key, issue in gone_reports] + [
+        {"key": key, "issue": issue, "was": "retraction"} for key, issue in gone_retractions
+    ]
+    for name, fields in (("reports", REPORT_FIELDS), ("retracted", RETRACTED_FIELDS)):
+        for key, issue in sorted(set(before[name]) & set(after[name])):
+            differing = [field for field in fields if before[name][key, issue][field] != after[name][key, issue][field]]
+            if differing:
+                found["changed"].append({"key": key, "issue": issue, "list": name, "fields": differing})
+    return found
+
+
 # ---- classifying a change -----------------------------------------------------------------------------------------------------------------
 
 
@@ -450,13 +561,14 @@ class Context:
     def _explains(self, key: str, evidences: Iterable[str | None], *, community: bool) -> bool:
         """Whether the change of an item explains a pick that wears it. A field the solver reads explains every pick; a move of the evidence level explains a pick
         only where it changes the item's membership of the pool the pick was made from (an item that moves from wiki to strict is in the wiki pool before and
-        after); and a move that a community entry made is the community's cause, a move nothing public explains is the data's."""
+        after); and a move that a community entry made is the community's cause, a move nothing public explains is the data's. (A report that stood outweighed and counts
+        now is both: the wiki's edit let it through, and nothing else makes the item strict.)"""
         change = self.items.get(key)
         if change is None:
             return False
         if community:
             return change.moves_level and _changes_pool(change.levels, evidences)
-        return change.solver_fields or (not change.moves_level and _changes_pool(change.levels, evidences))
+        return change.solver_fields or ((not change.moves_level or change.data_moves_level) and _changes_pool(change.levels, evidences))
 
     def causes(self, keys: Iterable[str], scopes: Sequence[Scope]) -> list[str]:
         """Every cause of a change in the picks of these ``scopes`` that wear these item ``keys``, in the order of precedence."""
@@ -886,16 +998,19 @@ def diff(old: str | os.PathLike[str] | Release | None, new: str | os.PathLike[st
             record.update(causes=change.causes, primary=change.causes[0] if change.causes else None, flag=None, items=[change.key])
             changes.append(record)
     changes.sort(key=_sort_key)
+    entries = _entry_changes(before, after)
     summary = _count(changes)
     summary.update(
         release=after.tag,
         previous=before.tag if before is not None else None,
         inputs=inputs.summary() if inputs is not None else None,
         community={
-            "added": sorted(k for k, c in items.items() if c.community == "added"),
-            "removed": sorted(k for k, c in items.items() if c.community == "removed"),
+            **{name: value for name, value in entries.items() if name != "note"},
+            "strict_gained": sorted(k for k, c in items.items() if c.gained),
+            "strict_lost": [{"key": k, "why": c.lost_why, "by": list(c.lost_by)} for k, c in sorted(items.items()) if c.lost],
+            "note": entries["note"],
         },
-        retractions=sum(1 for c in items.values() if c.community == "removed"),
+        retractions=len(entries["retracted"]),
     )
     return Report(after.tag, before.tag if before is not None else None, summary, changes, trial=bool(after.meta.get("trial")))
 
@@ -922,6 +1037,26 @@ def _where(change: Mapping[str, Any]) -> str:
 def _keys_line(keys: Sequence[str]) -> str:
     shown = ", ".join(f"`{key}`" for key in keys[:LIST_LIMIT])
     return shown + (f" and {len(keys) - LIST_LIMIT} more (the JSON lists them all)" if len(keys) > LIST_LIMIT else "")
+
+
+def _entries_line(entries: Sequence[Mapping[str, Any]], detail: Callable[[Mapping[str, Any]], str]) -> str:
+    """Up to ``LIST_LIMIT`` entries as ``key (issue N, ...)``; the rest are counted."""
+    shown = ", ".join(f"`{entry['key']}` (issue {entry['issue']}{detail(entry)})" for entry in entries[:LIST_LIMIT])
+    return shown + (f" and {len(entries) - LIST_LIMIT} more (the JSON lists them all)" if len(entries) > LIST_LIMIT else "")
+
+
+def _lost_lines(lost: Sequence[Mapping[str, Any]]) -> list[str]:
+    """One line for the items that stopped being strict because the report was retracted, and one for those whose report is outweighed (with what outweighs it)."""
+    retracted = [entry["key"] for entry in lost if entry["why"] == "retracted"]
+    outweighed = [entry for entry in lost if entry["why"] == "outweighed"]
+    lines = []
+    if retracted:
+        lines.append(f"- no longer strict, the report retracted ({len(retracted)}): {_keys_line(retracted)}")
+    if outweighed:
+        shown = ", ".join(f"`{entry['key']}` (by {', '.join(entry['by'])})" if entry["by"] else f"`{entry['key']}`" for entry in outweighed[:LIST_LIMIT])
+        more = f" and {len(outweighed) - LIST_LIMIT} more (the JSON lists them all)" if len(outweighed) > LIST_LIMIT else ""
+        lines.append(f"- no longer strict, the report outweighed ({len(outweighed)}): {shown}{more}")
+    return lines
 
 
 def _markdown(report: Report) -> str:
@@ -974,13 +1109,36 @@ def _markdown(report: Report) -> str:
             "",
         ]
     community = s["community"]
-    if community["added"] or community["removed"]:
-        lines += ["## Community evidence", ""]
-        if community["added"]:
-            lines.append(f"- added ({len(community['added'])}): {_keys_line(community['added'])}")
-        if community["removed"]:
-            lines.append(f"- retracted ({len(community['removed'])}): {_keys_line(community['removed'])}")
-        lines.append("")
+    shown = [
+        (f"- The entries of the list of reports cannot be compared: {community['note']}." if community["note"] else None),
+        (
+            f"- recorded in this release for the first time, reports ({len(community['first']['reports'])}): {_entries_line(community['first']['reports'], lambda e: '')}"
+            if community["first"]["reports"]
+            else None
+        ),
+        (
+            f"- recorded in this release for the first time, retracted ({len(community['first']['retracted'])}): "
+            f"{_entries_line(community['first']['retracted'], lambda e: ', ' + e['reason'])}"
+            if community["first"]["retracted"]
+            else None
+        ),
+        (f"- added ({len(community['added'])}): {_entries_line(community['added'], lambda e: '')}" if community["added"] else None),
+        (f"- retracted ({len(community['retracted'])}): {_entries_line(community['retracted'], lambda e: ', ' + e['reason'])}" if community["retracted"] else None),
+        (
+            f"- taken out of the file with no retraction ({len(community['deleted'])}): {_entries_line(community['deleted'], lambda e: '')}"
+            if community["deleted"]
+            else None
+        ),
+        (
+            f"- changed in place ({len(community['changed'])}): {_entries_line(community['changed'], lambda e: ', ' + e['list'] + ': ' + ', '.join(e['fields']))}"
+            if community["changed"]
+            else None
+        ),
+        (f"- strict now because of a report ({len(community['strict_gained'])}): {_keys_line(community['strict_gained'])}" if community["strict_gained"] else None),
+        *_lost_lines(community["strict_lost"]),
+    ]
+    if any(shown):
+        lines += ["## Community evidence", "", *(line for line in shown if line), ""]
     structural = [c for c in report.changes if c["kind"] in ("trio", "tier")]
     if structural:
         lines += ["## New and removed trios and tiers", ""]

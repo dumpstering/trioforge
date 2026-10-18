@@ -27,6 +27,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
+from after_an_add import AfterAnAdd, strict_without_a_report
 
 from trioforge.classes import CLASS_CODES
 from trioforge.data.jsonio import loads_strict
@@ -774,13 +775,27 @@ def test_the_table_has_a_header_and_one_record_for_every_wearable_of_the_catalog
     assert not any(i["key"] in listed for i in catalog_doc["items"] if not wearable(i))
 
 
-def test_hidden_wearables_are_in_the_table_flagged_owned_only_and_nothing_else_is(table, catalog_doc):
+@pytest.fixture(scope="module")
+def after_an_add(tmp_path_factory, catalog_doc):
+    """The catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh."""
+    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), catalog_doc)
+
+
+@pytest.mark.parametrize("after", [False, True], ids=["the committed catalog", "the catalog after an accepted report"])
+def test_hidden_wearables_are_in_the_table_flagged_owned_only_and_nothing_else_is(request, after):
+    if after:
+        catalog_doc = request.getfixturevalue("after_an_add").document
+        table = items(catalog_doc, RULES)
+    else:
+        catalog_doc, table = request.getfixturevalue("catalog_doc"), request.getfixturevalue("table")
     level = {i["key"]: i["evidence"]["level"] for i in catalog_doc["items"]}
     flagged = {key_of(r) for r in table["items"] if r.get("owned_only")}
     assert flagged == {key_of(r) for r in table["items"] if level[key_of(r)] == "hidden"}
     assert 3000 < len(flagged) < len(table["items"])
     assert all(r["evidence"]["level"] == level[key_of(r)] for r in table["items"])
-    assert {r["evidence"]["level"] for r in table["items"] if not r.get("owned_only")} == {"wiki", "disputed"}
+    shown = {r["evidence"]["level"] for r in table["items"] if not r.get("owned_only")}
+    assert shown - {"strict"} == {"wiki", "disputed"}  # (and strict, for the items that a report made strict, which is public)
+    assert strict_without_a_report(table) == [] and ("strict" in shown or not after)  # (the catalog after a report has a strict item: the setup holds)
 
 
 def test_the_records_are_sorted_by_the_numeric_page_id(table):

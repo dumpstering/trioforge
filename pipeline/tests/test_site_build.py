@@ -63,7 +63,7 @@ LICENCE_SENTENCE = (
 #: WebAssembly carries the first 16 hex digits of the SHA-256 of its content, the scripts and the stylesheet esbuild's hash) and its data
 #: files in assets/engine/data/ (the item table and the bundles, with the first 16 hex digits of their SHA-256)
 HASHED_ASSET = (
-    r"(?:(?:site|app|boot|upgrade-input|shared-kit|weights|chunk)-[A-Z0-9]{8}\.(?:css|js)|engine/(?:client|worker|kitvalue)-[A-Z0-9]{8}\.js|engine/highs-[A-Z0-9]{16}\.wasm"
+    r"(?:(?:site|app|boot|notfound|upgrade-input|shared-kit|weights|chunk)-[A-Z0-9]{8}\.(?:css|js)|engine/(?:client|worker|kitvalue)-[A-Z0-9]{8}\.js|engine/highs-[A-Z0-9]{16}\.wasm"
     r"|engine/data/(?:items|[a-z]{3}-[a-z]{3}-[a-z]{3}-l[0-9]{1,3})-[A-Z0-9]{16}\.json)"
 )
 #: the optimizer's list of files: one fixed address, outside /assets/, so that it is asked for again on every visit
@@ -1378,7 +1378,7 @@ def test_the_page_budgets_hold(site):
     # the script is two budgets: what the page loads by itself, and what it loads on first use (the chunks of the Upgrade section: each has a budget of its own, and all of them one)
     first_load_raw = sum(p.stat().st_size for p in scripts)
     assert first_load_raw <= 100 * 1024, first_load_raw
-    lazy = [p for p in (out / "assets").glob("*.js") if p not in scripts]
+    lazy = [p for p in (out / "assets").glob("*.js") if p not in scripts and not p.name.startswith("notfound-")]  # (the script of the 404 page is the first load of that page, not code loaded on first use)
     assert {p.name.split("-")[0] for p in lazy} == {"upgrade", "shared", "weights", "chunk"}  # (the section's, the panel of a shared kit, the sliders', and what they share: how many chunks esbuild makes of that is its own)
     for chunk in lazy:
         assert chunk.stat().st_size <= 100 * 1024, chunk.name
@@ -3231,7 +3231,7 @@ def test_the_command_line_builds_and_reports_sizes(tmp_path):
 
 
 # ---- the contract with the browser tests ---------------------------------------------------------------------------------------------------
-# tests-js/trio.test.mjs runs the real page code against these committed files. They are what this build writes for the
+# tests-js/trio.test.mjs, picker.test.mjs and notfound.test.mjs run the real page code against these committed files. They are what this build writes for the
 # fixture; if a template or the data format changes, regenerate them with
 #     TRIOFORGE_UPDATE_CONTRACT=1 python -m pytest pipeline/tests/test_site_build.py -k contract
 # and the JavaScript tests then show whether the page code still agrees.
@@ -3241,6 +3241,7 @@ def contract_files(out: Path) -> dict[str, str]:
     files = {
         "trio-main.html": extract_main(read(out, PAGES["trio"])),
         "home-main.html": extract_main(read(out, PAGES["home"])),
+        "notfound-main.html": extract_main(read(out, NOT_FOUND)),
         "trio-report-link.txt": page(out, PAGES["trio"]).by_id("report-link").get("href") + "\n",
     }
     for name in ("strict-own", "strict-group", "wiki-own", "wiki-group", "robust"):
@@ -4402,7 +4403,8 @@ def test_no_page_loads_the_code_of_the_upgrade_section_by_itself(site):
     out, _ = site
     for name, html in all_html(out):
         scripts = [(s.get("src").split("-")[0], s.get("type")) for s in html.find_all("script")]
-        assert all(src in ("/assets/boot", "/assets/app") for src, _ in scripts), (name, scripts)  # no script tag for the section's code
+        allowed = ("/assets/boot", "/assets/notfound") if name == NOT_FOUND else ("/assets/boot", "/assets/app")  # (the 404 page has a script of its own in place of the page script)
+        assert all(src in allowed for src, _ in scripts), (name, scripts)  # no script tag for the section's code
         assert "upgrade-input" not in read(out, name) and "gear-picker" not in read(out, name), name
     app = next((out / "assets").glob("app-*.js")).read_text(encoding="utf-8")
     assert "createGearInput" not in app and "createGearPicker" not in app  # it is not in the page script, which only knows where to import it from
@@ -4434,7 +4436,7 @@ def test_the_page_script_loads_the_upgrade_chunk_by_a_dynamic_import_and_imports
     # no chunk shared by the page script and the section: the files under assets/ are the page's, its stylesheet, the section's, the code of a shared kit (a chunk of its own, which the
     # section loads by a dynamic import), the sliders' (a chunk of its own as well) and the modules that those share (the chunks that esbuild makes of them), and the optimizer's folder
     names = sorted({p.name.split("-")[0] for p in (out / "assets").iterdir() if p.is_file()})
-    assert names == ["app", "boot", "chunk", "shared", "site", "upgrade", "weights"]
+    assert names == ["app", "boot", "chunk", "notfound", "shared", "site", "upgrade", "weights"]  # (notfound: the 404 page's own script, a bundle that shares nothing with the page script)
     chunk = chunks[0].read_text(encoding="utf-8")
     assert "initUpgrade" in chunk and "createGearInput" in chunk and "createGearInput" not in app
 
@@ -4442,13 +4444,14 @@ def test_the_page_script_loads_the_upgrade_chunk_by_a_dynamic_import_and_imports
 def test_what_the_section_adds_is_counted_apart_from_the_first_load(site):
     out, summary = site
     lazy = [p.read_bytes() for p in sorted((out / "assets").glob("*.js")) if p.name.split("-")[0] in ("upgrade", "shared", "weights", "chunk")]
-    assert len(lazy) == len(list((out / "assets").glob("*.js"))) - 2  # (every script but the page script and the boot script is loaded on first use)
+    assert len(lazy) == len(list((out / "assets").glob("*.js"))) - 3  # (every script but the page script, the boot script and the 404 page's own script is loaded on first use)
     assert summary.sizes["lazy_js"] == sum(len(c) for c in lazy) and summary.sizes["lazy_js_gzip"] == sum(gz(c) for c in lazy)  # (all the code loaded on first use: the sum of its chunks)
     app = next((out / "assets").glob("app-*.js")).read_bytes()
     boot = next((out / "assets").glob("boot-*.js")).read_bytes()
+    notfound = next((out / "assets").glob("notfound-*.js")).read_bytes()
     assert summary.sizes["first_load_js_gzip"] == gz(app) + gz(boot)  # the first load is the page script and the boot script, as before
     assert summary.sizes["first_load_js"] == len(app) + len(boot)  # the first load's raw size is the two that the page loads by itself
-    assert summary.sizes["total_js"] == len(app) + len(boot) + sum(len(c) for c in lazy)  # the total of all of them is reported, and is no budget
+    assert summary.sizes["total_js"] == len(app) + len(boot) + len(notfound) + sum(len(c) for c in lazy)  # the total of all of them (the 404 page's script too) is reported, and is no budget
 
 
 #: the files of the code of the Upgrade section, by the names esbuild's metafile gives its inputs (relative to the folder it runs in, static/)

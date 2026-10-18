@@ -560,6 +560,9 @@ test.describe("without JavaScript", () => {
       expect((await page.locator("main").innerText()).length, `${name} has text`).toBeGreaterThan(200);
     }
     await page.goto("/");
+    // from 13 trios on the list of the pages is folded into an expander, whose links are hidden until it is opened (which a visitor does without a script)
+    const folded = page.locator("#all-trios > summary");
+    if ((await folded.count()) > 0) await folded.click();
     await expect(page.locator('#live-trios a[href="/trio/pal-mnk-ber/"]')).toBeVisible();
     await expect(page.locator("#picker")).toBeHidden();
   });

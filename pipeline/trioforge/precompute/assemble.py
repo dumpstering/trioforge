@@ -16,7 +16,10 @@ digest of the public catalog and the evidence levels, is what the site build com
 which is the day of the release), the SHA-256 of the public catalog the seen flags were merged onto, the rules version and the rules (their values and
 levels), the code hash (the hash of the code the chunks are made under and of the code that writes the files of a trio: :func:`code_hash`), the solver options,
 the trios with the tiers each has, the sample of the parity suite that the release was held to (``parity_sample``, ``i/n``), the **evidence map** (item key to
-evidence level) and a random snapshot id. The evidence map is public at the granularity of a release and nowhere else.
+evidence level), the **community entries** and a random snapshot id. The evidence map is public at the granularity of a release and nowhere else. ``community`` is
+``{"reports": [...], "retracted": [...]}``, the entries of ``rules/community-seen.json`` as the committed file holds them (:mod:`trioforge.community`), so that the report of
+a release (:mod:`trioforge.reports.results_diff`) lists what was added and retracted from the file itself and not from the reason codes of the item table, which a
+retraction can leave as they were. A ``release.json`` made before the field existed has none, and is read as a release that does not list its entries.
 
 **``releases/<tag>.json``**, the pointer the maintainer commits, holds only the SHA-256 of the asset, the SHA-256 of the catalog, the rules version, the
 code hash, the solver options, ``catalog_date`` and the snapshot id (with the tag and the format number). It is made from the release document, so that
@@ -46,6 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from trioforge.classes import CLASS_CODES
+from trioforge.community import CommunityError, check_entries, sorted_entries
 from trioforge.data.jsonio import JsonFileError, load_strict, render
 from trioforge.precompute import shards
 from trioforge.site.data import ROLES
@@ -54,6 +58,7 @@ from trioforge.sources.client_tables import commit_files
 __all__ = [
     "FORMAT",
     "ITEMS_FILE",
+    "LEGACY_RELEASE_KEYS",
     "LEVELS",
     "POINTER_KEYS",
     "RELEASE_FILE",
@@ -97,8 +102,10 @@ LEVELS = ("strict", "wiki", "disputed", "hidden")  # the evidence levels of the 
 #: the fields of ``release.json``, in order
 RELEASE_KEYS = (
     "format", "release", "catalog_date", "catalog_sha256", "rules_version", "rules", "code_hash", "solver", "build_options", "level", "game_patch",
-    "trial", "parity_sample", "trios", "evidence", "snapshot_id",
+    "trial", "parity_sample", "trios", "evidence", "community", "snapshot_id",
 )  # fmt: skip
+#: the fields of a ``release.json`` made before the community entries were recorded: it is still read (and not taken for a release that had no entries: the field is absent)
+LEGACY_RELEASE_KEYS = tuple(name for name in RELEASE_KEYS if name != "community")
 #: the fields of ``releases/<tag>.json``, in order: what the deploy compares, and nothing that says which items or trios there are
 POINTER_KEYS = (
     "format", "release", "asset_sha256", "catalog_sha256", "catalog_date", "rules_version", "code_hash", "solver", "build_options", "snapshot_id",
@@ -395,7 +402,10 @@ def _need(ok: bool, what: str) -> None:
 def check_release_document(doc: Mapping[str, Any]) -> None:
     """Hold a ``release.json`` document to its form (the fields of :data:`RELEASE_KEYS` and nothing else, each of the right kind)."""
     _need(isinstance(doc, Mapping), "is not an object")
-    _need(list(doc) == list(RELEASE_KEYS), f"must have the fields {', '.join(RELEASE_KEYS)}, in that order")
+    _need(
+        list(doc) in (list(RELEASE_KEYS), list(LEGACY_RELEASE_KEYS)),
+        f"must have the fields {', '.join(RELEASE_KEYS)}, in that order (community is absent from a release made before the entries were recorded)",
+    )
     _need(doc["format"] == FORMAT and not isinstance(doc["format"], bool), f"format must be {FORMAT}")
     try:
         check_tag(doc["release"])
@@ -424,30 +434,45 @@ def check_release_document(doc: Mapping[str, Any]) -> None:
         isinstance(key, str) and _ITEM_KEY.fullmatch(key) is not None and level in LEVELS for key, level in evidence.items()
     )
     _need(ok, f"evidence must map an item key (small letters, digits and hyphens) to a level of {', '.join(LEVELS)}")
+    if "community" in doc:
+        community = doc["community"]
+        _need(isinstance(community, Mapping) and list(community) == ["reports", "retracted"], "community must hold the lists reports and retracted, in that order, and nothing else")
+        _check_entries(community)
+
+
+def _check_entries(community: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The entries of ``community`` held to the form of the file (the reader of the file does the same), or :class:`ReleaseRefused`."""
+    try:
+        return check_entries(community["reports"], community["retracted"], source="release.json: community: ")
+    except CommunityError as error:
+        raise ReleaseRefused(str(error)) from None
 
 
 def release_document(
     *, tag: str, catalog_date: str, catalog_sha256: str, rules_version: str, rules: Mapping[str, Mapping[str, Any]], code_hash: str,
     solver: Mapping[str, Any], build_options: Mapping[str, Any], level: int, game_patch: str, trios: Mapping[str, Sequence[int]],
-    evidence: Mapping[str, str], snapshot_id: str, parity_sample: str, trial: bool = False,
+    evidence: Mapping[str, str], community: Mapping[str, Sequence[Mapping[str, Any]]], snapshot_id: str, parity_sample: str, trial: bool = False,
 ) -> dict[str, Any]:
-    """The document of ``release.json`` (see the module docstring). ``trios`` maps the folder of each trio to its tiers. :class:`ReleaseRefused` for a
-    value that is not of the form :func:`check_release_document` asks."""
+    """The document of ``release.json`` (see the module docstring). ``trios`` maps the folder of each trio to its tiers. ``community`` is ``{"reports", "retracted"}``, the
+    entries of the committed file; it has no default, so that a release cannot say nothing about them by being made without. :class:`ReleaseRefused` for a value that is not of
+    the form :func:`check_release_document` asks."""
+    _need(isinstance(community, Mapping) and set(community) == {"reports", "retracted"}, "community must hold the lists reports and retracted, and nothing else")
+    reports, retracted = _check_entries(community)
     doc = {
         "format": FORMAT, "release": tag, "catalog_date": catalog_date, "catalog_sha256": catalog_sha256, "rules_version": rules_version,
         "rules": {key: dict(rules[key]) for key in sorted(rules)}, "code_hash": code_hash, "solver": dict(solver), "build_options": dict(build_options),
         "level": level, "game_patch": game_patch, "trial": trial, "parity_sample": parity_sample, "trios": {slug: list(trios[slug]) for slug in sorted(trios)},
-        "evidence": dict(sorted(evidence.items())), "snapshot_id": snapshot_id,
+        "evidence": dict(sorted(evidence.items())), "community": {"reports": sorted_entries(reports), "retracted": sorted_entries(retracted)}, "snapshot_id": snapshot_id,
     }  # fmt: skip
     check_release_document(doc)
     return doc
 
 
 def write_release_json(folder: str | os.PathLike[str], doc: Mapping[str, Any]) -> Path:
-    """Write ``release.json`` into ``folder`` (all or nothing), one entry of the evidence map, the rules and the trios to a line."""
+    """Write ``release.json`` into ``folder`` (all or nothing), one entry of the evidence map, the rules and the trios to a line, and one list of community entries."""
     check_release_document(doc)
     target = Path(folder)
-    commit_files(target, {RELEASE_FILE: render(dict(doc), per_line=("rules", "trios", "evidence"))}, last=RELEASE_FILE)
+    commit_files(target, {RELEASE_FILE: render(dict(doc), per_line=("rules", "trios", "evidence", "community"))}, last=RELEASE_FILE)
     return target / RELEASE_FILE
 
 

@@ -30,6 +30,7 @@ from release_helpers import (
     add_invented_item,
     change_release_json,
     copy_trio,
+    drop_community,
     drop_tier,
     edit,
     edit_runnerups,
@@ -38,9 +39,15 @@ from release_helpers import (
     pair,
     remove_trio,
     rename_race,
+    report_entry,
+    retraction_entry,
     runnerup_place,
+    set_community,
 )
+from test_evidence import ctx as ladder_context
+from test_evidence import make_item as ladder_item
 
+from trioforge.data.evidence import classify
 from trioforge.precompute import assemble
 from trioforge.reports import results_diff
 
@@ -278,12 +285,13 @@ def test_a_pick_that_rests_on_a_new_community_entry_is_community_only(tmp_path):
     old, new = pair(tmp_path)
     add_invented_item(old, "w91001", strict=False)
     add_invented_item(new, "w91001", strict=True)
+    set_community(new, reports=[report_entry("w91001", 5)])  # (the entry that the codes of the record rest on: release.json lists it)
     pick(new, "w91001", name="strict-own")  # (a strict pick: the strict pool is the one the entry changes)
     report = run(old, new)
     (change,) = of_kind(report, "scenario")
     assert change["causes"] == ["community"] and change["primary"] == "community" and change["flag"] is None
     assert report.summary["community_only"] == 2 and report.summary["by_cause"]["community"] == 3  # the pick, the default pick made from it, and the record of the item
-    assert report.summary["community"] == {"added": ["w91001"], "removed": []} and report.summary["retractions"] == 0
+    assert listed(report, "added") == [("w91001", 5)] and listed(report, "retracted") == [] and report.summary["retractions"] == 0
     (record,) = of_kind(report, "item", key="w91001")
     assert record["community"] == "added" and record["evidence"] == ["wiki", "strict"] and record["causes"] == ["community"]
 
@@ -293,12 +301,14 @@ def test_a_retraction_is_listed_and_is_the_cause_of_the_pick_that_goes(tmp_path)
     old, new = pair(tmp_path)
     add_invented_item(old, "w91001", strict=True)
     add_invented_item(new, "w91001", strict=False)
+    set_community(old, reports=[report_entry("w91001", 5)])
+    set_community(new, retracted=[retraction_entry("w91001", 5)])  # (the entry moved to the retractions: release.json lists it)
     pick(old, "w91001", name="strict-own")
     report = run(old, new)
     (change,) = of_kind(report, "scenario")
     head = shard(new, "strict-own").kit(shard(new, "strict-own").row(*OGR))[0]  # (the head the strict kit has when it does not wear the retracted item)
     assert change["causes"] == ["community"] and change["kit"] == [{"place": "HEAD", "old": "w91001", "new": head}]
-    assert report.summary["retractions"] == 1 and report.summary["community"] == {"added": [], "removed": ["w91001"]}
+    assert report.summary["retractions"] == 1 and listed(report, "retracted") == [("w91001", 5)] and listed(report, "added") == []
     (record,) = of_kind(report, "item", key="w91001")
     assert record["community"] == "removed" and record["evidence"] == ["strict", "wiki"]
     text = report.markdown()
@@ -340,6 +350,492 @@ def test_all_the_causes_that_apply_are_listed_in_the_order_of_precedence(tmp_pat
     change_release_json(new, code_hash="9f" * 32)
     (change,) = of_kind(run(old, new), "scenario")
     assert change["causes"] == ["code", "rule", "data", "community"]
+
+
+# ---- community entries as the ladder writes them -----------------------------------------------------------------------------------------------
+#
+# The item table of a release holds, for each item, the evidence level and the reason codes of the catalog (the codes of the live sources left out). The tests below do not write
+# those codes by hand: they ask the ladder what it gives an invented item with and without a report (``rules/community-seen.json``), with and without the wiki's own mark that
+# the item is gone, or a zone that is closed, and put that in the item table of each release. The entries of the list themselves are what ``release.json`` records
+# (``community``): the report lists what was added and retracted from them, by item and issue, and what the codes of an item do from its record.
+
+LADDER_ITEM = "w91001"
+GONE_MARKS = ["wiki_banner_delete", "removed_note"]  # the banner of a deleted page, and the note that the item was removed from the game
+LIVE = "Plane of Hate"  # a zone the client flags and the developers have opened
+CLOSED = "Rujarkian Hills"  # a zone the client flags and the developers say is not open yet
+UNFLAGGED = "Kael Drakkal"  # a zone the client does not flag
+
+
+def ladder_evidence(flags: list[str], *, reported: bool, zone: str = LIVE, name: str = "Invented Community Cap 91001") -> tuple[str, list[str]]:
+    item = ladder_item(LADDER_ITEM, name, drops=[(zone, ["Innoruuk"])], era_tags=["Classic Era"], flags=flags)
+    result = classify(item, ladder_context(community_keys={LADDER_ITEM} if reported else set()))
+    return result["level"], sorted({reason["code"].split(":")[0] for reason in result["reasons"]} - {"live-source"})
+
+
+def put_ladder_evidence(
+    folder: Path, flags: list[str], *, reported: bool, retracted: bool = False, zone: str = LIVE, issue: int = 5, name: str = "Invented Community Cap 91001"
+) -> None:
+    """The item table of a release as the ladder writes it for the invented item, and the entries that ``release.json`` records beside it: the report while it stands in the
+    file (``reported``), the retraction when it was taken back (``retracted``)."""
+    add_invented_item(folder, LADDER_ITEM, strict=False)
+    table = ItemTable(folder / "items.json")
+    table.set_evidence(LADDER_ITEM, *ladder_evidence(flags, reported=reported, zone=zone, name=name))
+    table.save()
+    set_community(
+        folder,
+        reports=[report_entry(LADDER_ITEM, issue)] if reported else [],
+        retracted=[retraction_entry(LADDER_ITEM, issue)] if retracted else [],
+    )
+
+
+def listed(report, name: str) -> list[tuple[str, int]]:
+    """The ``(key, issue)`` of the entries that the report lists under one of the lists of ``summary["community"]``."""
+    return [(entry["key"], entry["issue"]) for entry in report.summary["community"][name]]
+
+
+def test_what_the_ladder_writes_for_a_report_is_what_these_tests_start_from():
+    assert ladder_evidence([], reported=True) == ("strict", ["community-report"])
+    assert ladder_evidence([], reported=False) == ("wiki", [])
+    assert ladder_evidence(["wiki_banner_delete"], reported=True) == ("hidden", ["community-report-outweighed", "wiki-marked-not-in-eql"])
+    assert ladder_evidence(["removed_note"], reported=False) == ("hidden", ["wiki-marked-removed"])
+    assert ladder_evidence([], reported=True, zone=CLOSED) == ("hidden", ["community-report-outweighed", "zone-unreleased"])
+    assert ladder_evidence([], reported=False, zone=CLOSED) == ("hidden", ["zone-unreleased"])
+
+
+# -- the retraction of a report, and the report of an item the wiki marks as gone
+
+
+def test_the_retraction_of_a_report_on_a_live_item_is_listed_in_the_report_of_the_next_release(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, [], reported=False, retracted=True)
+    report = run(old, new)
+    assert listed(report, "retracted") == [(LADDER_ITEM, 5)] and listed(report, "added") == [] and report.summary["retractions"] == 1
+    assert report.summary["community"]["retracted"] == [{"key": LADDER_ITEM, "issue": 5, "reason": "withdrawn"}]
+    assert report.summary["community"]["strict_lost"] == [{"key": LADDER_ITEM, "why": "retracted", "by": []}] and report.summary["community"]["strict_gained"] == []
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["community"] == "removed" and record["evidence"] == ["strict", "wiki"] and record["causes"] == ["community"]
+    text = report.markdown()
+    assert f"- retracted (1): `{LADDER_ITEM}` (issue 5, withdrawn)" in text and f"- no longer strict, the report retracted (1): `{LADDER_ITEM}`" in text
+
+
+@pytest.mark.parametrize("flag", GONE_MARKS)
+def test_the_retraction_of_a_report_the_wikis_mark_outweighed_is_listed_too_and_moves_no_level(tmp_path, flag):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [flag], reported=True)
+    put_ladder_evidence(new, [flag], reported=False, retracted=True)
+    report = run(old, new)
+    assert listed(report, "retracted") == [(LADDER_ITEM, 5)] and report.summary["retractions"] == 1
+    assert report.summary["community"]["strict_lost"] == [] and report.summary["community"]["strict_gained"] == []  # (hidden before and after)
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["community"] == "removed" and record["evidence"] is None and record["causes"] == ["community"]
+    assert f"- retracted (1): `{LADDER_ITEM}` (issue 5, withdrawn)" in report.markdown()
+    assert of_kind(report, "scenario") == [] and report.summary["solver_diffs"] == 0 and report.summary["community_only"] == 0  # (no pick rested on it)
+
+
+@pytest.mark.parametrize("flag", GONE_MARKS)
+def test_a_report_on_a_marked_item_is_listed_as_added_and_changes_no_level(tmp_path, flag):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [flag], reported=False)
+    put_ladder_evidence(new, [flag], reported=True)
+    report = run(old, new)
+    assert listed(report, "added") == [(LADDER_ITEM, 5)] and listed(report, "retracted") == [] and report.summary["retractions"] == 0
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["community"] == "added" and record["evidence"] is None and record["causes"] == ["community"]
+
+
+def test_a_mark_of_the_wiki_that_outweighs_a_report_which_made_the_item_strict_is_data_and_no_retraction(tmp_path):
+    """The report stands in the file: what moved the item from strict to hidden is the wiki, and the report is not retracted. It is said all the same that the item is no longer
+    strict, and why: the report is outweighed, by the mark."""
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, ["wiki_banner_dne"], reported=True)
+    report = run(old, new)
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["community"] is None and record["evidence"] == ["strict", "hidden"] and record["causes"] == ["data"]
+    assert listed(report, "added") == [] and listed(report, "retracted") == [] and report.summary["retractions"] == 0
+    assert report.summary["community"]["strict_lost"] == [{"key": LADDER_ITEM, "why": "outweighed", "by": ["wiki-marked-not-in-eql"]}]
+    assert report.summary["community"]["strict_gained"] == []
+
+
+# -- a report that stood outweighed and counts now: the wiki's edit let it through, and the community is a cause too
+
+
+LIFTS = [
+    pytest.param(["wiki_banner_dne"], LIVE, id="the banner that says the item does not exist is taken off the page"),
+    pytest.param(["removed_note"], LIVE, id="the note that the item was removed from the game is taken off the page"),
+    pytest.param(["wiki_banner_delete", "removed_note"], LIVE, id="both marks are taken off the page"),
+    pytest.param([], CLOSED, id="the zone is opened"),
+    pytest.param([], UNFLAGGED, id="the client flags the zone"),
+]
+
+
+@pytest.mark.parametrize(("flags", "zone"), LIFTS)
+def test_a_report_that_stood_outweighed_and_counts_now_is_a_community_cause_beside_the_data(tmp_path, flags, zone):
+    """One report must not reach the kits through a later edit of the wiki without the report saying so: the item goes from hidden to strict, the wiki's edit is a cause, and
+    the report is a cause that is listed under Community evidence (it was in the file already: it is not an entry added)."""
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, flags, reported=True, zone=zone)
+    put_ladder_evidence(new, [], reported=True)
+    assert ladder_evidence(flags, reported=True, zone=zone)[0] == "hidden" and ladder_evidence([], reported=True)[0] == "strict"
+    report = run(old, new)
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["community"] == "lifted" and record["evidence"] == ["hidden", "strict"] and record["causes"] == ["data", "community"]
+    assert record["fields"] == ["evidence"]  # (the premise of R1: nothing but the evidence of the record changes, and the reason that went away is in its codes)
+    assert report.summary["community"]["strict_gained"] == [LADDER_ITEM] and report.summary["community"]["strict_lost"] == []
+    assert listed(report, "added") == [] and listed(report, "retracted") == [] and report.summary["retractions"] == 0
+    assert f"- strict now because of a report (1): `{LADDER_ITEM}`" in report.markdown()
+
+
+@pytest.mark.parametrize(("flags", "zone"), LIFTS)
+def test_a_pick_that_wears_an_item_a_report_lifted_names_the_community_and_the_data(tmp_path, flags, zone):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, flags, reported=True, zone=zone)
+    put_ladder_evidence(new, [], reported=True)
+    pick(new, LADDER_ITEM, name="strict-own")  # (a strict pick: the strict pool is the one the lift changes)
+    report = run(old, new)
+    (change,) = of_kind(report, "scenario")
+    assert change["causes"] == ["data", "community"] and change["primary"] == "data" and change["flag"] is None
+    assert report.summary["community_only"] == 0  # (the wiki's edit is a cause as well: it is not the community alone)
+
+
+def test_an_item_that_the_maintainer_alone_has_seen_is_no_lift(tmp_path):
+    """The item table's level has the private flags merged and its codes are the public catalog's: a level that moves with no community code to show for it is the data's."""
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, ["wiki_banner_dne"], reported=True)
+    put_ladder_evidence(new, ["wiki_banner_dne"], reported=True)
+    table = ItemTable(new / "items.json")
+    table.set_evidence(LADDER_ITEM, "strict", ["community-report-outweighed", "wiki-marked-not-in-eql"])  # (the level has the private flag merged; the codes stay the catalog's)
+    table.save()
+    (record,) = of_kind(run(old, new), "item", key=LADDER_ITEM)
+    assert record["community"] is None and record["causes"] == ["data"]
+
+
+# -- an item that stops being strict: the report is retracted, or it is outweighed (and by what)
+
+
+def lost(report) -> list[dict]:
+    return report.summary["community"]["strict_lost"]
+
+
+OUTWEIGHERS = [
+    pytest.param(["wiki_banner_dne"], LIVE, ["wiki-marked-not-in-eql"], id="the banner that says the item does not exist"),
+    pytest.param(["wiki_banner_delete"], LIVE, ["wiki-marked-not-in-eql"], id="the banner of a deleted page"),
+    pytest.param(["removed_note"], LIVE, ["wiki-marked-removed"], id="the note that the item was removed from the game"),
+    pytest.param(["wiki_banner_delete", "removed_note"], LIVE, ["wiki-marked-not-in-eql", "wiki-marked-removed"], id="both marks"),
+    pytest.param([], CLOSED, ["zone-unreleased"], id="the zone is not open yet"),
+    pytest.param([], UNFLAGGED, ["zones-not-in-eql"], id="the client does not flag the zone"),
+]
+
+
+@pytest.mark.parametrize(("flags", "zone", "by"), OUTWEIGHERS)
+def test_an_item_that_stops_being_strict_because_its_report_is_outweighed_is_listed_with_what_outweighs_it(tmp_path, flags, zone, by):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, flags, reported=True, zone=zone)
+    report = run(old, new)
+    assert lost(report) == [{"key": LADDER_ITEM, "why": "outweighed", "by": by}] and report.summary["community"]["strict_gained"] == []
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["community"] is None and record["causes"] == ["data"]  # (the entry did not change: the wiki or the client data did)
+    assert listed(report, "retracted") == [] and report.summary["retractions"] == 0
+    text = report.markdown()
+    assert f"- no longer strict, the report outweighed (1): `{LADDER_ITEM}` (by {', '.join(by)})" in text and "the report retracted" not in text
+
+
+@pytest.mark.parametrize(("name", "code"), [("Mask of Zorblax", "removed-by-patch"), ("Wind Zorblax Helm", "removed-by-research")])
+def test_an_item_that_a_patch_or_research_removes_while_its_report_stands_is_listed_as_outweighed_by_the_removal(tmp_path, name, code):
+    """The ladder hides such an item whatever players say and leaves no trace of the report in its codes; the file still has it."""
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, [], reported=True, name=name)
+    assert ladder_evidence([], reported=True, name=name) == ("hidden", [code])
+    report = run(old, new)
+    assert lost(report) == [{"key": LADDER_ITEM, "why": "outweighed", "by": [code]}]
+    assert listed(report, "retracted") == [] and f"(by {code})" in report.markdown() and "the report retracted" not in report.markdown()
+
+
+def test_an_item_whose_report_is_retracted_at_the_same_time_as_a_removal_or_a_mark_is_listed_as_retracted(tmp_path):
+    for number, (flags, name) in enumerate(((["wiki_banner_dne"], "Invented Community Cap 91001"), ([], "Mask of Zorblax"))):
+        old, new = pair(tmp_path / str(number))
+        put_ladder_evidence(old, [], reported=True)
+        put_ladder_evidence(new, flags, reported=False, retracted=True, name=name)  # (no report stands: nothing is outweighed)
+        report = run(old, new)
+        assert lost(report) == [{"key": LADDER_ITEM, "why": "retracted", "by": []}], (flags, name)
+        assert listed(report, "retracted") == [(LADDER_ITEM, 5)] and f"- no longer strict, the report retracted (1): `{LADDER_ITEM}`" in report.markdown()
+
+
+def test_an_item_a_patch_removes_is_taken_to_outweigh_its_report_when_the_new_release_lists_no_entries(tmp_path):
+    """Whether the report still stands cannot be told from a release that does not list its entries: the removal is taken to outweigh it."""
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, [], reported=True, name="Mask of Zorblax")
+    drop_community(new)
+    assert lost(run(old, new)) == [{"key": LADDER_ITEM, "why": "outweighed", "by": ["removed-by-patch"]}]
+
+
+def test_the_markdown_says_each_way_an_item_stopped_being_strict_on_a_line_of_its_own(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, ["wiki_banner_dne", "removed_note"], reported=True)
+    other = "w91002"
+    for folder in (old, new):
+        add_invented_item(folder, other, strict=True)
+    table = ItemTable(new / "items.json")
+    table.set_evidence(other, "wiki", [])
+    table.save()
+    set_community(old, reports=[report_entry(LADDER_ITEM, 5), report_entry(other, 6)])
+    set_community(new, reports=[report_entry(LADDER_ITEM, 5)], retracted=[retraction_entry(other, 6, reason="rejected")])
+    report = run(old, new)
+    assert lost(report) == [
+        {"key": LADDER_ITEM, "why": "outweighed", "by": ["wiki-marked-not-in-eql", "wiki-marked-removed"]},
+        {"key": other, "why": "retracted", "by": []},
+    ]
+    text = report.markdown()
+    assert f"- no longer strict, the report retracted (1): `{other}`" in text
+    assert f"- no longer strict, the report outweighed (1): `{LADDER_ITEM}` (by wiki-marked-not-in-eql, wiki-marked-removed)" in text
+
+
+# -- a record that is new in the second release, and strict by a report that the first release recorded already
+
+
+def test_a_record_that_is_new_in_the_second_release_and_strict_by_a_report_already_recorded_is_counted(tmp_path):
+    """The report is in the file of both releases; the catalog of the first had no page for the item. The item is strict now because of the report, and the report says so."""
+    old, new = pair(tmp_path)
+    set_community(old, reports=[report_entry(LADDER_ITEM, 5)])
+    put_ladder_evidence(new, [], reported=True)  # (the record is in the second release only)
+    report = run(old, new)
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["change"] == "added" and record["community"] == "added" and record["evidence"] == [None, "strict"] and record["causes"] == ["data", "community"]
+    assert report.summary["community"]["strict_gained"] == [LADDER_ITEM] and report.summary["community"]["strict_lost"] == []
+    assert listed(report, "added") == [] and listed(report, "retracted") == []  # (the entry is no new entry: the first release recorded it)
+    assert f"- strict now because of a report (1): `{LADDER_ITEM}`" in report.markdown()
+
+
+def test_a_pick_that_wears_a_record_new_and_strict_by_a_report_names_the_data_and_the_community(tmp_path):
+    old, new = pair(tmp_path)
+    set_community(old, reports=[report_entry(LADDER_ITEM, 5)])
+    put_ladder_evidence(new, [], reported=True)
+    pick(new, LADDER_ITEM, name="strict-own")
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["causes"] == ["data", "community"] and change["flag"] is None
+
+
+@pytest.mark.parametrize("flags", [["wiki_banner_dne"], ["removed_note"]])
+def test_a_record_new_in_the_second_release_whose_report_the_wiki_outweighs_is_not_counted_as_strict(tmp_path, flags):
+    old, new = pair(tmp_path)
+    set_community(old, reports=[report_entry(LADDER_ITEM, 5)])
+    put_ladder_evidence(new, flags, reported=True)
+    report = run(old, new)
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["change"] == "added" and record["community"] == "added" and record["evidence"] == [None, "hidden"]
+    assert report.summary["community"]["strict_gained"] == []
+
+
+def test_a_record_new_in_the_second_release_with_no_report_is_the_datas_alone(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(new, [], reported=False)
+    (record,) = of_kind(run(old, new), "item", key=LADDER_ITEM)
+    assert record["community"] is None and record["causes"] == ["data"]
+
+
+# -- what the report publishes does not depend on the private flags
+
+
+@pytest.mark.parametrize(
+    ("name", "old_flags", "old_reported", "new_flags", "new_reported", "new_retracted", "old_zone"),
+    [
+        pytest.param("a report is retracted", [], True, [], False, True, LIVE, id="a report is retracted"),
+        pytest.param("a report is added", [], False, [], True, False, LIVE, id="a report is added"),
+        pytest.param("a mark goes", ["wiki_banner_dne"], True, [], True, False, LIVE, id="the mark that outweighed a report goes"),
+        pytest.param("a zone opens", [], True, [], True, False, CLOSED, id="the zone that outweighed a report opens"),
+        pytest.param("a mark comes", [], True, ["wiki_banner_dne"], True, False, LIVE, id="a mark outweighs a report that stands"),
+    ],
+)
+def test_the_markdown_and_the_lists_of_the_report_are_the_same_whether_or_not_the_maintainer_has_seen_the_item(
+    tmp_path, name, old_flags, old_reported, new_flags, new_reported, new_retracted, old_zone
+):
+    """The item table has the private flags merged into its levels and the codes of the public catalog beside them. What the committed Markdown says about the items that a report
+    made strict or stopped making strict must come from the codes: if it came from the levels, an item the maintainer has seen would be missing from it (its level does not move),
+    and the gap would tell which items they have seen."""
+
+    def releases(seen: bool):
+        folder = tmp_path / ("seen" if seen else "unseen")
+        old, new = pair(folder)
+        put_ladder_evidence(old, old_flags, reported=old_reported, zone=old_zone)
+        put_ladder_evidence(new, new_flags, reported=new_reported, retracted=new_retracted)
+        if seen:  # the flag is merged into the level of every release; the codes stay the public catalog's
+            for release_folder in (old, new):
+                table = ItemTable(release_folder / "items.json")
+                record = table.record(LADDER_ITEM)
+                table.set_evidence(LADDER_ITEM, "strict", record["evidence"].get("codes", ()))
+                table.save()
+        return old, new
+
+    unseen, seen = (run(*releases(flag)) for flag in (False, True))
+    assert seen.summary["community"] == unseen.summary["community"] and seen.summary["retractions"] == unseen.summary["retractions"]
+    assert seen.markdown() == unseen.markdown(), name
+
+
+# -- the entries themselves, from release.json
+
+
+def test_a_duplicate_retracted_while_another_report_of_the_item_stands_is_listed(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True, issue=6)
+    put_ladder_evidence(new, [], reported=True, issue=6)  # (the item is strict by issue 6 in both: its record does not move)
+    set_community(old, reports=[report_entry(LADDER_ITEM, 5), report_entry(LADDER_ITEM, 6)])
+    set_community(new, reports=[report_entry(LADDER_ITEM, 6)], retracted=[retraction_entry(LADDER_ITEM, 5, reason="duplicate")])
+    report = run(old, new)
+    assert of_kind(report, "item") == [] and report.summary["changes"] == 0
+    assert report.summary["community"]["retracted"] == [{"key": LADDER_ITEM, "issue": 5, "reason": "duplicate"}] and report.summary["retractions"] == 1
+    assert f"- retracted (1): `{LADDER_ITEM}` (issue 5, duplicate)" in report.markdown()
+
+
+def test_a_second_report_of_an_item_that_is_already_reported_is_listed_as_added(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True, issue=5)
+    put_ladder_evidence(new, [], reported=True, issue=5)
+    set_community(new, reports=[report_entry(LADDER_ITEM, 5), report_entry(LADDER_ITEM, 6, kind="tier")])
+    report = run(old, new)
+    assert of_kind(report, "item") == [] and report.summary["changes"] == 0
+    assert report.summary["community"]["added"] == [{"key": LADDER_ITEM, "issue": 6}]
+    assert f"- added (1): `{LADDER_ITEM}` (issue 6)" in report.markdown()
+
+
+def test_an_entry_on_an_item_that_a_patch_or_research_removed_is_listed_though_nothing_else_moves(tmp_path):
+    """The ladder hides such an item whatever players say, so the codes are the removal's alone before the report, with it and after its retraction: only the entries tell."""
+    old = make_release(tmp_path / "old", tag="data-2026-10-10")
+    new = make_release(tmp_path / "new", tag="data-2026-10-17")
+    later = make_release(tmp_path / "later", tag="data-2026-10-24")
+    for folder in (old, new, later):
+        add_invented_item(folder, LADDER_ITEM, strict=False)
+        table = ItemTable(folder / "items.json")
+        table.set_evidence(LADDER_ITEM, "hidden", ["removed-by-patch"])
+        table.save()
+    set_community(new, reports=[report_entry(LADDER_ITEM, 5)])
+    set_community(later, retracted=[retraction_entry(LADDER_ITEM, 5, reason="wrong-item")])
+    added, retracted = run(old, new), run(new, later)
+    assert of_kind(added, "item") == [] and added.summary["community"]["added"] == [{"key": LADDER_ITEM, "issue": 5}]
+    assert of_kind(retracted, "item") == [] and retracted.summary["community"]["retracted"] == [{"key": LADDER_ITEM, "issue": 5, "reason": "wrong-item"}]
+    assert retracted.summary["retractions"] == 1
+
+
+def test_the_entries_are_compared_by_item_and_issue_and_not_by_where_they_stand_or_how_many_there_are(tmp_path):
+    old, new = pair(tmp_path)
+    one, two = report_entry("w91001", 5), report_entry("w91002", 6)
+    set_community(old, reports=[one, two])
+    set_community(new, reports=[two, one])  # (the same entries in another order)
+    assert run(old, new).summary["community"] == {
+        "added": [], "retracted": [], "deleted": [], "changed": [], "first": {"reports": [], "retracted": []}, "strict_gained": [], "strict_lost": [], "note": None,
+    }  # fmt: skip
+
+
+def test_an_entry_changed_in_place_is_listed_with_the_fields_that_differ(tmp_path):
+    old, new = pair(tmp_path)
+    set_community(old, reports=[report_entry("w91001", 5)], retracted=[retraction_entry("w91002", 6, reason="duplicate")])
+    set_community(new, reports=[report_entry("w91001", 5, kind="tier", date="2026-10-16")], retracted=[retraction_entry("w91002", 6, reason="rejected")])
+    changed = run(old, new).summary["community"]["changed"]
+    assert changed == [
+        {"key": "w91001", "issue": 5, "list": "reports", "fields": ["kind", "date"]},
+        {"key": "w91002", "issue": 6, "list": "retracted", "fields": ["reason"]},
+    ]
+
+
+def test_an_entry_that_leaves_the_file_with_no_retraction_is_listed_as_deleted(tmp_path):
+    old, new = pair(tmp_path)
+    set_community(old, reports=[report_entry("w91001", 5)], retracted=[retraction_entry("w91002", 6)])
+    report = run(old, new)
+    assert report.summary["community"]["deleted"] == [{"key": "w91001", "issue": 5, "was": "report"}, {"key": "w91002", "issue": 6, "was": "retraction"}]
+    assert report.summary["retractions"] == 0 and "- taken out of the file with no retraction (2): `w91001` (issue 5), `w91002` (issue 6)" in report.markdown()
+
+
+def test_a_previous_release_that_lists_no_entries_is_said_once_and_is_not_taken_for_one_without_entries(tmp_path):
+    old, new = pair(tmp_path)
+    drop_community(old)  # (a release made before the entries were recorded)
+    set_community(new, reports=[report_entry("w91001", 5)], retracted=[retraction_entry("w91002", 6)])
+    report = run(old, new)
+    sentence = "the previous release does not list its community entries"
+    assert report.summary["community"]["note"] == sentence
+    assert report.summary["community"]["added"] == [] and report.summary["community"]["retracted"] == [] and report.summary["retractions"] == 0  # (not "everything is new")
+    assert report.markdown().count(sentence) == 1 and json.loads(report.json_text())["summary"]["community"]["note"] == sentence
+
+
+def test_the_entries_of_the_first_release_that_records_them_are_listed_as_recorded_for_the_first_time_and_never_as_additions(tmp_path):
+    """The previous release is one made before the field existed: whatever the file holds now was recorded before, and the report cannot tell when. It lists the entries (their
+    number and each of them) as recorded in this release for the first time, and none as added or retracted."""
+    old, new = pair(tmp_path)
+    drop_community(old)
+    set_community(new, reports=[report_entry("w91001", 5), report_entry("w91002", 6, kind="tier")], retracted=[retraction_entry("w91003", 7, reason="duplicate")])
+    report = run(old, new)
+    community = report.summary["community"]
+    assert community["first"] == {
+        "reports": [{"key": "w91001", "issue": 5}, {"key": "w91002", "issue": 6}],
+        "retracted": [{"key": "w91003", "issue": 7, "reason": "duplicate"}],
+    }
+    assert community["added"] == [] and community["retracted"] == [] and community["deleted"] == [] and report.summary["retractions"] == 0
+    text = report.markdown()
+    assert "- recorded in this release for the first time, reports (2): `w91001` (issue 5), `w91002` (issue 6)" in text
+    assert "- recorded in this release for the first time, retracted (1): `w91003` (issue 7, duplicate)" in text
+    assert "- added (" not in text and "- retracted (" not in text  # (not one of them an addition or a retraction)
+    assert text.count("the previous release does not list its community entries") == 1  # (and the sentence is said once, as before)
+    assert json.loads(report.json_text())["summary"]["community"]["first"] == community["first"]
+
+
+def test_the_markdown_lists_twenty_of_the_entries_recorded_for_the_first_time_and_the_json_all_of_them(tmp_path):
+    old, new = pair(tmp_path)
+    drop_community(old)
+    set_community(new, reports=[report_entry(f"w{91000 + number}", 100 + number) for number in range(25)])
+    report = run(old, new)
+    assert len(report.summary["community"]["first"]["reports"]) == 25
+    text = report.markdown()
+    assert "- recorded in this release for the first time, reports (25): " in text and "`w91019` (issue 119)" in text and "`w91020`" not in text
+    assert "and 5 more (the JSON lists them all)" in text
+
+
+def test_nothing_is_recorded_for_the_first_time_when_the_previous_release_lists_its_entries_or_the_new_one_does_not(tmp_path):
+    old, new = pair(tmp_path / "both")
+    set_community(new, reports=[report_entry("w91001", 5)])
+    report = run(old, new)
+    assert report.summary["community"]["first"] == {"reports": [], "retracted": []} and report.summary["community"]["added"] == [{"key": "w91001", "issue": 5}]  # (an addition)
+    assert "recorded in this release for the first time" not in report.markdown()
+    old, new = pair(tmp_path / "neither")
+    drop_community(old)
+    drop_community(new)
+    report = run(old, new)
+    assert report.summary["community"]["first"] == {"reports": [], "retracted": []} and "recorded in this release for the first time" not in report.markdown()
+
+
+def test_a_new_release_that_lists_no_entries_is_said_too(tmp_path):
+    old, new = pair(tmp_path)
+    drop_community(new)
+    report = run(old, new)
+    assert report.summary["community"]["note"] == "the new release does not list its community entries" and report.markdown().count("does not list its community entries") == 1
+
+
+def test_two_releases_that_list_their_entries_say_nothing_of_the_kind(tmp_path):
+    old, new = pair(tmp_path)
+    assert run(old, new).summary["community"]["note"] is None and "does not list" not in run(old, new).markdown()
+
+
+def test_a_first_release_has_no_entries_to_compare_and_says_nothing_about_them(tmp_path):
+    new = make_release(tmp_path / "new", tag="data-2026-10-17")
+    set_community(new, reports=[report_entry("w91001", 5)])
+    report = results_diff.diff(None, new)
+    assert report.summary["community"] == {
+        "added": [], "retracted": [], "deleted": [], "changed": [], "first": {"reports": [], "retracted": []}, "strict_gained": [], "strict_lost": [], "note": None,
+    }  # fmt: skip
+    assert "Community evidence" not in report.markdown()
+
+
+def test_the_markdown_lists_twenty_entries_with_their_issues_and_the_json_all_of_them(tmp_path):
+    old, new = pair(tmp_path)
+    entries = [report_entry(f"w{91000 + number}", 100 + number) for number in range(25)]
+    set_community(new, reports=entries)
+    report = run(old, new)
+    assert len(report.summary["community"]["added"]) == 25 and len(json.loads(report.json_text())["summary"]["community"]["added"]) == 25
+    text = report.markdown()
+    assert "- added (25): " in text and "`w91000` (issue 100)" in text and "`w91019` (issue 119)" in text and "`w91020`" not in text
+    assert "and 5 more (the JSON lists them all)" in text
 
 
 # ---- new and removed trios and tiers -------------------------------------------------------------------------------------------------------
@@ -1015,6 +1511,42 @@ def test_a_community_entry_explains_a_strict_pick_and_not_a_wiki_one(tmp_path):
     report = run(old, new)
     assert view(report, "strict")["causes"] == ["community"]
     assert view(report, "wiki")["causes"] == [] and view(report, "wiki")["flag"] == "solver-diff"
+
+
+@pytest.mark.parametrize("shard_name", ["wiki-own", "strict-own"])
+@pytest.mark.parametrize(("flags", "zone"), LIFTS)
+def test_an_item_a_report_lifted_from_hidden_to_strict_explains_the_picks_of_both_pools_it_joins_with_both_causes(tmp_path, flags, zone, shard_name):
+    """Hidden to strict is in neither pool before and in both after: the rule of the pools credits the data (what let the report through) and the community (what makes the item
+    strict) in each, and a pick of a pool the item does not join would be credited to neither."""
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, flags, reported=True, zone=zone)
+    put_ladder_evidence(new, [], reported=True)
+    pick(new, LADDER_ITEM, name=shard_name)
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["causes"] == ["data", "community"] and change["flag"] is None
+
+
+@pytest.mark.parametrize("shard_name", ["wiki-own", "strict-own"])
+def test_an_item_a_mark_takes_from_strict_to_hidden_explains_the_picks_of_both_pools_it_leaves_with_the_data_alone(tmp_path, shard_name):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, ["wiki_banner_dne"], reported=True)
+    pick(old, LADDER_ITEM, name=shard_name)
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["causes"] == ["data"] and change["flag"] is None  # (the entry did not change)
+
+
+@pytest.mark.parametrize("shard_name", ["wiki-own", "strict-own"])
+def test_an_item_a_retraction_takes_from_strict_to_wiki_explains_the_strict_pick_alone_with_the_community(tmp_path, shard_name):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    put_ladder_evidence(new, [], reported=False, retracted=True)
+    pick(old, LADDER_ITEM, name=shard_name)
+    (change,) = of_kind(run(old, new), "scenario")
+    if shard_name == "strict-own":
+        assert change["causes"] == ["community"] and change["flag"] is None
+    else:  # (the wiki pool held the item before and after: the pick moved for another reason, and a solver diff must not be hidden behind the retraction)
+        assert change["causes"] == [] and change["flag"] == "solver-diff"
 
 
 # ---- the runner-ups of a view that one release lacks, and the evidence of a view ------------------------------------------------------------------

@@ -209,7 +209,9 @@ SAMPLE_BUDGET = 2_000_000  # bytes of gzip, summed over the files of the committ
 SCHEMA = Path(__file__).with_name("fixtures.schema.json")
 #: a key of an invented item: never the shape of a catalog key (``w`` and digits, or ``r`` and a name)
 INVENTED_KEY = re.compile(r"^it[a-z0-9-]*$")
-FORBIDDEN_WORDS = ("seen-in-game", "community-report", "seen_keys", "seen-flags")
+#: the words of the private flags that no fixture may hold. A word is matched whole (as a code or a name, up to the next character that is no letter, digit, hyphen or
+#: underscore), never as a part of another: ``seen-in-game-notes`` is not ``seen-in-game``. Community reports are public and have no word here.
+FORBIDDEN_WORDS = ("seen-in-game", "seen_keys", "seen-flags")
 PER_LINE = frozenset(
     {"records", "solves", "evaluations", "profiles", "items", "compositions", "modes", "costs", "files", "races", "buff_table"}
 )
@@ -788,8 +790,8 @@ def public_problems(doc: Mapping[str, Any], catalog_keys: Iterable[str]) -> list
     (:func:`trioforge.bench.strict_proxy`). An empty list means the fixture may be committed or served."""
     catalog = set(catalog_keys)
     out: list[str] = []
-    text = json.dumps(doc).lower()
-    out += [f"the fixture contains {word!r}, which belongs to the private flags" for word in FORBIDDEN_WORDS if word in text]
+    words = set(re.findall(r"[a-z0-9_-]+", json.dumps(doc).lower()))
+    out += [f"the fixture contains {word!r}, which belongs to the private flags" for word in FORBIDDEN_WORDS if word in words]
     records = list(doc.get("records", ())) + (list(doc["items"]) if "defaults" in doc else [])
     for record in records:
         evidence = record.get("evidence", {})

@@ -36,6 +36,10 @@ RESULTS = REPO / "fixtures" / "site" / "results"
 SLUG = "pal-mnk-ber"
 SHA = "ab" * 32
 TAG = "data-2026-10-17"
+#: the entries of the list of reports, as the committed file holds them (invented keys)
+REPORT = {"key": "w80113", "kind": "seen", "issue": 5, "date": "2026-10-14", "check": "item-window-screenshot"}
+RETRACTION = {"key": "w80158", "issue": 7, "date": "2026-10-15", "reason": "rejected"}
+NO_ENTRIES = {"reports": [], "retracted": []}
 FILES = sorted(
     [
         "items.json",
@@ -62,7 +66,7 @@ def document(**over):
         tag=TAG, catalog_date="2026-10-14", catalog_sha256=SHA, rules_version="2026-10-13", rules={"level.current": {"value": 50, "status": "active"}},
         code_hash="cd" * 32, solver={"canonical": True, "highs": "1.15.1"}, build_options={"any_rule": "all", "haste_assumed": None}, level=50,
         game_patch="2026-09-22", trios={SLUG: [0, 4, 10]}, evidence={"w80113": "strict", "w80158": "wiki", "w80392": "hidden"}, snapshot_id="ef" * 16,
-        parity_sample="7/36",
+        parity_sample="7/36", community=NO_ENTRIES,
     )
     values.update(over)
     return assemble.release_document(**values)
@@ -248,6 +252,15 @@ def make_junction(link: Path, target: Path) -> None:
             pytest.skip("this machine cannot create a directory link")
 
 
+def remove_link(link: Path) -> None:
+    """Remove a directory link made by :func:`make_junction`, never what it points at. ``rmdir`` removes a junction (or a directory symbolic link) on Windows, but on Linux it
+    refuses a symbolic link, which is no directory to it (NotADirectoryError); ``unlink`` removes that link itself."""
+    try:
+        os.rmdir(link)
+    except NotADirectoryError:
+        os.unlink(link)
+
+
 def test_a_folder_link_in_the_results_is_refused_inside_a_trio_and_as_a_trio(tmp_path):
     results = results_copy(tmp_path)
     elsewhere = tmp_path / "elsewhere"
@@ -256,7 +269,7 @@ def test_a_folder_link_in_the_results_is_refused_inside_a_trio_and_as_a_trio(tmp
     make_junction(results / SLUG / "runnerups-link", elsewhere)
     with pytest.raises(ReleaseRefused, match="link"):
         assemble.stage(results, [SLUG], tmp_path / "stage1")
-    os.rmdir(results / SLUG / "runnerups-link")  # (removes the link, never what it points at)
+    remove_link(results / SLUG / "runnerups-link")  # (removes the link, never what it points at)
     make_junction(results / "war-clr-pal", elsewhere)
     with pytest.raises(ReleaseRefused, match="link"):
         assemble.stage(results, [SLUG, "war-clr-pal"], tmp_path / "stage2")
@@ -423,6 +436,144 @@ def test_a_release_json_with_another_field_or_a_missing_one_is_refused_on_readin
     (tmp_path / "r" / "release.json").unlink()
     with pytest.raises(ReleaseRefused, match=r"release\.json"):
         assemble.read_release_json(tmp_path / "r")
+
+
+# ---- the community entries in release.json ---------------------------------------------------------------------------------------------
+
+SENTINEL = "Zorblax Sentinel"  # a made-up phrase: a refusal must never repeat what the document says
+
+
+def test_release_json_records_the_community_entries_as_the_file_holds_them_between_the_evidence_map_and_the_snapshot_id():
+    keys = list(assemble.RELEASE_KEYS)
+    assert keys.index("community") == keys.index("evidence") + 1 and keys.index("snapshot_id") == keys.index("community") + 1
+    doc = document(community={"reports": [REPORT], "retracted": [RETRACTION]})
+    assert list(doc) == keys and doc["community"] == {"reports": [REPORT], "retracted": [RETRACTION]}
+    assert list(doc["community"]["reports"][0]) == ["key", "kind", "issue", "date", "check"]  # the fields in the order the file writes them
+    assert list(doc["community"]["retracted"][0]) == ["key", "issue", "date", "reason"]
+
+
+def test_a_release_that_has_no_entry_says_so_with_two_empty_lists():
+    assert document()["community"] == {"reports": [], "retracted": []}
+
+
+def test_release_document_has_no_default_for_the_entries_so_that_a_release_never_says_nothing_by_forgetting():
+    import inspect
+
+    assert inspect.signature(assemble.release_document).parameters["community"].default is inspect.Parameter.empty
+    values = dict(
+        tag=TAG, catalog_date="2026-10-14", catalog_sha256=SHA, rules_version="2026-10-13", rules={}, code_hash="cd" * 32, solver={}, build_options={}, level=50,
+        game_patch="2026-09-22", trios={SLUG: [0]}, evidence={}, snapshot_id="ef" * 16, parity_sample="0/36",
+    )
+    with pytest.raises(TypeError, match="community"):
+        assemble.release_document(**values)
+
+
+def test_the_entries_are_sorted_like_the_file_so_that_the_same_entries_are_the_same_bytes():
+    other = {**REPORT, "key": "w80099", "issue": 3}
+    one = document(community={"reports": [REPORT, other], "retracted": []})
+    two = document(community={"reports": [other, REPORT], "retracted": []})
+    assert one == two and [entry["key"] for entry in one["community"]["reports"]] == ["w80099", "w80113"]
+
+
+def test_a_release_json_with_entries_is_written_one_list_to_a_line_and_read_back_as_it_was(tmp_path):
+    doc = document(community={"reports": [REPORT], "retracted": [RETRACTION]})
+    (tmp_path / "r").mkdir()
+    assemble.write_release_json(tmp_path / "r", doc)
+    text = (tmp_path / "r" / "release.json").read_text(encoding="utf-8")
+    assert f'"reports":[{json.dumps(REPORT, separators=(",", ":"))}]' in text and f'"retracted":[{json.dumps(RETRACTION, separators=(",", ":"))}]' in text
+    lines = text.splitlines()
+    assert any(line.startswith('  "reports":[') for line in lines) and any(line.startswith('  "retracted":[') for line in lines)  # (each list has a line of its own)
+    assert assemble.read_release_json(tmp_path / "r") == doc
+
+
+def test_a_release_json_made_before_the_entries_were_recorded_is_still_read_and_is_not_taken_for_one_without_entries(tmp_path):
+    legacy = {name: value for name, value in document().items() if name != "community"}
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r" / "release.json").write_text(json.dumps(legacy), encoding="utf-8")
+    read = assemble.read_release_json(tmp_path / "r")
+    assert "community" not in read and list(read) == [name for name in assemble.RELEASE_KEYS if name != "community"]
+    assemble.write_release_json(tmp_path / "r", read)  # (written back as it was: an old release does not gain an empty field)
+    assert "community" not in assemble.read_release_json(tmp_path / "r")
+
+
+BAD_COMMUNITY = {
+    "not an object": [],
+    "a text": "reports",
+    "nothing": None,
+    "no lists": {},
+    "no list of retractions": {"reports": []},
+    "no list of reports": {"retracted": []},
+    "a third list": {"reports": [], "retracted": [], "extra": []},
+    "reports that is a text": {"reports": "w80113", "retracted": []},
+    "retracted that is an object": {"reports": [], "retracted": {}},
+    "an entry that is a text": {"reports": ["w80113"], "retracted": []},
+    "a field that is not allowed": {"reports": [{**REPORT, "note": SENTINEL}], "retracted": []},
+    "a field of a report missing": {"reports": [{k: v for k, v in REPORT.items() if k != "check"}], "retracted": []},
+    "a link for the issue (the old form)": {"reports": [{**REPORT, "issue": "https://example.invalid/issues/5"}], "retracted": []},
+    "a key that is a slug": {"reports": [{**REPORT, "key": "rzorblax-ring"}], "retracted": []},
+    "an issue that is zero": {"reports": [{**REPORT, "issue": 0}], "retracted": []},
+    "a kind that is not on the list": {"reports": [{**REPORT, "kind": SENTINEL}], "retracted": []},
+    "a day that is no day": {"reports": [{**REPORT, "date": "2026-13-01"}], "retracted": []},
+    "a check that is not on the list": {"reports": [{**REPORT, "check": "screenshot"}], "retracted": []},
+    "a reason that was dropped from the list": {"reports": [], "retracted": [{**RETRACTION, "reason": "abuse"}]},
+    "a reason that is free text": {"reports": [], "retracted": [{**RETRACTION, "reason": SENTINEL}]},
+    "a report twice": {"reports": [REPORT, {**REPORT, "kind": "tier"}], "retracted": []},
+    "a retraction twice": {"reports": [], "retracted": [RETRACTION, {**RETRACTION, "reason": "duplicate"}]},
+    "an issue in both lists": {"reports": [{**REPORT, "issue": 7}], "retracted": [RETRACTION]},
+}
+
+
+@pytest.mark.parametrize("community", list(BAD_COMMUNITY.values()), ids=list(BAD_COMMUNITY))
+def test_entries_that_are_not_of_the_form_of_the_file_are_refused_and_never_repeated(community):
+    with pytest.raises(ReleaseRefused, match="community") as caught:
+        document(community=community)
+    message = str(caught.value)
+    assert "\n" not in message and SENTINEL not in message and "zorblax" not in message.lower()
+
+
+@pytest.mark.parametrize("community", list(BAD_COMMUNITY.values()), ids=list(BAD_COMMUNITY))
+def test_a_release_json_on_disk_with_entries_that_are_not_of_the_form_is_refused_on_reading(tmp_path, community):
+    doc = document()
+    doc["community"] = community
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r" / "release.json").write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(ReleaseRefused, match="community"):
+        assemble.read_release_json(tmp_path / "r")
+
+
+def test_a_release_json_on_disk_whose_lists_are_not_in_the_order_of_the_file_is_refused(tmp_path):
+    doc = document()
+    doc["community"] = {"retracted": [], "reports": []}
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r" / "release.json").write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(ReleaseRefused, match="community"):
+        assemble.read_release_json(tmp_path / "r")
+
+
+def test_the_field_comes_after_the_evidence_map_on_disk_and_a_document_with_it_elsewhere_is_refused(tmp_path):
+    doc = document()
+    moved = {name: doc[name] for name in doc if name != "community"}
+    moved["community"] = doc["community"]  # (last: after the snapshot id)
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r" / "release.json").write_text(json.dumps(moved), encoding="utf-8")
+    with pytest.raises(ReleaseRefused, match=r"release\.json"):
+        assemble.read_release_json(tmp_path / "r")
+
+
+def test_the_pointer_has_the_fields_it_had_and_never_the_community_entries():
+    pointer = assemble.pointer_document(document(community={"reports": [REPORT], "retracted": [RETRACTION]}), "12" * 32)
+    assert list(pointer) == list(assemble.POINTER_KEYS) and "community" not in assemble.POINTER_KEYS
+    text = json.dumps(pointer)
+    assert "community" not in text and "w80113" not in text and "w80158" not in text and "item-window-screenshot" not in text
+
+
+def test_the_asset_holds_the_community_entries_in_release_json_and_nothing_else_about_them(tmp_path, staged):
+    assemble.write_release_json(staged, document(community={"reports": [REPORT], "retracted": [RETRACTION]}))
+    path, _ = packed(tmp_path, staged)
+    with tarfile.open(path, "r:gz") as archive:
+        inside = json.loads(archive.extractfile("release.json").read())
+        other = [m.name for m in archive.getmembers() if m.name != "release.json" and b"item-window-screenshot" in archive.extractfile(m).read()]
+    assert inside["community"] == {"reports": [REPORT], "retracted": [RETRACTION]} and other == []
 
 
 def test_every_snapshot_id_is_new_and_random():

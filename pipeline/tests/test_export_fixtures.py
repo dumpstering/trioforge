@@ -35,8 +35,10 @@ import pytest
 from jsonschema import Draft202012Validator
 
 import solver_helpers as H
+from after_an_add import AfterAnAdd, evidence_of
 from trioforge import bench
 from trioforge import upgrade as UP
+from trioforge.data.jsonio import load_strict
 from trioforge.export import brute, browser, fixture_cases, fixture_plan, fixture_tables, fixtures, milp_json
 from trioforge.export.fixture_plan import REQUIRED_STRATA, matrix_plan, pmb36_plan, upgrade_plan
 from trioforge.model import formulas as fm
@@ -945,10 +947,10 @@ def test_the_item_table_holds_every_wearable_including_the_hidden_ones_flagged_o
 # ---- public only -------------------------------------------------------------------------------------------------------------
 
 
-def test_the_public_catalog_has_no_strict_item_and_the_generator_refuses_a_catalog_that_has_one(tmp_path, inputs):
+def test_the_public_catalog_has_no_strict_item_the_flags_made_and_the_generator_refuses_a_catalog_that_has_one(tmp_path, inputs):
     assert not [item for item in inputs.document["items"] if item["evidence"]["level"] == "strict"]
-    summary = json.loads((REPO / "derived" / "catalog-summary.json").read_text(encoding="utf-8"))
-    assert summary["counts"]["by_level"]["strict"] == 0
+    committed = load_strict(REPO / "derived" / "catalog.json")["items"]  # (what the committed catalog holds as strict rests on a community report, which is public)
+    assert [item["key"] for item in committed if item["evidence"]["level"] == "strict" and "community-report" not in {r["code"] for r in item["evidence"]["reasons"]}] == []
     document = {**inputs.document, "items": copy.deepcopy(inputs.document["items"][:6])}  # a few items are enough to be refused
     reason = {"code": "seen-in-game", "seal": "measured", "text": "Seen."}
     document["items"][3]["evidence"] = {"level": "strict", "reasons": [reason]}
@@ -958,7 +960,7 @@ def test_the_public_catalog_has_no_strict_item_and_the_generator_refuses_a_catal
         fixtures.generate(tmp_path / "out", 1, scale="tiny", catalog=path)
     assert not (tmp_path / "out").exists()
     assert fixtures.main(["--out", str(tmp_path / "out2"), "--scale", "tiny", "--catalog", str(path)]) == 2
-    reason = {"code": "community-report:x", "seal": "player", "text": "Reported."}
+    reason = {"code": "seen-in-game:x", "seal": "measured", "text": "Seen."}
     document["items"][3]["evidence"] = {"level": "wiki", "reasons": [reason]}
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(fixtures.FixtureError, match="sighting"):
@@ -1021,13 +1023,123 @@ def test_strict_in_a_fixture_is_only_the_hash_proxy(mini_docs, catalog_keys):
 
 
 def test_a_word_that_belongs_to_the_private_flags_is_rejected_wherever_it_is(mini_docs, catalog_keys):
-    for word in ("seen-flags", "seen_keys", "community-report", "seen-in-game"):
+    for word in ("seen-flags", "seen_keys", "seen-in-game"):
         case = a_case(mini_docs)
         case["label"] = f"about {word}"
         assert any(word in problem for problem in fixtures.public_problems(case, catalog_keys))
     for doc in mini_docs.values():
         text = json.dumps(doc).lower()
         assert not any(word in text for word in fixtures.FORBIDDEN_WORDS)
+
+
+def test_a_word_is_matched_whole_and_a_community_report_is_public(mini_docs, catalog_keys):
+    """The words of the private flags are matched as whole codes and names, never as a part of another: the reasons of a community report (which are public) contain none of
+    them as a whole, and a name that merely starts with one is not the word."""
+    assert tuple(fixtures.FORBIDDEN_WORDS) == ("seen-in-game", "seen_keys", "seen-flags") and fixture_cases.FORBIDDEN_REASONS == ("seen-in-game",)
+    for harmless in ("community-report", "community-report-outweighed", "seen-in-game-notes", "unseen-flags", "preseen_keys"):
+        case = a_case(mini_docs)
+        case["label"] = f"about {harmless}"
+        assert not any("private flags" in problem for problem in fixtures.public_problems(case, catalog_keys)), harmless
+    for private in ("seen-in-game", "seen-in-game:Some Zone", "the seen_keys of", "seen-flags.json"):
+        case = a_case(mini_docs)
+        case["label"] = f"about {private}"
+        assert any("private flags" in problem for problem in fixtures.public_problems(case, catalog_keys)), private
+    table = copy.deepcopy(mini_docs["items/table.json.gz"])
+    table["items"][0]["evidence"] = {"level": "hidden", "codes": ["community-report-outweighed", "wiki-marked-removed"]}
+    assert fixtures.public_problems(table, catalog_keys) == []  # (a hidden item whose report the wiki outweighed is in the item table of every release)
+    table["items"][0]["evidence"] = {"level": "hidden", "codes": ["seen-in-game"]}
+    assert any("names a sighting" in problem for problem in fixtures.public_problems(table, catalog_keys))
+
+
+# ---- the first accepted report -----------------------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def after_an_add(tmp_path_factory, inputs):
+    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), inputs.document)
+
+
+def test_the_catalog_after_an_add_is_what_the_builder_writes_for_a_report(after_an_add):
+    """The setup holds what it claims: one strict item that rests on a report alone, and two hidden ones whose reasons say that a report was received and outweighed."""
+    live, marked, closed = (evidence_of(after_an_add, key) for key in after_an_add.keys)
+    assert live["level"] == "strict" and [r["code"] for r in live["reasons"]] == ["community-report"]
+    assert marked["level"] == "hidden" and "community-report-outweighed" in {r["code"] for r in marked["reasons"]} and "conflict-note" not in {r["code"] for r in marked["reasons"]}
+    assert closed["level"] == "hidden" and "community-report-outweighed" in {r["code"] for r in closed["reasons"]}
+    assert sum(1 for item in after_an_add.document["items"] if item["evidence"]["level"] == "strict") == 1
+
+
+def test_the_exporter_takes_an_item_that_is_strict_by_community_reports_alone_for_a_wiki_item(after_an_add, inputs):
+    """Community reports are public and the guard is about the private flags: the first accepted report must not stop the fixtures, and the fixtures must not change for it."""
+    after = fixture_cases.Inputs(REPO, after_an_add.path)  # (no FixtureError: "the catalog has 1 strict items and 1 with a sighting")
+    assert not [item for item in after.document["items"] if item["evidence"]["level"] == "strict"]
+    live = after_an_add.live["key"]
+    assert after.items_by_key[live]["evidence"]["level"] == "wiki" and "community-report" not in {r["code"] for r in after.items_by_key[live]["evidence"]["reasons"]}
+    assert after.records[live] == inputs.records[live]  # (the record of the item table is the one the catalog without the report gives)
+    assert after.table["count"] == inputs.table["count"]
+
+
+def test_the_item_table_names_the_outweighed_report_and_is_public(after_an_add):
+    after = fixture_cases.Inputs(REPO, after_an_add.path)
+    for key in after_an_add.keys[1:]:
+        assert "community-report-outweighed" in after.records[key]["evidence"]["codes"]
+    table = fixture_tables.item_table(after, None)  # (all of it: the full set holds every wearable, and so the hidden items a report was received for)
+    assert fixtures.public_problems(table, set(after.items_by_key)) == []
+
+
+def test_a_strict_item_that_the_flags_made_is_still_refused_beside_one_that_a_report_made(after_an_add, tmp_path):
+    document = copy.deepcopy(after_an_add.document)
+    seen = next(item for item in document["items"] if item["evidence"]["level"] == "hidden" and item["key"] not in after_an_add.keys)
+    seen["evidence"] = {"level": "strict", "reasons": [{"code": "seen-in-game", "seal": "measured", "text": "Seen."}]}
+    path = tmp_path / "catalog.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(fixtures.FixtureError, match=r"1 strict items"):
+        fixture_cases.Inputs(REPO, path)
+    seen["evidence"] = {"level": "strict", "reasons": [{"code": "community-report", "seal": "player", "text": "x"}, {"code": "seen-in-game", "seal": "measured", "text": "x"}]}
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(fixtures.FixtureError, match=r"1 strict items"):
+        fixture_cases.Inputs(REPO, path)  # (a report beside a sighting is not a report alone: the item is still strict, and is counted as such)
+    seen["evidence"] = {"level": "strict", "reasons": [{"code": "community-report", "seal": "player", "text": "x"}, {"code": "eql-catalog", "seal": "player", "text": "x"}]}
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(fixtures.FixtureError, match=r"1 strict items"):
+        fixture_cases.Inputs(REPO, path)  # (nor is a report beside a listing of the EQ Legends Tools catalog)
+
+
+@pytest.fixture(scope="module")
+def after_an_add_lifted(tmp_path_factory, inputs):
+    """The catalog after a report for a disputed wearable (the report lifts it to strict) and for a live one."""
+    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add-lifted"), inputs.document, kinds=("disputed", "live"))
+
+
+def test_an_item_a_report_made_strict_is_what_the_ladder_gives_it_without_the_report_whatever_the_level(after_an_add_lifted, inputs):
+    """The strict record of an item lists the report and a conflict-note, and not the signals the report lifted it over: nothing of its dispute is left in it. So the exporter asks
+    the ladder again, without the reports (the same function, the rules and the client data of the checkout), and what it answers is the evidence of the fixture, whether that
+    is wiki, disputed or hidden: the item is what the catalog without the report has, and the fixtures do not change for the first report."""
+    after = fixture_cases.Inputs(REPO, after_an_add_lifted.path)
+    disputed, live = after_an_add_lifted.disputed, after_an_add_lifted.live
+    assert evidence_of(after_an_add_lifted, disputed["key"])["level"] == "strict" and evidence_of(after_an_add_lifted, live["key"])["level"] == "strict"  # (the setup)
+    assert inputs.items_by_key[disputed["key"]]["evidence"]["level"] == "disputed"
+    for key in after_an_add_lifted.keys:
+        assert after.items_by_key[key]["evidence"] == inputs.items_by_key[key]["evidence"], key
+        assert after.records[key] == inputs.records[key], key
+    assert after.items_by_key[disputed["key"]]["evidence"]["reasons"]  # (its dispute is there to be seen)
+
+
+def test_the_record_of_an_item_that_is_not_strict_is_never_touched_whatever_its_reasons_say(after_an_add, tmp_path):
+    document = copy.deepcopy(after_an_add.document)
+    hidden = next(item for item in document["items"] if item["evidence"]["level"] == "hidden" and item["key"] not in after_an_add.keys)
+    hidden["evidence"] = {"level": "hidden", "reasons": [{"code": "community-report", "seal": "player", "text": "Reported."}]}  # (no ladder gives this: the level stands)
+    path = tmp_path / "catalog.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    after = fixture_cases.Inputs(REPO, path)
+    assert after.items_by_key[hidden["key"]]["evidence"] == hidden["evidence"]
+
+
+def test_the_fixtures_can_still_be_made_after_the_first_accepted_report(after_an_add, tmp_path):
+    after = fixture_cases.Inputs(REPO, after_an_add.path)
+    manifest = fixtures.generate(tmp_path / "out", 42, scale="tiny", inputs=after)
+    assert manifest["complete"] is True
+    assert fixtures.validate_directory(tmp_path / "out", set(after.items_by_key)) == []
+    assert fixtures.main(["--out", str(tmp_path / "again"), "--scale", "tiny", "--seed", "42", "--catalog", str(after_an_add.path)]) == 0
 
 
 # ---- validation catches ------------------------------------------------------------------------------------------------------

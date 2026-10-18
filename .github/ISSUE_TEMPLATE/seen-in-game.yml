@@ -1,11 +1,13 @@
 name: Seen in game
-description: Report an item, a tier or a drop you saw in the game.
-labels: [seen-report]
+description: Report an item or a tier you saw in the game, with a crop of its item window.
+labels: [seen-report, needs-check]
 body:
   - type: markdown
     attributes:
       value: |
         Do not include character names, player names, chat lines or screenshots of chat. Item names, zones and NPC names are fine.
+
+        A report counts only after a maintainer has checked a screenshot of the item window. Attach a crop of the item window and nothing else.
   - type: input
     id: item
     attributes:
@@ -55,4 +57,13 @@ body:
     id: evidence
     attributes:
       label: Evidence
-      description: An /outputfile line or an item-window screenshot. Crop your name out of the screenshot, and cut it out of the line, before you attach it. Do not include chat.
+      description: "Drag a crop of the item window into this box, and nothing else: crop your name out, and leave out chat and every other window."
+    validations:
+      required: true
+  - type: checkboxes
+    id: image-check
+    attributes:
+      label: Image check
+      options:
+        - label: "My image shows only the item window: no names, no chat"
+          required: true

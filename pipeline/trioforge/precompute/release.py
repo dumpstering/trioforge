@@ -21,7 +21,9 @@ this in order:
    whether one is: a decision to delete fails closed, :meth:`Git.tracked`), and every private file (the catalog with the flags merged among them) is checked against
    the path itself before it is written (:func:`check_private_output`: no link or junction on the way, and ``git check-ignore`` says it is ignored). The build folder
    must be ignored as a whole, or lie outside the work tree, before the first private file is written (:func:`check_build_folder`): a folder that ``.gitignore`` covers
-   in part would show files in the status of the checkout during the hours, and the check at the end would refuse the release after them.
+   in part would show files in the status of the checkout during the hours, and the check at the end would refuse the release after them. The entries of the committed
+   list of reports (``rules/community-seen.json``) are read once, with the reader of the catalog builder, and ``release.json`` records them (:func:`read_community`):
+   the public catalog must have been built from that very file, or the entries and the evidence of the items would not describe the same state.
 2. **The catalog with the seen flags merged** is built into ``build/catalog-with-seen/`` (:func:`build_seen_catalog`) and must come from the same inputs as the
    public ``derived/catalog.json`` (:func:`check_seen_catalog`). It never leaves ``build/``; it stands for the release's own catalog in the checks below.
 3. **The precompute of the grid** (:func:`precompute_grid`): every trio of the grid at its default scope (:mod:`trioforge.scope`), one trio at a time in a
@@ -88,6 +90,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from trioforge import community as community_module
 from trioforge import precompute
 from trioforge.data import catalog as catalog_module
 from trioforge.data.jsonio import MAX_FILE_BYTES, JsonFileError, load_strict, loads_strict, render
@@ -147,6 +150,7 @@ __all__ = [
     "parity_stride_limit",
     "precompute_grid",
     "privacy_gate",
+    "read_community",
     "resolve_previous",
     "run_trio",
     "scheduled_warnings",
@@ -622,6 +626,42 @@ def check_invariants(folder: str | os.PathLike[str], trios: Sequence[str], outco
     if problems:
         raise ReleaseRefused(f"the invariants of the design do not hold ({len(problems)}): " + _more(problems, 3))
     return len(list(trios))
+
+
+COMMUNITY_INPUT = "rules/community-seen.json"  # how the provenance of the public catalog names the list of reports it was built from
+
+
+def read_community(rules: str | os.PathLike[str], public_document: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """The community entries of a release: ``{"reports", "retracted"}`` as ``rules/community-seen.json`` of the checkout holds them, read once and held to the form of the file
+    (the reader of the catalog builder, with the day after which an entry is refused being today). ``release.json`` records them, and the report of the release lists what was
+    added and retracted from them.
+
+    They are the entries of the release only if the public catalog was built from this very file: its provenance records the SHA-256 of the list of reports it was built from,
+    and a file the catalog does not record, another file, or a file that is not there while the catalog records one is refused (the evidence of the items would rest on
+    other entries than the ones recorded). No file, and a catalog that records none, is a release without entries. :class:`ReleaseRefused` with one line that never repeats
+    what the file said.
+    """
+    path = Path(rules) / "community-seen.json"
+    inputs = (public_document.get("provenance") or {}).get("inputs") or ()
+    recorded = [record.get("sha256") for record in inputs if isinstance(record, Mapping) and record.get("file") == COMMUNITY_INPUT]
+    if not path.exists():
+        if recorded:
+            raise ReleaseRefused(
+                f"the public catalog was built from {COMMUNITY_INPUT}, which is not in the checkout: restore the file, or build the catalog again without it"
+            )
+        return {"reports": [], "retracted": []}
+    try:
+        data = path.read_bytes()
+        document = community_module.check_document(loads_strict(data.decode("utf-8"), path.name), today=community_module.today_utc())
+    except (OSError, UnicodeDecodeError):
+        raise ReleaseRefused(f"{COMMUNITY_INPUT} cannot be read") from None
+    except (JsonFileError, community_module.CommunityError) as error:
+        raise ReleaseRefused(" ".join(str(error).split())) from None
+    if recorded != [hashlib.sha256(data).hexdigest()]:
+        raise ReleaseRefused(
+            f"{COMMUNITY_INPUT} of the checkout is not the file the public catalog was built from (its provenance does not record this one): build the catalog again"
+        )
+    return {"reports": document["reports"], "retracted": document["retracted"]}
 
 
 def check_seen_catalog(public: str | os.PathLike[str], merged: str | os.PathLike[str]) -> None:
@@ -1529,6 +1569,7 @@ def build_release(
         public_document, catalog_digest = _read_strict_once(public)  # (read once, here: release.json is written from these, and the checks at the end compare the file with them)
     except (OSError, JsonFileError) as error:
         raise ReleaseRefused(f"the public catalog cannot be read: {error}") from None
+    community_entries = read_community(base / "rules", public_document)  # (read once, here, with the catalog: release.json records these entries)
     previous_path, note = (None, None) if is_trial and previous == "auto" else resolve_previous(base, build_path, tag, previous)  # (a trial is no release to compare)
     if note:
         warn(note)
@@ -1611,8 +1652,8 @@ def build_release(
         document = assemble.release_document(
             tag=tag, catalog_date=public_document["version"], catalog_sha256=begun.catalog_sha256, rules_version=spec_one.rules_version, rules=begun.rules,
             code_hash=assemble.combine_code_hashes(begun.chunk_code, begun.writer_code), solver=grid.solver_info(True), build_options=grid.build_info(),
-            level=spec_one.level, game_patch=spec_one.game_patch, trios={f.slug: list(f.tiers) for f in facts}, evidence=evidence, snapshot_id=snapshot_id,
-            trial=is_trial, parity_sample=sample,
+            level=spec_one.level, game_patch=spec_one.game_patch, trios={f.slug: list(f.tiers) for f in facts}, evidence=evidence, community=community_entries,
+            snapshot_id=snapshot_id, trial=is_trial, parity_sample=sample,
         )  # fmt: skip
         assemble.write_release_json(staging, document)
         assemble.check_clean(staging)

@@ -477,6 +477,16 @@ elapsed = time.perf_counter() - started
 
 
 def peak_bytes():
+    if sys.platform.startswith("linux"):
+        # Not getrusage here: Linux hands the peak of the process that started this one down through fork and exec, so a child of a big test run reads the run's
+        # memory and not its own. VmHWM is the peak of the program that is running now.
+        try:
+            with open("/proc/self/status", encoding="ascii", errors="replace") as status:
+                for line in status:
+                    if line.startswith("VmHWM:"):
+                        return int(line.split()[1]) * 1024
+        except OSError:
+            pass
     try:
         import resource
 
@@ -566,6 +576,26 @@ def test_a23_one_enormous_line_is_also_streamed(repo, keyfile, tmp_path):
     assert report["code"] == 1  # the name at the very end is found
     assert report["elapsed"] < 30
     assert report["peak"] < 200 * 2**20
+
+
+def test_a23_the_peak_read_is_the_scan_childs_own_and_not_the_one_of_the_run_that_started_it(repo, keyfile):
+    """Linux hands the peak memory of a process down to the program it starts (through fork and exec), so a child that asks getrusage reads the larger of its own peak and its
+    parent's. A23 runs inside a test run with thousands of tests loaded, and the first CI run on Linux read 545 MiB for a scan that peaks near 45 MiB. Here this process takes
+    300 MiB and gives it back, then starts the same child on a tiny file: the reading must still be the child's own."""
+    tiny = repo / "tiny.txt"  # a path given to the scanner must lie inside the repository
+    tiny.write_text("a few plain words\n", encoding="utf-8")
+    ballast = bytearray(b"x") * (300 * 2**20)  # (every page is written, so the memory is really taken)
+    del ballast
+    done = subprocess.run(
+        [sys.executable, "-c", CHILD, str(PIPELINE), str(tiny), str(keyfile)],
+        cwd=repo,
+        env=cli_env(),
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(done.stderr.strip().splitlines()[-1])
+    assert report["code"] == 0, done.stdout + done.stderr
+    assert report["peak"] < 150 * 2**20, f"the child read {report['peak'] / 2**20:.0f} MiB"
 
 
 def test_a16_through_the_command_line_a_crlf_checkout_keeps_its_line_exception(repo, keyfile):

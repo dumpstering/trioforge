@@ -1,16 +1,13 @@
 <main id="main" tabindex="-1" class="wrap home" data-page="home">
 <h1>Best gear for every class trio</h1>
 <p class="lead">Pick three classes and see the one kit to wear: exact answers for EverQuest Legends, with the evidence and the confidence behind every rule. TrioForge is a fan project.</p>
-<section aria-labelledby="live-h">
-<h2 id="live-h">Live now</h2>
-<ul id="live-trios" class="cards">
-<li><a href="/trio/pal-mnk-ber/">Paladin / Monk / Berserker: best gear (level 50)</a></li>
-</ul>
-<p>Every other trio is coming soon.</p>
-</section>
-<section aria-labelledby="pick-h">
+<section id="picker" hidden aria-labelledby="pick-h" data-live="pal-mnk-ber">
 <h2 id="pick-h">Pick your three classes</h2>
-<div id="picker" hidden data-live="pal-mnk-ber">
+<div class="control">
+<label for="trio-search">Search for a trio</label>
+<div class="combo"><input id="trio-search" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="2500" aria-describedby="trio-search-hint"></div>
+<p id="trio-search-hint" class="note">Type three classes in any order, such as <code>pal mnk ber</code> or <code>paladin monk berserker</code>.</p>
+</div>
 <fieldset class="chips">
 <legend>Classes (choose three)</legend>
 <span class="chip"><input type="checkbox" id="class-WAR" value="WAR"><label for="class-WAR">Warrior</label></span>
@@ -31,6 +28,12 @@
 <span class="chip"><input type="checkbox" id="class-BER" value="BER"><label for="class-BER">Berserker</label></span>
 </fieldset>
 <p id="picker-status" role="status" aria-live="polite">Pick three classes.</p>
-</div>
+</section>
+<section aria-labelledby="live-h">
+<h2 id="live-h">Trios that are ready</h2>
+<ul id="live-trios" class="cards">
+<li><a href="/trio/pal-mnk-ber/">Paladin / Monk / Berserker: best gear (level 50)</a></li>
+</ul>
+<p>Every other trio is coming soon.</p>
 </section>
 </main>

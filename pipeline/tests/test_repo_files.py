@@ -15,6 +15,8 @@ import io
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -88,14 +90,16 @@ ISSUE_FORMS = {
         "choices": {},
     },
     "seen-in-game.yml": {
-        "labels": ["seen-report"],
+        "labels": ["seen-report", "needs-check"],
         "required": {
             "item": None,
             "zone": None,
             "how obtained": "dropdown",
             "tier seen": "dropdown",
+            "evidence": "textarea",
+            "image check": "checkboxes",
         },
-        "optional": {"evidence": "textarea"},
+        "optional": {},
         "choices": {
             "how obtained": ["loot", "quest reward", "vendor", "crafted", "other"],
             "tier seen": [f"+{n}" for n in range(11)],
@@ -123,6 +127,7 @@ PUBLIC_TEXT_FILES = [
     "CONTRIBUTING.md",
     "SECURITY.md",
     "docs/RESUME.md",
+    "docs/runbook-moderation.md",
     "scripts/lock_hashes.py",
     ".github/pull_request_template.md",
     ".github/workflows/test.yml",
@@ -580,7 +585,8 @@ def test_workflow_has_exactly_the_python_js_and_privacy_jobs_on_ubuntu():
     jobs = _workflow()["jobs"]
     assert set(jobs) == {"python", "js", "privacy"}
     for name, job in jobs.items():
-        assert job["runs-on"] == "ubuntu-latest", name
+        # the image is pinned like the actions are: GitHub moves ubuntu-latest to Ubuntu 26 on 2026-10-19, and a move of the runner should be a commit of ours
+        assert job["runs-on"] == "ubuntu-24.04", name
 
 
 def test_checkout_never_persists_the_token():
@@ -736,6 +742,13 @@ def test_scanner_imports_with_only_the_standard_library():
 # ---- issue forms --------------------------------------------------------------------------
 
 
+def _is_required(element) -> bool:
+    """Whether a field of an issue form must be filled in: its validations say so; a group of checkboxes has no validations, and is required when an option of it is."""
+    if element["type"] == "checkboxes":
+        return any(option.get("required") is True for option in element["attributes"]["options"])
+    return element.get("validations", {}).get("required") is True
+
+
 @pytest.mark.parametrize("filename", sorted(ISSUE_FORMS))
 def test_issue_form_parses_warns_about_privacy_and_requires_its_fields(filename):
     spec = ISSUE_FORMS[filename]
@@ -768,14 +781,12 @@ def test_issue_form_parses_warns_about_privacy_and_requires_its_fields(filename)
 
     for label, kind in spec["required"].items():
         element = fields[label]
-        assert element.get("validations", {}).get("required") is True, (
-            f"{filename}: {label!r} must have validations.required: true"
-        )
+        assert _is_required(element), f"{filename}: {label!r} must have validations.required: true (a group of checkboxes: an option that is required)"
         if kind is not None:
             assert element["type"] == kind, f"{filename}: {label!r} should be a {kind}"
     for label, kind in spec["optional"].items():
         element = fields[label]
-        assert element.get("validations", {}).get("required") is not True
+        assert not _is_required(element)
         assert element["type"] == kind
 
     for label, expected in spec["choices"].items():
@@ -794,6 +805,43 @@ def test_seen_in_game_evidence_field_says_to_crop_your_name_out():
         if element["type"] != "markdown" and element["attributes"]["label"] == "Evidence"
     )
     assert "crop your name out" in evidence["attributes"]["description"].casefold()
+
+
+SEEN_FORM = ISSUE_DIR / "seen-in-game.yml"
+IMAGE_CHECK = "My image shows only the item window: no names, no chat"
+
+
+def _seen_form():
+    return load_yaml(SEEN_FORM.read_text(encoding="utf-8"))
+
+
+def test_seen_in_game_form_has_a_required_checkbox_that_the_image_shows_only_the_item_window():
+    boxes = [element for element in _seen_form()["body"] if element["type"] == "checkboxes"]
+    assert len(boxes) == 1
+    options = boxes[0]["attributes"]["options"]
+    assert [option["label"] for option in options] == [IMAGE_CHECK]
+    assert all(option.get("required") is True for option in options)  # (a group of checkboxes has no validations: each option says for itself)
+    assert "validations" not in boxes[0]
+
+
+def test_seen_in_game_form_asks_for_a_crop_of_the_item_window_only_as_an_upload_and_for_no_log_line():
+    form = _seen_form()
+    evidence = next(
+        element for element in form["body"]
+        if element["type"] != "markdown" and element["attributes"]["label"] == "Evidence"
+    )
+    assert evidence["type"] == "textarea" and evidence["validations"]["required"] is True  # (a text box takes an image dragged into it)
+    text = _flat(evidence["attributes"]["description"]).casefold()
+    for needle in ("drag", "crop", "item window", "chat", "every other window"):
+        assert needle in text, needle
+    assert "/outputfile" not in text and "log line" not in text  # a line of the log holds a character name
+    assert "item window" in _flat(form["body"][0]["attributes"]["value"]).casefold()  # the opening block says what a maintainer will check
+
+
+def test_seen_in_game_form_flags_the_report_for_the_maintainers_check_and_never_says_it_is_checked():
+    labels = _seen_form()["labels"]
+    assert "needs-check" in labels and "seen-report" in labels
+    assert "screenshot-checked" not in labels  # that label is the maintainer's, set after the check
 
 
 def test_issue_chooser_config_disables_blank_issues():
@@ -816,6 +864,156 @@ def test_issue_chooser_config_links_to_the_security_policy_of_a_real_account_or_
         assert re.fullmatch(r"https://github\.com/[^/\s]+/[^/\s]+/security/policy", link["url"])
         assert "/OWNER/" not in link["url"]
         assert "private" in link["about"].casefold()
+
+
+# ---- the moderation runbook ---------------------------------------------------------------
+
+RUNBOOK = "docs/runbook-moderation.md"
+REPORT_REASONS = ["withdrawn", "wrong-item", "rejected", "duplicate"]  # the reasons of a retraction (trioforge.community.REASONS; this file imports nothing of trioforge)
+
+
+def _runbook() -> str:
+    return _flat(_read(RUNBOOK)).casefold()
+
+
+def test_the_runbook_says_how_to_check_a_report_and_that_the_wiki_outweighs_it():
+    text = _runbook()
+    for needle in ("item window", IMAGE_CHECK.casefold(), "`needs-check`", "`screenshot-checked`", "outweigh", "derived/catalog.json", "no free text"):
+        assert needle in text, needle
+
+
+def test_the_runbook_says_what_outweighs_a_report_and_when_a_report_that_was_outweighed_counts():
+    """The wiki's marks and a zone that is closed outweigh a report; the report waits, and counts from the release in which the mark goes or the zone opens, which is a
+    release whose report of results says so (an edit of the wiki must not put an item in the kits without the maintainer reading that)."""
+    text = _runbook()
+    for needle in (
+        "every zone is unreleased or not part of eql",
+        "a screenshot shows that the item is in the game's data, not that anyone can get it",
+        "from the release in which the mark is taken off or the zone is opened",
+        "strict now because of a report",
+        "release.json",
+        "no longer strict, the report retracted",
+        "no longer strict, the report outweighed",
+        "recorded in this release for the first time",
+    ):
+        assert needle in text, needle
+
+
+def test_the_runbook_has_the_command_to_add_and_the_command_to_retract_with_every_reason():
+    text = _runbook()
+    assert "python -m trioforge.community add --key" in text and "--screenshot-checked" in text and "--kind seen" in text
+    assert "python -m trioforge.community retract --issue" in text and "--reason" in text
+    for reason in REPORT_REASONS:
+        assert f"`{reason}`" in text, reason
+    for needle in ("results diff", "community evidence", "next release"):
+        assert needle in text, needle  # a retraction shows in the report of the next release
+
+
+def test_the_runbook_says_how_to_delete_revisions_and_ask_github_support_to_purge_an_attachment():
+    text = _runbook()
+    for needle in ("delete revision", "edited", "github support", "purge", "attachment", "character name", "chat"):
+        assert needle in text, needle
+
+
+def test_the_runbook_says_how_to_set_the_interaction_limits():
+    text = _runbook()
+    for needle in ("interaction limits", "existing users", "prior contributors", "repository collaborators", "moderation options"):
+        assert needle in text, needle
+
+
+def test_the_runbook_lists_every_label_of_the_issue_forms_and_the_ones_of_the_check_and_how_to_create_them():
+    text = _runbook()
+    labels = {label for spec in ISSUE_FORMS.values() for label in spec["labels"]} | {"needs-check", "screenshot-checked", "retracted"}
+    assert labels >= {"seen-report", "data", "site", "rules"}
+    for label in sorted(labels):
+        assert f"`{label}`" in text, label
+    assert "gh label create" in text
+
+
+def test_the_runbook_has_no_reason_that_labels_the_account_of_a_reporter():
+    """A reason stays in a public file beside an issue number for good, so the list holds none that says what the person did."""
+    text = _runbook()
+    assert "`abuse`" not in text and "`rejected`" in text
+    assert "says nothing about the person" in text
+
+
+def _incident_steps() -> tuple[str, list[str]]:
+    """The section of the runbook about a name or chat in an attachment (flattened, casefolded) and its numbered steps."""
+    section = _read(RUNBOOK).split("## A name or chat in an attachment", 1)[1].split("\n## ", 1)[0]
+    steps = [_flat(line.split(". ", 1)[1]).casefold() for line in section.splitlines() if re.match(r"\d+\. ", line)]
+    return _flat(section).casefold(), steps
+
+
+def test_the_first_step_of_an_incident_is_to_hide_or_delete_the_content():
+    section, steps = _incident_steps()
+    assert len(steps) >= 5 and steps[0].startswith("hide or delete")
+    assert "make the content unreachable first" in section
+
+
+def test_nothing_public_is_added_to_an_incident_until_the_attachment_is_gone():
+    """Between hiding the content and the purge of the attachment, a label, a comment, a retraction or a commit that names the issue would point at a picture that can still be opened."""
+    section, steps = _incident_steps()
+    purge = next(number for number, step in enumerate(steps) if "ask github support to purge" in step)
+    wait = next(number for number, step in enumerate(steps) if "add nothing public" in step)
+    retract = next(number for number, step in enumerate(steps) if "retract it" in step)
+    assert purge < wait < retract
+    for needle in ("until the attachment is gone", "no label", "no comment", "no retraction", "no commit"):
+        assert needle in steps[wait], needle
+    for number in range(wait):
+        assert not any(word in steps[number] for word in ("retract it", "set the label", "close the issue")), (number, steps[number])
+    assert "before the attachment is gone" in _runbook()  # the table of labels says so beside `retracted`
+
+
+def _documented_commands() -> list[list[str]]:
+    """The commands of the reports that the runbook shows in its code blocks, each as its words."""
+    blocks = re.findall(r"```\n(.*?)```", _read(RUNBOOK), re.DOTALL)
+    return [shlex.split(line) for block in blocks for line in block.splitlines() if "trioforge.community" in line]
+
+
+def test_the_commands_of_the_runbook_are_written_the_way_the_repository_runs_a_module():
+    """``PYTHONPATH=pipeline python -m trioforge.<module>`` from the root, as the pull request template and the guide for contributors write it; on PowerShell the path is set first."""
+    commands = _documented_commands()
+    assert [words[words.index("-m") + 2] for words in commands] == ["add", "retract"]
+    assert all(words[:4] == ["PYTHONPATH=pipeline", "python", "-m", "trioforge.community"] for words in commands), commands
+    assert '$env:pythonpath = "pipeline"' in _runbook()
+
+
+def test_the_commands_of_the_runbook_run_as_written_from_the_root_of_a_repository(tmp_path):
+    """Run word for word, from the root of a repository of the test's own (a copy of the package and a catalog of one invented wearable), with the environment the line sets
+    and no other path to the package: the first command adds the report the second retracts."""
+    root = tmp_path / "repo"
+    shutil.copytree(ROOT / "pipeline" / "trioforge", root / "pipeline" / "trioforge", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    (root / "derived").mkdir()
+    (root / "derived" / "catalog.json").write_text(json.dumps({"items": [{"key": "w123", "name": "Invented Cap", "slots": ["HEAD"]}]}), encoding="utf-8")
+    commands = _documented_commands()
+    assert len(commands) == 2
+    for words in commands:
+        words = list(words)
+        environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+        while "=" in words[0] and not words[0].startswith("-"):
+            name, value = words.pop(0).split("=", 1)
+            environment[name] = value
+        assert words[:3] == ["python", "-m", "trioforge.community"]
+        done = subprocess.run([sys.executable, *words[1:]], cwd=root, env=environment, capture_output=True, text=True, timeout=120, check=False)
+        assert done.returncode == 0 and done.stderr == "", (words, done.stderr)
+    document = json.loads((root / "rules" / "community-seen.json").read_text(encoding="utf-8"))
+    assert document["reports"] == [] and [(entry["key"], entry["issue"], entry["reason"]) for entry in document["retracted"]] == [("w123", 5, "withdrawn")]
+
+
+def test_the_command_of_the_runbook_needs_the_path_it_names(tmp_path):
+    """Without PYTHONPATH=pipeline the module is not found: the line of the runbook is not a decoration."""
+    root = tmp_path / "repo"
+    shutil.copytree(ROOT / "pipeline" / "trioforge", root / "pipeline" / "trioforge", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    done = subprocess.run([sys.executable, "-m", "trioforge.community", "--help"], cwd=root, env=environment, capture_output=True, text=True, timeout=120, check=False)
+    assert done.returncode != 0 and "No module named" in done.stderr
+
+
+def test_the_runbook_names_no_person_and_no_account_only_the_owner_of_the_build_as_a_placeholder():
+    text = _read(RUNBOOK)
+    assert not re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text), "an e-mail address"
+    assert not re.search(r"(?<![\w.])github\.com/(?!<owner>)", text), "an address of a concrete account"
+    assert "<owner>" in text
 
 
 # ---- licences -----------------------------------------------------------------------------

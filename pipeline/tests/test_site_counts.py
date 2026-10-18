@@ -20,6 +20,7 @@ from collections.abc import Collection
 from pathlib import Path
 
 import pytest
+from after_an_add import AfterAnAdd, strict_without_a_report
 
 from trioforge import rules as rules_module
 from trioforge.export import browser
@@ -54,11 +55,11 @@ def levels(table: dict) -> Counter:
     return Counter(record["evidence"]["level"] for record in table["items"])
 
 
-def counts_the_flags_decide(results: Path) -> set[int]:
+def counts_the_flags_decide(results: Path, catalog: Path = CATALOG) -> set[int]:
     """The counts of the item table of ``results`` that the seen flags decide: the number of items at an evidence level where it is not the number the public catalog alone gives, and
     the number of pages (strict and wiki items) where it is not the public catalog's. Only counts of ``LEAST`` and more."""
     real = json.loads((results / "items.json").read_text(encoding="utf-8"))
-    public = browser.items(json.loads(CATALOG.read_text(encoding="utf-8")), rules_module.load(RULES))
+    public = browser.items(json.loads(catalog.read_text(encoding="utf-8")), rules_module.load(RULES))
     mine, theirs = levels(real), levels(public)
     figures = {mine[level] for level in mine if mine[level] != theirs[level]}
     pages = lambda count: count["strict"] + count["wiki"]  # noqa: E731
@@ -99,10 +100,18 @@ def test_the_scan_finds_a_figure_with_or_without_its_separator_and_leaves_look_a
     assert figures_in("", figures) == set() and figures_in("8642", set()) == set()
 
 
-def test_the_counts_the_flags_decide_are_the_ones_the_public_catalog_alone_does_not_give(tmp_path):
-    public = browser.items(json.loads(CATALOG.read_text(encoding="utf-8")), rules_module.load(RULES))
+@pytest.fixture(scope="module")
+def after_an_add(tmp_path_factory):
+    """The public catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh."""
+    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), json.loads(CATALOG.read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize("after", [False, True], ids=["the committed catalog", "the catalog after an accepted report"])
+def test_the_counts_the_flags_decide_are_the_ones_the_public_catalog_alone_does_not_give(tmp_path, request, after):
+    catalog = request.getfixturevalue("after_an_add").path if after else CATALOG
+    public = browser.items(json.loads(catalog.read_text(encoding="utf-8")), rules_module.load(RULES))
     kept = Counter(levels(public))
-    assert kept["wiki"] > LEAST and kept["strict"] == 0  # (the public catalog has no strict item: that level comes from the flags alone)
+    assert kept["wiki"] > LEAST and strict_without_a_report(public) == []  # (a strict item of the public catalog rests on a report, which is public: a flag is the maintainer's alone)
     # a table in which two hidden items were rescued by a sighting: the wiki items are the public ones, the rescued are strict
     table = json.loads(json.dumps(public))
     rescued = [record for record in table["items"] if record["evidence"]["level"] == "hidden"][:2]
@@ -111,9 +120,20 @@ def test_the_counts_the_flags_decide_are_the_ones_the_public_catalog_alone_does_
         record.pop("owned_only", None)
     (tmp_path / "items.json").write_text(json.dumps(table), encoding="utf-8")
     mine = levels(table)
-    assert mine["strict"] == 2 and mine["hidden"] == kept["hidden"] - 2 and mine["wiki"] == kept["wiki"]
+    assert mine["strict"] == kept["strict"] + 2 and mine["hidden"] == kept["hidden"] - 2 and mine["wiki"] == kept["wiki"]
     # the hidden count and the number of pages are not the public ones; the strict count is too, but a count so small is in every file; the wiki and the disputed counts are the public ones
-    assert counts_the_flags_decide(tmp_path) == {kept["hidden"] - 2, kept["wiki"] + 2}
+    assert counts_the_flags_decide(tmp_path, catalog) == {kept["hidden"] - 2, kept["strict"] + kept["wiki"] + 2}
+
+
+@pytest.mark.parametrize("evidence", [{"level": "strict", "codes": ["seen-in-game"]}, {"level": "strict"}, {"level": "strict", "codes": ["eql-catalog"]}, {"level": "strict", "codes": ["community-report", "seen-in-game"]}])
+def test_a_strict_item_that_no_report_alone_made_is_refused_in_a_public_table(evidence):
+    """The public catalog may have strict items now, but only the ones a report made: a flag, a listing its owner has not allowed, or nothing public at all is refused."""
+    public = browser.items(json.loads(CATALOG.read_text(encoding="utf-8")), rules_module.load(RULES))
+    record = next(record for record in public["items"] if record["evidence"]["level"] == "hidden")
+    record["evidence"] = evidence
+    assert strict_without_a_report(public) == [browser.record_key(record)]
+    record["evidence"] = {"level": "strict", "codes": ["community-report"]}
+    assert strict_without_a_report(public) == []
 
 
 # ---- the repository and its history, against the real results of this computer -------------------------------------------------------------

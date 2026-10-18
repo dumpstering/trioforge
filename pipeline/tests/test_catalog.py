@@ -121,9 +121,20 @@ def quests_file(tmp_path_factory):
     return path
 
 
-def build(tmp_path, records, quests, *, out=None, client=CLIENT, rules=RULES, **kwargs):
+def rules_without_reports(tmp_path):
+    """The hand-written rules of the checkout and no list of reports. A catalog built from a fixture is built from these, whatever reports the checkout has accepted: the first one
+    would otherwise be an input of every such build (its file in the provenance, its key among the unknown ones), and these tests are about the fixture."""
+    folder = tmp_path / "rules-without-reports"
+    folder.mkdir(exist_ok=True)
+    for name in ("hand-lists.json", "zone-aliases.json"):
+        shutil.copy(RULES / name, folder / name)
+    return folder
+
+
+def build(tmp_path, records, quests, *, out=None, client=CLIENT, rules=None, **kwargs):
     wiki = make_wiki(tmp_path / "wiki", records)
     out = out or tmp_path / "out"
+    rules = rules_without_reports(tmp_path) if rules is None else rules
     kwargs.setdefault("workers", 0)
     summary = build_catalog(wiki, client, out, quests_path=quests, rules_dir=rules, generated=DATE, **kwargs)
     return summary, out
@@ -699,17 +710,39 @@ def test_community_reports_make_items_strict_and_unknown_keys_are_counted(tmp_pa
     rules = tmp_path / "rules"
     shutil.copytree(RULES, rules)
     report = {"version": DATE, "reports": [
-        {"key": FLAGGED_KEY, "issue": "https://example.invalid/issues/1"},
-        {"key": "w999999", "issue": "https://example.invalid/issues/2"},
+        {"key": FLAGGED_KEY, "kind": "seen", "issue": 1, "date": DATE, "check": "item-window-screenshot"},
+        {"key": "w999999", "kind": "tier", "issue": 2, "date": DATE, "check": "item-window-screenshot"},
+    ], "retracted": [
+        {"key": BYSTANDER_KEY, "issue": 3, "date": DATE, "reason": "wrong-item"},
     ]}  # fmt: skip
     (rules / "community-seen.json").write_text(json.dumps(report), encoding="utf-8")
     summary, out = build(tmp_path, [flagged_record(), bystander_record()], quests_file, rules=rules)
     items = items_by_key(out)
     assert level_and_codes(items[FLAGGED_KEY]) == ("strict", ["community-report"])
-    assert level_and_codes(items[BYSTANDER_KEY])[0] == "wiki"
+    assert level_and_codes(items[BYSTANDER_KEY])[0] == "wiki"  # (its report was retracted: an entry of "retracted" gives no key)
     assert summary["community_unknown"] == 1 and summary["counts"]["by_level"]["strict"] == 1
     provenance = read_json(out / "catalog.json")["provenance"]
     assert "rules/community-seen.json" in [record["file"] for record in provenance["inputs"]]
+
+
+def test_a_report_for_an_item_the_wiki_marks_as_gone_leaves_it_hidden_and_a_report_for_a_live_item_makes_it_strict(tmp_path, quests_file):
+    rules = tmp_path / "rules"
+    shutil.copytree(RULES, rules)
+    marked = plain_record(FLAGGED_PAGE, "Zorblax Signet", "{{delete}}\n" + flagged_record()["content"])  # a live source, and the banner that says the page was deleted
+    removed = synthetic_record(910003, "Blarg Signet", statsblock="Slot: FINGER", dropsfrom="ITEM REMOVED FROM GAME")
+    live = bystander_record()
+    reports = [{"key": f"w{page}", "kind": "seen", "issue": number, "date": DATE, "check": "item-window-screenshot"} for number, page in enumerate((FLAGGED_PAGE, 910003, BYSTANDER_PAGE), 1)]
+    (rules / "community-seen.json").write_text(json.dumps({"version": DATE, "reports": reports, "retracted": []}), encoding="utf-8")
+    summary, out = build(tmp_path, [marked, removed, live], quests_file, rules=rules)
+    items = items_by_key(out)
+    assert level_and_codes(items[FLAGGED_KEY]) == ("hidden", ["community-report-outweighed", "wiki-marked-not-in-eql"])
+    assert level_and_codes(items["w910003"]) == ("hidden", ["community-report-outweighed", "wiki-marked-removed"])
+    assert level_and_codes(items[BYSTANDER_KEY]) == ("strict", ["community-report"])
+    assert summary["counts"]["by_level"]["strict"] == 1 and summary["community_unknown"] == 0
+    assert "conflict-note" not in summary["counts"]["by_reason"]  # (nothing is kept as strict against the wiki's word)
+    counts = summary["counts"]
+    assert counts["by_reason"]["community-report-outweighed"] == 2  # both hidden items carry it ...
+    assert counts["hidden_by_reason"] == {"wiki-marked-not-in-eql": 1, "wiki-marked-removed": 1}  # ... and it is no reason to hide an item: only the marks hide them
 
 
 def test_the_allowed_catalog_keys_make_items_strict(tmp_path, quests_file):

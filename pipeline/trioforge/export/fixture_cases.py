@@ -3,8 +3,9 @@
 A **case** (``kind`` ``case``) is a JSON document that holds what a port needs to build the same program and what Python
 made of it, and nothing else. :mod:`trioforge.export.fixtures` describes the format; this module makes the documents.
 
-* The shared state of a run is an :class:`Inputs`: the tables, the catalog (refused if it holds a strict item), the item
-  table, the resolved buff sets and the pools of a trio. Nothing is read from anywhere else.
+* The shared state of a run is an :class:`Inputs`: the tables, the catalog (refused if it holds a strict item that the private
+  flags made; a strict item that community reports alone made is public, and the ladder is asked again about it without the
+  reports), the item table, the resolved buff sets and the pools of a trio. Nothing is read from anywhere else.
 * :func:`make_scenario` and :func:`scenario_case` make a case of the ``matrix`` or ``pmb36`` family: a profile (with the
   weights composed when the spec says so), the pool at one tier, the pruning, the built model and the canonical solve.
 * :func:`upgrade_case` makes a case of the ``upgrade`` family: Equip now and the first steps of the farm path, the best 2 and 3
@@ -84,7 +85,9 @@ __all__ = [
 FORMAT = 1
 SECONDARY_INDEX = SLOT_INSTANCES.index("SECONDARY")
 PRIMARY_INDEX = SLOT_INSTANCES.index("PRIMARY")
-FORBIDDEN_REASONS = ("seen-in-game", "community-report")
+#: the reason of a sighting of the maintainer's, the one a fixture must never name. (A community report is public: its reasons, ``community-report`` and
+#: ``community-report-outweighed``, are not here, and every check against this list matches the whole code, never a part of one.)
+FORBIDDEN_REASONS = ("seen-in-game",)
 OWNED_TIERS = (0, 0, 0, 2, 4, 4, 6)
 OWNED_COUNTS = (1, 1, 1, 2)
 BEST_SET_SIZES = (2, 3)  # the sizes of the best sets an Upgrade case records (the tab shows the best 2 and 3 behind an expander)
@@ -207,8 +210,37 @@ def idents(items: Iterable[ItemVec]) -> list[str]:
 # ---- the shared state of a run -------------------------------------------------------------------------------------------
 
 
+def _code(reason: Mapping[str, Any]) -> str:
+    return str(reason.get("code", "")).split(":")[0]
+
+
 def _names_a_sighting(reason: Mapping[str, Any]) -> bool:
-    return str(reason.get("code", "")).split(":")[0] in FORBIDDEN_REASONS
+    return _code(reason) in FORBIDDEN_REASONS
+
+
+def _by_community_alone(evidence: Mapping[str, Any]) -> bool:
+    """Whether an item is strict because players reported it and for no other reason: its reasons have ``community-report`` and neither the maintainer's sighting nor a listing
+    of the EQ Legends Tools catalog. Community reports are public (``rules/community-seen.json``), and the guard of the fixtures is about the private flags."""
+    codes = {_code(reason) for reason in evidence.get("reasons", ()) if isinstance(reason, Mapping)}
+    return evidence.get("level") == "strict" and "community-report" in codes and not codes & {"seen-in-game", "eql-catalog"}
+
+
+def _ladder_without_reports(root: Path, items: Sequence[Mapping[str, Any]]) -> Any:
+    """The context the catalog builder gives the ladder, without the reports of players, a seen flag or a listing: the rules, the client data and the quests of the checkout, and the
+    items of the catalog (for the names that are out of era and the names two pages share). :class:`FixtureError` where a file cannot be read."""
+    from trioforge.data import catalog as catalog_module
+    from trioforge.data import evidence as ladder
+
+    try:
+        client = catalog_module.check_client(root / "derived" / "client")
+        hand = ladder.load_hand_lists(root / "rules" / "hand-lists.json")
+        aliases = ladder.load_aliases(root / "rules" / "zone-aliases.json", zone_ids=client.ids)
+        quests = ladder.QuestTable.from_data(load_strict(root / "derived" / "quests.json"), "quests.json")
+    except (OSError, ValueError, catalog_module.BuildError) as error:
+        raise FixtureError(f"the ladder cannot be asked again about the items that reports made strict: {type(error).__name__}") from error
+    return ladder.Context(
+        flagged=client.flagged, aliases=aliases, hand=hand, quests=quests, out_of_era_names=ladder.out_of_era_names(items, hand), ambiguous_names=ladder.ambiguous_names(items)
+    )
 
 
 class Inputs:
@@ -216,7 +248,12 @@ class Inputs:
 
     ``catalog_path`` defaults to the catalog of this checkout (or of the main checkout of a worktree). A catalog with a
     strict item, or with an item whose reasons name a sighting, is refused: the fixtures come from the public catalog only,
-    and "strict" in a fixture means the hash proxy of :func:`trioforge.bench.strict_proxy`."""
+    and "strict" in a fixture means the hash proxy of :func:`trioforge.bench.strict_proxy`. The one exception is a strict item
+    that players' reports alone made (the first accepted report makes one): community reports are public, but the strict record
+    of such an item holds the report and a conflict-note and none of the signals the report lifted it over, so the ladder is asked
+    again about it without the reports (:func:`_ladder_without_reports`, from the files of ``root``), and what it answers is the
+    evidence of the item here, whichever level that is: wiki, disputed or hidden. It is what the catalog without the report has,
+    and the fixtures do not change for the report."""
 
     def __init__(self, root: Path = REPO, catalog_path: Path | None = None) -> None:
         self.root = Path(root)
@@ -233,6 +270,13 @@ class Inputs:
                 raise FixtureError(
                     f"{Path(path).name}: an item has no key or no evidence level (is this the catalog the builder writes?)"
                 )
+        by_reports = [item for item in document["items"] if _by_community_alone(item["evidence"])]
+        if by_reports:
+            from trioforge.data.evidence import classify
+
+            context = _ladder_without_reports(self.root, document["items"])
+            for item in by_reports:
+                item["evidence"] = classify(item, context)
         strict = [item["key"] for item in document["items"] if item["evidence"].get("level") == "strict"]
         seen = [
             item["key"] for item in document["items"]

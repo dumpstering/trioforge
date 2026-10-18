@@ -15,9 +15,13 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from trioforge.data import evidence as ladder_module
 from trioforge.data.evidence import (
     LEVELS,
+    NOT_HIDING_CODES,
+    NOTE_CODES,
     SEALS,
+    ZONE_CLOSED_CODES,
     Context,
     EvidenceError,
     HandLists,
@@ -747,6 +751,175 @@ def test_a_community_report_makes_an_item_strict():
     assert result["reasons"][0]["seal"] == "player"
 
 
+# A report counts as strict evidence, but it never outranks the wiki's own word that an item is gone: a banner that says the page was deleted or the item
+# does not exist, or the note that it was removed from the game. One report must not be able to put such an item into kits. Only the maintainer's own
+# evidence (the seen flags, a listing the owner allows) still does, as it always did.
+WIKI_MARKS = [
+    ("wiki_banner_delete", "wiki-marked-not-in-eql"),
+    ("wiki_banner_does_not_exist", "wiki-marked-not-in-eql"),
+    ("wiki_banner_dne", "wiki-marked-not-in-eql"),
+    ("removed_note", "wiki-marked-removed"),
+]
+
+
+@pytest.mark.parametrize(("flag", "mark"), WIKI_MARKS)
+def test_an_item_the_wiki_marks_as_gone_stays_hidden_when_players_report_it_and_the_reasons_say_both(flag, mark):
+    item = make_item(drops=[("Plane of Hate", ["Innoruuk"])], era_tags=["Classic Era"], flags=[flag])  # (a live source: the mark hides the item all the same)
+    result = classify(item, ctx(community_keys={"w1"}))
+    assert result["level"] == "hidden"
+    assert codes(result) == ["community-report-outweighed", mark]
+    by_code = {reason["code"]: reason for reason in result["reasons"]}
+    assert by_code["community-report-outweighed"]["seal"] == "player" and 0 < len(by_code["community-report-outweighed"]["text"]) <= 200
+    assert by_code[mark]["seal"] == "player"
+    assert "conflict-note" not in by_code and "community-report" not in by_code  # (it is not kept as strict, so there is nothing to note)
+
+
+def test_both_wiki_marks_and_a_report_give_both_marks_and_the_outweighed_report():
+    item = make_item(flags=["removed_note", "wiki_banner_delete"])
+    assert verdict(item, ctx(community_keys={"w1"})) == (
+        "hidden",
+        ["community-report-outweighed", "wiki-marked-not-in-eql", "wiki-marked-removed"],
+    )
+
+
+def test_a_report_for_another_item_changes_nothing_about_a_marked_item():
+    assert verdict(make_item(flags=["wiki_banner_dne"]), ctx(community_keys={"w2"})) == ("hidden", ["wiki-marked-not-in-eql"])
+
+
+def test_an_outweighed_report_leaves_the_notes_about_the_item_in_place():
+    item = make_item(flags=["wiki_banner_delete", "wiki_banner_revamped", "temporary"], deity=["Innoruuk"])
+    assert verdict(item, ctx(community_keys={"w1"})) == (
+        "hidden",
+        ["community-report-outweighed", "not-for-bis", "not-for-default-kits", "wiki-marked-not-in-eql", "wiki-marked-revamped"],
+    )
+
+
+@pytest.mark.parametrize("flags", [["wiki_banner_revamped"], ["temporary"], ["lore"], []])
+def test_a_live_item_the_wiki_does_not_mark_as_gone_is_strict_with_a_report(flags):
+    """A note on the page ("revamped", "temporary") is no mark: a report still counts as strict evidence."""
+    item = make_item(drops=[("Plane of Hate", ["Innoruuk"])], flags=flags)
+    result = classify(item, ctx(community_keys={"w1"}))
+    assert result["level"] == "strict" and "community-report" in codes(result)
+    assert "community-report-outweighed" not in codes(result) and "conflict-note" not in codes(result)
+
+
+# An item-window screenshot shows that the item is in the game's data, not that anyone can get it. So besides the wiki's marks, the two reasons that say every zone the item
+# comes from is closed outweigh a report on their own: ``zone-unreleased`` (the client flags the zone, the developers say it is not open) and ``zones-not-in-eql`` (the client
+# does not flag it). The seen flags still beat them; a report still lifts the items that are hidden or disputed for any other reason (by design).
+ZONE_CASES = [
+    pytest.param("zone-unreleased", [("Rujarkian Hills", ["a warlord"])], "developer", id="every zone is unreleased"),
+    pytest.param("zones-not-in-eql", [("Kael Drakkal", ["a dragon"])], "client", id="no zone is flagged by the client"),
+    pytest.param("zones-not-in-eql", [("Rujarkian Hills", ["a"]), ("Kael Drakkal", ["b"])], "client", id="an unreleased zone and an unflagged one"),
+    pytest.param("zones-not-in-eql", [("Rujarkian Hills", ["a"]), ("Blarg Marsh", ["b"])], "client", id="an unreleased zone and one that has no client id"),
+]
+
+
+@pytest.mark.parametrize(("code", "drops", "seal"), ZONE_CASES)
+def test_an_item_whose_zones_are_all_closed_stays_hidden_when_players_report_it_and_the_reasons_say_both(code, drops, seal):
+    item = make_item(drops=drops)
+    assert verdict(item) == ("hidden", [code])  # (without the report)
+    result = classify(item, ctx(community_keys={"w1"}))
+    assert result["level"] == "hidden" and codes(result) == ["community-report-outweighed", code]
+    by_code = {reason["code"]: reason for reason in result["reasons"]}
+    assert by_code[code]["seal"] == seal  # the reason keeps the seal of whoever said the zone is closed
+    assert by_code["community-report-outweighed"]["seal"] == "player" and "zone" in by_code["community-report-outweighed"]["text"].lower()
+    assert 0 < len(by_code["community-report-outweighed"]["text"]) <= 200
+    assert "conflict-note" not in by_code and "community-report" not in by_code
+
+
+def test_the_text_of_an_outweighed_report_names_what_outweighs_it():
+    marked = {r["code"]: r["text"] for r in classify(make_item(flags=["wiki_banner_dne"]), ctx(community_keys={"w1"}))["reasons"]}
+    closed = {r["code"]: r["text"] for r in classify(make_item(drops=[("Kael Drakkal", ["a"])]), ctx(community_keys={"w1"}))["reasons"]}
+    assert "mark" in marked["community-report-outweighed"] and "zone" not in marked["community-report-outweighed"]
+    assert "zone" in closed["community-report-outweighed"] and "mark" not in closed["community-report-outweighed"]
+
+
+def test_a_mark_and_a_closed_zone_together_give_the_marks_and_the_outweighed_report_as_before():
+    item = make_item(drops=[("Kael Drakkal", ["a"])], flags=["wiki_banner_delete"])
+    assert verdict(item, ctx(community_keys={"w1"})) == ("hidden", ["community-report-outweighed", "wiki-marked-not-in-eql"])  # (the marks are the only hidden reasons given)
+
+
+@pytest.mark.parametrize(("code", "drops", "seal"), ZONE_CASES)
+def test_the_maintainers_evidence_still_beats_a_closed_zone_and_a_report_beside_it_is_listed_as_before(code, drops, seal):
+    item = make_item(drops=drops)
+    seen = classify(item, ctx(seen_keys={"w1"}, community_keys={"w1"}))
+    assert seen["level"] == "strict" and codes(seen) == ["community-report", "conflict-note", "seen-in-game"]
+    assert codes(classify(item, ctx(seen_keys={"w1"}))) == ["conflict-note", "seen-in-game"]
+    assert codes(classify(item, ctx(catalog_keys_allowed={"w1"}, community_keys={"w1"}))) == ["community-report", "conflict-note", "eql-catalog"]
+
+
+LIFTED_BY_DESIGN = [
+    pytest.param(make_item(crafted=[("Oggok Forge", [])]), "cultural-container", {}, id="made only in a cultural container"),
+    pytest.param(make_item(), "no-known-source", {}, id="no known source"),
+    pytest.param(make_item(era_tags=["Kunark Era"]), "out-of-era", {}, id="an era tag that is out of era and no source"),
+    pytest.param(make_item(drops=[("Blarg Marsh", ["a frog"])]), "zones-unmapped", {}, id="every zone has no client id"),
+    pytest.param(make_item(crafted=[("Forge", ["Velium Bar"])]), "out-of-era-ingredient", {"out_of_era_names": {"velium bar"}}, id="every recipe needs an ingredient that is out of era"),
+    pytest.param(make_item(drops=[("Plane of Hate", ["a"])], era_tags=["Kunark Era"]), "out-of-era-tag-live-zone", {}, id="a live source and an era tag that is out of era (disputed)"),
+    pytest.param(make_item(drops=[("Plane of Hate", ["a"])], era_tags=["Classic Era", "Kunark Era"]), "conflicting-era-tags", {}, id="a live source and both kinds of era tag (disputed)"),
+]
+
+
+@pytest.mark.parametrize(("item", "reason", "more"), LIFTED_BY_DESIGN)
+def test_a_report_still_lifts_an_item_that_is_hidden_or_disputed_for_another_reason(item, reason, more):
+    """By design: these are the wiki's signals (a name, a container, a tag, a gap), and a screenshot that shows the item in game answers them."""
+    assert reason in codes(classify(item, ctx(**more)))
+    result = classify(item, ctx(community_keys={"w1"}, **more))
+    assert result["level"] == "strict" and "community-report" in codes(result)
+    assert "community-report-outweighed" not in codes(result)
+
+
+def test_the_text_of_the_ladder_names_the_reasons_that_outweigh_a_report_and_the_ones_it_lifts_and_the_code_does_the_same():
+    """Step 5 of the module text says which reasons outweigh a report and which a report lifts, and a reader takes it at its word: the codes it names are the code's. The reasons
+    it lifts are the ones ``LIFTED_BY_DESIGN`` shows lifting, none of them outweighs, and a zone with no client id beside a closed zone is the closed zone's reason."""
+    text = " ".join((ladder_module.__doc__ or "").split())
+    outweigh = re.search(r"``([a-z-]+)`` and ``([a-z-]+)`` outweigh a report from players on their own", text)
+    assert outweigh is not None and {outweigh[1], outweigh[2]} == set(ZONE_CLOSED_CODES)
+    lifts = re.search(r"a report lifts an item that is hidden or disputed for any other reason \(([^()]*)\)", text)
+    assert lifts is not None
+    named = set(re.findall(r"``([a-z-]+)``", lifts[1]))
+    assert named == {param.values[1] for param in LIFTED_BY_DESIGN}, sorted(named)
+    assert not named & set(ZONE_CLOSED_CODES)
+    # (the sentence after it: an unmapped zone beside a closed one is the closed zone's reason, and it outweighs)
+    mixed = classify(make_item(drops=[("Rujarkian Hills", ["a"]), ("Blarg Marsh", ["b"])]), ctx(community_keys={"w1"}))
+    assert codes(mixed) == ["community-report-outweighed", "zones-not-in-eql"]
+    assert re.search(r"zone with no client id beside a closed zone gives ``zones-not-in-eql``, which outweighs a report", text) is not None
+
+
+def test_the_codes_that_outweigh_a_report_are_the_marks_the_closed_zones_and_the_removals():
+    """The report of results names what outweighs a report when an item stops being strict because of it. Beside ``community-report-outweighed`` the ladder gives the marks of the
+    wiki and the reasons that say every zone is closed (and nothing else that hides); a removal by a patch or by research hides the item first, and records no report at all."""
+    from trioforge.data.evidence import REMOVAL_CODES, WIKI_MARK_CODES
+
+    beside: set[str] = set()
+    for flag, _ in WIKI_MARKS:
+        beside |= set(codes(classify(make_item(flags=[flag]), ctx(community_keys={"w1"}))))
+    for param in ZONE_CASES:
+        beside |= set(codes(classify(make_item(drops=param.values[1]), ctx(community_keys={"w1"}))))
+    assert beside - {"community-report-outweighed"} == set(WIKI_MARK_CODES) | set(ZONE_CLOSED_CODES)
+    removed = [codes(classify(make_item(title=title), ctx(community_keys={"w1"}))) for title in ("Mask of Zorblax", "Wind Zorblax Helm")]
+    assert removed == [["removed-by-patch"], ["removed-by-research"]]  # (hidden before anything else is looked at: no outweighed report is recorded)
+    assert {code for found in removed for code in found} == set(REMOVAL_CODES)
+
+
+def test_the_codes_that_are_no_reason_to_hide_an_item_are_the_notes_and_the_outweighed_report():
+    """The summary of the catalog counts the items hidden for each reason: a note is none, and the record that a report was received and outweighed is none either (the mark or
+    the closed zone beside it is the reason). The notes stay the notes the pages word (``NOTE_CODES``)."""
+    assert NOT_HIDING_CODES == NOTE_CODES | {"community-report-outweighed"}
+    assert NOTE_CODES == {"not-for-bis", "not-for-default-kits", "wiki-marked-revamped"}
+    hidden_for = {code for flag in ("wiki_banner_delete", "removed_note") for code in codes(classify(make_item(flags=[flag]), ctx(community_keys={"w1"})))} - NOT_HIDING_CODES
+    assert hidden_for == {"wiki-marked-not-in-eql", "wiki-marked-removed"}
+
+
+def test_the_maintainers_own_evidence_still_beats_the_wikis_mark_and_a_report_beside_it_is_listed_as_before():
+    item = make_item(drops=[("Plane of Hate", ["Innoruuk"])], flags=["wiki_banner_delete"])
+    seen = classify(item, ctx(seen_keys={"w1"}, community_keys={"w1"}))
+    assert seen["level"] == "strict" and codes(seen) == ["community-report", "conflict-note", "seen-in-game"]
+    listed = classify(item, ctx(catalog_keys_allowed={"w1"}, community_keys={"w1"}))
+    assert listed["level"] == "strict" and codes(listed) == ["community-report", "conflict-note", "eql-catalog"]
+    alone = classify(item, ctx(seen_keys={"w1"}))
+    assert alone["level"] == "strict" and codes(alone) == ["conflict-note", "seen-in-game"]
+
+
 def test_a_listing_in_the_allowed_catalog_makes_an_item_strict():
     result = classify(make_item(), ctx(catalog_keys_allowed={"w1"}))
     assert result["level"] == "strict" and codes(result) == ["eql-catalog"]
@@ -1160,7 +1333,7 @@ def test_a_banner_does_not_beat_strict_evidence_which_gets_a_conflict_note():
     result = classify(item, ctx(seen_keys={"w1"}))
     assert result["level"] == "strict" and codes(result) == ["conflict-note", "seen-in-game"]
     assert "wiki-marked-not-in-eql" in {r["code"]: r for r in result["reasons"]}["conflict-note"]["text"]
-    removed = classify(make_item(flags=["removed_note"]), ctx(community_keys={"w1"}))
+    removed = classify(make_item(flags=["removed_note"]), ctx(seen_keys={"w1"}))  # (the maintainer's evidence beats the note; a report does not: see the tests above)
     assert removed["level"] == "strict" and "wiki-marked-removed" in removed["reasons"][0]["text"] + removed["reasons"][1]["text"]
 
 

@@ -85,9 +85,10 @@ from typing import Any
 
 import trioforge
 from trioforge.classes import CLASS_CODES
+from trioforge.community import CommunityError, read_document
 from trioforge.data.evidence import (
     LEVELS,
-    NOTE_CODES,
+    NOT_HIDING_CODES,
     Context,
     EvidenceError,
     HandLists,
@@ -461,24 +462,18 @@ def load_seen_keys(path: str | os.PathLike[str]) -> frozenset[str]:
 def load_community_keys(path: str | os.PathLike[str]) -> frozenset[str]:
     """The item keys accepted from player reports (``rules/community-seen.json``); none if there is no file.
 
-    The file is ``{"version", "reports": [{"key", "issue"}]}``: the key of the item and the public issue
-    where the report was accepted.
+    The file is ``{"version", "reports": [{"key", "kind", "issue", "date", "check"}], "retracted": [{"key", "issue", "date", "reason"}]}``
+    and is read strictly (:func:`trioforge.community.read_document`): a field, value or kind that the form does not list is refused, and so is a
+    file of the old form, with a line that says how to convert it. The keys of ``reports`` are the answer; the entries of ``retracted`` give none.
     """
     source = Path(path)
     if not source.exists():
         return frozenset()
-    document = _load_json(source, "rules/community-seen.json")
-    reports = document.get("reports") if isinstance(document, dict) else None
-    if not isinstance(reports, list):
-        raise BuildError("rules/community-seen.json must hold an object with a 'reports' list")
-    keys = []
-    for report in reports:
-        key = report.get("key") if isinstance(report, dict) else None
-        issue = report.get("issue") if isinstance(report, dict) else None
-        if not isinstance(key, str) or not _KEY.fullmatch(key) or not isinstance(issue, str) or not issue.startswith("https://"):
-            raise BuildError("rules/community-seen.json: every report needs an item key and an https issue link")
-        keys.append(key)
-    return frozenset(keys)
+    try:
+        document = read_document(source)
+    except CommunityError as error:
+        raise BuildError(str(error)) from error
+    return frozenset(entry["key"] for entry in document["reports"])
 
 
 # ---- where the seen flags may be merged -------------------------------------------------------------
@@ -708,7 +703,7 @@ def _counts(items: Sequence[Mapping[str, Any]], skipped: Counter) -> dict[str, A
         codes = {reason["code"].split(":", 1)[0] for reason in item["evidence"]["reasons"]}
         reasons.update(codes)
         if item["evidence"]["level"] == "hidden":
-            hidden_by_reason.update(codes - NOTE_CODES)
+            hidden_by_reason.update(codes - NOT_HIDING_CODES)  # a note, and the record of an outweighed report, hide nothing
 
     def ordered(counter: Counter) -> dict[str, int]:
         return {key: counter[key] for key in sorted(counter)}

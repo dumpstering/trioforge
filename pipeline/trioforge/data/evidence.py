@@ -8,7 +8,9 @@
 strict   seen in game (the maintainer's private flags, never in a committed build), reported by
          players (``rules/community-seen.json``) or listed by an EQL-specific catalog (only with its
          owner's permission). Never overrides a patch or research removal. When the wiki signals
-         disagree, the item stays strict and gets a ``conflict-note``.
+         disagree, the item stays strict and gets a ``conflict-note``; a report from players alone
+         does not override the wiki's own word that the item is gone, nor the word of the developers
+         or the client that every zone it comes from is closed (below).
 wiki     a source in a live zone and no conflict (below). Strict items are wiki items by definition.
 disputed a live source, but the wiki's era tag is out of era (the tags follow Project 1999, not EQL),
          or the page carries both an in-era and an out-of-era tag. Out by default; shown on item pages.
@@ -25,9 +27,13 @@ The order of the checks:
    item flags ``wiki_banner_delete``, ``wiki_banner_does_not_exist``, ``wiki_banner_dne``) hides the item with
    the reason ``wiki-marked-not-in-eql``, and the drop-list note ``ITEM REMOVED FROM GAME`` (``removed_note``)
    with ``wiki-marked-removed`` (both sealed ``player``: they are the wiki's word); these are the only hidden
-   reasons given, however many live sources the page lists, because the page says they are stale. Strict
-   evidence outranks them (the item stays strict, with a ``conflict-note``); a patch or research removal
-   is checked first, as before.
+   reasons given, however many live sources the page lists, because the page says they are stale. The
+   maintainer's own evidence (the seen flags, a listing the owner allows) outranks them: the item stays strict,
+   with a ``conflict-note``, and a report from players beside that evidence is listed as before. **A report from
+   players alone does not**: one report must not put an item the wiki says is gone into kits. An item that the
+   page marks and players report stays hidden, and its reasons are the marks and ``community-report-outweighed``
+   (a report was received, and the wiki's word outweighs it); it gets no ``conflict-note``. A patch or research
+   removal is checked first, as before.
 4. A **live source**: a drop in a live zone; a foraged zone that is live (``live-source:foraged``: the
    ``foraged`` list goes through the same zone gate as the drops, the EQL-only exemption included); a quest
    whose giver stands in a live zone and whose page is not out of era; a vendor in a live zone; a recipe in
@@ -46,7 +52,14 @@ The order of the checks:
    ``foraging`` and ``quest`` ("Every drop or quest zone is flagged but not yet released."). Besides them:
    ``out-of-era`` (an out-of-era tag), ``cultural-container`` (recipes only in cultural containers),
    ``out-of-era-ingredient`` (every other recipe needs an out-of-era ingredient). If none applies,
-   ``no-known-source``.
+   ``no-known-source``. **``zone-unreleased`` and ``zones-not-in-eql`` outweigh a report from players on their own**, as
+   the wiki's marks do (a screenshot of the item window shows that the item is in the game's data, not that anyone can
+   get it): an item with either stays hidden when players report it, with ``community-report-outweighed`` among its
+   reasons and no ``conflict-note``. The seen flags still override them; a report lifts an item that is hidden or
+   disputed for any other reason (``cultural-container``, ``no-known-source``, ``out-of-era``, ``out-of-era-ingredient``,
+   ``out-of-era-tag-live-zone``, ``conflicting-era-tags`` and ``zones-unmapped``). A zone with no client id beside a
+   closed zone gives ``zones-not-in-eql``, which outweighs a report: only an item whose every zone has no client id is
+   ``zones-unmapped``.
 6. Notes added at every level; the item stays in the catalog: ``not-for-bis`` (a temporary item, one a quest
    takes on hand-in, one whose class list or race list is empty because its page says ``Class: NONE`` or
    ``Race: NONE``: nobody may use or wear it, or a hand weapon that names a skill but has no damage or no delay,
@@ -110,8 +123,12 @@ __all__ = [
     "HAND_LISTS_PATH",
     "LEVELS",
     "NOTE_CODES",
+    "NOT_HIDING_CODES",
+    "REMOVAL_CODES",
     "SEALS",
     "WIKI_GONE_FLAGS",
+    "WIKI_MARK_CODES",
+    "ZONE_CLOSED_CODES",
     "Context",
     "EvidenceError",
     "HandLists",
@@ -159,6 +176,19 @@ CONFLICT_CODES = frozenset(
 
 # Reasons that are notes on an item, not the reason for its level: they are left out of the counts of hidden items.
 NOTE_CODES = frozenset({"not-for-bis", "not-for-default-kits", "wiki-marked-revamped"})
+
+# The reasons that are no reason to hide an item: the notes, and the record that a report from players was received and outweighed (the mark or the closed zone beside it is the
+# reason). The summary of the catalog counts the items hidden for each reason that is not one of these; ``NOTE_CODES`` stays the notes the pages word.
+NOT_HIDING_CODES = NOTE_CODES | {"community-report-outweighed"}
+
+# The reasons that say every zone an item comes from is closed: the developers say they are not open (``zone-unreleased``), or the client does not flag them
+# (``zones-not-in-eql``). With the wiki's marks they outweigh a report from players.
+ZONE_CLOSED_CODES = frozenset({"zone-unreleased", "zones-not-in-eql"})
+
+# The rest of what outweighs a report from players: the reasons the wiki page itself gives for hiding an item (step 3), and the removals that hide it before anything else is looked at
+# (step 1: a patch note, the maintainer's research). The report of results (:mod:`trioforge.reports.results_diff`) names them when an item stops being strict because of one.
+WIKI_MARK_CODES = frozenset({"wiki-marked-not-in-eql", "wiki-marked-removed"})
+REMOVAL_CODES = frozenset({"removed-by-patch", "removed-by-research"})
 
 # Item flags (see trioforge.data.normalize.FLAGS) that the wiki page sets.
 WIKI_GONE_FLAGS = frozenset({"wiki_banner_delete", "wiki_banner_does_not_exist", "wiki_banner_dne"})
@@ -624,7 +654,8 @@ class Context:
     * ``hand``: the hand-kept lists; ``quests``: the quest table.
     * ``seen_keys``: item keys seen in game. **Empty in every committed build**: it is filled only by the
       CI build and by a private local preview, which write outside ``derived/``.
-    * ``community_keys``: item keys reported by players (``rules/community-seen.json``).
+    * ``community_keys``: item keys reported by players (``rules/community-seen.json``). A report is strict
+      evidence, except for an item that the wiki page marks as gone (:func:`classify`).
     * ``catalog_keys_allowed``: item keys listed by EQ Legends Tools; empty unless its owner has agreed.
     * ``out_of_era_names``: :func:`title_key` of the items that are out of era (see
       :func:`out_of_era_names`), so a recipe that needs one is not a live source.
@@ -1014,10 +1045,15 @@ def classify(item: Mapping[str, Any], ctx: Context, report: Report | None = None
         strict: dict[str, dict[str, str]] = {}
         if key in ctx.seen_keys:
             strict["seen-in-game"] = _reason("seen-in-game", "measured", "Seen in game.")
-        if key in ctx.community_keys:
-            strict["community-report"] = _reason("community-report", "player", "Reported as seen in game by players.")
         if key in ctx.catalog_keys_allowed:
             strict["eql-catalog"] = _reason("eql-catalog", "player", "Listed in the EQ Legends Tools catalog.")
+        reported = key in ctx.community_keys
+        closed = bool(ZONE_CLOSED_CODES & signal_reasons.keys())  # every zone the item comes from is closed: unreleased, or not part of EQL by the client's flags
+        if reported and (strict or not (marked or closed)):
+            # A report is strict evidence, but it never overrides the wiki's own word that the item is gone, nor the word of the developers or the client that every zone it
+            # comes from is closed (a screenshot of the item window shows that the item is in the game's data, not that anyone can get it). Of the evidence that does
+            # override them (the maintainer's seen flags, a listing the owner allows), a report beside it is listed as ever; on its own it is outweighed (below).
+            strict["community-report"] = _reason("community-report", "player", "Reported as seen in game by players.")
         if strict:
             level, reasons = "strict", strict
             conflicts = sorted(code for code in (*signal_reasons, *marked) if code in CONFLICT_CODES)
@@ -1027,8 +1063,16 @@ def classify(item: Mapping[str, Any], ctx: Context, report: Report | None = None
                 )
         elif marked:
             level, reasons = "hidden", marked  # the page says the item is gone: its sources are stale, so they are not listed
+            if reported:
+                reasons["community-report-outweighed"] = _reason(
+                    "community-report-outweighed", "player", "Players reported the item, but the wiki's own mark says it is gone, and that outweighs a report."
+                )
         else:
             level, reasons = signal_level, signal_reasons
+            if reported and closed:
+                reasons["community-report-outweighed"] = _reason(
+                    "community-report-outweighed", "player", "Players reported the item, but every zone it comes from is unreleased or not part of EQL, and that outweighs a report."
+                )
 
     name_key = title_key(name) if name else ""
     causes = {

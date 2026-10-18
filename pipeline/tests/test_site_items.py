@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from after_an_add import AfterAnAdd, strict_without_a_report
 
 from trioforge import rules as rules_module
 from trioforge.data import evidence
@@ -559,9 +560,8 @@ def test_the_default_answer_of_a_trio_wears_the_items_of_the_default_scenario_an
 # ---- the same page for real items --------------------------------------------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def real():
-    catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+def real_of(catalog: dict) -> SimpleNamespace:
+    """The catalog (a document) with the item table that the results are made from."""
     rules = rules_module.load(RULES)
     table = browser.items(catalog, rules)
     originals = {item["key"]: item for item in catalog["items"]}
@@ -569,6 +569,17 @@ def real():
         rules=rules, book=content.load_rulebook(RULES), table=table, originals=originals,
         records={browser.record_key(record): record for record in table["items"]},
     )  # fmt: skip
+
+
+@pytest.fixture(scope="module")
+def real():
+    return real_of(json.loads(CATALOG.read_text(encoding="utf-8")))
+
+
+@pytest.fixture(scope="module")
+def real_after_an_add(tmp_path_factory):
+    """The catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh."""
+    return real_of(AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), json.loads(CATALOG.read_text(encoding="utf-8"))).document)
 
 
 def twenty(real) -> list[str]:
@@ -614,9 +625,14 @@ def test_the_tier_table_of_twenty_real_items_is_at_tier_figure_for_figure_weapon
     assert weapons >= 6
 
 
-def test_every_wearable_of_the_wiki_catalog_has_a_page_model_that_needs_nothing_the_table_lacks(real):
+@pytest.mark.parametrize("after", [False, True], ids=["the committed catalog", "the catalog after an accepted report"])
+def test_every_wearable_of_the_wiki_catalog_has_a_page_model_that_needs_nothing_the_table_lacks(request, after):
+    real = request.getfixturevalue("real_after_an_add" if after else "real")
     keys = build.item_page_keys(real.table)
-    assert len(keys) > 1500  # (the public catalog has no strict item: these are the wiki level)
-    for key in keys[:: max(1, len(keys) // 300)]:
+    assert len(keys) > 1500  # (these are the wiki level, and the strict items that a report made, which are public)
+    assert strict_without_a_report(real.table) == []  # (a flag is the maintainer's alone: a public catalog has no strict item that rests on one)
+    strict = [key for key in keys if real.records[key]["evidence"]["level"] == "strict"]
+    for key in [*keys[:: max(1, len(keys) // 300)], *strict]:
         page = view.item_page(real.records[key], defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=("A wiki page", 1))
-        assert page.key == key and page.level == "wiki" and len(page.description) <= 240
+        assert page.key == key and page.level == ("strict" if key in strict else "wiki") and len(page.description) <= 240
+    assert strict or not after  # (the catalog after an accepted report has a strict page: the setup holds; the committed one may or may not have one, the day it has)

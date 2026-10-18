@@ -104,6 +104,7 @@ def pointer_for(root: Path, tag: str, asset: Path | None, *, sha: str | None = N
     document = assemble.release_document(
         tag=tag, catalog_date="2026-10-14", catalog_sha256="ab" * 32, rules_version="2026-10-13", rules={}, code_hash="cd" * 32, solver={}, build_options={},
         level=50, game_patch="2026-09-22", trios={SLUG: [0, 4, 10]}, evidence={}, snapshot_id="ef" * 16, parity_sample="0/36",
+        community={"reports": [], "retracted": []},
     )
     digest = sha or (assemble._sha256_of(asset) if asset else "00" * 32)
     return assemble.write_pointer(root / "releases" / f"{tag}.json", assemble.pointer_document(document, digest))
@@ -811,8 +812,10 @@ def test_a_link_or_junction_on_the_way_to_a_private_output_is_refused_whatever_g
     (repo / "reports").mkdir()
     (repo / "build").mkdir()
     make_junction(repo / "build" / "reports", repo / "reports")  # build/reports/x.json is ignored by the text of its path, and is written to reports/x.json
-    git = release.Git(repo)
-    assert git.ignored(repo / "build" / "reports" / "x.json")  # (git reads the text of the path)
-    with pytest.raises(ReleaseRefused, match="link|junction") as raised:
-        release.check_private_output(repo / "build" / "reports" / "x.json", git)
-    assert "reports" in str(raised.value)
+    # What git says about a path behind a link depends on the system: git on Windows reads the text of the path and says "ignored" (it takes a junction for a folder), and git
+    # on Linux refuses the path ("beyond a symbolic link"), which is no answer at all. The refusal must wait for neither, so it is asked of the real git and of one that says
+    # "ignored", as git does on Windows.
+    for git in (release.Git(repo), SimpleNamespace(ignored=lambda place: True)):
+        with pytest.raises(ReleaseRefused, match="link|junction") as raised:
+            release.check_private_output(repo / "build" / "reports" / "x.json", git)
+        assert "reports" in str(raised.value)

@@ -1,20 +1,23 @@
 {% extends "base.html.j2" %}
-{% block main %}
-<main id="main" tabindex="-1" class="wrap home" data-page="home">
-<h1>Best gear for every class trio</h1>
-<p class="lead">Pick three classes and see the one kit to wear: exact answers for EverQuest Legends, with the evidence and the confidence behind every rule. TrioForge is a fan project.</p>
-<section aria-labelledby="live-h">
-<h2 id="live-h">Live now</h2>
-<ul id="live-trios" class="cards">
+{#- The list of every trio page, in the page itself: it needs no script, and it is how the pages are found by a visitor without one and by a search engine. -#}
+{% macro trio_list(live, kind) -%}
+<ul id="live-trios" class="{{ kind }}">
 {% for trio in live %}
 <li><a href="/trio/{{ trio.slug }}/">{{ trio.name }}: best gear (level {{ trio.level }})</a></li>
 {% endfor %}
 </ul>
-<p>Every other trio is coming soon.</p>
-</section>
-<section aria-labelledby="pick-h">
+{%- endmacro %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap home" data-page="home">
+<h1>Best gear for every class trio</h1>
+<p class="lead">Pick three classes and see the one kit to wear: exact answers for EverQuest Legends, with the evidence and the confidence behind every rule. TrioForge is a fan project.</p>
+<section id="picker" hidden aria-labelledby="pick-h" data-live="{{ live|map(attribute='slug')|join(' ') }}">
 <h2 id="pick-h">Pick your three classes</h2>
-<div id="picker" hidden data-live="{{ live|map(attribute='slug')|join(' ') }}">
+<div class="control">
+<label for="trio-search">Search for a trio</label>
+<div class="combo"><input id="trio-search" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="2500" aria-describedby="trio-search-hint"></div>
+<p id="trio-search-hint" class="note">Type three classes in any order, such as <code>pal mnk ber</code> or <code>paladin monk berserker</code>.</p>
+</div>
 <fieldset class="chips">
 <legend>Classes (choose three)</legend>
 {% for cls in classes %}
@@ -22,7 +25,22 @@
 {% endfor %}
 </fieldset>
 <p id="picker-status" role="status" aria-live="polite">Pick three classes.</p>
-</div>
+</section>
+<section aria-labelledby="live-h">
+<h2 id="live-h">Trios that are ready</h2>
+{% if list_open %}
+{{ trio_list(live, "cards") }}
+{% else %}
+<details id="all-trios" class="expander">
+<summary>Show all {{ live|length }} trios</summary>
+{{ trio_list(live, "plain") }}
+</details>
+{% endif %}
+{% if live|length < trio_total %}
+<p>Every other trio is coming soon.</p>
+{% else %}
+<p>Every trio is ready.</p>
+{% endif %}
 </section>
 </main>
 {% endblock %}

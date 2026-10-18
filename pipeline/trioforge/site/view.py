@@ -699,7 +699,7 @@ EVIDENCE_REASONS = {
 #: or set aside here before a page can meet it.
 EVIDENCE_CODES = frozenset(
     {
-        "removed-by-patch", "removed-by-research", "seen-in-game", "community-report", "eql-catalog", "conflict-note", "wiki-marked-not-in-eql",
+        "removed-by-patch", "removed-by-research", "seen-in-game", "community-report", "community-report-outweighed", "eql-catalog", "conflict-note", "wiki-marked-not-in-eql",
         "wiki-marked-removed", "out-of-era-tag-live-zone", "conflicting-era-tags", "zone-unreleased", "zones-unmapped", "zones-not-in-eql",
         "out-of-era", "cultural-container", "out-of-era-ingredient", "no-known-source",
     }

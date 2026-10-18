@@ -6,8 +6,13 @@ reads the precompute's results (``build/results/<trio>/``, through :mod:`triofor
 sources manifest and the changelog, and writes a folder Cloudflare Pages can serve:
 
 * ``index.html`` and one page each for the trios, ``/rules/``, ``/sources/``, ``/about/`` and ``/changelog/``. The trio
-  page has its default answer baked in, so it reads without JavaScript. ``404.html`` is the page for an address with no
-  file (Cloudflare Pages answers 404 with it; without one it answers every unknown address with the home page and a 200);
+  page has its default answer baked in, so it reads without JavaScript, and the home page lists the page of every trio in its own markup (folded into an expander when there are many), so
+  that the pages are found without a script. ``404.html`` is the page for an address with no
+  file (Cloudflare Pages answers 404 with it; without one it answers every unknown address with the home page and a 200). It has a script of its own in place of the page script
+  (``assets/notfound-<HASH>.js``, made of three files and checked by :func:`check_notfound_script`) that takes an address of a trio in another order, case or form to the page of the trio, from
+  the list of the build in the page (``data-trios``), keeping the query and the fragment. The page has no analytics beacon and none of the code that takes a kit link out of the address, since
+  it hands that address on, and it gives a policy of its own (:data:`NOTFOUND_POLICY`, a meta element in its head: no script of another site and no connection of any kind, whoever
+  put the script there); :func:`check_budgets` holds all three to the file;
 * ``item/<key>/index.html``: the page of each item that has one, which is every wearable whose evidence level in the item table of the results is strict or wiki
   (:func:`item_page_keys`; a disputed or a hidden item has none, and nothing links to it). It is a static page with its tables of tiers in it, worked out by ``at_tier``,
   of at most 16 KB raw and 4 KB gzipped, that loads nothing but the stylesheet and the scripts every page loads (:func:`check_budgets` holds both). The names in
@@ -79,7 +84,9 @@ import contextlib
 import datetime
 import gzip
 import hashlib
+import html as html_module
 import json
+import math
 import os
 import re
 import secrets
@@ -131,14 +138,17 @@ __all__ = [
     "page_code_files",
     "check_engine_data",
     "check_manifest_sizes",
+    "check_notfound_script",
     "check_owner",
     "check_page_script",
     "check_weights_chunk",
     "credit_of",
     "attribution_parts",
+    "home_context",
     "main",
     "make_env",
     "marker_path",
+    "notfound_context",
     "render_manifest",
     "render_trio_manifest",
     "revision_rows",
@@ -146,8 +156,12 @@ __all__ = [
     "trio_manifest_name",
     "FIXED_PAGES",
     "HASH_PLACEHOLDER",
+    "HOME_LIST_OPEN",
     "ITEM_PAGE_LEVELS",
     "LIMITS",
+    "NOTFOUND_INPUTS",
+    "NOTFOUND_POLICY",
+    "NOT_FOUND_LISTED",
     "TRIO_MANIFEST_DIR",
     "WEARABLE_SLOTS",
     "item_page_keys",
@@ -270,9 +284,21 @@ LIMITS = {
     # 10.7 KB of the largest real page and a limit of 12 KB left no room; the gzip limit stays at 4 KB (the same pages reach 3.3 KB)
     "item_html": 16 * 1024,
     "item_html_gzip": 4 * 1024,
+    # the home page lists every trio page in its own markup (about 90 bytes for each: some 50 KB raw and 4 KB gzipped for the 560 trios of the full grid), and the 404 page, which is sent for every
+    # address that has no file, carries the list of the trios in one attribute (about 7 KB raw and 1.4 KB gzipped for the full grid) and names none. Each is held to its own limits, and to the
+    # budget of the first load that every page has.
+    "home_html": 80 * 1024,
+    "home_html_gzip": 12 * 1024,
+    "notfound_html": 16 * 1024,
+    "notfound_html_gzip": 5 * 1024,
     # the files of the site: Cloudflare Pages takes at most 20,000, and the build holds itself to 15,000
     "files": 15_000,
 }
+
+#: the home page lists the pages of the trios in the page itself, in a list that is open up to this many and folded into an expander beyond it (a list of 560 would be most of the page), and
+#: the 404 page names the trios it can open up to this many and none beyond it (it is sent for every address that has no file, and would otherwise weigh as much as the home page)
+HOME_LIST_OPEN = 12
+NOT_FOUND_LISTED = 8
 
 FAVICON = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E"
@@ -374,10 +400,14 @@ class EngineData:
 
 @dataclass(frozen=True)
 class Assets:
+    """The files every page may name: the stylesheet, the boot script, the page script, the optimizer's files and the script of the 404 page (``notfound``, a bundle of its own that
+    only that page loads)."""
+
     css: str
     boot: str
     app: str
     engine: EngineAssets
+    notfound: str
 
 
 def _run_esbuild(arguments: list[str]) -> None:
@@ -504,6 +534,69 @@ def _check_kit_chunk(meta: Mapping[str, Any]) -> None:
                     stack.append(one["path"])
 
 
+#: What the 404 page says of itself in a <meta http-equiv="Content-Security-Policy"> element in its head, before anything it loads. A policy that a page gives adds to the one of the header (a page
+#: is held to both), so nothing on this page can load a script of another site or send anything, whoever put it there: the 404 page is the one page that keeps a kit link in its address, and
+#: a beacon that the host's own toggle put into it, or one that the header of an analytics build would let come, would see it. The page's own script asks for nothing.
+NOTFOUND_POLICY = "script-src 'self'; connect-src 'none'"
+
+#: The files the script of the 404 page is made of, by the names esbuild's metafile gives its inputs (relative to the folder it runs in, ``static/``). It is a bundle of its own with these three and no
+#: others: above all not first.js (or input/kitlocation.js, which it calls), the code that takes a kit link out of the address. The 404 page hands the address to the page of the trio untouched,
+#: and a page that cleared the fragment first would lose the kit.
+NOTFOUND_INPUTS = ("notfound.js", "canonical.js", "theme.js")
+
+
+def _static_name(name: object) -> str:
+    """An input of esbuild's metafile as a path below ``static/`` (named from there, or from the root of the repository)."""
+    text = str(name).replace("\\", "/")
+    return text.split("/static/", 1)[1] if "/static/" in text else text
+
+
+def check_notfound_script(meta: Mapping[str, Any]) -> None:
+    """Refuse a bundle of the 404 page's script that is not one script made of :data:`NOTFOUND_INPUTS` alone and importing nothing. ``meta`` is esbuild's metafile of the bundle."""
+    scripts = {name: info for name, info in meta.get("outputs", {}).items() if str(name).endswith(".js")}
+    if len(scripts) != 1:
+        raise BuildError(f"esbuild's account of the 404 script has {'no script' if not scripts else 'more than one script'} (notfound.js)")
+    ((output, info),) = scripts.items()
+    imports = [str(one.get("path", "?")) for one in info.get("imports", [])]
+    if imports:
+        raise BuildError(f"the 404 script {Path(output).name} imports {Path(imports[0]).name}: it is one file, so that the page asks for nothing more")
+    held = {_static_name(name) for name in info.get("inputs", {})}
+    for name in sorted(held):
+        if name not in NOTFOUND_INPUTS:
+            raise BuildError(
+                f"the 404 script {Path(output).name} holds {name}, which is no file of its own ({', '.join(NOTFOUND_INPUTS)}): the 404 page hands the kit link in its address on untouched, "
+                f"and the code of the page script takes it out"
+            )
+    for name in NOTFOUND_INPUTS:
+        if name not in held:
+            raise BuildError(
+                f"the 404 script {Path(output).name} does not hold {name}, one of its own files ({', '.join(NOTFOUND_INPUTS)}): a 404 page whose script lacks one of them would not move "
+                f"an address of a trio, or would not hint, or would not take the theme button"
+            )
+
+
+#: what esbuild is told for every bundle of the page code
+ESBUILD_COMMON = [
+    "--bundle",
+    "--minify",
+    "--charset=utf8",
+    "--legal-comments=none",
+    "--target=chrome110,firefox110,safari16.4",
+    "--log-level=warning",
+    "--entry-names=[name]-[hash]",
+]
+
+
+def _bundle_notfound(out: Path) -> dict[str, Any]:
+    """Bundle the script of the 404 page into the folder ``out`` as a module of its own (no ``--splitting``: what it shares with the page script is copied, not imported, so that the page asks
+    for one file and the page script's code, which clears a kit link from the address, is not loaded with it), check what it is made of (:func:`check_notfound_script`) and return esbuild's account."""
+    meta_path = out.with_name(out.name + "-meta.json")
+    _run_esbuild([*ESBUILD_COMMON, "--format=esm", f"--metafile={meta_path}", f"--outdir={out}", str(STATIC / "notfound.js")])
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    check_notfound_script(meta)
+    return meta
+
+
 #: The files of the code of the sliders and of the answers for the settings the shards lack, by the names esbuild's metafile gives its inputs. The page script loads them by a dynamic
 #: import, the first time the Weights assumption is opened or a buff choice the shards lack is used (or the address asks for one): no output that a page loads by itself holds them.
 WEIGHTS_INPUTS = ("ui/weights.js",)
@@ -539,23 +632,18 @@ def _weights_input(name: str) -> str | None:
     return tail if tail in WEIGHTS_INPUTS else None
 
 
-def bundle_assets(*, keep_metafile: dict[str, Any] | None = None) -> tuple[Assets, dict[str, bytes]]:
+def bundle_assets(
+    *, keep_metafile: dict[str, Any] | None = None, keep_notfound_metafile: dict[str, Any] | None = None
+) -> tuple[Assets, dict[str, bytes]]:
     """Bundle and minify ``static/``: the module ``app.js`` and ``site.css`` together (``--splitting``: the code behind a dynamic import, the Upgrade section's, is
-    a chunk of its own, and the code of a shared kit that the section loads by one is another), and ``boot.js`` (which sets the saved theme before the page paints) as a
-    classic script. Names carry a hash of the content. The optimizer's files are made last (:func:`_bundle_engine`) and go under ``assets/engine/``. A dict given as
-    ``keep_metafile`` is filled with esbuild's account of the bundle (what each output was made of), for a test that looks at it."""
-    common = [
-        "--bundle",
-        "--minify",
-        "--charset=utf8",
-        "--legal-comments=none",
-        "--target=chrome110,firefox110,safari16.4",
-        "--log-level=warning",
-        "--entry-names=[name]-[hash]",
-    ]
+    a chunk of its own, and the code of a shared kit that the section loads by one is another), ``boot.js`` (which sets the saved theme before the page paints) as a
+    classic script, and ``notfound.js``, the script of the 404 page, as a module of its own with nothing shared with the page script (:func:`check_notfound_script`). Names carry
+    a hash of the content. The optimizer's files are made last (:func:`_bundle_engine`) and go under ``assets/engine/``. A dict given as ``keep_metafile`` is filled with esbuild's account
+    of the bundle of the page script (what each output was made of), and one given as ``keep_notfound_metafile`` with that of the 404 script, for a test that looks at them."""
+    common = ESBUILD_COMMON
     files: dict[str, bytes] = {}
     with tempfile.TemporaryDirectory() as scratch:
-        main_out, boot_out = Path(scratch) / "main", Path(scratch) / "boot"
+        main_out, boot_out, notfound_out = Path(scratch) / "main", Path(scratch) / "boot", Path(scratch) / "notfound"
         meta_path = Path(scratch) / "main-meta.json"
         _run_esbuild(
             [*common, "--format=esm", "--splitting", f"--metafile={meta_path}", f"--outdir={main_out}", str(STATIC / "app.js"), str(STATIC / "site.css")]
@@ -566,7 +654,10 @@ def bundle_assets(*, keep_metafile: dict[str, Any] | None = None) -> tuple[Asset
         if keep_metafile is not None:
             keep_metafile.update(meta)
         _run_esbuild([*common, "--format=iife", f"--outdir={boot_out}", str(STATIC / "boot.js")])
-        for folder in (main_out, boot_out):
+        notfound_meta = _bundle_notfound(notfound_out)  # (a bundle of its own: see there)
+        if keep_notfound_metafile is not None:
+            keep_notfound_metafile.update(notfound_meta)
+        for folder in (main_out, boot_out, notfound_out):
             for path in sorted(folder.iterdir()):
                 files[f"assets/{path.name}"] = path.read_bytes()
 
@@ -578,7 +669,7 @@ def bundle_assets(*, keep_metafile: dict[str, Any] | None = None) -> tuple[Asset
         return "/" + found[0]
 
     engine = _bundle_engine(files)
-    return Assets(find("site", "css"), find("boot", "js"), find("app", "js"), engine), files
+    return Assets(find("site", "css"), find("boot", "js"), find("app", "js"), engine, find("notfound", "js")), files
 
 
 def _bundle_engine(files: dict[str, bytes]) -> EngineAssets:
@@ -884,6 +975,33 @@ def render_headers(text: str, *, noindex: bool) -> str:
 # ---- budgets ---------------------------------------------------------------------------------------------------------------------------
 
 
+#: what the messages of :func:`check_budgets` call the entry pages
+ENTRY_PAGE_NAMES = {"home": "home page", "notfound": "404 page"}
+#: the entry pages that may carry no analytics beacon, and what marks one (the host it is loaded from, the script's name and the attribute that holds its token), in lower case
+NO_BEACON = ("notfound",)
+BEACON_MARKERS = ("cloudflareinsights", "beacon.min.js", "data-cf-beacon")
+
+
+def _policy_problem(text: str) -> str | None:
+    """What is wrong with the policy that a page gives in a ``<meta http-equiv="Content-Security-Policy">`` element, as a clause that follows the name of the page, or None when it is the one
+    policy :data:`NOTFOUND_POLICY`, once, before the first stylesheet or script of the page (a policy governs what comes after it)."""
+    metas = [
+        found
+        for found in re.finditer(r"<meta\b[^>]*>", text, re.IGNORECASE)
+        if re.search(r"""http-equiv\s*=\s*["']content-security-policy["']""", found.group(0), re.IGNORECASE)
+    ]
+    if len(metas) != 1:
+        return f"has {len(metas)} <meta> policies, and needs one: {NOTFOUND_POLICY!r}"
+    content = re.search(r"""\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')""", metas[0].group(0), re.IGNORECASE)
+    value = None if content is None else html_module.unescape(content.group(1) if content.group(1) is not None else content.group(2))
+    if value is None or " ".join(value.split()) != NOTFOUND_POLICY:
+        return f"has a <meta> policy of {value!r}, and needs {NOTFOUND_POLICY!r}: it adds to the header's, so nothing on the page can load a script of another site or send anything"
+    loads = [found.start() for found in re.finditer(r"<(?:link|script)\b", text, re.IGNORECASE)]
+    if loads and metas[0].start() > min(loads):
+        return "has its policy after the first thing it loads, which the policy then does not govern"
+    return None
+
+
 def _gzip_size(content_bytes: bytes) -> int:
     return len(gzip.compress(content_bytes, 9, mtime=0))
 
@@ -894,6 +1012,7 @@ def check_budgets(
     trio_pages: Sequence[str],
     first_load_assets: Mapping[str, Sequence[str]],
     item_pages: Sequence[str] = (),
+    entry_pages: Mapping[str, str] | None = None,
 ) -> dict[str, int]:
     """Measure the page budgets; raise :class:`BudgetError` naming each that is broken.
 
@@ -907,6 +1026,13 @@ def check_budgets(
     ``first_load_assets`` gives it (the stylesheet, the boot script and the page script that every page loads) and nothing else, in two scripts: a page of an item that named another file
     (the chunk of the Upgrade section, say) or carried a script of its own would load more than the first load the budgets count. ``item_pages`` is their number, ``largest_item`` and
     ``largest_item_gzip`` the sizes of the largest.
+
+    ``entry_pages`` are the two pages that have a first load of their own, by label: ``{"home": "index.html", "notfound": "404.html"}``. Each is held to the limits of its label
+    (``home_html``, ``home_html_gzip``; ``notfound_html``, ``notfound_html_gzip``) and to the budgets of a first load, and loads the files ``first_load_assets`` gives it and nothing else, in two
+    scripts: a page that named another file, or carried a script of its own, would load more than its first load. The 404 page has its own script in place of the page script, and may carry no
+    analytics beacon (:data:`BEACON_MARKERS`): it has no guard for a kit link in its address, which the beacon would see. It must also give its own policy, :data:`NOTFOUND_POLICY`, once, in a
+    meta element before the first stylesheet or script, which keeps a beacon that the host puts into it from loading or sending anything even where the header would allow it. Sizes are reported as ``<label>_html``, ``<label>_html_gzip`` and
+    ``<label>_first_load_gzip`` (the page's HTML, stylesheet and scripts, gzipped).
 
     Every script in ``files`` is counted by one budget or another: the first load's (the files the pages name in ``first_load_assets``), the code loaded on first
     use, or the optimizer's client and worker. A script that is none of them (at the root of the site, in a folder of its own below ``assets/``, or in the optimizer's
@@ -1033,6 +1159,43 @@ def check_budgets(
         scripts = len(re.findall(r"<script\b", text))
         if scripts != 2:
             problems.append(f"item page {page} has {scripts} scripts (the boot script and the page script, 2)")
+    for label, page in (entry_pages or {}).items():
+        what = ENTRY_PAGE_NAMES[label]
+        html = files[page]
+        loaded = first_load_assets[page]
+        html_gz = _gzip_size(html)
+        css_gz = sum(_gzip_size(files[a]) for a in loaded if a.endswith(".css"))
+        js_gz = sum(_gzip_size(files[a]) for a in loaded if a.endswith(".js"))
+        js_raw = sum(len(files[a]) for a in loaded if a.endswith(".js"))
+        sizes[f"{label}_html"], sizes[f"{label}_html_gzip"] = len(html), html_gz
+        sizes[f"{label}_first_load_gzip"] = html_gz + css_gz + js_gz
+        if len(html) > LIMITS[f"{label}_html"]:
+            problems.append(f"{what} {page} is {len(html) / 1024:.1f} KB (limit {LIMITS[f'{label}_html'] // 1024} KB)")
+        if html_gz > LIMITS[f"{label}_html_gzip"]:
+            problems.append(f"{what} {page} is {html_gz / 1024:.1f} KB gzip (limit {LIMITS[f'{label}_html_gzip'] // 1024} KB)")
+        if js_raw > LIMITS["first_load_js"]:
+            problems.append(f"first-load JS of {page} is {js_raw / 1024:.1f} KB raw (limit {LIMITS['first_load_js'] // 1024} KB)")
+        if js_gz > LIMITS["first_load_js_gzip"]:
+            problems.append(f"first-load JS of {page} is {js_gz / 1024:.1f} KB gzip (limit {LIMITS['first_load_js_gzip'] // 1024} KB)")
+        if html_gz + css_gz + js_gz > LIMITS["first_load_gzip"]:
+            problems.append(f"first load of {page} is {(html_gz + css_gz + js_gz) / 1024:.1f} KB gzip (limit {LIMITS['first_load_gzip'] // 1024} KB)")
+        text = html.decode("utf-8", errors="replace")
+        wanted = {"/" + name for name in loaded}
+        named = set(_ASSET_REFERENCE.findall(text))
+        if named - wanted:
+            problems.append(f"{what} {page} loads {', '.join(sorted(named - wanted))}, which is not part of its first load")
+        if wanted - named:
+            problems.append(f"{what} {page} does not load {', '.join(sorted(wanted - named))}, which its first load is made of")
+        scripts = len(re.findall(r"<script\b", text))
+        if scripts != 2:
+            problems.append(f"{what} {page} has {scripts} scripts (the boot script and its own page script, 2)")
+        if label in NO_BEACON:
+            beacon = next((marker for marker in BEACON_MARKERS if marker in text.lower()), None)
+            if beacon is not None:
+                problems.append(f"{what} {page} carries an analytics beacon ({beacon}): it has no guard for a kit link in its address, which a beacon would see")
+            policy = _policy_problem(text)
+            if policy is not None:
+                problems.append(f"{what} {page} {policy}")
     sizes["files"] = len(files)
     if len(files) > LIMITS["files"]:
         problems.append(f"the site has {len(files):,} files (limit {LIMITS['files']:,})")
@@ -1456,6 +1619,24 @@ def _nav(current: str) -> list[dict[str, object]]:
     return [{"href": href, "label": label, "current": href == current} for href, label in items]
 
 
+def home_context(live: Sequence[Any]) -> dict[str, object]:
+    """What the home page is given besides the frame: ``live`` (the trios the build made, each with its ``slug``, ``name`` and ``level``), the classes for the chips in the order of the site's
+    classes, how many trios the grid has (so that the page can say that every one is ready) and whether the list of the pages is shown open (up to :data:`HOME_LIST_OPEN` trios) or
+    folded into an expander."""
+    return {
+        "live": live,
+        "classes": [SimpleNamespace(code=code, name=CLASS_NAMES[code]) for code in CLASS_CODES],
+        "trio_total": math.comb(len(CLASS_CODES), 3),
+        "list_open": len(live) <= HOME_LIST_OPEN,
+    }
+
+
+def notfound_context(live: Sequence[Any]) -> dict[str, object]:
+    """What the 404 page is given besides the frame: ``live`` (the list in ``data-trios``, which its script checks an address against) and whether the page also names the trios it can open
+    (up to :data:`NOT_FOUND_LISTED` of them: it is sent for every address that has no file)."""
+    return {"live": live, "listed": 0 < len(live) <= NOT_FOUND_LISTED}
+
+
 @dataclass(frozen=True)
 class SiteBuild:
     """What a build made: the pages (path -> file), the sizes measured and the number of files written (the files of the output folder: the marker
@@ -1612,8 +1793,7 @@ def build(
         title="TrioForge: best gear for every class trio",
         description="Exact best-in-slot gear for every class trio, with the evidence and confidence behind every rule. A fan project.",
         subject="the home page",
-        live=live,
-        classes=[SimpleNamespace(code=code, name=CLASS_NAMES[code]) for code in CLASS_CODES],
+        **home_context(live),
     )
     pages["rules/index.html"] = render(
         "rules.html.j2",
@@ -1686,7 +1866,8 @@ def build(
     )
     # Pages answers an address it has no file for with this page and a 404, instead of the home page and a 200 (the answer it
     # gives a single-page app), so a data file that is missing is an error to the page code and not a web page that does not
-    # parse. It is shown at whatever address was asked for, so it names no address of its own (no canonical link).
+    # parse. It is shown at whatever address was asked for, so it names no address of its own (no canonical link). Its script moves
+    # an address of a trio in another order, case or form to the page of the trio, from the list of the build in the page.
     pages["404.html"] = render(
         "notfound.html.j2",
         "/404.html",
@@ -1694,7 +1875,7 @@ def build(
         description="There is nothing at this address. Go to the home page to find a trio.",
         subject="the page-not-found page",
         canonical=False,
-        live=live,
+        **notfound_context(live),
     )
 
     # 3. everything else, then the budgets
@@ -1718,7 +1899,11 @@ def build(
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + entries + "</urlset>\n"
         ).encode("utf-8")
     loaded = [assets.css.lstrip("/"), assets.boot.lstrip("/"), assets.app.lstrip("/")]
-    sizes = check_budgets(files, trio_pages=trio_files, first_load_assets={name: loaded for name in [*trio_files, *item_files]}, item_pages=item_files)
+    first_load = {name: loaded for name in [*trio_files, *item_files, "index.html"]}
+    first_load["404.html"] = [assets.css.lstrip("/"), assets.boot.lstrip("/"), assets.notfound.lstrip("/")]  # (its own script, in place of the page script)
+    sizes = check_budgets(
+        files, trio_pages=trio_files, first_load_assets=first_load, item_pages=item_files, entry_pages={"home": "index.html", "notfound": "404.html"}
+    )
     sizes.update({f"checked_{name}": count for name, count in engine_checked.items()})
 
     # 4. write
@@ -1902,6 +2087,11 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
         f"CSS {_kb(sizes['first_load_css_gzip'])} gzip; HTML {_kb(sizes['first_load_html_gzip'])} gzip"
     )
     print(f"first load of a trio page: {_kb(sizes['first_load_gzip'])} gzip (limit {LIMITS['first_load_gzip'] // 1024} KB)")
+    for label, what in ENTRY_PAGE_NAMES.items():
+        print(
+            f"{what}: {_kb(sizes[f'{label}_html'])} raw (limit {LIMITS[f'{label}_html'] // 1024} KB), {_kb(sizes[f'{label}_html_gzip'])} gzip (limit {LIMITS[f'{label}_html_gzip'] // 1024} KB); "
+            f"first load {_kb(sizes[f'{label}_first_load_gzip'])} gzip (limit {LIMITS['first_load_gzip'] // 1024} KB)"
+        )
     print(
         f"code loaded on first use ({sizes['lazy_chunks']} chunks): {_kb(sizes['lazy_js'])} raw in all (limit {LIMITS['lazy_total_js'] // 1024} KB); "
         f"the largest chunk {_kb(sizes['lazy_chunk_js'])} raw (limit {LIMITS['lazy_chunk_js'] // 1024} KB), "

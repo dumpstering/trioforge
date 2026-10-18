@@ -600,6 +600,121 @@ def test_a_release_is_built_packed_and_written_up(world, tmp_path):
     assert "privacy scan" in text and "0 findings" in text and TAG in text
 
 
+# ---- the community entries of the release --------------------------------------------------------------------------------------------------------
+#
+# release.json records the entries of rules/community-seen.json as the committed file holds them, read once at the start; the public catalog must have been built from that very
+# file (its provenance records the SHA-256 of it), or the entries and the evidence of the items would not describe the same state.
+
+COMMUNITY_REPORT = {"key": "w9004", "kind": "seen", "issue": 5, "date": "2026-10-14", "check": "item-window-screenshot"}
+COMMUNITY_RETRACTION = {"key": "w9006", "issue": 7, "date": "2026-10-15", "reason": "rejected"}
+
+
+def community_file(rules: Path, **document) -> str:
+    """Write ``rules/community-seen.json`` in a folder and give the SHA-256 of what was written."""
+    rules.mkdir(parents=True, exist_ok=True)
+    text = json.dumps({"version": "2026-10-15", "reports": [COMMUNITY_REPORT], "retracted": [COMMUNITY_RETRACTION], **document})
+    (rules / "community-seen.json").write_text(text, encoding="utf-8")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def catalog_built_from(digest: str | None) -> dict:
+    """The part of a public catalog that says what it was built from: the record of the list of reports, if there was one."""
+    inputs = [{"file": "rules/community-seen.json", "sha256": digest, "date": "2026-10-15"}] if digest else []
+    return {"version": "2030-01-02", "provenance": {"inputs": inputs}}
+
+
+def test_with_no_file_and_a_catalog_that_was_built_with_none_the_release_has_no_entries(tmp_path):
+    assert release.read_community(tmp_path / "rules", catalog_built_from(None)) == {"reports": [], "retracted": []}
+
+
+def test_the_entries_are_those_of_the_file_when_the_catalog_was_built_from_it(tmp_path):
+    digest = community_file(tmp_path / "rules")
+    assert release.read_community(tmp_path / "rules", catalog_built_from(digest)) == {"reports": [COMMUNITY_REPORT], "retracted": [COMMUNITY_RETRACTION]}
+
+
+def test_a_file_the_catalog_was_not_built_from_is_refused_and_so_is_a_catalog_built_from_a_file_that_is_not_there(tmp_path):
+    digest = community_file(tmp_path / "rules")
+    twice = catalog_built_from(digest)
+    twice["provenance"]["inputs"] = twice["provenance"]["inputs"] * 2
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json.*build the catalog again"):
+        release.read_community(tmp_path / "rules", twice)  # a catalog that records the list twice is not one the builder wrote
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json.*build the catalog again"):
+        release.read_community(tmp_path / "rules", catalog_built_from(None))  # the catalog knows no file
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json.*build the catalog again"):
+        release.read_community(tmp_path / "rules", catalog_built_from("00" * 32))  # another file
+    community_file(tmp_path / "rules", reports=[])  # the file changed after the catalog was built
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json.*build the catalog again"):
+        release.read_community(tmp_path / "rules", catalog_built_from(digest))
+    (tmp_path / "rules" / "community-seen.json").unlink()
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json.*not in the checkout"):
+        release.read_community(tmp_path / "rules", catalog_built_from(digest))
+
+
+@pytest.mark.parametrize(
+    "document",
+    [{"extra": 1}, {"reports": [{**COMMUNITY_REPORT, "note": "Zorblax Sentinel"}]}, {"reports": [{**COMMUNITY_REPORT, "date": "2999-01-01"}]}, {"retracted": [{**COMMUNITY_RETRACTION, "issue": 5}]}],
+    ids=["a field that is not allowed", "free text in a report", "a day after today", "an issue in both lists"],
+)
+def test_a_file_that_is_not_of_the_form_refuses_the_release_without_repeating_it(tmp_path, document):
+    digest = community_file(tmp_path / "rules", **document)
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json") as raised:
+        release.read_community(tmp_path / "rules", catalog_built_from(digest))
+    assert "zorblax" not in str(raised.value).lower() and "\n" not in str(raised.value)
+
+
+def test_a_file_of_the_old_form_refuses_the_release_with_the_line_that_says_how_to_convert_it(tmp_path):
+    (tmp_path / "rules").mkdir()
+    text = json.dumps({"version": "2026-10-14", "reports": [{"key": "w9004", "issue": "https://example.invalid/issues/1"}]})
+    (tmp_path / "rules" / "community-seen.json").write_text(text, encoding="utf-8")
+    with pytest.raises(ReleaseRefused, match="old form.*convert"):
+        release.read_community(tmp_path / "rules", catalog_built_from(hashlib.sha256(text.encode("utf-8")).hexdigest()))
+
+
+def test_release_json_says_that_a_checkout_with_no_file_has_no_entries(world, tmp_path):
+    _, result, _ = build(world, tmp_path)
+    with tarfile.open(result.asset, "r:gz") as archive:
+        inside = json.loads(archive.extractfile("release.json").read())
+    assert inside["community"] == {"reports": [], "retracted": []}
+
+
+def finished(spec):
+    """A stand-in for the solving: the results of the world are whole, and the build only has to find them (a change of the catalog's provenance would make the chunks again)."""
+    return release.TrioOutcome(slug=spec.slug, status="resumed", chunks=36, scenarios=72)
+
+
+def test_release_json_records_the_entries_of_the_committed_file_that_the_catalog_was_built_from(world, tmp_path, monkeypatch):
+    copy = clone(world, tmp_path)
+    digest = community_file(copy.root / "rules")
+    catalog = json.loads(copy.catalog.read_text(encoding="utf-8"))
+    catalog["provenance"] = catalog_built_from(digest)["provenance"]
+    copy.catalog.write_text(json.dumps(catalog), encoding="utf-8")
+    # (the bundles of the world were made from the catalog as it was: their hash of the inputs says so, and these two checks would make the trios again)
+    monkeypatch.setattr(release, "check_bundles", lambda *args, **kwargs: None)
+    monkeypatch.setattr(release, "check_pruning", lambda *args, **kwargs: [])
+    _, result, _ = build(world, tmp_path, runner=finished)
+    with tarfile.open(result.asset, "r:gz") as archive:
+        inside = json.loads(archive.extractfile("release.json").read())
+    assert inside["community"] == {"reports": [COMMUNITY_REPORT], "retracted": [COMMUNITY_RETRACTION]}
+    assert list(inside)[list(inside).index("evidence") + 1] == "community"
+    pointer = (copy.root / "releases" / f"{TAG}.json").read_text(encoding="utf-8")
+    assert "community" not in pointer and "w9004" not in pointer  # (the pointer is what git keeps: no entry)
+
+
+def test_a_catalog_not_built_from_the_file_of_the_checkout_refuses_the_build_before_any_hour_is_spent(world, tmp_path):
+    copy = clone(world, tmp_path)
+    community_file(copy.root / "rules")  # (the catalog of the world knows no file)
+    calls: list[str] = []
+
+    def spy(spec):
+        calls.append(spec.slug)
+        return finished(spec)
+
+    with pytest.raises(ReleaseRefused, match=r"community-seen\.json"):
+        build(world, tmp_path, runner=spy)
+    assert calls == []
+    nothing_left(copy.root)
+
+
 def test_what_the_asset_holds(world, tmp_path):
     copy, result, _ = build(world, tmp_path)
     with tarfile.open(result.asset, "r:gz") as archive:
