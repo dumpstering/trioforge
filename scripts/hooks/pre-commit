@@ -1,0 +1,18 @@
+#!/bin/sh
+# TrioForge pre-commit hook: scan the staged version of every changed file for private
+# names and game-log text. Install it once per clone: sh scripts/install-hooks.sh
+#
+# Git runs hooks from the top of the working tree, so the relative paths below are right.
+# The scanner blocks the commit (exit 1) on a finding, and (exit 2) when it cannot run,
+# for example when the privacy key is missing. It never prints what it matched.
+if [ -f .venv/Scripts/python.exe ]; then
+    python=.venv/Scripts/python.exe
+elif [ -f .venv/bin/python ]; then
+    python=.venv/bin/python
+else
+    echo "privacy hook: no .venv python found; run the setup in README" >&2
+    exit 2
+fi
+PYTHONPATH=pipeline
+export PYTHONPATH
+exec "$python" -m trioforge.privacy.scan --staged --require-key

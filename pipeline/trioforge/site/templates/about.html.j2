@@ -1,0 +1,20 @@
+{% extends "base.html.j2" %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap prose" data-page="about">
+<h1>About TrioForge</h1>
+<h2>What this is</h2>
+<p>TrioForge works out the best gear for every class trio in EverQuest Legends. It is free, static and has no accounts. Each page opens with one answer, the kit to wear, and keeps the alternatives behind expanders. Every number comes from a rule that carries a confidence seal, a source and a date, and the <a href="/rules/">rules page</a> lists them all.</p>
+<h2>A fan project</h2>
+<p>{{ disclaimer }}</p>
+<p>The site's name and logo do not use the game's name, and nothing here is official. Data and credits are on the <a href="/sources/">sources page</a>.</p>
+<h2>Privacy</h2>
+<p>This preview has no analytics. It sets no cookies, loads nothing from other sites and sends no information about you anywhere. The only thing it keeps in your browser is your light or dark choice, in local storage, and only if you press the theme button.</p>
+<p>When page counts are switched on later, they will be cookieless counts of page paths from Cloudflare Web Analytics, and this page will say exactly what they see before they start. The switches on a trio page are kept in the address (the part after the question mark), which holds no personal information.</p>
+<h2>Contact</h2>
+{% if issues_url %}
+<p>Report a wrong item, a missing source or a rule that the evidence no longer supports through <a href="{{ issues_url }}" rel="noopener noreferrer">GitHub issues</a>. Please leave character names, player names and chat lines out of every report.</p>
+{% else %}
+<p>{{ reports_not_open }}: a wrong item, a missing source or a rule that the evidence no longer supports will be reported through GitHub issues. Please leave character names, player names and chat lines out of every report.</p>
+{% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 43866,
+    "ns": 0,
+    "title": "Crushbone Battle Beads",
+    "revisions": [
+     {
+      "revid": 194396,
+      "timestamp": "2026-10-13T23:53:56Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{delete}}{{DNE}}\n<onlyinclude>{{Itempage\n|notes       = Used in Jul2002 Kelethin DRU weapon quest[https://everquest.allakhazam.com/db/quest.html?quest=2135].\n|itemname    = Crushbone Battle Beads\n|lucy_img_ID = 848\n|statsblock  = \nMAGIC ITEM  NO DROP<br>\nWT: 0.1  Size: SMALL<br>\nClass: ALL<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Crushbone]]\n\n* [[Emperor Crush]]\n* [[Lord Darish]]\n* [[orc centurion]]\n* [[orc emissary]]\n\n}}</onlyinclude>\n\n\n[[Category:Crushbone]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

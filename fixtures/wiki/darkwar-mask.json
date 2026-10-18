@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 44308,
+    "ns": 0,
+    "title": "Darkwar Mask",
+    "revisions": [
+     {
+      "revid": 145710,
+      "parentid": 111597,
+      "timestamp": "2026-06-04T00:45:37Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Velious Era}}\n\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Darkwar Mask\n|lucy_img_ID = 772\n|statsblock  = \nMAGIC ITEM  LORE ITEM  NO DROP<br>\nSlot: FACE<br>\nAC: 10<br>\nSTR: +5  DEX: +5  AGI: +5<br>\nWT: 2.5  Size: SMALL<br>\nClass: WAR<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Plane of Hate]]\n\n* [[a revultant rat]]\n* [[An Agent of Innoruuk]]\n\n}}</onlyinclude>\n\n[[Category:Warrior Equipment]]\n[[Category:Face]]\n[[Category:Plane of Hate]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

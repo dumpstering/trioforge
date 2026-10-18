@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 34955,
+    "ns": 0,
+    "title": "Earthshaker",
+    "revisions": [
+     {
+      "revid": 178691,
+      "parentid": 176929,
+      "timestamp": "2026-09-17T13:21:47Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|notes       = Summoned pets and charmed pets can now both use this and other AoE procs (so long as they meet the requirements).\n|itemname    = Earthshaker\n|lucy_img_ID = 519\n|statsblock  = \nAttunable, Lore Equipped, Placeable<br>\nSlot: PRIMARY<br>\nSkill: 2H Slashing  Atk Delay: 70<br>\nDMG: 37 <br>\nSTR: +6  DEX: -5  STA: +6<br>\nEffect:  [[Earthquake|<span class='itemeff'>Earthquake</span>]] (Combat, Casting Time: Instant) at Level 45<br>\nWT: 16.0  Size: GIANT<br>\nClass: WAR PAL RNG SHD BER<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[The Hole]]\n\n* [[Master Yael]]\n}}</onlyinclude>\n\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Berserker Equipment]]\n[[Category:Primary]]\n[[Category:2H Slashing]]\n[[Category:Weapon Procs]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

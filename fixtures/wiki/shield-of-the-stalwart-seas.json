@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 42690,
+    "ns": 0,
+    "title": "Shield of the Stalwart Seas",
+    "revisions": [
+     {
+      "revid": 179970,
+      "parentid": 179969,
+      "timestamp": "2026-09-30T22:39:01Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname       = Shield of the Stalwart Seas\n|lucy_img_ID    = 974\n|statsblock     = \nLore Equipped, Attunable, Placeable<br>\nSlot: SECONDARY  Type: Shield<br>\nAC: 35<br>\nSTR: +20  STA: +20<br>\nEffect: [[Ultravision|<span class='itemeff'>Ultravision</span>]] (Worn)<br>\nSize: MEDIUM  WT: 7.3<br>\nClass: PAL<br>\nRace: ALL<br>\n|merchant_value = 8p 5g 7s 1c\n|notes          = \n|dropsfrom      = \n[[Plane of Hate]]\n\n* [[an eerie chest]] (unconfirmed for EQL)\n* [[Lord of Ire]]\n* [[Maestro of Rancor]]\n}}</onlyinclude>\n\n[[Category:Paladin Equipment]]\n[[Category:Secondary]]\n[[Category:Plane of Hate]]\n[[Category:Worn Effects]]\n[[Category:Ultravision (Worn)]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

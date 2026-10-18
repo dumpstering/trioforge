@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 59714,
+    "ns": 0,
+    "title": "Blessed Champion Arrows",
+    "revisions": [
+     {
+      "revid": 169678,
+      "timestamp": "2026-08-15T05:01:15Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n[[File:Blessed_Champion_Arrows.png|400px|]]\n\n{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Blessed Champion Arrows\n|lucy_img_ID = 598\n|statsblock  = \nSlot: AMMO<br>\nSkill: Archery Atk Delay: 0<br>\nDMG: 11 Fire DMG: 4<br>\nWT: 0.1  Range: 170  Size: SMALL<br>\nClass: WAR PAL RNG<br>\nRace: ALL<br>\nTunare\n|playercrafted = \n\n* [[Fletching]] (Trivial: 335)\n** '''Yield: Blessed Champion Arrows''' x1\n** In [[Feir`Dal Fletching Kit]]:\n:: {{SmIcon|1100}} 1 x [[Blessed Arrow Heads]] - Crafted\n:: {{SmIcon|1110}} 1 x [[Mithril Bundled Arrow Shafts]] - Crafted\n:: {{SmIcon|1102}} 1 x [[Mithril Fletchings]] - Crafted\n:: {{SmIcon|977}} 1 x [[Small Groove Nocks]] - Bought\n\n|recipes = \n\n* [[Skill Fletching|Fletching]]\n\n}}</onlyinclude>\n\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Ammo]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

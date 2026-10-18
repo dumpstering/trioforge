@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 52641,
+    "ns": 0,
+    "title": "10 Dose Adrenaline Tap",
+    "revisions": [
+     {
+      "revid": 193474,
+      "timestamp": "2026-10-13T23:32:19Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = 10 Dose Adrenaline Tap\n|lucy_img_ID = 697\n|statsblock  = \nEXPENDABLE  Charges: 10<br>\nEffect: [[Flurry]] (Any Slot, Casting Time: 8.0)<br>\nWT: 0.4  Size: SMALL<br>\nClass: ALL<br>\nRace: ALL<br>\n|playercrafted = \n\n* [[Alchemy]]\n\n}}</onlyinclude>"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

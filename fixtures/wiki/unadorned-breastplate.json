@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 52836,
+    "ns": 0,
+    "title": "Unadorned Breastplate",
+    "revisions": [
+     {
+      "revid": 147214,
+      "timestamp": "2026-06-04T00:52:34Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Velious Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Unadorned Breastplate\n|lucy_img_ID = 624\n|statsblock  = \nMAGIC ITEM  LORE ITEM  NO DROP<br>\nSlot: CHEST<br>\nWT: 15.0  Size: TINY<br>\nClass: WAR CLR PAL SHD BRD<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Temple of Veeshan]]\n\n(ToV East mobs)\n \n*    [[an ancient guardian wurm]]\n*    [[an ancient tigerclaw racnar]]\n*    [[an elder shard wyvern]]\n*    [[a burning guardian]]\n*    [[a fiery drake]]\n*    [[a greater sky drake]]\n*    [[an ancient frost guardian]]\n*    [[an ancient shard wyvern]]\n*    [[a raging wyvern]]\n*    [[a vehement wyvern]]\n*    [[a shimmer drake]]\n*    [[a racnar (Temple of Veeshan)|a racnar]]\n*    [[an emerald watcher]]\n}}</onlyinclude>\n== Related quests ==\n\n<ul><li>[[Bard Skyshrine Armor Quests|Bard Skyshrine Breastplate]] ({{:Breastplate of Twilight}})\n</li><li>[[Cleric Skyshrine Armor Quests|Cleric Skyshrine Breastplate]] ({{:Akkirus' Chestplate of the Risen}})\n</li><li>[[Paladin Skyshrine Armor Quests|Paladin Skyshrine Breastplate]] ({{:Scaled Knight's Breastplate}})\n</li><li>[[Shadowknight Skyshrine Armor Quests|Shadowknight Skyshrine Breastplate]] ({{:Blood Lord's Breastplate}})\n</li><li>[[Warrior Skyshrine Armor Quests|Warrior Skyshrine Breastplate]] ({{:Breastplate of the Myrmidon}})\n</li></ul>\n\n\n[[Category:Chest]]\n[[Category:Temple of Veeshan]]\n[[Category:Fashion: Plate]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

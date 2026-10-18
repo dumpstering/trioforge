@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16452,
+    "ns": 0,
+    "title": "Bone Chips",
+    "revisions": [
+     {
+      "revid": 194007,
+      "parentid": 193050,
+      "timestamp": "2026-10-13T23:46:17Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname       = Bone Chips\n|lucy_img_ID    = 804\n|statsblock     = \nQuest<br>\nSize: SMALL  WT: 0.1<br>\nClass: ALL<br>\nRace: ALL<br>\n|merchant_value = 1s 4c\n|notes          = \nBone Chips are used as a spell reagent by [[Necromancer]]s and [[Shadow Knight]]s to summon their pets. All such spells require two chips except [[Cavorting Bones]] which requires one.\n\nBone Chips are also used in numerous quests for low level players to gain experience up to level 4 or so, the same quests may be used by higher level players for faction.\n\nBeing accessible to low level players and time-consuming to farm by high level players, there will always be an economy for Bone Chips, giving low level players access to quick cash.\n|dropsfrom      = \n\nVarious Zones\n\n* Many skeleton types\n\n[[Najena]]\n\n* [[a skeleton]]\n\n|recipes        = \n\n* [[Spell Research]]\n** [[Practice Rune (Azia)]] (Trivial:21)\n\n|relatedquests  = \n\n* [[Bone Chips Quests]]\n\n}}</onlyinclude>\n\n==See also==\n* [[Bone Chips (Golin's)]] (LORE)\n\n\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

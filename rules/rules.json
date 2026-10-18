@@ -1,0 +1,723 @@
+{
+  "version": "2026-10-13",
+  "rules": [
+    {
+      "id": "level.current",
+      "title": "Current level cap",
+      "value": 50,
+      "unit": "level",
+      "seal": "developer",
+      "source": [
+        {"kind": "public-text", "ref": "developer announcements (level cap until Rulers of Kunark)"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "naked.cap",
+      "title": "Naked stat cap",
+      "value": "none",
+      "unit": "stat",
+      "seal": "measured",
+      "source": [
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active",
+      "notes": "EQL Tools' naked cap is player-reported; not applied"
+    },
+    {
+      "id": "naked.rule",
+      "title": "Naked stat formula",
+      "value": "race base + sum of the three class modifiers",
+      "unit": "text",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/attributes"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "hp.pools_counted",
+      "title": "Class HP pools counted",
+      "value": 2,
+      "unit": "pools",
+      "seal": "measured",
+      "source": [
+        {"kind": "client-file", "ref": "Resources/basedata.txt"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "hp.sta_curve",
+      "title": "Effective STA curve for HP",
+      "value": {"breaks": [255, 510], "slopes": [1, 0.5, 0]},
+      "unit": "per point",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "mana.pools_counted",
+      "title": "Mana pools counted",
+      "value": 2,
+      "unit": "pools",
+      "seal": "measured",
+      "source": [
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "mana.base_l50",
+      "title": "Base mana at level 50",
+      "value": 900,
+      "unit": "mana",
+      "seal": "client",
+      "source": [
+        {"kind": "client-file", "ref": "Resources/basedata.txt"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "mana.per_stat_l50",
+      "title": "Mana per casting-stat point at level 50",
+      "value": 4.5,
+      "unit": "mana per point",
+      "seal": "client",
+      "source": [
+        {"kind": "client-file", "ref": "Resources/basedata.txt"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "mana.wis_bands",
+      "title": "WIS multiplier bands for mana",
+      "value": {"breaks": [100, 200, 255, 510], "slopes": [1, 2.5, 1.25, 0.625, 0]},
+      "unit": "multiplier",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B4",
+      "alternatives": [
+        {
+          "value": {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]},
+          "seal": "measured",
+          "source": [
+            {"kind": "url", "ref": "https://eqltools.com/attributes"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mana.stat_by_class",
+      "title": "Mana stat by class",
+      "value": {"WIS": ["PAL", "RNG", "BST", "CLR", "SHM", "DRU"], "INT": ["SHD", "BRD", "WIZ", "ENC", "NEC", "MAG"]},
+      "unit": "map",
+      "seal": "client",
+      "source": [
+        {"kind": "client-file", "ref": "eqstr_us.txt"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "end.formula",
+      "title": "Endurance formula",
+      "value": "per pool: base_end + end_fac x converted(avg(STR,STA,DEX,AGI)), base_end and end_fac per class; best two pools",
+      "unit": "text",
+      "seal": "measured",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "ac.sheet.item_mult",
+      "title": "Sheet AC: item multiplier",
+      "value": 1.3333333333,
+      "unit": "x",
+      "seal": "measured",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "ac.sheet.defense_div",
+      "title": "Sheet AC: defense divisor",
+      "value": 3,
+      "unit": "divisor",
+      "seal": "measured",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "ac.sheet.spell_ac_div",
+      "title": "Sheet AC: spell AC divisor",
+      "value": 4,
+      "unit": "divisor",
+      "seal": "measured",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B1"
+    },
+    {
+      "id": "ac.sheet.agi_div",
+      "title": "Sheet AC: AGI divisor",
+      "value": 20,
+      "unit": "divisor",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "ac.softcap.past_cap_rate",
+      "title": "AC rate past the softcap",
+      "value": "per class from Resources/ACMitigation.txt: the rate of the class with the best softcap",
+      "unit": "text",
+      "seal": "client",
+      "source": [
+        {"kind": "client-file", "ref": "Resources/ACMitigation.txt"}
+      ],
+      "date": "2026-10-13",
+      "status": "active",
+      "notes": "For example 0.33 for the Paladin at level 50."
+    },
+    {
+      "id": "ac.softcap.combat_stability_pct",
+      "title": "Combat Stability softcap bonus by rank",
+      "value": {"1": 2, "2": 5, "3": 10},
+      "unit": "percent (cumulative)",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active",
+      "notes": "Percentages from EQEmu; they fit the softcaps the game shows."
+    },
+    {
+      "id": "ac.softcap.physical_enhancement_pct",
+      "title": "Physical Enhancement softcap bonus",
+      "value": 2,
+      "unit": "percent",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active",
+      "notes": "Percentage from EQEmu; it fits the same softcaps."
+    },
+    {
+      "id": "ac.softcap.pe_for_caster_only_trios",
+      "title": "Physical Enhancement applies to caster-only trios",
+      "value": false,
+      "unit": "bool",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/"},
+        {"kind": "public-text", "ref": "in-game AA list"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B10"
+    },
+    {
+      "id": "ac.shield.offhand_raises_cap",
+      "title": "Offhand shield raises the softcap",
+      "value": true,
+      "unit": "bool",
+      "seal": "measured",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/combat"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "stats.knee",
+      "title": "Stat knee",
+      "value": 255,
+      "unit": "stat",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/attributes"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "stats.hard_cap",
+      "title": "Stat hard cap",
+      "value": 510,
+      "unit": "stat",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/attributes"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "stats.str_to_atk",
+      "title": "ATK per STR",
+      "value": 0.666667,
+      "unit": "ATK per STR",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "stats.agi_to_ac",
+      "title": "AC per AGI",
+      "value": 0.2222,
+      "unit": "AC per AGI",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "stats.dex_post255_slope",
+      "title": "DEX benefit slope past 255",
+      "value": 0.1,
+      "unit": "fraction",
+      "seal": "player",
+      "source": [
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "haste.cap_pct",
+      "title": "Haste cap",
+      "value": 75,
+      "unit": "percent",
+      "seal": "player",
+      "source": [
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "haste.cap_pct_with_monk",
+      "title": "Haste cap with a Monk in the trio",
+      "value": 85,
+      "unit": "percent",
+      "seal": "player",
+      "source": [
+        {"kind": "public-text", "ref": "patch notes, Unbound Alacrity"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "haste.worn_per_tier",
+      "title": "Worn haste per tier",
+      "value": 1,
+      "unit": "percent per tier",
+      "seal": "player",
+      "source": [
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "haste.unbound_alacrity",
+      "title": "Unbound Alacrity: effect on haste",
+      "value": "raises the cap only",
+      "unit": "text",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "patch notes, Unbound Alacrity (\"current and maximum haste value\")"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B8"
+    },
+    {
+      "id": "regen.gear_caps",
+      "title": "Regen caps from gear",
+      "value": {"HP": 30, "MANA": 15, "END": 15},
+      "unit": "per tick",
+      "seal": "player",
+      "source": [
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B7",
+      "notes": "Player-reported; not measured."
+    },
+    {
+      "id": "regen.per_tier",
+      "title": "Regen per tier",
+      "value": 1,
+      "unit": "per tier",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"},
+        {"kind": "private-player", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "regen.value_minutes",
+      "title": "Regen valuation window",
+      "value": 3,
+      "unit": "minutes",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "resist.cap",
+      "title": "Resist cap",
+      "value": 200,
+      "unit": "per school",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "tier.stat_rule",
+      "title": "Tier stat rule",
+      "value": "base + max(n, floor(base*n/10))",
+      "unit": "text",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "tier.weight_floor",
+      "title": "Tier weight floor",
+      "value": 0.1,
+      "unit": "stone",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "tier.weapon_damage_pct",
+      "title": "Weapon damage per tier",
+      "value": 5,
+      "unit": "percent per tier",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B5",
+      "alternatives": [
+        {
+          "value": 10,
+          "seal": "player",
+          "source": [
+            {"kind": "url", "ref": "https://eqltools.com/"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tier.accuracy_pct",
+      "title": "Accuracy per tier",
+      "value": 2.5,
+      "unit": "percent per tier",
+      "seal": "developer",
+      "source": [
+        {"kind": "public-text", "ref": "patch notes 2026-09-22"}
+      ],
+      "date": "2026-09-22",
+      "status": "active"
+    },
+    {
+      "id": "tier.socket_open",
+      "title": "Tier at which each socket opens",
+      "value": {"focus": 1, "click": 2, "worn": 3, "proc": 4},
+      "unit": "tier",
+      "seal": "developer",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"},
+        {"kind": "public-text", "ref": "developer demo"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "tier.arrival",
+      "title": "Tier at which items arrive, by source",
+      "value": {"drop": "instance difficulty D0-D4", "quest": 0, "crafted": 0, "vendor": 0, "summoned": "spell rank"},
+      "unit": "tier",
+      "seal": "developer",
+      "source": [
+        {"kind": "public-text", "ref": "developer hotfix notes 2026-07-29 and developer stream 2026-06-10"}
+      ],
+      "date": "2026-07-29",
+      "status": "active"
+    },
+    {
+      "id": "tier.max_fresh_drop",
+      "title": "Highest tier of a fresh drop",
+      "value": 4,
+      "unit": "tier",
+      "seal": "measured",
+      "source": [
+        {"kind": "public-text", "ref": "developer hotfix notes 2026-07-29"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "active",
+      "notes": "No fresh drop above this tier has been seen."
+    },
+    {
+      "id": "tier.exp_needed",
+      "title": "Experience needed for tier N",
+      "value": "2^N - 1",
+      "unit": "exp",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Mote_Guide"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "tier.negatives_scale",
+      "title": "Negative stats scale with tier",
+      "value": false,
+      "unit": "bool",
+      "seal": "model",
+      "source": [
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B6",
+      "notes": "One observation suggests negative stats grow with tier; not settled."
+    },
+    {
+      "id": "monk.weight_curve",
+      "title": "Monk worn-weight bonus curve",
+      "value": {"softcap_stones": 17, "hardcap_stones": 36, "full_bonus_ac": 73, "shape": "EQEmu fade"},
+      "unit": "stones and AC",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/combat"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "levels": {"55": {"softcap_stones": 20, "hardcap_stones": 40, "full_bonus_ac": 80, "shape": "EQEmu fade"}},
+      "test": "B9",
+      "notes": "EQL Tools' threshold of about 34 read as the end of the bonus",
+      "alternatives": [
+        {
+          "value": {"full_until_stones": 34},
+          "seal": "developer",
+          "source": [
+            {"kind": "url", "ref": "https://eqltools.com/combat"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monk.bonus_placement",
+      "title": "Monk worn-weight bonus placement",
+      "value": "on top of the capped sheet AC (bypasses the softcap), valued per sheet point",
+      "unit": "text",
+      "seal": "developer",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/combat"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B9",
+      "alternatives": [
+        {
+          "value": "inside X before the cap",
+          "seal": "model",
+          "source": [
+            {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "packrat.pct_per_rank",
+      "title": "Packrat percent per rank",
+      "value": 0,
+      "unit": "percent",
+      "seal": "model",
+      "source": [
+        {"kind": "client-file", "ref": "dbstr_us.txt"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B11"
+    },
+    {
+      "id": "race.iksar_ac_bonus",
+      "title": "Iksar racial AC bonus",
+      "value": 35,
+      "unit": "AC",
+      "seal": "developer",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/combat"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "race.iksar_ac_placement",
+      "title": "Iksar racial AC placement",
+      "value": "on top of the capped sheet AC (bypasses the softcap)",
+      "unit": "text",
+      "seal": "developer",
+      "source": [
+        {"kind": "url", "ref": "https://eqltools.com/combat"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B17"
+    },
+    {
+      "id": "buffs.min_duration_minutes",
+      "title": "Minimum buff duration",
+      "value": 10,
+      "unit": "minutes",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "buffs.max_slots",
+      "title": "Buff slot limit",
+      "value": 15,
+      "unit": "buffs",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B16"
+    },
+    {
+      "id": "roles.templates",
+      "title": "Role weight templates",
+      "value": {
+        "tank": {"HP": 1, "AC": 6, "MANA": 0.5, "ATK": 2, "DEX": 0.1, "HASTE": 1.5, "END": 0.5, "SV": 0.4, "CHA": 0.05},
+        "melee": {"HP": 1.3, "AC": 1.5, "MANA": 0.5, "ATK": 3, "DEX": 0.8, "HASTE": 3, "END": 0.3, "SV": 0.2, "CHA": 0.05},
+        "caster": {"HP": 1, "AC": 1.2, "MANA": 4.0, "ATK": 0.3, "DEX": 0.1, "HASTE": 0, "END": 0.05, "SV": 0.4, "CHA": 0.05}
+      },
+      "unit": "HP-equivalents",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "roles.balanced",
+      "title": "Balanced role",
+      "value": "equal blend of the templates the trio can play",
+      "unit": "text",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "active"
+    },
+    {
+      "id": "weapons.damage_weight",
+      "title": "Weapon damage weight",
+      "value": 600,
+      "unit": "HP-equivalents per damage-index point per unit of the role's ATK weight",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B18",
+      "notes": "Multiplied by each role template's ATK weight; the Caster role uses 0. One ATK point is taken as worth about a tenth of a percent of melee damage."
+    },
+    {
+      "id": "weapons.dual_wield_factor",
+      "title": "Dual-wield off-hand factor",
+      "value": 0.8,
+      "unit": "fraction",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-13",
+      "status": "open",
+      "test": "B5",
+      "notes": "The share of the off hand's damage that counts in the weapon index."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 35122,
+    "ns": 0,
+    "title": "Azzar's Dreadful Hat",
+    "revisions": [
+     {
+      "revid": 177910,
+      "timestamp": "2026-09-11T05:41:50Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|notes       = {{Item Lore|Fear the Hat}}\n|itemname    = Azzar's Dreadful Hat\n|lucy_img_ID = 1121\n|statsblock  = \nLore Equipped, No Trade, Quest<br>\nSlot: HEAD<br>\nAC: 2<br>\nSize: SMALL  WT: 0.4<br>\nClass: ALL<br>\nRace: ALL<br>\nDeity: Cazic-Thule<br>\n|dropsfrom = \n\n[[The Warrens]]\n\n* [[Cave Bat Lord]]\n\n\n|relatedquests = \n\n* [[Azzar's Dreadful Hat Quest]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Beastlord Equipment]]\n[[Category:Berserker Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Head]]\n[[Category:Fashion: Cloth]]\n[[Category:Cazic Thule Worshiper Equipment]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

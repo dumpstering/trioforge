@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16829,
+    "ns": 0,
+    "title": "Blackened Iron Armplates",
+    "revisions": [
+     {
+      "revid": 139505,
+      "timestamp": "2026-06-04T00:17:16Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n{{revamped}}\n\n<onlyinclude>{{Itempage\n|notes       = Part of the [[Blackened Iron Armor Set]].\n|itemname    = Blackened Iron Armplates\n|lucy_img_ID = 543\n|statsblock  = \nMAGIC ITEM<br>\nSlot: ARMS<br>\nAC: 6<br>\nWT: 5.0  Size: SMALL<br>\nClass: WAR CLR PAL RNG SHD BRD ROG SHM<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Clan Runnyeye]]\n\n* [[The Goblin King]]\n* [[a goblin warlord]]\n* [[a Pickclaw Zekspeaker]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Arms]]\n[[Category:Clan Runnyeye]]\n[[Category:Fashion: Chain]]\n[[Category:Fashion: Mine Shaft]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 53169,
+    "ns": 0,
+    "title": "Air Tight Box",
+    "revisions": [
+     {
+      "revid": 193661,
+      "parentid": 147423,
+      "timestamp": "2026-10-13T23:39:30Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Air Tight Box\n|lucy_img_ID = 1144\n|statsblock  = \nLORE ITEM  NO DROP<br>\nWT: 6.0  Size: MEDIUM<br>\nClass: ALL<br>\nRace: ALL<br>\n|relatedquests = \n\n* [[Air Tight Box Quest]]\n\n|playercrafted = \n\n* Non-Tradeskill (Intermediate Quest Result)\n\n}}</onlyinclude>\n\n\n[[Category:Player Crafted]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16279,
+    "ns": 0,
+    "title": "Girdle of Faith",
+    "revisions": [
+     {
+      "revid": 180733,
+      "parentid": 180732,
+      "timestamp": "2026-10-03T05:28:30Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname       = Girdle of Faith\n|lucy_img_ID    = 560\n|statsblock     = \nLore Equipped, No Trade<br>\nSlot: WAIST<br>\nAC: 10<br>\nSTR: +6  WIS: +6  AGI: +6<br>\nHaste: +41%<br>\nSize: SMALL  WT: 1.0<br>\nClass: PAL<br>\nRace: ALL<br>\n|notes          = {{Item Lore|Dirkog's Girdle of Faith}}\n|relatedquests  = \n\n* [[Plane of Sky#Paladin Tests|Paladin Test of Spirit]]\n\n}}</onlyinclude>\n\n[[Category:Paladin Equipment]]\n[[Category:Waist]]\n\n[[Category:Quest Items]]\n[[Category:Worn Effects]]\n[[Category:Worn Haste]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 59097,
+    "ns": 0,
+    "title": "Torrid Corruptor",
+    "revisions": [
+     {
+      "revid": 180357,
+      "parentid": 180174,
+      "timestamp": "2026-10-02T13:46:34Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n[[File:Torrid_Corruptor.png|thumb|200px|The Torrid Corruptor]]\n<onlyinclude>{{Itempage\n|itemname = Torrid Corruptor\n|lucy_img_ID = 519\n|statsblock  = \nLore Equipped, No Trade, Quest, QuestReward<br>\nSlot: PRIMARY<br>\nSkill: 2H Slashing ATK Delay: 44<br>\nDMG: 33  DMG Bonus: 20<br>\n<br>\nSTR: +16  INT: +5  WIS: +5  DEX: +5  CHA: -30  HP: +30  MANA: +30<br>\nSV Fire: +5  SV Disease: +5  SV Cold: +5  SV Magic: +5  SV Poison: +5<br>\nEffect: [[Oathbreaker's Curse]] (Combat Req Level 45)<br>\nEffect: [[Unrighteous Bash (Worn)]]<br>\n<br>\nSize: LARGE  WT: 0.1<br>\n<br>\nClass: PAL, SHD<br>\nRace: ALL<br>\n\n|notes = \n\n|relatedquests = \n\n* [[The Torrid Corruptor]]\n\n}}</onlyinclude>\n\n[[Category:Paladin Equipment]]\n[[Category:Shadow Knight Equipment]]\n\n[[Category:Primary]]\n\n[[Category:2H Slashing]]\n\n[[Category:Light source]]\n[[Category:Worn Effects]]\n[[Category:Weapon Procs]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

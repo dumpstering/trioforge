@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 42638,
+    "ns": 0,
+    "title": "Engineer's Ring",
+    "revisions": [
+     {
+      "revid": 193407,
+      "parentid": 193016,
+      "timestamp": "2026-10-12T23:33:03Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname       = Engineer's Ring\n|lucy_img_ID    = 616\n|statsblock     = \nLore Equipped, No Trade<br>\nSlot: FINGER<br>\nAC: 20<br>\nSTR: +5  STA: +5  INT: +5  WIS: +5  AGI: +5  DEX: +5  CHA: +5  HP: +5  MANA: +20  END: +20<br>\nSize: TINY  WT: 0.1<br>\nClass: WAR CLR PAL SHD ROG NEC WIZ MAG ENC<br>\nRace: ALL<br>\n|notes          = {{Item Lore|Ring of an engineer}}\n|dropsfrom      = \n\n[[Plane of Hate]]\n\n* [[Innoruuk_(God)|Innoruuk]]\n\n}}</onlyinclude>\n\n[[Category:Cleric Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n\n[[Category:Fingers]]\n\n[[Category:Plane of Hate]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

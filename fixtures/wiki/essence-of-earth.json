@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 60345,
+    "ns": 0,
+    "title": "Essence of Earth",
+    "revisions": [
+     {
+      "revid": 179834,
+      "timestamp": "2026-09-30T01:05:29Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname = Essence of Earth\n|lucy_img_ID = 566\n|statsblock  = \nLore Equipped, Attunable<br>\nSlot: NECK<br>\nAC 4  STR: +5  STA: +5<br>\nSV Fire: +2<br>\nEffect: [[Illusion: Earth Elemental]] (Can Equip, Cast Time: Instant) at Level 30<br>\nCharges: 2<br>\nWT: 1.1  Size: MEDIUM<br>\nClass: ALL<br>\nRace: ALL<br>\n|merchant_value = 0\n\n|dropsfrom =\n\n[[The Hole]]\n* [[Retseth Tretse]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Beastlord Equipment]]\n[[Category:Berserker Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n\n[[Category:Neck]]\n[[Category:The Hole]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

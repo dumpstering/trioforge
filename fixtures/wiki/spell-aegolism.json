@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 54635,
+    "ns": 0,
+    "title": "Spell: Aegolism",
+    "revisions": [
+     {
+      "revid": 197204,
+      "timestamp": "2026-10-14T00:50:18Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Velious Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Spell: Aegolism\n|lucy_img_ID = 504\n|statsblock  = \nMAGIC ITEM<br>\nCharges: 1<br>\nSkill: Abjuration<br>\nMana Cost: 750<br>\nEffect:  Aegolism<br>\nWT: 0.1  Size: SMALL<br>\nClass: CLR<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Cobalt Scar]]\n\n* [[Kelorek`Dar]]\n\n[[Dragon Necropolis]]\n\n* [[Queen Raltaas]]\n* [[Zlandicar]]\n\n[[Iceclad Ocean]]\n\n* [[Lodizal]]\n\n[[Icewell Keep]]\n\n* [[Dain Frostreaver IV]]\n\n[[Kerafyrm's Lair]]\n\n* [[Master of the Guard]]\n* [[The Final Arbiter]]\n* [[The Progenitor]]\n\n[[Plane of Growth]]\n\n* [[a serene forest spirit]]\n* [[a thifling focuser]]\n* [[Prince Thirneg]]\n* [[Rumbleroot]]\n* [[Tunare]]\n* [[Undogo Digolo]]\n\n[[Siren's Grotto]]\n\n* [[Mistress Latazura]]\n* [[Mistress of the Darkwater]]\n\n[[Velketor's Labyrinth]]\n\n* [[Velketor the Sorcerer]]\n\n[[Western Wastes]]\n\n* [[Bufa]]\n* [[Derasinal]]\n* [[Gafala]]\n* [[Gangel]]\n* [[Glati]]\n* [[Harla Dar]]\n* [[Honvar]]\n* [[Karkona]]\n* [[Klandicar]]\n* [[Mazi]]\n* [[Nintal]]\n* [[Onava]]\n* [[Quoza]]\n* [[Sontalak]]\n* [[Vitaela]]\n* [[Yeldema]]\n* [[Zil Sapara]]\n\n|playercrafted = \n\n* [[Research]] (Trivial: 224)\n\n}}</onlyinclude>\n\n\n[[Category:Player Crafted]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

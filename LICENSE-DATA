@@ -1,0 +1,43 @@
+TrioForge data licence
+
+The data in this repository is licensed under the Creative Commons
+Attribution-ShareAlike 4.0 International licence (CC BY-SA 4.0).
+
+This licence covers:
+
+- derived/
+- fixtures/
+- rules/
+- the generated site data
+
+The code in this repository is licensed separately under the MIT licence; see
+the file LICENSE.
+
+Legal code:    https://creativecommons.org/licenses/by-sa/4.0/legalcode
+Deed (summary): https://creativecommons.org/licenses/by-sa/4.0/
+
+Not covered
+-----------
+
+Game facts derived from Daybreak Game Company's files are Daybreak's and fall
+outside this grant. This includes `derived/client/` and the race base stats
+and class modifiers in `rules/races.json` (cited from EQL Tools' published
+attributes table, which reads them from the game client).
+
+Attribution
+-----------
+
+Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, graded by evidence, tier-scaled
+
+Attribution URI: https://eqlwiki.com/
+Attribution URI (EQL Tools): https://eqltools.com/sources
+
+In short
+--------
+
+The site's data is licensed CC BY-SA 4.0, except the game facts read from Daybreak Game Company's files, which are Daybreak's and fall outside that licence. The code is licensed MIT.
+
+Disclaimer
+----------
+
+TrioForge is a fan project, not affiliated with or endorsed by Daybreak Game Company. EverQuest is a registered trademark of Daybreak Game Company LLC.

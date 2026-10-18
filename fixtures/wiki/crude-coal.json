@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 60823,
+    "ns": 0,
+    "title": "Crude Coal",
+    "revisions": [
+     {
+      "revid": 179608,
+      "timestamp": "2026-09-27T03:06:20Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname = Crude Coal\n|lucy_img_ID = \n|statsblock  = \nRec Level: 4\nSize: SMALL  WT: 0.5<br>\nClass: ALL<br>\nRace: ALL<br>\n\n|notes = \n\n|merchant_value = 9s 5c\n\n|soldby = \n\n{{ItemWhereTable|\n{{ItemWhereRow   | [[West Commonlands]]              | [[Parus the Strong]]          |               | (-279, 534) }}\n}}\n\n}}</onlyinclude>"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

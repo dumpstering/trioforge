@@ -1,0 +1,1159 @@
+{
+ "schema": "trioforge-goldens/1",
+ "kind": "sheet-ac",
+ "about": "Character-sheet armor class X = 4/3 x (worn + shield) + defense/3 + spell/4 + agi/20, the softcap Y = floor(softcap x (100 + CS + PE)/100) + shield, and the result min(X, rate x X + (1 - rate) x Y), for a trio whose best softcap is 392 with Combat Stability 3 and Physical Enhancement; invented gear totals.",
+ "cases": [
+  {
+   "worn_ac": 0,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "242/3",
+    "Y": 439,
+    "sheet": "242/3"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "442/3",
+    "Y": 439,
+    "sheet": "442/3"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 214,
+    "Y": 439,
+    "sheet": 214
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "842/3",
+    "Y": 439,
+    "sheet": "842/3"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1042/3",
+    "Y": 439,
+    "sheet": "1042/3"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 414,
+    "Y": 439,
+    "sheet": 414
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 454,
+    "Y": 439,
+    "sheet": "8879/20"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1442/3",
+    "Y": 439,
+    "sheet": "1811/4"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1642/3",
+    "Y": 439,
+    "sheet": "1899/4"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "362/3",
+    "Y": 469,
+    "sheet": "362/3"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "562/3",
+    "Y": 469,
+    "sheet": "562/3"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 254,
+    "Y": 469,
+    "sheet": 254
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "962/3",
+    "Y": 469,
+    "sheet": "962/3"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1162/3",
+    "Y": 469,
+    "sheet": "1162/3"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 454,
+    "Y": 469,
+    "sheet": 454
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 494,
+    "Y": 469,
+    "sheet": "1909/4"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1562/3",
+    "Y": 469,
+    "sheet": "9721/20"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1762/3",
+    "Y": 469,
+    "sheet": "10161/20"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "499/6",
+    "Y": 439,
+    "sheet": "499/6"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "899/6",
+    "Y": 439,
+    "sheet": "899/6"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "433/2",
+    "Y": 439,
+    "sheet": "433/2"
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1699/6",
+    "Y": 439,
+    "sheet": "1699/6"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "2099/6",
+    "Y": 439,
+    "sheet": "2099/6"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "833/2",
+    "Y": 439,
+    "sheet": "833/2"
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "913/2",
+    "Y": 439,
+    "sheet": "17791/40"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "2899/6",
+    "Y": 439,
+    "sheet": "18143/40"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "3299/6",
+    "Y": 439,
+    "sheet": "19023/40"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "739/6",
+    "Y": 469,
+    "sheet": "739/6"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1139/6",
+    "Y": 469,
+    "sheet": "1139/6"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "513/2",
+    "Y": 469,
+    "sheet": "513/2"
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1939/6",
+    "Y": 469,
+    "sheet": "1939/6"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "2339/6",
+    "Y": 469,
+    "sheet": "2339/6"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "913/2",
+    "Y": 469,
+    "sheet": "913/2"
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "993/2",
+    "Y": 469,
+    "sheet": "19123/40"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "3139/6",
+    "Y": 469,
+    "sheet": "3895/8"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 0,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "3539/6",
+    "Y": 469,
+    "sheet": "4071/8"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "272/3",
+    "Y": 439,
+    "sheet": "272/3"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "472/3",
+    "Y": 439,
+    "sheet": "472/3"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 224,
+    "Y": 439,
+    "sheet": 224
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "872/3",
+    "Y": 439,
+    "sheet": "872/3"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1072/3",
+    "Y": 439,
+    "sheet": "1072/3"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 424,
+    "Y": 439,
+    "sheet": 424
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 464,
+    "Y": 439,
+    "sheet": "1789/4"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1472/3",
+    "Y": 439,
+    "sheet": "9121/20"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1672/3",
+    "Y": 439,
+    "sheet": "9561/20"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "392/3",
+    "Y": 469,
+    "sheet": "392/3"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "592/3",
+    "Y": 469,
+    "sheet": "592/3"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 264,
+    "Y": 469,
+    "sheet": 264
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "992/3",
+    "Y": 469,
+    "sheet": "992/3"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1192/3",
+    "Y": 469,
+    "sheet": "1192/3"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 464,
+    "Y": 469,
+    "sheet": 464
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": 504,
+    "Y": 469,
+    "sheet": "9611/20"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1592/3",
+    "Y": 469,
+    "sheet": "9787/20"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 80,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1792/3",
+    "Y": 469,
+    "sheet": "10227/20"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "559/6",
+    "Y": 439,
+    "sheet": "559/6"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "959/6",
+    "Y": 439,
+    "sheet": "959/6"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "453/2",
+    "Y": 439,
+    "sheet": "453/2"
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1759/6",
+    "Y": 439,
+    "sheet": "1759/6"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "2159/6",
+    "Y": 439,
+    "sheet": "2159/6"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "853/2",
+    "Y": 439,
+    "sheet": "853/2"
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "933/2",
+    "Y": 439,
+    "sheet": "17923/40"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "2959/6",
+    "Y": 439,
+    "sheet": "3655/8"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 0,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "3359/6",
+    "Y": 439,
+    "sheet": "3831/8"
+   }
+  },
+  {
+   "worn_ac": 0,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "799/6",
+    "Y": 469,
+    "sheet": "799/6"
+   }
+  },
+  {
+   "worn_ac": 50,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1199/6",
+    "Y": 469,
+    "sheet": "1199/6"
+   }
+  },
+  {
+   "worn_ac": 100,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "533/2",
+    "Y": 469,
+    "sheet": "533/2"
+   }
+  },
+  {
+   "worn_ac": 150,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1999/6",
+    "Y": 469,
+    "sheet": "1999/6"
+   }
+  },
+  {
+   "worn_ac": 200,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "2399/6",
+    "Y": 469,
+    "sheet": "2399/6"
+   }
+  },
+  {
+   "worn_ac": 250,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "933/2",
+    "Y": 469,
+    "sheet": "933/2"
+   }
+  },
+  {
+   "worn_ac": 280,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "1013/2",
+    "Y": 469,
+    "sheet": "3851/8"
+   }
+  },
+  {
+   "worn_ac": 300,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "3199/6",
+    "Y": 469,
+    "sheet": "19607/40"
+   }
+  },
+  {
+   "worn_ac": 350,
+   "shield_ac": 30,
+   "defense_cap": 230,
+   "spell_ac": 40,
+   "agi_total": 130,
+   "softcap": 392,
+   "past_cap_rate": 0.33,
+   "cs_pct": 10,
+   "pe_pct": 2,
+   "expected": {
+    "X": "3599/6",
+    "Y": 469,
+    "sheet": "20487/40"
+   }
+  }
+ ]
+}

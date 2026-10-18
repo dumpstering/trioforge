@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 48933,
+    "ns": 0,
+    "title": "Imbued Black Pearl Electrum Choker",
+    "revisions": [
+     {
+      "revid": 146156,
+      "timestamp": "2026-06-04T00:47:40Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Imbued Black Pearl Electrum Choker\n|lucy_img_ID = 1046\n|statsblock  = \nSlot: NECK<br>\nDEX: +3  AGI: +3  WIS: +2<br>\nWT: 0.1  Size: TINY<br>\nClass: ALL<br>\nRace: ALL<br>\nDeity Prexus<br>\n\n|playercrafted = \n\n* [[Jewelry Making]] (Trivial: ??)\n** '''Imbued Black Pearl Electrum Choker''' x1\n** In [[Jeweler's Kit]]:\n:: {{SmIcon|1091}} 1 x [[Enchanted Electrum Bar]] - Summoned\n:: {{SmIcon|767}} 1 x [[Imbued Black Pearl]] - Summoned\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Neck]]\n[[Category:Player Crafted]]\n[[Category:Prexus Worshiper Equipment]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

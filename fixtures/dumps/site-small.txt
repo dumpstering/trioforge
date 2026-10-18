@@ -1,0 +1,64 @@
+Location	Name	ID	Count	Slots
+Any Slot	Empty	0	0	0
+Ear	Rune-etched Earring +2	520001	1	10
+Ear-Slot7	Empty	0	0	0
+Ear-Slot8	Empty	0	0	0
+Head	Helm of the Stoneward +4	520002	1	10
+Head-Slot7	Empty	0	0	0
+Head-Slot8	Empty	0	0	0
+Head-Slot9	Empty	0	0	0
+Head-Slot10	Empty	0	0	0
+Face	Empty	0	0	0
+Ear	Rune-etched Earring +2	520001	1	10
+Ear-Slot7	Empty	0	0	0
+Ear-Slot8	Empty	0	0	0
+Neck	Choker of the Deep	520003	1	10
+Shoulders	Empty	0	0	0
+Arms	Vambraces of Might +1	520004	1	10
+Arms-Slot7	Empty	0	0	0
+Back	Empty	0	0	0
+Wrist	Bracer of the Iron Oath	520005	1	10
+Wrist	Empty	0	0	0
+Range	Empty	0	0	0
+Hands	Empty	0	0	0
+Primary	Pellbrook Mallet +3	520006	1	10
+Primary-Slot7	Empty	0	0	0
+Primary-Slot8	Empty	0	0	0
+Primary-Slot9	Empty	0	0	0
+Secondary	Empty	0	0	0
+Fingers	Band of Quiet Lanterns +4	520007	1	10
+Fingers-Slot7	Empty	0	0	0
+Fingers-Slot8	Empty	0	0	0
+Fingers-Slot9	Empty	0	0	0
+Fingers-Slot10	Empty	0	0	0
+Fingers	Empty	0	0	0
+Chest	Breastplate of Warding +4	520008	1	10
+Chest-Slot7	Empty	0	0	0
+Chest-Slot8	Empty	0	0	0
+Chest-Slot9	Empty	0	0	0
+Chest-Slot10	Empty	0	0	0
+Legs	Empty	0	0	0
+Feet	Empty	0	0	0
+Waist	Empty	0	0	0
+Any Slot	Empty	0	0	0
+Ammo	Empty	0	0	0
+General 1	Wicker Basket	520100	1	4
+General 1-Slot1	Larkspur Pauldrons +4	520009	1	10
+General 1-Slot1-Slot7	Empty	0	0	0
+General 1-Slot1-Slot8	Empty	0	0	0
+General 1-Slot1-Slot9	Empty	0	0	0
+General 1-Slot1-Slot10	Empty	0	0	0
+General 1-Slot2	Tin Flask	520101	20	10
+General 1-Slot3	Tinker's Awl	520010	1	10
+General 1-Slot4	Empty	0	0	0
+Held	Empty	0	0	0
+Bank1	Helm of the Stoneward +4	520002	1	10
+Bank1-Slot7	Empty	0	0	0
+Bank1-Slot8	Empty	0	0	0
+Bank1-Slot9	Empty	0	0	0
+Bank1-Slot10	Empty	0	0	0
+SharedBank1	Gauntlets of Endless Wrath +1	520011	1	10
+SharedBank1-Slot7	Empty	0	0	0
+
+KeyRing	Name	ID	
+Equipment	Mask of the Weary	520012

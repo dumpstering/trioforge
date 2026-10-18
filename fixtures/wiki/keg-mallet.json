@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 57366,
+    "ns": 0,
+    "title": "Keg Mallet",
+    "revisions": [
+     {
+      "revid": 162993,
+      "timestamp": "2026-07-28T02:16:33Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|notes = \n|merchant_value = 1pp, 1gp, 4sp, 3cp\n|itemname = Keg Mallet\n|lucy_img_ID = 581\n|statsblock  = \nLore Equipped, Attunable<br>\nSlot: PRIMARY<br>\nSkill: 1H Blunt<br>\nBase Dmg: 9<br>\nAtk Delay: 30<br>\nSTA: +3<br>\nWIS: +3<br>\nWT: 1.5  Size: SMALL<br>\nClass: WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM BST BER<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Blackburrow]]\n\n* [[Master Brewer]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Beastlord Equipment]]\n[[Category:Berserker Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Primary]]\n[[Category:1H Blunt]]\n[[Category:Blackburrow]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

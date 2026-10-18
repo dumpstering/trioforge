@@ -1,0 +1,47 @@
+Location	Name	ID	Count	Slots
+Any Slot	Empty	0	0	0
+Ear	Empty	0	0	0
+Head	Helm of the Stoneward +4	520002	1	10
+Head-Slot7	Empty	0	0	0
+Head-Slot8	Empty	0	0	0
+Head-Slot9	Empty	0	0	0
+Head-Slot10	Empty	0	0	0
+Face	Empty	0	0	0
+Ear	Empty	0	0	0
+Neck	Choker of the Deep	520003	1	10
+Shoulders	Empty	0	0	0
+Arms	Empty	0	0	0
+Back	Empty	0	0	0
+Wrist	Empty	0	0	0
+Wrist	Empty	0	0	0
+Range	Empty	0	0	0
+Hands	Empty	0	0	0
+Primary	Empty	0	0	0
+Secondary	Empty	0	0	0
+Fingers	Empty	0	0	0
+Fingers	Empty	0	0	0
+Chest	Breastplate of Warding +4	520008	1	10
+Chest-Slot7	Empty	0	0	0
+Chest-Slot8	Empty	0	0	0
+Chest-Slot9	Empty	0	0	0
+Chest-Slot10	Empty	0	0	0
+Legs	Empty	0	0	0
+Feet	Empty	0	0	0
+Waist	Empty	0	0	0
+Any Slot	Empty	0	0	0
+Ammo	Empty	0	0	0
+General 1	Wicker Basket	520100	1	4
+General 1-Slot1	Millrace pavise	520013	1	10
+General 1-Slot2	larkspur pauldrons +4	520009	1	10
+General 1-Slot2-Slot7	Empty	0	0	0
+General 1-Slot2-Slot8	Empty	0	0	0
+General 1-Slot2-Slot9	Empty	0	0	0
+General 1-Slot2-Slot10	Empty	0	0	0
+General 1-Slot3	Tin Flask	520101	20	10
+General 1-Slot4	Dented Thimble	520102	3	10
+Held	Empty	0	0	0
+Bank1	Tinker's Awl	520010	1	10
+Bank2	Cracked Whistle +1	520103	1	10
+Bank2-Slot7	Empty	0	0	0
+
+KeyRing	Name	ID	

@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 57119,
+    "ns": 0,
+    "title": "Griffin-Hide Armguards",
+    "revisions": [
+     {
+      "revid": 171881,
+      "timestamp": "2026-08-23T14:30:36Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "\n<onlyinclude>{{Itempage\n|notes       = Custom EQL Plane of Sky reward.\n|itemname    = Griffin-Hide Armguards\n|lucy_img_ID = 634\n|statsblock  = \nLore Equipped, No Trade<br>\nSlot: ARMS<br>\nClass: BST<br>\nRace: ALL<br>\nAC: 6<br>\nSTA: +4  WIS: +3<br>\nSV MAGIC: +5  SV FIRE: +5  SV COLD: +5  SV DISEASE: +5  SV POISON: +5<br>\nEnd: +15<br>\nWT: 2.5  Size: SMALL<br>\n|relatedquests = \n* [[Beastlord Plane of Sky Tests|Beastlord Test of Harpy]]\n}}</onlyinclude>\n[[Category:Beastlord Equipment]]\n[[Category:Arms]]\n[[Category:Plane of Sky]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

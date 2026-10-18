@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16335,
+    "ns": 0,
+    "title": "Aerated Pauldrons",
+    "revisions": [
+     {
+      "revid": 177585,
+      "timestamp": "2026-09-09T19:13:16Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Delete}} Replaced with Pauldrons of the Blue Sky in EQL\n\n<onlyinclude>{{Itempage\n|notes       = Pre-upgrade PoS quest reward.\n|itemname    = Aerated Pauldrons\n|lucy_img_ID = 798\n|statsblock  = \nMAGIC ITEM  LORE ITEM  NO DROP<br>\nSlot: SHOULDERS<br>\nCharges: 3<br>\nAC: 12<br>\nDEX: +10  AGI: +10<br>\nEffect:  [[Spirit of Cheetah]] (Must Equip, Casting Time: Instant) at Level 45<br>\nWT: 4.5  Size: MEDIUM<br>\nClass: WAR<br>\nRace: ALL<br>\n\n\n}}</onlyinclude>\n\n[[Category:Warrior Equipment]]\n[[Category:Shoulders]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

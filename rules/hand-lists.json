@@ -1,0 +1,250 @@
+{
+  "version": "2026-10-14",
+  "notes": [
+    "Hand-kept lists that no automatic rule can catch. Pages are matched by exact wiki page title after normalization, never by substring.",
+    "removed: a patch note says the item no longer drops. The Kedge Backbone note removes one dropper; the design hides the item anyway.",
+    "removed, 2026-10-14: Torc of Veeshan (patch note of 2026-05-29) was taken off this list because no page of the cached pull of 2026-10-14 has that title, so the entry matched nothing. Put it back if a page of that exact title appears.",
+    "research_removals: the maintainer's private research found the item removed or replaced in EQL (Wind Etched armor, and pre-upgrade Sky rewards that the developers swapped for new items). Only the page titles are public.",
+    "unreleased_zones: the client flags the zone, but it is not open. exists_unflagged_zones: the zone exists, but the client does not flag it. A zone is matched by its wiki spelling (names) or by its client zone id (ids).",
+    "eql_only_zones: client zone ids of zones that exist only in EQL (New Sebilis Expedition, Lake Nerius, Rujarkian Hills). The wiki's era tags follow the Project 1999 timeline and say nothing about items found there.",
+    "cultural_containers: the 14 cultural tradeskill containers. Players report that armour and jewellery made only in them is not in EQL.",
+    "cultural_containers, added 2026-10-14: Vale Forge, Feir`Dal Forge, Fier`Dal Forge (also written Fier'Dal Forge: the match ignores the quote mark), Tier`dal Forge and Dalnir Forge are likely cultural forges. Source: observed on wiki recipe pages (the cached pull of 2026-10-14 names them as the container of 14 recipes); they are treated like the first 14 until players say otherwise.",
+    "in_era_tags and out_of_era_tags: the wiki's era tags, written as the page parser writes them. A tag in neither list is ignored.",
+    "shields and not_shields (added 2026-10-14): judgments about the item type, matched by catalog key. The name is for the reader: the build summary counts an entry whose name is not the item's as stale. The catalog builder types an item as a shield (item_type Shield) when the page states it, else when the item fits the off-hand slot, alone or with the back slot and no other, has no weapon numbers, has an armor class above zero and has shield, buckler, aegis, bulwark or targe in its name, else when it is in shields. An item in not_shields is never typed as a shield, whatever the page or its name says.",
+    "shields: off-hand armor pieces that are shields although neither the page nor the name says so. The note gives the evidence, the icon (lucy_img_id) that the item shares with items named shield. not_shields: held items, crystals and the like, whose names have the word shield (the Shield of the Devout was added after the two webshields: the same icon and size, a weight of 0.5 stone). Both lists are the maintainer's judgment (seal model, source TrioForge judgment, as for the judgment constants of rules.json), not facts that a file states."
+  ],
+  "removed": [
+    {
+      "title": "Mask of Deception",
+      "seal": "developer",
+      "source": [{"kind": "url", "ref": "https://eqlwiki.com/index.php?title=Patch_Notes"}],
+      "date": "2026-05-22"
+    },
+    {
+      "title": "Obsidian Shard (Sky)",
+      "seal": "developer",
+      "source": [{"kind": "url", "ref": "https://eqlwiki.com/index.php?title=Patch_Notes"}],
+      "date": "2026-05-29"
+    },
+    {
+      "title": "Kedge Backbone",
+      "seal": "developer",
+      "source": [{"kind": "url", "ref": "https://eqlwiki.com/index.php?title=Patch_Notes"}],
+      "date": "2026-06-23"
+    }
+  ],
+  "research_removals": [
+    {
+      "title": "Wind Etched Boots of Ro",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Wind Etched Bracers of Ro",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Wind Etched Gauntlets of Ro",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Wind Etched Helm of Ro",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Agilmente's Flute of Flight",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Sphinx-Hide Mantle",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Songweaver's Mantle",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Mask of the Songbird",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    },
+    {
+      "title": "Glowing Pauldrons",
+      "seal": "measured",
+      "source": [{"kind": "private-measured", "ref": "maintainer's private observation"}],
+      "date": "2026-10-14"
+    }
+  ],
+  "unreleased_zones": [
+    {
+      "names": ["Rujarkian Hills"],
+      "ids": [901],
+      "seal": "developer",
+      "source": [{"kind": "public-text", "ref": "EverQuest Legends producer's letter, 2026-09-17: Rujarkian Hills is pushed to 2027"}],
+      "date": "2026-09-17"
+    }
+  ],
+  "exists_unflagged_zones": [
+    {
+      "names": ["The Arena"],
+      "ids": [77],
+      "seal": "developer",
+      "source": [{"kind": "url", "ref": "https://eqlwiki.com/index.php?title=Patch_Notes"}],
+      "date": "2026-06-23"
+    },
+    {
+      "names": ["Tutorial", "Tutorial Zone"],
+      "ids": [],
+      "seal": "developer",
+      "source": [{"kind": "url", "ref": "https://eqlwiki.com/index.php?title=Patch_Notes"}],
+      "date": "2026-07-14"
+    }
+  ],
+  "eql_only_zones": [99, 900, 901],
+  "cultural_containers": [
+    "Antonican Forge",
+    "Royal Qeynos Forge",
+    "Stormguard Forge",
+    "Oggok Forge",
+    "Teir`Dal Forge",
+    "Koada`Dal Forge",
+    "Feir'Dal Sewing Kit",
+    "Erudite Sewing Kit",
+    "Vale Sewing Kit",
+    "Iksar Forge",
+    "Northman Forge",
+    "Feir`Dal Fletching Kit",
+    "Kejek Forge",
+    "Coldain Tanners Kit",
+    "Vale Forge",
+    "Feir`Dal Forge",
+    "Fier`Dal Forge",
+    "Tier`dal Forge",
+    "Dalnir Forge"
+  ],
+  "in_era_tags": ["Classic Era", "Fear Era", "Hate Era", "Paineel Era", "Sky Era", "Temple Era"],
+  "out_of_era_tags": [
+    "Chardok Era",
+    "Chardok Revamp Era",
+    "Epicquests Era",
+    "Epics Era",
+    "Fearhaterevamp Era",
+    "Kunark Era",
+    "Luclin Era",
+    "Velious Era"
+  ],
+  "shields": [
+    {
+      "key": "w52912",
+      "name": "Life's Guard",
+      "note": "Worn in the off hand only, no weapon numbers, AC 30; the page names no type and the name has no shield word. Its lucy_img_id is 805 (icon 805), the icon of 15 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w34708",
+      "name": "Marr's Promise",
+      "note": "Worn in the off hand only, no weapon numbers, AC 14; the page names no type and the name has no shield word. Its lucy_img_id is 805 (icon 805), the icon of 15 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w549",
+      "name": "Insignia Protector",
+      "note": "Worn in the off hand only, no weapon numbers, AC 20; the page names no type and the name has no shield word. Its lucy_img_id is 805 (icon 805), the icon of 15 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w35441",
+      "name": "Bladestopper",
+      "note": "Worn in the off hand only, no weapon numbers, AC 25; the page names no type and the name has no shield word. Its lucy_img_id is 606 (icon 606), the icon of 9 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w43872",
+      "name": "Krup Warrior Guard",
+      "note": "Worn in the off hand only, no weapon numbers, AC 5; the page names no type and the name has no shield word. Its lucy_img_id is 542 (icon 542), the icon of 13 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w16531",
+      "name": "Guard of the Marines",
+      "note": "Worn in the off hand only, no weapon numbers, AC 8; the page names no type and the name has no shield word. Its lucy_img_id is 676 (icon 676), the icon of 28 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w16954",
+      "name": "Guard of Ik",
+      "note": "Worn in the off hand only, no weapon numbers, AC 10; the page names no type and the name has no shield word. Its lucy_img_id is 676 (icon 676), the icon of 28 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w34849",
+      "name": "Devlas Ilkvel",
+      "note": "Worn in the off hand only, no weapon numbers, AC 15; the page names no type and the name has no shield word. Its lucy_img_id is 676 (icon 676), the icon of 28 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w58561",
+      "name": "Nisch Mas Ilkvel",
+      "note": "Worn in the off hand only, no weapon numbers, AC 10; the page names no type and the name has no shield word. Its lucy_img_id is 676 (icon 676), the icon of 28 other off-hand armor pieces named shield, buckler or aegis.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    }
+  ],
+  "not_shields": [
+    {
+      "key": "w33508",
+      "name": "Cryosilk Webshield",
+      "note": "A held crystal, not a shield: its lucy_img_id is 973 (icon 973), the crystal and orb icon that the held items A Shimmering Orb and Rokyls Channelling Crystal also use, with weight 0.2 and size TINY. The word shield in the name would make the name rule call it one.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w35255",
+      "name": "Crystal Webshield",
+      "note": "A held crystal, not a shield: its lucy_img_id is 973 (icon 973), the crystal and orb icon that the held items A Shimmering Orb and Rokyls Channelling Crystal also use, with weight 0.2 and size TINY. The word shield in the name would make the name rule call it one.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    },
+    {
+      "key": "w16938",
+      "name": "Shield of the Devout",
+      "note": "A held item, not a shield: its lucy_img_id is 973 (icon 973), the crystal and orb icon that the held items A Shimmering Orb and Rokyls Channelling Crystal also use, with weight 0.5 and size TINY. The word shield in the name would make the name rule call it one.",
+      "seal": "model",
+      "source": [{"kind": "public-text", "ref": "TrioForge judgment"}],
+      "date": "2026-10-14"
+    }
+  ]
+}

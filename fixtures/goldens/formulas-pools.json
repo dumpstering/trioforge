@@ -1,0 +1,2706 @@
+{
+ "schema": "trioforge-goldens/1",
+ "kind": "pools-exact",
+ "about": "Max HP, mana and endurance with no integer floors, for invented stat totals. HP: the two largest of 5 + base_hp + hp_fac x STA (STA counted fully to 255, half a point per point to 510, nothing above), plus item and buff HP. Mana: the two largest of base_mana + mana_fac x band(WIS or INT of the class), plus item and buff mana; no mana class means 0. END: the two largest of base_end + end_fac x conv(average of STR, STA, DEX, AGI, each counted to 510), conv = x to 100, 2.5 a point to 201, 1.25 a point after, plus item and buff END. Natural Durability is not modelled.",
+ "cases": [
+  {
+   "name": "hum-war-mnk-rog-naked",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 95,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "naked END average 97.5, no mana class",
+   "expected": {
+    "HP": "14655/4",
+    "MANA": 0,
+    "END": "5355/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "195/2"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-items-and-buffs",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 95,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 120,
+    "MANA": 0,
+    "END": 30
+   },
+   "buff": {
+    "HP": 300,
+    "MANA": 0,
+    "END": 20
+   },
+   "why": "flat item and buff points join the pools",
+   "expected": {
+    "HP": "16335/4",
+    "MANA": 0,
+    "END": "5455/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "195/2"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-95",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 88,
+    "STA": 93,
+    "AGI": 102,
+    "DEX": 97,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": -2,
+    "STA": -2,
+    "DEX": -3,
+    "AGI": -3
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 95: below the 100 knee",
+   "expected": {
+    "HP": "14581/4",
+    "MANA": 0,
+    "END": 2655,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 95
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-100",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 93,
+    "STA": 98,
+    "AGI": 107,
+    "DEX": 102,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 3,
+    "STA": 3,
+    "DEX": 2,
+    "AGI": 2
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 100: on the 100 knee",
+   "expected": {
+    "HP": "7383/2",
+    "MANA": 0,
+    "END": 2700,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 100
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-105",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 98,
+    "STA": 103,
+    "AGI": 112,
+    "DEX": 107,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 8,
+    "STA": 8,
+    "DEX": 7,
+    "AGI": 7
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 105: above the 100 knee",
+   "expected": {
+    "HP": "14951/4",
+    "MANA": 0,
+    "END": "5625/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 105
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-110",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 103,
+    "STA": 108,
+    "AGI": 117,
+    "DEX": 112,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 13,
+    "STA": 13,
+    "DEX": 12,
+    "AGI": 12
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 110: above the 100 knee",
+   "expected": {
+    "HP": 3784,
+    "MANA": 0,
+    "END": 2925,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 110
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-115",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 108,
+    "STA": 113,
+    "AGI": 122,
+    "DEX": 117,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 18,
+    "STA": 18,
+    "DEX": 17,
+    "AGI": 17
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 115: above the 100 knee",
+   "expected": {
+    "HP": "15321/4",
+    "MANA": 0,
+    "END": "6075/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 115
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-120",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 113,
+    "STA": 118,
+    "AGI": 127,
+    "DEX": 122,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 23,
+    "STA": 23,
+    "DEX": 22,
+    "AGI": 22
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 120: above the 100 knee",
+   "expected": {
+    "HP": "7753/2",
+    "MANA": 0,
+    "END": 3150,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 120
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-125",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 118,
+    "STA": 123,
+    "AGI": 132,
+    "DEX": 127,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 28,
+    "STA": 28,
+    "DEX": 27,
+    "AGI": 27
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 125: above the 100 knee",
+   "expected": {
+    "HP": "15691/4",
+    "MANA": 0,
+    "END": "6525/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 125
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-130",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 123,
+    "STA": 128,
+    "AGI": 137,
+    "DEX": 132,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 33,
+    "STA": 33,
+    "DEX": 32,
+    "AGI": 32
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 130: above the 100 knee",
+   "expected": {
+    "HP": 3969,
+    "MANA": 0,
+    "END": 3375,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 130
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-135",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 128,
+    "STA": 133,
+    "AGI": 142,
+    "DEX": 137,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 38,
+    "STA": 38,
+    "DEX": 37,
+    "AGI": 37
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 135: above the 100 knee",
+   "expected": {
+    "HP": "16061/4",
+    "MANA": 0,
+    "END": "6975/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 135
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-140",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 133,
+    "STA": 138,
+    "AGI": 147,
+    "DEX": 142,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 43,
+    "STA": 43,
+    "DEX": 42,
+    "AGI": 42
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 140: above the 100 knee",
+   "expected": {
+    "HP": "8123/2",
+    "MANA": 0,
+    "END": 3600,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 140
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-99_75",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 93,
+    "STA": 97,
+    "AGI": 107,
+    "DEX": 102,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 3,
+    "STA": 2,
+    "DEX": 2,
+    "AGI": 2
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 99.75: beside a knee (100 or 201)",
+   "expected": {
+    "HP": "14729/4",
+    "MANA": 0,
+    "END": "10791/4",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "399/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-100_25",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 93,
+    "STA": 98,
+    "AGI": 107,
+    "DEX": 103,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 3,
+    "STA": 3,
+    "DEX": 3,
+    "AGI": 2
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 100.25: beside a knee (100 or 201)",
+   "expected": {
+    "HP": "7383/2",
+    "MANA": 0,
+    "END": "21645/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "401/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-200_75",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 194,
+    "STA": 198,
+    "AGI": 208,
+    "DEX": 203,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 104,
+    "STA": 103,
+    "DEX": 103,
+    "AGI": 103
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 200.75: beside a knee (100 or 201)",
+   "expected": {
+    "HP": "9233/2",
+    "MANA": 0,
+    "END": "39735/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "803/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-201_0",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 194,
+    "STA": 199,
+    "AGI": 208,
+    "DEX": 203,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 104,
+    "STA": 104,
+    "DEX": 103,
+    "AGI": 103
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 201.0: beside a knee (100 or 201)",
+   "expected": {
+    "HP": "18503/4",
+    "MANA": 0,
+    "END": "9945/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 201
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-end-average-201_25",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 194,
+    "STA": 199,
+    "AGI": 208,
+    "DEX": 204,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {
+    "STR": 104,
+    "STA": 104,
+    "DEX": 104,
+    "AGI": 103
+   },
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END average 201.25: beside a knee (100 or 201)",
+   "expected": {
+    "HP": "18503/4",
+    "MANA": 0,
+    "END": "79605/16",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "805/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-one-stat-over-510",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 600,
+    "STA": 300,
+    "AGI": 300,
+    "DEX": 300,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STR counts as 510 in the END average",
+   "expected": {
+    "HP": "42815/8",
+    "MANA": 0,
+    "END": "53415/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "705/2"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-all-stats-over-510",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 700,
+    "STA": 650,
+    "AGI": 800,
+    "DEX": 520,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "all four count as 510; STA 650 gives no HP past 510",
+   "expected": {
+    "HP": "50585/8",
+    "MANA": 0,
+    "END": "33795/4",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 510
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-254",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 254,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 254",
+   "expected": {
+    "HP": "10269/2",
+    "MANA": 0,
+    "END": "28305/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "549/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-255",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 255,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 255",
+   "expected": {
+    "HP": "20575/4",
+    "MANA": 0,
+    "END": "14175/4",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "275/2"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-256",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 256,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 256",
+   "expected": {
+    "HP": "41187/8",
+    "MANA": 0,
+    "END": "28395/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "551/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-257",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 257,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 257",
+   "expected": {
+    "HP": 5153,
+    "MANA": 0,
+    "END": 3555,
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 138
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-258",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 258,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 258",
+   "expected": {
+    "HP": "41261/8",
+    "MANA": 0,
+    "END": "28485/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "553/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-300",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 300,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 300",
+   "expected": {
+    "HP": "42815/8",
+    "MANA": 0,
+    "END": "30375/8",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "595/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-509",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 509,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 509",
+   "expected": {
+    "HP": "12637/2",
+    "MANA": 0,
+    "END": "9945/2",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": 201
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-510",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 510,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 510",
+   "expected": {
+    "HP": "50585/8",
+    "MANA": 0,
+    "END": "79605/16",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "805/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-511",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 511,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 511",
+   "expected": {
+    "HP": "50585/8",
+    "MANA": 0,
+    "END": "79605/16",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "805/4"
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-sta-600",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 600,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "STA 600",
+   "expected": {
+    "HP": "50585/8",
+    "MANA": 0,
+    "END": "79605/16",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "805/4"
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-150",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 150,
+    "STA": 150,
+    "AGI": 150,
+    "DEX": 150,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": 3835,
+    "MANA": 0,
+    "END": "15455/4",
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "BER",
+     "MNK"
+    ],
+    "end_average": 150
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-200",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 200,
+    "STA": 200,
+    "AGI": 200,
+    "DEX": 200,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": 4260,
+    "MANA": 0,
+    "END": "9915/2",
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "BER",
+     "MNK"
+    ],
+    "end_average": 200
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-222",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 222,
+    "STA": 222,
+    "AGI": 222,
+    "DEX": 222,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": 4447,
+    "MANA": 0,
+    "END": "83345/16",
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "BER",
+     "MNK"
+    ],
+    "end_average": 222
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-223",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 223,
+    "STA": 223,
+    "AGI": 223,
+    "DEX": 223,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": "8911/2",
+    "MANA": 0,
+    "END": 5220,
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "BER",
+     "MNK"
+    ],
+    "end_average": 223
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-224",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 224,
+    "STA": 224,
+    "AGI": 224,
+    "DEX": 224,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": 4464,
+    "MANA": 0,
+    "END": "20925/4",
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "MNK",
+     "ROG"
+    ],
+    "end_average": 224
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-250",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 250,
+    "STA": 250,
+    "AGI": 250,
+    "DEX": 250,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": 4685,
+    "MANA": 0,
+    "END": "22095/4",
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "MNK",
+     "ROG"
+    ],
+    "end_average": 250
+   }
+  },
+  {
+   "name": "hum-ber-mnk-rog-all-four-400",
+   "race": "HUM",
+   "trio": [
+    "BER",
+    "MNK",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 400,
+    "STA": 400,
+    "AGI": 400,
+    "DEX": 400,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "END pools order: BER ahead below 223, behind above",
+   "expected": {
+    "HP": "21375/4",
+    "MANA": 0,
+    "END": "28845/4",
+    "hp_pools": [
+     "BER",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "MNK",
+     "ROG"
+    ],
+    "end_average": 400
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-150-int-120",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 150,
+    "INT": 120
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "7225/2",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-150-int-210",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 150,
+    "INT": 210
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "10375/2",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "WIZ",
+     "ENC"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-100-int-101",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 100,
+    "INT": 101
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "5695/2",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "WIZ",
+     "ENC"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-101-int-100",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 101,
+    "INT": 100
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "11345/4",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-100-int-100",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 100,
+    "INT": 100
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": 2825,
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-200-int-201",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 200,
+    "INT": 201
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "20345/4",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "WIZ",
+     "ENC"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-201-int-200",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 201,
+    "INT": 200
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "40645/8",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-255-int-256",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 255,
+    "INT": 256
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "45595/8",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "WIZ",
+     "ENC"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-256-int-255",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 256,
+    "INT": 255
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "91145/16",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-300-int-300",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 300,
+    "INT": 300
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "47575/8",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-510-int-511",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 510,
+    "INT": 511
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "57025/8",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-600-int-700",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 600,
+    "INT": 700
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "57025/8",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-50-int-99",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 50,
+    "INT": 99
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": 2816,
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "WIZ",
+     "ENC"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-wis-99-int-50",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 99,
+    "INT": 50
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 75,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 50,
+    "END": 0
+   },
+   "why": "which two mana pools count",
+   "expected": {
+    "HP": 3328,
+    "MANA": "5191/2",
+    "END": "2107/2",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  },
+  {
+   "name": "hum-pal-shd-brd-wis-120-int-90",
+   "race": "HUM",
+   "trio": [
+    "PAL",
+    "SHD",
+    "BRD"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 100,
+    "STA": 85,
+    "AGI": 75,
+    "DEX": 85,
+    "WIS": 120,
+    "INT": 90
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 40,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "mixed, single or all-WIS mana pools",
+   "expected": {
+    "HP": 3706,
+    "MANA": 2920,
+    "END": "14917/8",
+    "hp_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "mana_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "end_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "end_average": "345/4"
+   }
+  },
+  {
+   "name": "hum-pal-shd-brd-wis-120-int-200",
+   "race": "HUM",
+   "trio": [
+    "PAL",
+    "SHD",
+    "BRD"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 100,
+    "STA": 85,
+    "AGI": 75,
+    "DEX": 85,
+    "WIS": 120,
+    "INT": 200
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 40,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "mixed, single or all-WIS mana pools",
+   "expected": {
+    "HP": 3706,
+    "MANA": 4990,
+    "END": "14917/8",
+    "hp_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "mana_pools": [
+     "SHD",
+     "BRD"
+    ],
+    "end_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "end_average": "345/4"
+   }
+  },
+  {
+   "name": "hum-pal-shd-brd-wis-90-int-90",
+   "race": "HUM",
+   "trio": [
+    "PAL",
+    "SHD",
+    "BRD"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 100,
+    "STA": 85,
+    "AGI": 75,
+    "DEX": 85,
+    "WIS": 90,
+    "INT": 90
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 40,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "mixed, single or all-WIS mana pools",
+   "expected": {
+    "HP": 3706,
+    "MANA": 2650,
+    "END": "14917/8",
+    "hp_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "mana_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "end_pools": [
+     "PAL",
+     "SHD"
+    ],
+    "end_average": "345/4"
+   }
+  },
+  {
+   "name": "hum-war-clr-rog-wis-140-int-60",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "CLR",
+    "ROG"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 90,
+    "STA": 100,
+    "AGI": 95,
+    "DEX": 90,
+    "WIS": 140,
+    "INT": 60
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 40,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "mixed, single or all-WIS mana pools",
+   "expected": {
+    "HP": 3770,
+    "MANA": 1840,
+    "END": "10575/4",
+    "hp_pools": [
+     "WAR",
+     "CLR"
+    ],
+    "mana_pools": [
+     "CLR"
+    ],
+    "end_pools": [
+     "WAR",
+     "ROG"
+    ],
+    "end_average": "375/4"
+   }
+  },
+  {
+   "name": "hum-dru-clr-shm-wis-180-int-60",
+   "race": "HUM",
+   "trio": [
+    "DRU",
+    "CLR",
+    "SHM"
+   ],
+   "level": 50,
+   "attrs": {
+    "STR": 80,
+    "STA": 110,
+    "AGI": 75,
+    "DEX": 75,
+    "WIS": 180,
+    "INT": 60
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 40,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "mixed, single or all-WIS mana pools",
+   "expected": {
+    "HP": "7113/2",
+    "MANA": 4540,
+    "END": "2929/2",
+    "hp_pools": [
+     "CLR",
+     "SHM"
+    ],
+    "mana_pools": [
+     "DRU",
+     "CLR"
+    ],
+    "end_pools": [
+     "DRU",
+     "CLR"
+    ],
+    "end_average": 85
+   }
+  },
+  {
+   "name": "hum-war-mnk-rog-level-55",
+   "race": "HUM",
+   "trio": [
+    "WAR",
+    "MNK",
+    "ROG"
+   ],
+   "level": 55,
+   "attrs": {
+    "STR": 90,
+    "STA": 95,
+    "AGI": 105,
+    "DEX": 100,
+    "WIS": 75,
+    "INT": 75
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "the level-55 pool table",
+   "expected": {
+    "HP": "854629/200",
+    "MANA": 0,
+    "END": "12495/4",
+    "hp_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "mana_pools": [],
+    "end_pools": [
+     "WAR",
+     "MNK"
+    ],
+    "end_average": "195/2"
+   }
+  },
+  {
+   "name": "eru-clr-wiz-enc-level-55",
+   "race": "ERU",
+   "trio": [
+    "CLR",
+    "WIZ",
+    "ENC"
+   ],
+   "level": 55,
+   "attrs": {
+    "STR": 65,
+    "STA": 95,
+    "AGI": 70,
+    "DEX": 70,
+    "WIS": 180,
+    "INT": 150
+   },
+   "gear_added": {},
+   "item": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "buff": {
+    "HP": 0,
+    "MANA": 0,
+    "END": 0
+   },
+   "why": "the level-55 pool table",
+   "expected": {
+    "HP": 3881,
+    "MANA": "19425/4",
+    "END": "4629/4",
+    "hp_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "mana_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_pools": [
+     "CLR",
+     "WIZ"
+    ],
+    "end_average": 75
+   }
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 33237,
+    "ns": 0,
+    "title": "Crystalline Silk Cloak",
+    "revisions": [
+     {
+      "revid": 141222,
+      "parentid": 68338,
+      "timestamp": "2026-06-04T00:24:59Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Velious Era}}\n\n<onlyinclude>{{Itempage\n|notes       = Part of the [[Crystalline Silk Armor]] Set\n|itemname    = Crystalline Silk Cloak\n|lucy_img_ID = 660\n|statsblock  = \nSlot: BACK<br>\nAC: 4<br>\nSV MAGIC: +2<br>\nWT: 0.1  Size: MEDIUM<br>\nClass: ALL<br>\nRace: ALL<br>\n\n|playercrafted = \n\n[[:Tailoring]] (108)\n:'''Yield:''' ''Crystalline Silk Cloak'' x1\n:In: [[Deluxe Sewing Kit]], [[Large Sewing Kit]], [[Loom]]\n:*1 x [[Cloak Pattern]]\n:*1 x [[Silver Thread]]\n:*3 x [[Crystalline Silk Swatch]]\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Back]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,23 @@
+#!/bin/sh
+# TrioForge pre-push hook: before anything leaves this machine, scan
+#   * the files and the index (--all) and the whole history (--history): every blob and message
+#     reachable from any branch or tag, and every branch and tag name;
+#   * what this push is about to send (--pre-push, which reads the ref lines git writes to this
+#     hook's standard input): the commits the remote lacks (also those no branch reaches, when
+#     they are pushed by id) and the names the refs will have on the remote;
+#   * who made every commit: each author and committer must use the address in
+#     privacy/identity.txt, which is committed, and every date must be in UTC. The address is
+#     not taken from git config: a clone set up with a personal address must not pass.
+# Any finding refuses the push. The first argument is the name (or URL) of the remote.
+if [ -f .venv/Scripts/python.exe ]; then
+    python=.venv/Scripts/python.exe
+elif [ -f .venv/bin/python ]; then
+    python=.venv/bin/python
+else
+    echo "privacy hook: no .venv python found; run the setup in README" >&2
+    exit 2
+fi
+PYTHONPATH=pipeline
+export PYTHONPATH
+exec "$python" -m trioforge.privacy.scan --all --history \
+    --identity-file privacy/identity.txt --pre-push "$1" --require-key

@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 54451,
+    "ns": 0,
+    "title": "Robe of Discord",
+    "revisions": [
+     {
+      "revid": 148652,
+      "timestamp": "2026-06-04T00:59:04Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Robe of Discord\n|lucy_img_ID = 838\n|statsblock  = \nMAGIC ITEM<br>\nSlot: CHEST<br>\nAC: 8<br>\nSTA: +5  INT: +3<br>\nWT: 3.5  Size: MEDIUM<br>\nClass: NEC WIZ MAG ENC<br>\nRace: ALL<br>\n|dropsfrom = \n* [[Priest of Discord]]\n\n<u>Located in the following locations:</u><br>\n[[Cabilis]]<br>\n[[Erudin]]<br>\n[[Felwithe]]<br>\n[[Freeport]]<br>\n[[Greater Faydark]]<br>\n[[Grobb]]<br>\n[[Halas]]<br>\n[[Kaladim]]<br>\n[[Neriak]]<br>\n[[Oggok]]<br>\n[[Paineel]]<br>\n[[Qeynos]]<br>\n[[Rivervale]]<br>\n\n}}</onlyinclude>\n\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Chest]]\n[[Category:Nektulos Forest]]\n[[Category:Fashion: Flowing Black Robe]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

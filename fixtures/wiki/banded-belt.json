@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 32365,
+    "ns": 0,
+    "title": "Banded Belt",
+    "revisions": [
+     {
+      "revid": 174342,
+      "parentid": 173953,
+      "timestamp": "2026-08-28T19:36:17Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = This is part of the [[Banded Armor]] set.\n|itemname    = Banded Belt\n|lucy_img_ID = 562\n|statsblock  = \nSlot: WAIST<br>\nAC: 6<br>\nWT: 2.5  Size: SMALL<br>\nClass: WAR CLR PAL RNG SHD BRD ROG SHM BER<br>\nRace: ALL<br>\n|playercrafted = \n\n* [[Blacksmithing]] (Trivial: 95)\n** '''Yield: Banded Belt''' x1\n** In [[Forge]]:\n:: {{SmIcon|1151}} 1 x [[Belt Sectional Mold]] - Bought\n:: {{SmIcon|1036}} 2 x [[Sheet Metal]] - Crafted, Bought\n:: {{SmIcon|584}} 1 x [[Water Flask]] - Foraged, Crafted, Summoned, Bought, Quested, Dropped\n\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Berseker Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Waist]]\n[[Category:Player Crafted]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16742,
+    "ns": 0,
+    "title": "Large Patchwork Cloak",
+    "revisions": [
+     {
+      "revid": 166485,
+      "parentid": 139423,
+      "timestamp": "2026-08-05T19:59:36Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{delete}} not relevent in EQ legends\n{{Disambig3|[[Patchwork Armor Set]]}} {{Disambig3|[[Small Patchwork Armor Set]]}}\n\n<onlyinclude>{{Itempage\n|notes       = Part of the [[Large Patchwork Armor Set]].\n|itemname    = Large Patchwork Cloak\n|lucy_img_ID = 660\n|statsblock  = \nSlot: BACK<br>\nAC: 3<br>\nWT: 2.5  Size: MEDIUM<br>\nClass: ALL except NEC WIZ MAG ENC<br>\nRace: ALL<br>\n|relatedquests = \n\n* [[Cindl's Polar Bear Collection]]\n\n|playercrafted = \n\n* [[Skill Tailoring|Tailoring]] (Trivial: 26)\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Back]]\n[[Category:Player Crafted]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

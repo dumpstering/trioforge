@@ -1,0 +1,37 @@
+name: Wrong item data
+description: An item page shows a wrong stat, tier, source or class restriction.
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include character names, player names, chat lines or screenshots of chat. Item names, zones and NPC names are fine.
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The link to the page that shows the problem.
+      placeholder: "https://"
+    validations:
+      required: true
+  - type: input
+    id: item
+    attributes:
+      label: Item
+      description: The item name, as the game spells it.
+    validations:
+      required: true
+  - type: textarea
+    id: what-is-wrong
+    attributes:
+      label: What is wrong
+      description: What the page says, and what it should say instead.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: A link that shows the correct value, or "in game" if you checked it there.
+    validations:
+      required: true

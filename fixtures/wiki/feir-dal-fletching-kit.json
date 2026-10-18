@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 59726,
+    "ns": 0,
+    "title": "Feir`Dal Fletching Kit",
+    "revisions": [
+     {
+      "revid": 194888,
+      "timestamp": "2026-10-14T00:03:36Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname       = Feir`Dal Fletching Kit\n|lucy_img_ID    = 883\n|statsblock     = \nSize: GIANT  WT: 1.0<br>\nWeight Reduction: 0%  Capacity: 10  Size Capacity: LARGE<br>\nClass: ALL<br>\nRace: ELF DEF VAH<br>\n|merchant_value = 1s\n|notes          = Used for [[Fletching]]\n|playercrafted  = \n\n* [[Skill Blacksmithing|Blacksmithing]] (Trivial: 163)\n** '''Yield: Feir`Dal Fletching Kit'''\n** In [[Feir`Dal Forge]]:\n**: {{SmIcon|584}} 1x [[Water Flask]]\n**: {{SmIcon|1138}} 1x [[Small Brick of Mithril]]\n**: {{SmIcon|1151}} 1x [[Hinge Mold]]\n**: {{SmIcon|1151}} 1x [[Container Base Mold]]\n**: {{SmIcon|1151}} 1x [[Container Lid Mold]]\n\n}}</onlyinclude>\n\n{{Navbox Tradeskill Containers}}\n\n\n[[Category:Containers]]\n[[Category:Tradeskill Containers]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

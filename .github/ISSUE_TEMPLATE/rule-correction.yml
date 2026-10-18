@@ -1,0 +1,41 @@
+name: Rule correction
+description: A rule in the rules file is wrong, or its evidence is out of date.
+labels: [rules]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include character names, player names, chat lines or screenshots of chat. Item names, zones and NPC names are fine.
+  - type: input
+    id: rule-id
+    attributes:
+      label: Rule id
+      description: The id of the rule, for example haste.cap_pct.
+    validations:
+      required: true
+  - type: textarea
+    id: what-the-rule-should-be
+    attributes:
+      label: What the rule should be
+      description: The value you expect, and its unit.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: How you know. Link a patch note, a client file or a wiki page, or describe what you measured in the game.
+    validations:
+      required: true
+  - type: dropdown
+    id: confidence
+    attributes:
+      label: Confidence
+      description: Where the evidence comes from.
+      options:
+        - Client file
+        - Developer
+        - Measured
+        - Player reports
+    validations:
+      required: true

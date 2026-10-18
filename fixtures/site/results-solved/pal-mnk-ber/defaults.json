@@ -1,0 +1,19 @@
+{
+"version":1,
+"trio":"pal-mnk-ber",
+"classes":["PAL","MNK","BER"],
+"level":50,
+"data_release":"data-2026-10-14",
+"game_patch":"2026-10-13",
+"rules_version":"2026-10-13",
+"view":{"role":"balanced","tier":4,"evidence":"strict","buffs":"own"},
+"strict_pool_empty":false,
+"race":"OGR",
+"runner_up_race":"IKS",
+"margin":405.3,
+"F":17455.7,
+"setup":"dw",
+"races":[{"race":"OGR","legal":true,"F":17455.7,"setup":"dw"},{"race":"IKS","legal":true,"F":17050.4,"setup":"dw"}],
+"flip_notes":[],
+"robustness":"skipped: disabled"
+}

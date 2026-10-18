@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 57110,
+    "ns": 0,
+    "title": "Baton of the Sky",
+    "revisions": [
+     {
+      "revid": 177378,
+      "parentid": 173791,
+      "timestamp": "2026-09-09T14:15:23Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname    = Baton of the Sky\n|lucy_img_ID = 822\n|statsblock  = \nMAGIC ITEM  LORE ITEM  NO DROP<br>\nSlot: PRIMARY<br>\nSkill: 2H Blunt  Atk Delay: 40<br> \nDMG: 33<br>\nAC: 25<br>\nMana: 75<br>\nSTR: +10  STA: +10 WIS: +15<br>\nEffect:  [[Blessing of the Lord Commander]] (Must Equip)<br>\n&nbsp; Casting Time: Instant<br>\n&nbsp; Required Level: 49<br>\n&nbsp; Cooldown: 600 seconds<br>\nWT: 8.0  Size: MEDIUM<br>\nClass: CLR<br>\nRace: ALL<br>\n|relatedquests = \n\n* [[Plane of Sky#Cleric Tests|Cleric Test of The Weak]]\n\n}}</onlyinclude>\n\n[[Category:Cleric Equipment]]\n[[Category:Primary]]\n[[Category:2H Blunt]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

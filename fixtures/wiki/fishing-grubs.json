@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 37497,
+    "ns": 0,
+    "title": "Fishing Grubs",
+    "revisions": [
+     {
+      "revid": 180133,
+      "timestamp": "2026-10-01T09:24:34Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname       = Fishing Grubs\n|lucy_img_ID    = 926\n|statsblock     = \nQuest<br>\nSlot: Ammo<br>\nSize: TINY  WT: 0.1<br>\nClass: ALL<br>\nRace: ALL<br>\n|merchant_value = 3c\n|notes          = \n|soldby         = \n\n{{ItemWhereTable|\n{{ItemWhereRow   | [[Cabilis|East Cabilis]]          | [[Klok Foxmyr]]               |               | (123, -201) }}\n}}\n\n|foraged        = \n\n* [[Freeport|East Freeport]]\n* [[Everfrost Peaks]]\n* [[Halas]]\n* [[Misty Thicket]]\n* [[Oasis of Marr]]\n* [[South Karana]]\n* [[The Estate of Unrest]]\n* [[West Commonlands]]\n\n|recipes        = \n\n* [[Brewing]]\n** [[Fetid Essence]] (Trivial: 122)\n\n|relatedquests  = \n\n* [[Deck of Spontaneous Generation Quest]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Vendor Sold]]\n[[Category:Tradeskill Ingredient]]\n[[Category:Foraged]]\n\n[[Category:Quest Items]]\n[[Category:Beastlord Equipment]]\n[[Category:Berserker Equipment]]\n[[Category:Ammo]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 43156,
+    "ns": 0,
+    "title": "Morning Dew",
+    "revisions": [
+     {
+      "revid": 196136,
+      "timestamp": "2026-10-14T00:28:34Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname       = Morning Dew\n|lucy_img_ID    = 717\n|statsblock     = \nSize: SMALL  WT: 0.1<br>\nClass: ALL<br>\nRace: ALL<br>\n|merchant_value = absolutely nothing\n|notes          = \n|dropsfrom      = \n\n* [[A Faerie]]\n* [[a faerie guard]]\n* [[a faerie maiden]]\n* [[a faerie courtier]]\n* [[A Brownie Farmer]]\n* [[A Brownie]]\n* [[A Brownie Guard]]\n\nThis item can also be found as a \"ground spawn\" in Lesser Faydark. They look like small green leaves.\nOne loc is {{Loc|Lesser Faydark|(792,2457)}}; {{Loc|Lesser Faydark|(1460,2789)}}\n\n|foraged        = \n\n* [[Lesser Faydark]]\n* [[Greater Faydark]]\n\n|recipes        = \n\n* [[Brewing]]\n** [[Moonlight Temper]] (Trivial: 135)\n* [[Blacksmithing]]\n** [[Mithril Bits]] (Trivial: 43)\n** Various High Elf Cultural Recipes\n\n}}</onlyinclude>\n\n[[Category:Foraged]]\n\n[[Category:Tradeskill Ingredient]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

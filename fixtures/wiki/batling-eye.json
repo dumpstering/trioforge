@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 35127,
+    "ns": 0,
+    "title": "Batling Eye",
+    "revisions": [
+     {
+      "revid": 142780,
+      "timestamp": "2026-06-04T00:32:01Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Batling Eye\n|lucy_img_ID = 885\n|statsblock  = \nMAGIC ITEM<br>\nSlot: RANGE<br>\nEXPENDABLE  Charges: 1<br>\nINT: +2<br>\nEffect: [[Eye of Zomm]] (Any Slot, Casting Time: Instant)<br>\nWT: 0.1  Size: SMALL<br>\nClass: ALL<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[The Warrens]]\n\n* [[A mischievious batling]]\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Range]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

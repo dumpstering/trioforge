@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16551,
+    "ns": 0,
+    "title": "Chilled Tundra Root",
+    "revisions": [
+     {
+      "revid": 194213,
+      "timestamp": "2026-10-13T23:50:20Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname       = Chilled Tundra Root\n|lucy_img_ID    = 583\n|statsblock     = \nNo Trade<br>\nSize: TINY  WT: 0.1<br>\nClass: RNG DRU<br>\nRace: ALL<br>\n|notes          = {{Item Lore|Root frozen rock hard by the tundra}}\n|foraged        = \n\n* [[Everfrost Peaks]]\n\n|relatedquests  = \n\n* [[Druid Epic Quest]]\n* [[Ranger Epic Quest]]\n\n}}</onlyinclude>\n\n\n[[Category:Foraged]]\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

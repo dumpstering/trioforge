@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 57121,
+    "ns": 0,
+    "title": "Spiroc Beak Earcuff",
+    "revisions": [
+     {
+      "revid": 177346,
+      "timestamp": "2026-09-09T14:05:51Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = Custom EQL Plane of Sky reward.\n|itemname    = Spiroc Beak Earcuff\n|lucy_img_ID = 501\n|statsblock  = \nLore Equipped, No Trade<br>\nSlot: EAR<br>\nAC: 4<br>\nHP: +10  Mana: +10  End: +10<br>\nWIS: +5  CHA: +5<br>\nWT: 0.1  Size: TINY<br>\nClick Effect: [[Vigor of Zehkes]] (Must Equip) Required Level: 46<br>\nCast Time: Instant, Cooldown: 120 seconds<br>\nClass: BST<br>\nRace: ALL<br>\n\n|relatedquests = \n* [[Plane of Sky#Beastlord Tests|Beastlord Test of Aviak]]\n}}</onlyinclude>\n\n[[Category:Beastlord Equipment]]\n[[Category:Ear]]\n[[Category:Plane of Sky]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

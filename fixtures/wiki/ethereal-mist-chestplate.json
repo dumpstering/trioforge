@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 33469,
+    "ns": 0,
+    "title": "Ethereal Mist Chestplate",
+    "revisions": [
+     {
+      "revid": 174407,
+      "parentid": 173545,
+      "timestamp": "2026-08-28T20:31:52Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|notes       = Part of the [[Ethereal Mist Armor]] set.\n|itemname    = Ethereal Mist Chestplate\n|lucy_img_ID = 624\n|statsblock  = \nLore Equipped, No Trade, Quest<br>\nSlot: CHEST<br>\nAC: 28<br>\nSTA: +15  WIS: +15  HP: +25  MANA: +25<br>\nWT: 7.5  Size: LARGE<br>\nClass: CLR<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Plane of Fear]]\n\n* [[a glare lord]]\n* [[a tentacle tormentor]]\n* [[phoboplasm]]\n\n[[Plane of Hate]]\n\n* [[a haunted chest]]\n* [[An Evangelist of Hate]]\n\n}}</onlyinclude>\n\n[[Category:Cleric Equipment]]\n[[Category:Chest]]\n[[Category:Plane of Fear]]\n[[Category:Plane of Hate]]\n[[Category:Fashion: Plate]]\n[[Category:Fashion: Plum]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

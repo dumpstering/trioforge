@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 42648,
+    "ns": 0,
+    "title": "Skinner's Belt",
+    "revisions": [
+     {
+      "revid": 155788,
+      "parentid": 155774,
+      "timestamp": "2026-07-11T00:09:56Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = {{Item Lore|Lost belt of Kruss da Troll}}\n|itemname    = Skinner's Belt\n|lucy_img_ID = 563\n|statsblock  = \nMAGIC ITEM  LORE ITEM  NO DROP<br>\nSlot: WAIST<br>\nAC: 12<br>\nSTR: +15  WIS: +15  HP: +20  MANA: +20<br>\nSV DISEASE: +20  SV POISON: +20<br>\nWT: 1.0  Size: SMALL<br>\nClass: WAR SHD SHM<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Plane of Hate]]\n\n* [[Innoruuk_(God)|Innoruuk]]\n\n}}</onlyinclude>\n\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Waist]]\n[[Category:Plane of Hate]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

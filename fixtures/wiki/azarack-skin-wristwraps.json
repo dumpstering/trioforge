@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 57049,
+    "ns": 0,
+    "title": "Azarack Skin Wristwraps",
+    "revisions": [
+     {
+      "revid": 177347,
+      "timestamp": "2026-09-09T14:06:06Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Azarack Skin Wristwraps\n|lucy_img_ID = 637\n|statsblock  = \nNo Trade<br>\nClass: BST<br>\nRace: ALL<br>\nWrist<br>\nAC: 5 HP: +35 END: +10<br>\nSTR: +5 STA: +5 DEX: +5<br>\nWT: 1.0  Size: SMALL<br>\nClick Effect: [[Whirl Bolt]] (Must Equip) - Cast Time: 1.0 seconds, Required Level: 46, Cooldown: 240 seconds\n|relatedquests =\n\n* [[Plane of Sky#Beastlord Tests|Beastlord Test of Azarack]]\n\n}}</onlyinclude>\n\n[[Category:Beastlord Equipment]]\n[[Category:Wrist]]\n[[Category:Plane of Sky]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

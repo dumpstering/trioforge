@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 59355,
+    "ns": 0,
+    "title": "Wind Rune Meda",
+    "revisions": [
+     {
+      "revid": 197813,
+      "timestamp": "2026-10-14T01:02:18Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname       = Wind Rune Meda\n|lucy_img_ID    = 966\n|statsblock     = \nNo Trade, Quest<br>\nSize: MEDIUM  WT: 1.0<br>\nClass: CLR RNG DRU BRD SHM ENC<br>\nRace: ALL<br>\n|notes          = \n|dropsfrom      = \n\n* [[Plane of Sky]]\n\n|relatedquests  = \n\n* [[Plane of Sky#Bard Tests|Bard Test of Tone]]\n* [[Plane of Sky#Cleric Tests|Cleric Test of Skill]]\n* [[Plane of Sky#Druid Tests|Druid Test of Wolf]]\n* [[Plane of Sky#Enchanter Tests|Enchanter Test of Illusion]]\n* [[Plane of Sky#Ranger Tests|Ranger Test of Body]]\n* [[Plane of Sky#Shaman Tests|Shaman Test of Might]]\n\n}}</onlyinclude>\n\n\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,1722 @@
+/*
+ * TrioForge. One stylesheet, system fonts, no images, no external requests.
+ *
+ * Colours are tokens. Light is the default; the system's dark preference switches them unless the visitor chose light with
+ * the theme button, and choosing dark with the button switches them whatever the system says. The two dark blocks hold the
+ * same values (a test checks that, and that every text pair keeps WCAG AA contrast in each theme).
+ */
+
+:root {
+  --bg: #faf8f5;
+  --surface: #ffffff;
+  --tint: #f1ece4;
+  --text: #1a1d21;
+  --muted: #4b5460;
+  --border: #cfd4da;
+  --control: #6a7480;
+  --accent: #9a3a0a;
+  --accent-fill: #9a3a0a;
+  --on-accent: #ffffff;
+  --focus: #1d4ed8;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b;
+    --surface: #1c2026;
+    --tint: #20252c;
+    --text: #e9ecef;
+    --muted: #aab3bd;
+    --border: #343b44;
+    --control: #8b95a1;
+    --accent: #f2a272;
+    --accent-fill: #f2a272;
+    --on-accent: #1a1208;
+    --focus: #8ab4ff;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #14171b;
+  --surface: #1c2026;
+  --tint: #20252c;
+  --text: #e9ecef;
+  --muted: #aab3bd;
+  --border: #343b44;
+  --control: #8b95a1;
+  --accent: #f2a272;
+  --accent-fill: #f2a272;
+  --on-accent: #1a1208;
+  --focus: #8ab4ff;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+code,
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  margin: 1.6rem 0 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+h1 {
+  font-size: 1.65rem;
+  margin-top: 0.5rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+}
+
+p,
+ul,
+ol,
+dl,
+fieldset {
+  margin: 0 0 0.9rem;
+}
+
+a {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+  text-underline-offset: 0.15em;
+}
+
+li,
+dd {
+  overflow-wrap: anywhere;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+strong {
+  font-weight: 650;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.wrap {
+  width: 100%;
+  max-width: 62rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -4rem;
+  z-index: 10;
+  padding: 0.6rem 1rem;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-radius: 0.4rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+main {
+  flex: 1 0 auto;
+  padding-bottom: 2.5rem;
+  min-width: 0;
+}
+
+/* ---- header and footer ---- */
+
+.site-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1.25rem;
+  padding-block: 0.4rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  min-height: 2.75rem;
+}
+
+.logo {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--accent);
+}
+
+.site-header nav {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.site-header nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.45rem;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 0.4rem;
+}
+
+.site-header nav a:hover {
+  background: var(--tint);
+}
+
+.site-header nav a[aria-current="page"] {
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
+}
+
+.theme-toggle,
+.btn {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 600;
+  margin-inline-start: 0.5rem;
+}
+
+.theme-toggle:hover {
+  background: var(--tint);
+}
+
+.theme-toggle {
+  font-size: 0.9rem;
+}
+
+.data-strip {
+  margin: 0 auto;
+  padding-block: 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.rules {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.assume-fixed {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.cap-rules {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.preview-banner {
+  margin: 0 auto;
+  padding-block: 0.3rem 0.45rem;
+  border-top: 1px solid var(--border);
+  background: var(--tint);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding-block: 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.site-footer p {
+  margin-bottom: 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---- the trio page ---- */
+
+.page-head h1 {
+  margin-bottom: 0.4rem;
+}
+
+.best-race {
+  font-size: 1.1rem;
+  margin-bottom: 0.3rem;
+}
+
+.margin {
+  color: var(--muted);
+}
+
+.note {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lead {
+  font-size: 1.1rem;
+  max-width: 44rem;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.control {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.control > label,
+.control > legend,
+.assume legend {
+  display: block;
+  padding: 0;
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+select {
+  min-height: 2.75rem;
+  max-width: 100%;
+  padding: 0.4rem 2rem 0.4rem 0.7rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background-color: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.seg-items {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.seg-item,
+.opt {
+  position: relative;
+  display: inline-block;
+}
+
+.seg-item input,
+.opt input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.seg-item label {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.seg-item input:checked + label {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 650;
+}
+
+/* the mark is drawn and never read: its alternative text is empty, so it is not part of the name of the radio button ("Balanced", not
+   "check mark Balanced"). The line before is for a browser that does not know the alternative-text syntax, and then keeps it. */
+.seg-item input:checked + label::before {
+  content: "\2713\00a0";
+  content: "\2713\00a0" / "";
+}
+
+.seg-item input:focus-visible + label,
+.opt input:focus-visible + label {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.assumes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin: 1rem 0 0.6rem;
+}
+
+.assumes-lead {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.assume {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.assume[open] {
+  flex-basis: 100%;
+}
+
+.assume summary {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+}
+
+.change {
+  margin-left: 0.25em;
+}
+
+.change {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.assume fieldset {
+  border: 0;
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 0.8rem 0.4rem;
+  margin: 0;
+}
+
+.opt {
+  margin: 0 0.9rem 0.4rem 0;
+}
+
+.opt label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-left: 1.7rem;
+  position: relative;
+}
+
+.opt label::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: -0.575rem;
+  border: 2px solid var(--control);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.opt input:checked + label::before {
+  background: radial-gradient(circle, var(--accent-fill) 0 45%, var(--surface) 50%);
+  border-color: var(--accent-fill);
+}
+
+/* a check box is a square, with a mark when it is on (the mark is drawn and never read, as the one of a chosen segment); it sits on a line of its own under the choices it goes with */
+.opt input[type="checkbox"] + label::before {
+  border-radius: 0.25rem;
+}
+
+.opt input[type="checkbox"]:checked + label::before {
+  content: "\2713";
+  content: "\2713" / "";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--on-accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.opt input[type="checkbox"]:disabled + label {
+  color: var(--muted);
+}
+
+.opt.sub {
+  display: block;
+  margin-left: 1rem;
+}
+
+/* the Weights assumption: a segmented control for each slider group of the bundle (the Role control's own classes), and the words for what the group weighs under its name; the groups are
+   side by side and wrap, and are not sections of their own (the rule that the assumptions' fieldset has is not drawn for them) */
+.weights-sets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1.5rem;
+}
+
+.assume .weights-sets fieldset {
+  border: 0;
+  padding: 0;
+}
+
+.weights .hint {
+  flex-basis: auto;
+  max-width: 16rem;
+  margin-bottom: 0.3rem;
+}
+
+.weights-reset {
+  margin-top: 0.75rem;
+}
+
+/* the answer for settings that have no precomputed answer: what the optimizer is doing, what it made, or what went wrong, with its one button; the table under it is dimmed while it works */
+.solve {
+  margin-top: 0.4rem;
+}
+
+.solve h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+}
+
+.solve p {
+  margin: 0 0 0.4rem;
+}
+
+.solve .btn {
+  margin-top: 0.1rem;
+}
+
+.trio.solving #kit,
+.trio.solving #why,
+.trio.solving #weapons {
+  opacity: 0.6;
+}
+
+.trio.solved #why,
+.trio.solved #weapons {
+  display: none;
+}
+
+.status {
+  margin: 0.6rem 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--control);
+  border-left-width: 0.35rem;
+  border-radius: 0.4rem;
+  background: var(--tint);
+}
+
+/* nothing to say: out of sight, and still on the page, so that a screen reader has the live region before its first message */
+.status.quiet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* a narrow screen folds the switches behind one line that says what is shown (see the narrow-screen block below) */
+.view-bar {
+  display: none;
+}
+
+.view-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.view-main {
+  font-weight: 650;
+}
+
+.view-assumes {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.btn-change {
+  min-height: 2.75rem;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* until the page code enables it the button is not there for the eye or for a screen reader, and still takes its room */
+.btn-change:disabled {
+  visibility: hidden;
+}
+
+/* ---- tables ---- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+caption {
+  padding: 0 0 0.5rem;
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+th,
+td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+thead th {
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-bottom: 2px solid var(--border);
+}
+
+tbody th {
+  font-weight: 600;
+}
+
+.kit tbody th,
+.totals tbody th,
+.runnerups tbody th {
+  white-space: nowrap;
+}
+
+.kit .name {
+  font-weight: 600;
+}
+
+.kit th:nth-child(3),
+.kit td:nth-child(3),
+.kit .seal {
+  white-space: nowrap;
+}
+
+.reach {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.deity {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.kit tbody tr:nth-child(even),
+.totals tbody tr:nth-child(even) {
+  background: var(--tint);
+}
+
+.swaps {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.delta {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.table-note {
+  margin-top: 0.4rem;
+}
+
+/* ---- the item page: a table of tiers that scrolls sideways inside its own region ---- */
+
+/* eleven tiers do not fit a phone, so the table scrolls inside a region that a keyboard can reach (it has a tab stop), and the names of the stats stay in view */
+.scroll {
+  margin: 0 0 0.6rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.tiers {
+  min-width: 36rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.9rem;
+}
+
+.tiers th,
+.tiers td {
+  padding: 0.4rem 0.6rem;
+}
+
+.tiers td,
+.tiers thead th:not(:first-child) {
+  text-align: right;
+}
+
+.tiers thead tr,
+.tiers tbody tr {
+  background: var(--surface);
+}
+
+.tiers tbody tr:nth-child(even) {
+  background: var(--tint);
+}
+
+.tiers thead th:first-child,
+.tiers tbody th {
+  position: sticky;
+  left: 0;
+  background: inherit;
+  white-space: nowrap;
+}
+
+.tiers tbody tr:last-child th,
+.tiers tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---- seals ---- */
+
+.seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  vertical-align: baseline;
+}
+
+.icon {
+  width: 1em;
+  height: 1em;
+  flex: none;
+}
+
+.open-test {
+  margin-left: 0.4em;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ---- expanders ---- */
+
+details.expander {
+  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+details.expander > summary {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+details.expander[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+details.expander > *:not(summary) {
+  margin-inline: 0.9rem;
+}
+
+details.expander > table {
+  width: calc(100% - 1.8rem);
+}
+
+details.expander > p:first-of-type {
+  margin-top: 0.8rem;
+}
+
+details.expander > :last-child {
+  margin-bottom: 0.9rem;
+}
+
+.plain {
+  list-style: none;
+  padding: 0;
+}
+
+.plain li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+dl.pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+dl.pairs dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+dl.pairs dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---- the other pages ---- */
+
+.cards {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.cards a {
+  display: block;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.chips {
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chips legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+.chip {
+  position: relative;
+}
+
+.chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.chip label {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.chip input:checked + label {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 650;
+}
+
+.chip input:checked + label::before {
+  content: "\2713\00a0";
+}
+
+.chip input:disabled + label {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.chip input:focus-visible + label {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.rule {
+  margin: 0 0 1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+}
+
+.rule h3 {
+  margin-top: 0;
+}
+
+.rule p,
+.rule ul {
+  margin-bottom: 0.5rem;
+}
+
+.rule-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.legend {
+  list-style: none;
+  padding: 0;
+}
+
+.legend li {
+  margin-bottom: 0.4rem;
+}
+
+/* ---- the question before the optimizer is downloaded (engine/client.js builds it when it is first needed) ---- */
+
+.engine-consent {
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+}
+
+.engine-consent h3 {
+  margin-top: 0;
+}
+
+.engine-consent-warning {
+  padding-inline-start: 0.7rem;
+  border-inline-start: 4px solid var(--accent);
+}
+
+.engine-consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.engine-consent button {
+  min-height: 2.75rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.engine-consent button[data-action="accept"] {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.engine-consent progress {
+  display: block;
+  width: 100%;
+  max-width: 24rem;
+}
+
+/* ---- the Upgrade section (static/ui/upgrade-input.js and gear-picker.js fill it in) ---- */
+
+.upgrade {
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.ways {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 0 1.5rem;
+}
+
+.way h3 {
+  margin-top: 0.6rem;
+}
+
+.way > .note {
+  margin-top: 0.4rem;
+}
+
+.dz {
+  position: relative;
+}
+
+/* the file input lies invisibly over the drop zone, as the input of a chip lies over its label: a click, a drop and a key all reach it */
+.dz-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6rem;
+  padding: 1rem;
+  border: 2px dashed var(--control);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.dz-input:disabled + .dropzone {
+  color: var(--muted);
+}
+
+.dz-input:focus-visible + .dropzone {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dz-input:hover + .dropzone,
+.dropzone.is-over {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--tint);
+}
+
+.pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+.pick .btn {
+  margin-inline-start: 0;
+}
+
+.combo {
+  position: relative;
+  flex: 1 1 14rem;
+}
+
+.combo input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.listbox {
+  position: absolute;
+  z-index: 5;
+  inset-inline: 0;
+  top: 100%;
+  max-height: 18rem;
+  margin: 0.15rem 0 0;
+  padding: 0.2rem 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.listbox li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.listbox li[aria-selected="true"] {
+  background: var(--tint);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.li-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.btn-quiet {
+  min-height: 2.75rem;
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--control);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.owned-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.2rem 1rem;
+  margin: 1.6rem 0 0.4rem;
+}
+
+.owned-head h3 {
+  margin: 0;
+}
+
+.owned li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem 0.9rem;
+}
+
+.owned-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.owned-name {
+  display: block;
+  font-weight: 600;
+}
+
+.owned-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* a dot between what is said under the name; its alternative text is empty, so that a screen reader does not say "middle dot" (the line before is for a browser that does not
+   know the syntax, and then keeps the dot) */
+.owned-meta + .owned-meta::before {
+  content: "\00b7";
+  content: "\00b7" / "";
+  margin-inline: 0 0.35em;
+}
+
+/* what needs the visitor's eye after a file was read: choices, and what the catalog does not know. Never in the way of the answer. */
+.banner {
+  margin: 0.9rem 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--control);
+  border-left-width: 0.35rem;
+  border-radius: 0.4rem;
+  background: var(--tint);
+}
+
+.banner > :last-child {
+  margin-bottom: 0;
+}
+
+.choices,
+.choice-options {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice {
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.choice-name {
+  margin-bottom: 0.2rem;
+}
+
+.choice-options li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem 0.9rem;
+  padding: 0.3rem 0;
+}
+
+/* the answer under the list of the gear (static/ui/upgrade-answer.js fills it in): Equip now, the Next step, Then, and the line with Stop */
+.result {
+  margin-top: 1.6rem;
+}
+
+.result h3 {
+  margin: 0 0 0.3rem;
+}
+
+/* the column of the places is as narrow as the names of the places (the item has the rest of the width) */
+.equip tbody th {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.steps {
+  margin: 0.4rem 0;
+  padding-inline-start: 1.8rem;
+}
+
+.steps li {
+  margin: 0.55rem 0;
+}
+
+/* a step under Then is one line: what it is, then its gain and its cost, each after a dot (the dot between the facts is the one of the owned list) */
+.step-what {
+  font-weight: 600;
+}
+
+.steps .step-what + .owned-meta::before {
+  content: "\00b7";
+  content: "\00b7" / "";
+  margin-inline: 0 0.35em;
+}
+
+.path-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+}
+
+.path-bar > * {
+  margin: 0.8rem 0 0;
+}
+
+/* Stop once it was pressed: still a button with the focus on it, but it says that it has been taken */
+.btn-quiet[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* the expanders under the answer (static/ui/upgrade-answer.js): best sets, Every slot and the tier mode. They use the page's expanders (details.expander) and its table of runner-ups */
+.more {
+  margin-top: 1.6rem;
+}
+
+.expander-body {
+  margin-top: 0.8rem;
+}
+
+.set {
+  margin: 0 0 1.1rem;
+}
+
+.set h4 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.set .note,
+.set-gain,
+.set-other {
+  margin: 0.4rem 0 0;
+}
+
+.set .steps {
+  margin: 0.5rem 0;
+}
+
+.set-gain {
+  font-weight: 650;
+}
+
+/* a place of Every slot: what the kit wears there, then the best swaps under it */
+.slot-now {
+  margin-bottom: 0.15rem;
+}
+
+.slot-none {
+  font-size: 0.9rem;
+}
+
+.mode-set {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mode-set legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+  font-weight: 600;
+}
+
+/* a mode, the tier it takes if it takes one, and what it means in a line of its own */
+.mode-opt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.1rem 1.2rem;
+  margin: 0 0 0.6rem;
+}
+
+.mode-opt > .note {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.mode-opt .opt {
+  margin-right: 0;
+}
+
+/* ---- a kit that came in a link, the Share button, and the box that remembers the gear (static/ui/shared-kit.js, share.js and remember.js) ---- */
+
+/* the shared kit is at the top of the answer area, and set apart from the page's own answer */
+.shared {
+  margin: 1.2rem 0;
+  padding: 0.5rem 0.9rem 0.8rem;
+  border: 1px solid var(--control);
+  border-left-width: 0.35rem;
+  border-radius: 0.4rem;
+  background: var(--tint);
+}
+
+.shared > h2 {
+  margin-top: 0.4rem;
+}
+
+.shared .note {
+  margin: 0.3rem 0;
+}
+
+.shared-value {
+  margin: 0.6rem 0;
+  font-weight: 650;
+}
+
+/* the words beside the button, and what a click said, in a line each */
+.share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.8rem;
+  margin: 0.7rem 0;
+}
+
+.share > .note {
+  margin: 0;
+}
+
+.share > p {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+/* the link, when the browser would not copy it: a read-only field, the whole width */
+.share-field {
+  flex: 1 0 100%;
+}
+
+.share-field label {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.share-link {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--control);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  color: var(--text);
+  font: 0.85rem / 1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* the box that remembers the gear: a check box a finger can hit, its words, and a line under it */
+.remember {
+  margin: 0.8rem 0;
+}
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+}
+
+.remember-row input {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  accent-color: var(--accent-fill);
+}
+
+.remember-row label {
+  cursor: pointer;
+}
+
+.remember .note {
+  margin: 0.2rem 0;
+}
+
+/* ---- narrow screens: the tables become stacked cards ---- */
+
+@media (max-width: 37.5rem) {
+  .site-header nav {
+    order: 3;
+    flex: 1 0 100%;
+  }
+
+  /* the five links fit on one line of a 360 px phone (the first screen is short); a narrower one wraps them */
+  .site-header nav ul {
+    gap: 0;
+  }
+
+  .site-header nav a {
+    padding: 0 0.35rem;
+    font-size: 0.95rem;
+  }
+
+  /* and the answer starts as high as it can: "Wear this" and the first row are on the first screen of a phone */
+  .page-head details.expander > summary {
+    padding-block: 0.35rem;
+  }
+
+  .answer h2 {
+    margin-top: 1rem;
+  }
+
+  .theme-toggle {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .kit,
+  .kit caption,
+  .kit thead,
+  .kit tbody,
+  .kit th,
+  .kit td,
+  .totals,
+  .totals caption,
+  .totals thead,
+  .totals tbody,
+  .totals th,
+  .totals td {
+    display: block;
+  }
+
+  .kit thead,
+  .totals thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  /* a row becomes a card: the slot, then the item, then the small facts in a wrapping line */
+  .kit tr,
+  .totals tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.1rem 0.9rem;
+    margin-bottom: 0.6rem;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    background: var(--surface);
+  }
+
+  .kit tbody tr:nth-child(even),
+  .totals tbody tr:nth-child(even) {
+    background: var(--surface);
+  }
+
+  .kit th,
+  .totals th {
+    flex: 0 0 100%;
+    padding: 0;
+    border: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .kit td,
+  .totals td {
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .kit td::before,
+  .totals td::before {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  /* what each small fact is, in words before it (a column's words are said here once, not in each of its cells): the item and the seal need none, nor does the kit's total or its rule */
+  .kit td:nth-child(3)::before {
+    content: "Tier ";
+  }
+
+  .kit td:nth-child(4)::before {
+    content: "Arrives at ";
+  }
+
+  .kit td:nth-child(5)::before {
+    content: "Source ";
+  }
+
+  .kit td:nth-child(2) {
+    flex: 0 0 100%;
+    font-size: 1.05rem;
+  }
+
+  .totals tr {
+    margin-bottom: 0.45rem;
+    padding: 0.4rem 0.8rem;
+  }
+
+  .totals th {
+    flex: 1 1 8rem;
+    font-size: 0.85rem;
+  }
+
+  .totals td:nth-child(2) {
+    font-weight: 650;
+  }
+
+  .totals td::before {
+    font-weight: 400;
+  }
+
+  .totals td:nth-child(3)::before {
+    content: "cap ";
+  }
+
+  .totals td:nth-child(4) {
+    flex: 0 0 100%;
+    font-size: 0.9rem;
+  }
+
+  .kit .reach {
+    display: inline;
+  }
+
+  /* the line that says what is shown: its box here, and where it is shown below. It is in the page from the first paint where the page
+     code will run, with the button drawn invisible (disabled until the code starts, and keeping its room), so that the answer does not
+     move down when the code starts; without script there is nothing to open, and no line. A browser that does not know the scripting
+     media query shows it when the code has started, by the mark the code sets. */
+  .view-bar {
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem 0.75rem;
+    margin: 0.6rem 0 0.4rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface);
+  }
+
+  .view-bar[data-ready] {
+    display: flex;
+  }
+
+  @media (scripting: enabled) {
+    .view-bar {
+      display: flex;
+    }
+  }
+
+  /* closed until the Change button opens it (without the page code there is nothing to switch to, and nothing to open) */
+  .switches:not([data-open]) {
+    display: none;
+  }
+
+  .controls {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .control select {
+    width: 100%;
+  }
+
+  .hint {
+    flex-basis: auto;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* In forced colours the browser repaints backgrounds and drops gradients and shadows, so the dot of a chosen radio button (a gradient)
+   would vanish. A chosen one is drawn with a thick ring of the system's highlight colour, an unchosen one with a thin ring: the two
+   differ by more than a colour. System colours are kept as they are. */
+@media (forced-colors: active) {
+  .seg-item input:checked + label,
+  .chip input:checked + label {
+    outline: 2px solid Highlight;
+  }
+
+  .listbox li[aria-selected="true"] {
+    outline: 2px solid Highlight;
+  }
+
+  .opt label::before {
+    border: 2px solid ButtonText;
+    background: Canvas;
+  }
+
+  .opt input:checked + label::before {
+    border: 0.4rem solid Highlight;
+    background: Canvas;
+  }
+}

@@ -1,0 +1,40 @@
+{% extends "base.html.j2" %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap prose" data-page="sources">
+<h1>Sources and licences</h1>
+<p class="lead">Data release {{ meta.data_tag }}, read from the game as of patch {{ meta.game_patch }}. Level {{ meta.level }}.</p>
+<h2>Item data</h2>
+<p>{{ attribution }}</p>
+<p>The wiki's text is licensed <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a>. TrioForge's derived data is licensed the same way. The wiki is at <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki.com</a>; the pages and revisions behind the items that the trio pages show are listed below. Each item page carries its own credit: the wiki page, its revision, the licence and the changes made.</p>
+<details class="expander" id="revisions-box">
+<summary>Pages and revisions used ({{ revisions|length }})</summary>
+<table class="revisions" id="revisions">
+<caption>The wiki page and revision each item shown on a trio page was read from</caption>
+<thead>
+<tr><th scope="col">Wiki page</th><th scope="col">Revision</th><th scope="col">Item key</th></tr>
+</thead>
+<tbody>
+{% for row in revisions %}
+<tr><th scope="row">{% if row.page %}<a href="{{ row.page }}">{{ row.title }}</a>{% else %}{{ row.title }}{% endif %}</th><td><a href="{{ row.url }}" rel="noopener noreferrer">{{ row.revid }}</a></td><td><code>{{ row.key }}</code></td></tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+<h2>Other sources</h2>
+<ul>
+<li><strong>EQL Tools</strong> (<a href="https://eqltools.com/sources" rel="noopener noreferrer">eqltools.com/sources</a>): its gear and quest data are licensed CC BY-SA 4.0 (compiled from the wiki). The gear data is used to cross-check ours and the quest data supplies the zones of quest givers. The race base stats and class modifiers are cited from its <a href="https://eqltools.com/attributes" rel="noopener noreferrer">published attributes table</a>.</li>
+<li><strong>Game files</strong>: some rules are facts read as text from resource files that ship with the game client, such as zone flags, class tables, skill caps and spell data. The files themselves are never published. These game facts belong to Daybreak and fall outside our CC BY-SA licence.</li>
+<li><strong>EQEmu</strong>: some formulas and constants are modelled on the EQEmu server project (<a href="https://github.com/EQEmu/Server" rel="noopener noreferrer">GPL-3.0</a>); no EQEmu code is used.</li>
+<li><strong>HiGHS</strong>: the exact solver behind every kit (<a href="https://github.com/ERGO-Code/HiGHS" rel="noopener noreferrer">MIT licence</a>).</li>
+</ul>
+<h2>Licences</h2>
+<p>{{ licence_sentence }} {{ disclaimer }}</p>
+<p>The data licence covers the rules, the generated site data and the fixtures.</p>
+<h2>Data inputs</h2>
+<ul>
+{% for file, date in manifest.inputs %}
+<li><code>{{ file }}</code>, {{ date }}</li>
+{% endfor %}
+</ul>
+</main>
+{% endblock %}

@@ -1,0 +1,48 @@
+{#- The Upgrade section of a trio page: the gear the visitor has, read from a file of /outputfile inventory or typed in. The controls are in the page, switched off until
+the page code enables them (the `data-wake` ones), so that a first focus or click on one can load the code of the section (static/ui/upgrade-input.js), which no page loads
+by itself. Everything the code shows later (the list of the gear, the notes, the choices, and under them the answer: Equip now, the Next step and the steps after it, and under
+those the expanders for the best sets, Every slot and the tier mode, in #upgrade-results, which is empty here) is made by the code, from text only. The section has no live region: the page has two (#status and #announce), and what the section says
+is said through the second. `data-level` is the level the page is for, which a request to the optimizer names. -#}
+<section class="upgrade" id="upgrade" aria-labelledby="upgrade-h" data-trio="{{ page.slug }}" data-level="{{ page.level }}">
+<h2 id="upgrade-h" tabindex="-1">Upgrade from the gear you have</h2>
+<p class="note">Your file is read in this browser and is never uploaded.</p>
+<noscript><p class="note">The Upgrade section needs JavaScript.</p></noscript>
+<p id="upgrade-load" class="status quiet"></p>
+<div class="ways">
+<div class="way">
+<h3>Read your inventory file</h3>
+<div class="dz">
+<input type="file" id="upgrade-file" class="dz-input" aria-describedby="upgrade-file-help" data-wake disabled>
+<label for="upgrade-file" id="upgrade-drop" class="dropzone">Drop your inventory file here, or choose it</label>
+</div>
+<p id="upgrade-file-help" class="note">In the game, type <code>/outputfile inventory</code> and use the file it writes.</p>
+</div>
+<div class="way">
+<h3>Or add an item by name</h3>
+<div class="pick">
+<div class="control combo">
+<label for="upgrade-pick">Item</label>
+<input type="text" id="upgrade-pick" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="upgrade-list" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="100" data-wake disabled>
+<ul id="upgrade-list" class="listbox" role="listbox" aria-label="Matching items" hidden></ul>
+</div>
+<div class="control">
+<label for="upgrade-tier">Tier</label>
+<select id="upgrade-tier" data-wake disabled>
+{% for tier in range(11) %}
+<option value="{{ tier }}">+{{ tier }}</option>
+{% endfor %}
+</select>
+</div>
+<button type="button" id="upgrade-add" class="btn" disabled>Add</button>
+</div>
+</div>
+</div>
+<div id="upgrade-feedback"></div>
+<div class="owned-head">
+<h3 id="upgrade-owned-h" tabindex="-1">Your gear <span id="upgrade-count"></span></h3>
+<button type="button" id="upgrade-clear" class="btn-quiet" aria-label="Clear all gear" hidden>Clear</button>
+</div>
+<p id="upgrade-empty" class="note">Nothing yet: read your file or add an item.</p>
+<ul id="upgrade-owned" class="plain owned" aria-labelledby="upgrade-owned-h"></ul>
+<div id="upgrade-results"></div>
+</section>

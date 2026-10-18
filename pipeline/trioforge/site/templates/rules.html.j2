@@ -1,0 +1,59 @@
+{% extends "base.html.j2" %}
+{% from "base.html.j2" import seal with context %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap prose" data-page="rules">
+<h1>Rules and confidence seals</h1>
+<p class="lead">Every number the planner uses is a rule: a value, a seal that says how far to trust it, a source and a date. Rules version {{ book.version }}.</p>
+<section aria-labelledby="seals-h">
+<h2 id="seals-h">Confidence seals</h2>
+<ul id="seal-legend" class="legend">
+{% for key, label, meaning in seal_legend %}
+<li>{{ seal(key, "i-" ~ key, label) }}: {{ meaning }}</li>
+{% endfor %}
+</ul>
+</section>
+{% if book.open_rules %}
+<section aria-labelledby="open-h">
+<h2 id="open-h">Open tests</h2>
+<p>These rules wait for an in-game test. Until it is done the value is a best estimate, and the pages that depend on it say so.</p>
+<ul id="open-tests">
+{% for rule in book.open_rules %}
+<li><a href="#{{ rule.id }}">{{ rule.test }}: {{ rule.title }}</a></li>
+{% endfor %}
+</ul>
+</section>
+{% endif %}
+{% for group in book.groups %}
+<section aria-labelledby="group-{{ group.key }}">
+<h2 id="group-{{ group.key }}">{{ group.title }}</h2>
+{% for rule in group.rules %}
+<article class="rule" id="{{ rule.id }}">
+<h3>{{ rule.title }}</h3>
+<p class="rule-meta">{{ seal(rule.seal, "i-" ~ rule.seal, rule.seal_label) }} &middot; <code>{{ rule.id }}</code> &middot; {{ rule.date }}{% if rule.status == "open" %} &middot; <strong>Open: waiting for in-game test {{ rule.test }}</strong>{% endif %}</p>
+<p>Value: <code>{{ rule.value }}</code> <span class="muted">({{ rule.unit }})</span></p>
+{% for level, value in rule.levels %}
+<p>At level {{ level }}: <code>{{ value }}</code></p>
+{% endfor %}
+{% if rule.notes %}
+<p>{{ rule.notes }}</p>
+{% endif %}
+<p class="muted">Sources</p>
+<ul>
+{% for source in rule.sources %}
+<li>{% if source.href %}<a href="{{ source.href }}" rel="noopener noreferrer">{{ source.text }}</a>{% else %}{{ source.text }}{% endif %}</li>
+{% endfor %}
+</ul>
+{% for alt in rule.alternatives %}
+<p>Alternative: <code>{{ alt.value }}</code> {{ seal(alt.seal, "i-" ~ alt.seal, alt.seal_label) }}</p>
+<ul>
+{% for source in alt.sources %}
+<li>{% if source.href %}<a href="{{ source.href }}" rel="noopener noreferrer">{{ source.text }}</a>{% else %}{{ source.text }}{% endif %}</li>
+{% endfor %}
+</ul>
+{% endfor %}
+</article>
+{% endfor %}
+</section>
+{% endfor %}
+</main>
+{% endblock %}

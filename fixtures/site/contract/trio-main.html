@@ -1,0 +1,560 @@
+<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-base="/data/pal-mnk-ber/" data-release="data-2026-10-14" data-groups="AC MANA ATK+HASTE SV regen" data-items="/item/">
+<div class="page-head">
+<h1>Paladin / Monk / Berserker: best gear (<span data-rules="level.current">level 50</span>)</h1>
+<p id="best-race" class="best-race">Best race for this trio: <strong>Ogre</strong> <span class="margin" data-rules="roles.balanced roles.templates">(+813 over Troll)</span>, judged in the <span id="best-race-view">Balanced view at <span data-rules="tier.stat_rule">+4</span> with strict evidence and your own buffs</span>.</p>
+<details class="expander" id="race-why">
+<summary>How the best race was judged, and what could change it</summary>
+<p id="best-race-rules" class="note">How the score works: <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="best-race-note" class="note">Could change if an open test goes the other way: Iksar, if Iksar AC stacks inside the cap (test B17). <a href="/rules/#open-tests">See the open tests</a></p>
+</details>
+</div>
+
+<noscript><p class="note">The race, role and tier switches need JavaScript. This page shows the best kit for the default view.</p></noscript>
+<div class="view-bar" id="view-bar">
+<p class="view-summary" id="view-summary"><span class="sr-only">Showing </span><span class="view-main"><span data-f="s-race">Ogre</span> &middot; <span data-f="s-role">Balanced</span> &middot; <span data-f="s-tier" data-rules="tier.stat_rule">+4</span></span> <span class="view-assumes" data-f="s-assumes">dual wield, strict evidence, your own buffs</span></p>
+<button type="button" id="switches-toggle" class="btn-change" aria-expanded="false" aria-controls="switches" aria-label="Change race, role, tier and assumptions" disabled>Change</button>
+</div>
+<div class="switches" id="switches">
+<section class="controls" aria-labelledby="controls-h">
+<h2 id="controls-h" class="sr-only">Choose a race, role and tier</h2>
+<div class="control">
+<label for="sw-race">Race</label>
+<select id="sw-race" name="race" disabled>
+<optgroup label="Available at character creation">
+<option value="OGR" data-label="Ogre" selected>Ogre (best for this trio)</option>
+<option value="TRL" data-label="Troll">Troll</option>
+</optgroup>
+<optgroup label="Needs a race or primary unlock">
+<option value="ELF" data-label="Wood Elf">Wood Elf (needs unlock)</option>
+</optgroup>
+</select>
+</div>
+<fieldset class="control seg" id="sw-role">
+<legend>Role</legend>
+<div class="seg-items">
+<span class="seg-item"><input type="radio" name="role" id="role-balanced" value="balanced" data-label="Balanced" data-hint="An equal blend of staying alive and doing damage, for this trio&#39;s classes." data-setups="1h-shield 2h dw" checked disabled><label for="role-balanced">Balanced</label></span>
+<span class="seg-item"><input type="radio" name="role" id="role-tank" value="tank" data-label="Tank" data-hint="Staying alive first: armour class, hit points and haste." data-setups="1h-shield 2h dw" disabled><label for="role-tank">Tank</label></span>
+<span class="seg-item"><input type="radio" name="role" id="role-melee" value="melee" data-label="Melee" data-hint="Damage first: attack, haste and dexterity, then hit points." data-setups="2h dw" disabled><label for="role-melee">Melee</label></span>
+</div>
+</fieldset>
+<div class="control">
+<label for="sw-tier">Tier</label>
+<select id="sw-tier" name="tier" disabled>
+<option value="0" data-label="+0">+0</option>
+<option value="4" data-label="+4" selected>+4</option>
+<option value="10" data-label="+10">+10 (endgame)</option>
+</select>
+</div>
+<p class="hint"><span id="role-hint">An equal blend of staying alive and doing damage, for this trio&#39;s classes.</span> <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+</section>
+
+<section class="assumes" aria-labelledby="assumes-h">
+<h2 id="assumes-h" class="sr-only">Assumptions</h2>
+<span class="assumes-lead">Assumes</span>
+<details class="assume" id="assume-buffs">
+<summary><span class="sum">Buffs: <span data-f="assume-buffs">your own buffs</span> <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Buffs</legend>
+<span class="opt"><input type="radio" name="buffs" id="buffs-own" value="own" data-phrase="your own buffs" checked disabled><label for="buffs-own">Your own buffs</label></span>
+<span class="opt"><input type="radio" name="buffs" id="buffs-group" value="group" data-phrase="common group buffs" disabled><label for="buffs-group">Common group buffs</label></span>
+<span class="opt"><input type="radio" name="buffs" id="buffs-raid" value="raid" data-phrase="full raid buffs" disabled><label for="buffs-raid">Full raid</label></span>
+<span class="opt sub"><input type="checkbox" id="buffs-ench" data-phrase="and an Enchanter" disabled><label for="buffs-ench">Enchanter in group</label></span>
+</fieldset>
+</details>
+<details class="assume" id="assume-weapons">
+<summary><span class="sum">Weapons: <span data-f="assume-setup">dual wield</span>, scored at <span data-f="assume-haste" data-rules="haste.cap_pct_with_monk haste.worn_per_tier">66%</span> haste <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Weapons</legend>
+<span class="opt"><input type="radio" name="setup" id="setup-1h-shield" value="1h-shield" data-label="1H + shield" data-phrase="1H + shield" disabled><label for="setup-1h-shield"><span class="opt-text">1H + shield<span class="best-flag" hidden> (best for this role)</span></span></label></span>
+<span class="opt"><input type="radio" name="setup" id="setup-2h" value="2h" data-label="Two-hander" data-phrase="two-hander" disabled><label for="setup-2h"><span class="opt-text">Two-hander<span class="best-flag" hidden> (best for this role)</span></span></label></span>
+<span class="opt"><input type="radio" name="setup" id="setup-dw" value="dw" data-label="Dual wield" data-phrase="dual wield" checked disabled><label for="setup-dw"><span class="opt-text">Dual wield<span class="best-flag"> (best for this role)</span></span></label></span>
+</fieldset>
+</details>
+<details class="assume" id="assume-evidence">
+<summary><span class="sum">Evidence: <span data-f="assume-ev">strict evidence</span> <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Evidence</legend>
+<span class="opt"><input type="radio" name="ev" id="ev-strict" value="strict" data-phrase="strict evidence" checked disabled><label for="ev-strict">Strict: only items seen in game</label></span>
+<span class="opt"><input type="radio" name="ev" id="ev-wiki" value="wiki" data-phrase="wiki evidence" disabled><label for="ev-wiki">Wiki: also items the wiki lists</label></span>
+</fieldset>
+</details>
+<details class="assume" id="assume-weights">
+<summary><span class="sum">Weights: <span data-f="assume-weights">role's own</span> <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Weights</legend>
+</fieldset>
+</details>
+<span class="assume-fixed" id="assume-aa">AA: <a href="/rules/#ac.softcap.combat_stability_pct">Combat Stability 3</a>, <a href="/rules/#ac.softcap.physical_enhancement_pct">Physical Enhancement</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span>; no deity</span>
+</section>
+</div>
+<p id="status" class="status quiet" role="status" aria-live="polite"></p>
+<p id="announce" class="sr-only" role="status" aria-live="polite"></p>
+
+<section class="answer" aria-labelledby="wear-h">
+<h2 id="wear-h" tabindex="-1">Wear this</h2>
+<table class="kit" id="kit" role="table">
+<caption id="kit-caption">For <span data-f="v-race">Ogre</span> &middot; <span data-f="v-role">Balanced</span> &middot; <span data-f="v-tier" data-rules="tier.stat_rule">+4</span> &middot; <span data-f="v-setup">Dual wield</span></caption>
+<thead role="rowgroup">
+<tr role="row">
+<th scope="col" role="columnheader">Slot</th>
+<th scope="col" role="columnheader">Item</th>
+<th scope="col" role="columnheader" data-rules="tier.stat_rule">Tier</th>
+<th scope="col" role="columnheader" data-rules="tier.arrival tier.exp_needed">Arrives at</th>
+<th scope="col" role="columnheader">Source</th>
+<th scope="col" role="columnheader">Seal</th>
+</tr>
+</thead>
+<tbody id="kit-body" role="rowgroup">
+<tr role="row">
+<th scope="row" role="rowheader">Head</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90001/">Helm of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Face</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80816/">Mummer&#39;s Half-Face</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Ear 1</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90007/">Rune-etched Earring</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane of Fear</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Ear 2</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90009/">Stud of the Fallen</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Lower Guk</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Neck</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90011/">Choker of the Deep</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Nagafen&#39;s Lair</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Shoulders</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w8091/">Larkspur Pauldrons</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane of Fear</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Arms</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90016/">Vambraces of the Unyielding Stonewarden of the Frozen Deepwatch Citadel Expedition</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane of Hate</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Back</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80712/">Weaver&#39;s Evening Drape</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane of Sky</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Wrist 1</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90020/">Bracer of the Iron Oath</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane of Hate</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Wrist 2</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90021/">Wristguard of Warding</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Hands</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90023/">Gauntlets of Endless Wrath</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane of Fear</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Finger 1</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80631/">Band of Quiet Lanterns</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Finger 2</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90026/">Band of the Stalwart</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Befallen</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Chest</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80469/">Saltmarsh Jerkin</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Nagafen&#39;s Lair</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Legs</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90030/">Greaves of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Feet</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90032/">Boots of the Wayfarer</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Befallen</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Waist</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80677/">Riverstone Buckle Strap</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Range</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90037/">&lt;b&gt;x&lt;/b&gt;</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Plane &lt;i&gt;of&lt;/i&gt; Hate &amp; &#34;Fear&#34;</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Any slot 1</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90027/">Signet of the Forgotten Court</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">Lower Guk</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Any slot 2</th>
+<td role="cell"><span class="name" data-f="name">Leave empty</span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">—</span></td>
+<td role="cell"><span data-f="arrival">—</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">—</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false" hidden><use data-f="seal-icon" href="#i-none"></use></svg><span data-f="seal">—</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Main hand</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80988/">Ferryman&#39;s Pike</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
+<td role="cell"><span data-f="source">The Hole</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+<tr role="row">
+<th scope="row" role="rowheader">Off hand</th>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80113/">Pellbrook Mallet</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span data-f="tier">+4</span></td>
+<td role="cell"><span data-f="arrival">+0</span> <span class="reach" data-f="reach">16 copies to reach +4</span></td>
+<td role="cell"><span data-f="source">Quest in Lake Rathetear</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
+</tr>
+</tbody>
+</table>
+<p id="kit-rules" class="rules">Tiers: <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.arrival">Tier at which items arrive, by source</a> <span class="seal seal-developer"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-developer"></use></svg><span>Developer</span></span> &middot; <a href="/rules/#tier.exp_needed">Experience needed for tier N</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
+</section>
+
+<section class="why" id="why" aria-labelledby="why-h">
+<h2 id="why-h">Why this kit</h2>
+<p data-rules="roles.templates">Kit value <strong id="kit-value">10,720</strong> hit-point equivalents; the gear adds <strong id="kit-gain">+7,770</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<table class="totals" id="totals" role="table">
+<caption class="sr-only">Totals of this kit against the caps</caption>
+<thead role="rowgroup">
+<tr role="row">
+<th scope="col" role="columnheader">Stat</th>
+<th scope="col" role="columnheader">This kit</th>
+<th scope="col" role="columnheader">Cap</th>
+<th scope="col" role="columnheader">Rule</th>
+</tr>
+</thead>
+<tbody id="totals-body" role="rowgroup">
+<tr role="row" data-rules="ac.softcap.past_cap_rate">
+<th scope="row" role="rowheader">Sheet AC</th>
+<td role="cell"><span data-f="t-ac">666</span></td>
+<td role="cell" data-rules="ac.softcap.past_cap_rate ac.softcap.combat_stability_pct ac.softcap.physical_enhancement_pct">439 softcap <span class="cap-rules">(<a href="/rules/#ac.softcap.past_cap_rate">client AC table</a>, <a href="/rules/#ac.softcap.combat_stability_pct">Combat Stability</a>, <a href="/rules/#ac.softcap.physical_enhancement_pct">Physical Enhancement</a>) <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></span></td>
+<td role="cell"><a href="/rules/#ac.softcap.past_cap_rate">AC rate past the softcap</a> <span class="seal seal-client"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-client"></use></svg><span>Client file</span></span></td>
+</tr>
+<tr role="row" data-rules="hp.pools_counted">
+<th scope="row" role="rowheader">Hit points</th>
+<td role="cell"><span data-f="t-hp">2,880</span></td>
+<td role="cell">no cap</td>
+<td role="cell"><a href="/rules/#hp.pools_counted">Class HP pools counted</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span></td>
+</tr>
+<tr role="row" data-rules="mana.pools_counted">
+<th scope="row" role="rowheader">Mana</th>
+<td role="cell"><span data-f="t-mana">1,236</span></td>
+<td role="cell">no cap</td>
+<td role="cell"><a href="/rules/#mana.pools_counted">Mana pools counted</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span></td>
+</tr>
+<tr role="row" data-rules="end.formula">
+<th scope="row" role="rowheader">Endurance</th>
+<td role="cell"><span data-f="t-end">3,094</span></td>
+<td role="cell">no cap</td>
+<td role="cell"><a href="/rules/#end.formula">Endurance formula</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span></td>
+</tr>
+<tr role="row" data-rules="haste.cap_pct_with_monk">
+<th scope="row" role="rowheader">Haste</th>
+<td role="cell"><span data-f="t-haste">57%</span></td>
+<td role="cell">85%</td>
+<td role="cell"><a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></td>
+</tr>
+<tr role="row" data-rules="stats.str_to_atk">
+<th scope="row" role="rowheader">Attack</th>
+<td role="cell"><span data-f="t-atk">788</span></td>
+<td role="cell">no cap</td>
+<td role="cell"><a href="/rules/#stats.str_to_atk">ATK per STR</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+</tr>
+<tr role="row" data-rules="resist.cap">
+<th scope="row" role="rowheader">Magic resist</th>
+<td role="cell"><span data-f="t-mr">86</span></td>
+<td role="cell">200</td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+</tr>
+<tr role="row" data-rules="resist.cap">
+<th scope="row" role="rowheader">Fire resist</th>
+<td role="cell"><span data-f="t-fr">73</span></td>
+<td role="cell">200</td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+</tr>
+<tr role="row" data-rules="resist.cap">
+<th scope="row" role="rowheader">Cold resist</th>
+<td role="cell"><span data-f="t-cr">68</span></td>
+<td role="cell">200</td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+</tr>
+<tr role="row" data-rules="resist.cap">
+<th scope="row" role="rowheader">Disease resist</th>
+<td role="cell"><span data-f="t-dr">64</span></td>
+<td role="cell">200</td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+</tr>
+<tr role="row" data-rules="resist.cap">
+<th scope="row" role="rowheader">Poison resist</th>
+<td role="cell"><span data-f="t-pr">61</span></td>
+<td role="cell">200</td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+</tr>
+<tr role="row" data-rules="regen.gear_caps">
+<th scope="row" role="rowheader">HP regen</th>
+<td role="cell"><span data-f="t-hpreg">14</span></td>
+<td role="cell">30</td>
+<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="open-test">open test B7</span></td>
+</tr>
+<tr role="row" data-rules="regen.gear_caps">
+<th scope="row" role="rowheader">Mana regen</th>
+<td role="cell"><span data-f="t-manareg">7</span></td>
+<td role="cell">15</td>
+<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="open-test">open test B7</span></td>
+</tr>
+<tr role="row" data-rules="regen.gear_caps">
+<th scope="row" role="rowheader">Endurance regen</th>
+<td role="cell"><span data-f="t-endreg">8</span></td>
+<td role="cell">15</td>
+<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="open-test">open test B7</span></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section class="weapons" id="weapons" aria-labelledby="weapons-h">
+<h2 id="weapons-h">Weapons</h2>
+<dl class="pairs">
+<div><dt>Setup</dt><dd data-f="w-setup">Dual wield</dd></div>
+<div><dt>Main hand</dt><dd data-f="w-main">Ferryman&#39;s Pike</dd></div>
+<div><dt>Off hand</dt><dd data-f="w-off">Pellbrook Mallet</dd></div>
+</dl>
+<p class="hint"><a href="/rules/#weapons.damage_weight">How weapons are scored</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> <span class="open-test">open test B18</span></p>
+<p id="weapons-haste" class="hint">Scored at <span data-f="w-haste" data-rules="haste.cap_pct_with_monk haste.worn_per_tier">66%</span> haste: <a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
+<details class="expander" id="other-setups">
+<summary>Other weapon setups for this role</summary>
+<ul id="w-others" class="plain" data-rules="roles.balanced roles.templates">
+<li>1H + shield: Tinker&#39;s Awl + Orchard Warden&#39;s Targe (−140)</li>
+<li>Two-hander: Gristmill Maul (−85)</li>
+</ul>
+</details>
+</section>
+
+<details class="expander" id="runnerups" data-files="balanced tank melee">
+<summary>Runner-ups: the next best choices for each slot</summary>
+<p>Shown for the default assumptions only: items seen in game, your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights. Each figure is the change in kit value if you swapped just that slot; an item that needs a deity can be an improvement.</p>
+<p id="runnerups-loading" class="note" hidden>Loading the runner-ups for this view&hellip;</p>
+<p id="runnerups-rules" class="note">The kit value is scored by <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="runnerups-na" class="note" hidden>Runner-ups are shown for the default assumptions only (items seen in game, your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights). Change the assumptions back to see them.</p>
+<table class="runnerups" id="runnerups-table">
+<caption class="sr-only">The next best choices for each slot, with the change in kit value</caption>
+<thead>
+<tr><th scope="col">Slot</th><th scope="col">Next best choices (change in kit value)</th></tr>
+</thead>
+<tbody id="runnerups-body" data-rules="roles.balanced roles.templates">
+<tr><th scope="row">Head</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Crown of the Tribunal</span> <span class="delta" data-f="r-delta">+7</span> <span class="deity" data-f="r-deity">Needs deity: The Tribunal</span></li>
+<li><span data-f="r-name">Steel Cap of Valor</span> <span class="delta" data-f="r-delta">−12</span></li>
+<li><span data-f="r-name">Crown of the Vanguard</span> <span class="delta" data-f="r-delta">−19</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Face</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Mask of the Weary</span> <span class="delta" data-f="r-delta">−15</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Ear 1</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Gold Hoop of Haste</span> <span class="delta" data-f="r-delta">−19</span></li>
+<li><span data-f="r-name">Stud of the Fallen</span> <span class="delta" data-f="r-delta">−26</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Ear 2</th><td><ol class="swaps" data-f="swaps" hidden>
+</ol><span class="muted" data-f="r-none">No close alternatives</span></td></tr>
+<tr><th scope="row">Neck</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Choker of Seven Pebbles</span> <span class="delta" data-f="r-delta">−26</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Shoulders</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Pauldrons of the Vanguard</span> <span class="delta" data-f="r-delta">−12</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Arms</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Vambraces of Might</span> <span class="delta" data-f="r-delta">−15</span></li>
+<li><span data-f="r-name">Armguards of the Lost Legion</span> <span class="delta" data-f="r-delta">−23</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Back</th><td><ol class="swaps" data-f="swaps" hidden>
+</ol><span class="muted" data-f="r-none">No close alternatives</span></td></tr>
+<tr><th scope="row">Wrist 1</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Wristguard of Warding</span> <span class="delta" data-f="r-delta">−22</span></li>
+<li><span data-f="r-name">Cuff of the Wayfarer</span> <span class="delta" data-f="r-delta">−30</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Wrist 2</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Bracer of the Iron Oath</span> <span class="delta" data-f="r-delta">−26</span></li>
+<li><span data-f="r-name">Cuff of the Wayfarer</span> <span class="delta" data-f="r-delta">−33</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Hands</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Gloves of the Mountain</span> <span class="delta" data-f="r-delta">−12</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Finger 1</th><td><ol class="swaps" data-f="swaps" hidden>
+</ol><span class="muted" data-f="r-none">No close alternatives</span></td></tr>
+<tr><th scope="row">Finger 2</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Band of Quiet Lanterns</span> <span class="delta" data-f="r-delta">−19</span></li>
+<li><span data-f="r-name">Signet of the Forgotten Court</span> <span class="delta" data-f="r-delta">−26</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Chest</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Mantle of the Faithful</span> <span class="delta" data-f="r-delta">−9</span> <span class="deity" data-f="r-deity">Needs deity: The Tribunal or Rodcet Nife</span></li>
+<li><span data-f="r-name">Breastplate of Warding</span> <span class="delta" data-f="r-delta">−22</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Legs</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Legplates_of_Valor_Forged_Without_Any_Spaces_In_Their_Unbroken_Name_0123456789</span> <span class="delta" data-f="r-delta">−26</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Feet</th><td><ol class="swaps" data-f="swaps" hidden>
+</ol><span class="muted" data-f="r-none">No close alternatives</span></td></tr>
+<tr><th scope="row">Waist</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Copperleaf Sash</span> <span class="delta" data-f="r-delta">−15</span></li>
+<li><span data-f="r-name">Thornwick Cord</span> <span class="delta" data-f="r-delta">−23</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Range</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Short Bow of the Fallen</span> <span class="delta" data-f="r-delta">−19</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Any slot 1</th><td><ol class="swaps" data-f="swaps" hidden>
+</ol><span class="muted" data-f="r-none">No close alternatives</span></td></tr>
+<tr><th scope="row">Any slot 2</th><td><ol class="swaps" data-f="swaps" hidden>
+</ol><span class="muted" data-f="r-none">No close alternatives</span></td></tr>
+<tr><th scope="row">Main hand</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Tinker&#39;s Awl</span> <span class="delta" data-f="r-delta">−12</span></li>
+<li><span data-f="r-name">Gristmill Maul</span> <span class="delta" data-f="r-delta">−19</span></li>
+<li><span data-f="r-name">Pellbrook Mallet</span> <span class="delta" data-f="r-delta">−26</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+<tr><th scope="row">Off hand</th><td><ol class="swaps" data-f="swaps">
+<li><span data-f="r-name">Orchard Warden&#39;s Targe</span> <span class="delta" data-f="r-delta">−15</span></li>
+<li><span data-f="r-name">Hearthguard Kite</span> <span class="delta" data-f="r-delta">−23</span></li>
+<li><span data-f="r-name">Millrace Pavise</span> <span class="delta" data-f="r-delta">−30</span></li>
+</ol><span class="muted" data-f="r-none" hidden>No close alternatives</span></td></tr>
+</tbody>
+</table>
+</details>
+
+<details class="expander" id="robust">
+<summary>Robust core: picks that hold when the assumptions change</summary>
+<p id="robust-loading" class="note" hidden>Loading the robust core for this view&hellip;</p>
+<p id="robust-summary" data-n="count">20 of 22 picks hold in every check. The other 2 depend on an assumption:</p>
+<ul id="robust-list" class="plain">
+<li>Chest: Saltmarsh Jerkin – depends on the Monk curve (test B9)</li>
+<li>Waist: Riverstone Buckle Strap – depends on the &#34;AC&#34; &amp; mana weight (x2)</li>
+</ul>
+<p id="robust-na" class="note" data-rules="tier.stat_rule" hidden>Robustness checks cover the default race at +4 and +10 only.</p>
+</details>
+
+<section class="upgrade" id="upgrade" aria-labelledby="upgrade-h" data-trio="pal-mnk-ber" data-level="50">
+<h2 id="upgrade-h" tabindex="-1">Upgrade from the gear you have</h2>
+<p class="note">Your file is read in this browser and is never uploaded.</p>
+<noscript><p class="note">The Upgrade section needs JavaScript.</p></noscript>
+<p id="upgrade-load" class="status quiet"></p>
+<div class="ways">
+<div class="way">
+<h3>Read your inventory file</h3>
+<div class="dz">
+<input type="file" id="upgrade-file" class="dz-input" aria-describedby="upgrade-file-help" data-wake disabled>
+<label for="upgrade-file" id="upgrade-drop" class="dropzone">Drop your inventory file here, or choose it</label>
+</div>
+<p id="upgrade-file-help" class="note">In the game, type <code>/outputfile inventory</code> and use the file it writes.</p>
+</div>
+<div class="way">
+<h3>Or add an item by name</h3>
+<div class="pick">
+<div class="control combo">
+<label for="upgrade-pick">Item</label>
+<input type="text" id="upgrade-pick" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="upgrade-list" autocomplete="off" autocorrect="off" spellcheck="false" maxlength="100" data-wake disabled>
+<ul id="upgrade-list" class="listbox" role="listbox" aria-label="Matching items" hidden></ul>
+</div>
+<div class="control">
+<label for="upgrade-tier">Tier</label>
+<select id="upgrade-tier" data-wake disabled>
+<option value="0">+0</option>
+<option value="1">+1</option>
+<option value="2">+2</option>
+<option value="3">+3</option>
+<option value="4">+4</option>
+<option value="5">+5</option>
+<option value="6">+6</option>
+<option value="7">+7</option>
+<option value="8">+8</option>
+<option value="9">+9</option>
+<option value="10">+10</option>
+</select>
+</div>
+<button type="button" id="upgrade-add" class="btn" disabled>Add</button>
+</div>
+</div>
+</div>
+<div id="upgrade-feedback"></div>
+<div class="owned-head">
+<h3 id="upgrade-owned-h" tabindex="-1">Your gear <span id="upgrade-count"></span></h3>
+<button type="button" id="upgrade-clear" class="btn-quiet" aria-label="Clear all gear" hidden>Clear</button>
+</div>
+<p id="upgrade-empty" class="note">Nothing yet: read your file or add an item.</p>
+<ul id="upgrade-owned" class="plain owned" aria-labelledby="upgrade-owned-h"></ul>
+<div id="upgrade-results"></div>
+</section>
+</main>

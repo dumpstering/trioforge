@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 34966,
+    "ns": 0,
+    "title": "Serpent's Tooth",
+    "revisions": [
+     {
+      "revid": 193414,
+      "timestamp": "2026-10-13T00:45:43Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|itemname       = Serpent's Tooth\n|lucy_img_ID    = 592\n|statsblock     = \nLore Equipped, Attunable, Placeable<br>\nSlot: PRIMARY SECONDARY<br>\nSkill: 1H Piercing  Atk Delay: 27<br>\nDMG: 13  BACKSTAB: 13<br>\nSTR: +3<br>\nSize: MEDIUM  WT: 2.3<br>\nClass: WAR RNG SHD BRD ROG NEC WIZ MAG ENC BST<br>\nRace: ALL<br>\n|merchant_value = 4p 7g 6s 2c\n|dropsfrom      = \n\n[[The Hole]]\n\n* [[Master Yael]]\n\n}}</onlyinclude>\n[[Category:Bard Equipment]]\n[[Category:Beastlord Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n\n[[Category:Primary]]\n[[Category:Secondary]]\n\n[[Category:Piercing]]\n\n[[Category:The Hole]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

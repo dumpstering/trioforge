@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 34998,
+    "ns": 0,
+    "title": "Symbol of Marr",
+    "revisions": [
+     {
+      "revid": 173874,
+      "parentid": 171605,
+      "timestamp": "2026-08-27T20:56:53Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Symbol of Marr\n|lucy_img_ID = 1058\n|statsblock  = \nLore Equipped, No Trade<br>\nSlot: Neck<br>\nAC: 15<br>\nSTR: 5 WIS: 5<br>\nWT: 0.1  Size: TINY<br>\nClass: PAL<br>\nRace: ALL<br>\n|dropsfrom = \n\n[[Plane of Sky]]\n\n* [[a thunder spirit princess]]\n* [[Bazzzazzt]]\n* [[Bzzzt]]\n* [[Bazzt Zzzt]]\n* [[soul harvester]]\n* [[Protector of Sky]]\n* [[Gorgalosk]]\n* [[Keeper of Souls]]\n* [[Sister of the Spire]]\n* [[The Spiroc Lord]]\n* [[A blade storm]]\n* [[the Hand of Veeshan]]\n\n\n}}</onlyinclude>\n\n[[Category:Paladin Equipment]]\n[[Category:Neck]]\n[[Category:Plane of Sky]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

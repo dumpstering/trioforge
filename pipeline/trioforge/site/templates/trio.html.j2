@@ -1,0 +1,220 @@
+{% extends "base.html.j2" %}
+{% from "base.html.j2" import seal, rule_seal, rule_link, rule_links with context %}
+{% macro tr_kit(row) -%}
+<tr role="row">
+<th scope="row" role="rowheader">{{ row.slot }}</th>
+<td role="cell"><span class="name" data-f="name">{% if row.href %}<a href="{{ row.href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</span> <span class="deity" data-f="deity"{% if not row.deity %} hidden{% endif %}>{{ row.deity }}</span></td>
+<td role="cell"><span data-f="tier">{{ row.tier }}</span></td>
+<td role="cell"><span data-f="arrival">{{ row.arrival }}</span> <span class="reach" data-f="reach">{{ row.reach }}</span></td>
+<td role="cell"><span data-f="source">{{ row.source }}</span></td>
+<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"{% if row.empty %} hidden{% endif %}><use data-f="seal-icon" href="#{{ row.seal_icon }}"></use></svg><span data-f="seal">{{ row.seal }}</span></span></td>
+</tr>
+{%- endmacro %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-base="{{ page.data_base }}" data-release="{{ page.release }}" data-groups="{{ page.weight_groups|join(' ') }}"{% if page.items_base %} data-items="{{ page.items_base }}"{% endif %}>
+<div class="page-head">
+<h1>{{ page.name }}: best gear (<span data-rules="level.current">level {{ page.level }}</span>)</h1>
+<p id="best-race" class="best-race">Best race for this trio: <strong>{{ page.best_name }}</strong> <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">({{ page.margin }} over {{ page.runner_up_name }})</span>, judged in the <span id="best-race-view">{{ page.verdict_role }} view at <span data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> with {{ page.assume_evidence }} and {{ page.assume_buffs }}</span>.</p>
+<details class="expander" id="race-why">
+<summary>How the best race was judged{% if page.flips %}, and what could change it{% endif %}</summary>
+<p id="best-race-rules" class="note">How the score works: {{ rule_links(page.margin_rules) }}</p>
+{% if page.flips %}
+<p id="best-race-note" class="note">Could change if an open test goes the other way: {{ page.flips }}{% if page.flips_more %}; <span data-n="count">+{{ page.flips_more }} more</span>{% endif %}. <a href="/rules/#open-tests">See the open tests</a></p>
+{% endif %}
+</details>
+</div>
+
+<noscript><p class="note">The race, role and tier switches need JavaScript. This page shows the best kit for the default view.</p></noscript>
+<div class="view-bar" id="view-bar">
+<p class="view-summary" id="view-summary"><span class="sr-only">Showing </span><span class="view-main"><span data-f="s-race">{{ page.verdict_race }}</span> &middot; <span data-f="s-role">{{ page.verdict_role }}</span> &middot; <span data-f="s-tier" data-rules="tier.stat_rule">{{ page.verdict_tier }}</span></span> <span class="view-assumes" data-f="s-assumes">{{ page.summary_assumes }}</span></p>
+<button type="button" id="switches-toggle" class="btn-change" aria-expanded="false" aria-controls="switches" aria-label="Change race, role, tier and assumptions" disabled>Change</button>
+</div>
+<div class="switches" id="switches">
+<section class="controls" aria-labelledby="controls-h">
+<h2 id="controls-h" class="sr-only">Choose a race, role and tier</h2>
+<div class="control">
+<label for="sw-race">Race</label>
+<select id="sw-race" name="race" disabled>
+{% for legal in (true, false) %}
+{% set group = page.races|selectattr("legal", "equalto", legal)|list %}
+{% if group %}
+<optgroup label="{{ 'Available at character creation' if legal else 'Needs a race or primary unlock' }}">
+{% for r in group %}
+<option value="{{ r.code }}" data-label="{{ r.name }}"{% if r.code == page.default.race %} selected{% endif %}>{{ r.name }}{% if r.best %} (best for this trio){% elif not r.legal %} (needs unlock){% endif %}</option>
+{% endfor %}
+</optgroup>
+{% endif %}
+{% endfor %}
+</select>
+</div>
+<fieldset class="control seg" id="sw-role">
+<legend>Role</legend>
+<div class="seg-items">
+{% for r in page.roles %}
+<span class="seg-item"><input type="radio" name="role" id="role-{{ r.code }}" value="{{ r.code }}" data-label="{{ r.label }}" data-hint="{{ r.hint }}" data-setups="{{ r.setups|join(' ') }}"{% if r.checked %} checked{% endif %} disabled><label for="role-{{ r.code }}">{{ r.label }}</label></span>
+{% endfor %}
+</div>
+</fieldset>
+<div class="control">
+<label for="sw-tier">Tier</label>
+<select id="sw-tier" name="tier" disabled>
+{% for t in page.tiers %}
+<option value="{{ t.value }}" data-label="{{ t.label }}"{% if t.selected %} selected{% endif %}>{{ t.text }}</option>
+{% endfor %}
+</select>
+</div>
+<p class="hint"><span id="role-hint">{{ page.role_hint }}</span> <a href="/rules/#{{ page.roles_rule.id }}">How roles weigh stats</a> {{ rule_seal(page.roles_rule) }}</p>
+</section>
+
+<section class="assumes" aria-labelledby="assumes-h">
+<h2 id="assumes-h" class="sr-only">Assumptions</h2>
+<span class="assumes-lead">Assumes</span>
+<details class="assume" id="assume-buffs">
+<summary><span class="sum">Buffs: <span data-f="assume-buffs">{{ page.assume_buffs }}</span> <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Buffs</legend>
+{% for b in page.buffs %}
+<span class="opt"><input type="radio" name="buffs" id="buffs-{{ b.code }}" value="{{ b.code }}" data-phrase="{{ b.phrase }}"{% if b.checked %} checked{% endif %} disabled><label for="buffs-{{ b.code }}">{{ b.label }}</label></span>
+{% endfor %}
+<span class="opt sub"><input type="checkbox" id="buffs-ench" data-phrase="and an Enchanter" disabled><label for="buffs-ench">Enchanter in group</label></span>
+</fieldset>
+</details>
+<details class="assume" id="assume-weapons">
+<summary><span class="sum">Weapons: <span data-f="assume-setup">{{ page.assume_setup }}</span>, scored at <span data-f="assume-haste" data-rules="{{ page.haste_rules|map(attribute='id')|join(' ') }}">{{ page.assume_haste }}</span> haste <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Weapons</legend>
+{% for s in page.setups %}
+<span class="opt"{% if not s.visible %} hidden{% endif %}><input type="radio" name="setup" id="setup-{{ s.code }}" value="{{ s.code }}" data-label="{{ s.label }}" data-phrase="{{ s.phrase }}"{% if s.checked %} checked{% endif %} disabled{% if not s.visible %} hidden{% endif %}><label for="setup-{{ s.code }}"><span class="opt-text">{{ s.label }}<span class="best-flag"{% if not s.checked %} hidden{% endif %}> (best for this role)</span></span></label></span>
+{% endfor %}
+</fieldset>
+</details>
+<details class="assume" id="assume-evidence">
+<summary><span class="sum">Evidence: <span data-f="assume-ev">{{ page.assume_evidence }}</span> <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Evidence</legend>
+{% for e in page.evidence %}
+<span class="opt"><input type="radio" name="ev" id="ev-{{ e.code }}" value="{{ e.code }}" data-phrase="{{ e.phrase }}"{% if e.checked %} checked{% endif %} disabled><label for="ev-{{ e.code }}">{{ e.label }}</label></span>
+{% endfor %}
+</fieldset>
+</details>
+<details class="assume" id="assume-weights">
+<summary><span class="sum">Weights: <span data-f="assume-weights">role's own</span> <span class="change">change</span></span></summary>
+<fieldset>
+<legend>Weights</legend>
+</fieldset>
+</details>
+<span class="assume-fixed" id="assume-aa">AA: {% for label, ref in page.aa %}<a href="/rules/#{{ ref.id }}">{{ label }}</a>{% if not loop.last %}, {% endif %}{% endfor %} {{ seal(page.aa_seal.seal, page.aa_seal.seal_icon, page.aa_seal.seal_label) }}; no deity</span>
+</section>
+</div>
+{% if page.evidence_note %}
+<p id="evidence-note" class="note">{{ page.evidence_note }}</p>
+{% endif %}
+<p id="status" class="status quiet" role="status" aria-live="polite"></p>
+<p id="announce" class="sr-only" role="status" aria-live="polite"></p>
+
+<section class="answer" aria-labelledby="wear-h">
+<h2 id="wear-h" tabindex="-1">Wear this</h2>
+<table class="kit" id="kit" role="table">
+<caption id="kit-caption">For <span data-f="v-race">{{ page.verdict_race }}</span> &middot; <span data-f="v-role">{{ page.verdict_role }}</span> &middot; <span data-f="v-tier" data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> &middot; <span data-f="v-setup">{{ page.verdict_setup }}</span></caption>
+<thead role="rowgroup">
+<tr role="row">
+<th scope="col" role="columnheader">Slot</th>
+<th scope="col" role="columnheader">Item</th>
+<th scope="col" role="columnheader" data-rules="tier.stat_rule">Tier</th>
+<th scope="col" role="columnheader" data-rules="tier.arrival tier.exp_needed">Arrives at</th>
+<th scope="col" role="columnheader">Source</th>
+<th scope="col" role="columnheader">Seal</th>
+</tr>
+</thead>
+<tbody id="kit-body" role="rowgroup">
+{% for row in page.rows %}
+{{ tr_kit(row) }}
+{% endfor %}
+</tbody>
+</table>
+<p id="kit-rules" class="rules">Tiers: {{ rule_links(page.tier_rules) }}</p>
+</section>
+
+<section class="why" id="why" aria-labelledby="why-h">
+<h2 id="why-h">Why this kit</h2>
+<p data-rules="roles.templates">Kit value <strong id="kit-value">{{ page.value }}</strong> hit-point equivalents; the gear adds <strong id="kit-gain">{{ page.gain }}</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#{{ page.roles_rule.id }}">How roles weigh stats</a> {{ rule_seal(page.roles_rule) }}</p>
+<table class="totals" id="totals" role="table">
+<caption class="sr-only">Totals of this kit against the caps</caption>
+<thead role="rowgroup">
+<tr role="row">
+<th scope="col" role="columnheader">Stat</th>
+<th scope="col" role="columnheader">This kit</th>
+<th scope="col" role="columnheader">Cap</th>
+<th scope="col" role="columnheader">Rule</th>
+</tr>
+</thead>
+<tbody id="totals-body" role="rowgroup">
+{% for row in page.totals %}
+<tr role="row" data-rules="{{ row.rule.id }}">
+<th scope="row" role="rowheader">{{ row.label }}</th>
+<td role="cell"><span data-f="t-{{ row.field }}">{{ row.value }}</span></td>
+<td role="cell"{% if row.cap_rules %} data-rules="{% for text, ref in row.cap_rules %}{{ ref.id }}{% if not loop.last %} {% endif %}{% endfor %}"{% endif %}>{{ row.cap }}{% if row.cap_rules %} <span class="cap-rules">({% for text, ref in row.cap_rules %}<a href="/rules/#{{ ref.id }}">{{ text }}</a>{% if not loop.last %}, {% endif %}{% endfor %}) {{ seal(row.cap_seal.seal, row.cap_seal.seal_icon, row.cap_seal.seal_label) }}</span>{% endif %}</td>
+<td role="cell"><a href="/rules/#{{ row.rule.id }}">{{ row.rule.title }}</a> {{ rule_seal(row.rule) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+
+<section class="weapons" id="weapons" aria-labelledby="weapons-h">
+<h2 id="weapons-h">Weapons</h2>
+<dl class="pairs">
+<div><dt>Setup</dt><dd data-f="w-setup">{{ page.w_setup }}</dd></div>
+<div><dt>Main hand</dt><dd data-f="w-main">{{ page.w_main }}</dd></div>
+<div><dt>Off hand</dt><dd data-f="w-off">{{ page.w_off }}</dd></div>
+</dl>
+<p class="hint"><a href="/rules/#{{ page.weapons_rule.id }}">How weapons are scored</a> {{ rule_seal(page.weapons_rule) }}</p>
+<p id="weapons-haste" class="hint">Scored at <span data-f="w-haste" data-rules="{{ page.haste_rules|map(attribute='id')|join(' ') }}">{{ page.assume_haste }}</span> haste: {{ rule_links(page.haste_rules) }}</p>
+<details class="expander" id="other-setups"{% if not page.w_others %} hidden{% endif %}>
+<summary>Other weapon setups for this role</summary>
+<ul id="w-others" class="plain" data-rules="{{ page.delta_rules|map(attribute='id')|join(' ') }}">
+{% for line in page.w_others %}
+<li>{{ line }}</li>
+{% endfor %}
+</ul>
+</details>
+</section>
+
+<details class="expander" id="runnerups" data-files="{{ page.runnerups_files|join(' ') }}">
+<summary>Runner-ups: the next best choices for each slot</summary>
+<p>Shown for the default assumptions only: {{ page.runnerups_assumes }}. Each figure is the change in kit value if you swapped just that slot; an item that needs a deity can be an improvement.</p>
+<p id="runnerups-loading" class="note" hidden>Loading the runner-ups for this view&hellip;</p>
+<p id="runnerups-rules" class="note">The kit value is scored by {{ rule_links(page.delta_rules) }}</p>
+<p id="runnerups-na" class="note"{% if page.runnerups_available %} hidden{% endif %}>Runner-ups are shown for the default assumptions only ({{ page.runnerups_assumes }}). Change the assumptions back to see them.</p>
+<table class="runnerups" id="runnerups-table"{% if not page.runnerups_available %} hidden{% endif %}>
+<caption class="sr-only">The next best choices for each slot, with the change in kit value</caption>
+<thead>
+<tr><th scope="col">Slot</th><th scope="col">Next best choices (change in kit value)</th></tr>
+</thead>
+<tbody id="runnerups-body" data-rules="{{ page.delta_rules|map(attribute='id')|join(' ') }}">
+{% for row in page.runnerups %}
+<tr><th scope="row">{{ row.slot }}</th><td><ol class="swaps" data-f="swaps"{% if not row.swaps %} hidden{% endif %}>
+{% for s in row.swaps %}
+<li><span data-f="r-name">{{ s.name }}</span> <span class="delta" data-f="r-delta">{{ s.delta }}</span>{% if s.deity %} <span class="deity" data-f="r-deity">{{ s.deity }}</span>{% endif %}</li>
+{% endfor %}
+</ol><span class="muted" data-f="r-none"{% if row.swaps %} hidden{% endif %}>No close alternatives</span></td></tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+
+<details class="expander" id="robust">
+<summary>Robust core: picks that hold when the assumptions change</summary>
+<p id="robust-loading" class="note" hidden>Loading the robust core for this view&hellip;</p>
+<p id="robust-summary" data-n="count"{% if not page.robust_summary %} hidden{% endif %}>{{ page.robust_summary }}</p>
+<ul id="robust-list" class="plain"{% if not page.robust_items %} hidden{% endif %}>
+{% for line in page.robust_items %}
+<li>{{ line }}</li>
+{% endfor %}
+</ul>
+<p id="robust-na" class="note" data-rules="tier.stat_rule"{% if page.robust_summary %} hidden{% endif %}>{{ page.robust_note }}</p>
+</details>
+
+{% include "upgrade.html.j2" %}
+</main>
+{% endblock %}

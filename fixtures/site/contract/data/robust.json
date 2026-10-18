@@ -1,0 +1,15 @@
+{
+ "v": 2,
+ "release": "data-2026-10-14",
+ "license": "CC BY-SA 4.0",
+ "attribution": "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, graded by evidence, tier-scaled",
+ "race": "OGR",
+ "views": [
+  ["balanced",4,"dw","strict","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","depends on the Monk curve (test B9)","robust","robust","depends on the \"AC\" & mana weight (x2)","robust","robust","robust","robust","robust"]],
+  ["balanced",10,"dw","strict","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","depends on the Monk curve (test B9)","robust","robust","depends on the \"AC\" & mana weight (x2)","robust","robust","robust","robust","robust"]],
+  ["tank",4,"1h-shield","strict","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","depends on the Monk curve (test B9)","robust","robust","depends on the \"AC\" & mana weight (x2)","robust","robust","robust","robust","robust"]],
+  ["tank",10,"1h-shield","strict","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","depends on the Monk curve (test B9)","robust","robust","depends on the \"AC\" & mana weight (x2)","robust","robust","robust","robust","robust"]],
+  ["melee",4,"2h","strict","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","depends on the Monk curve (test B9)","robust","robust","depends on the \"AC\" & mana weight (x2)","robust","robust","robust","depends on the weapon damage rate","robust"]],
+  ["melee",10,"2h","strict","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","depends on the Monk curve (test B9)","robust","robust","depends on the \"AC\" & mana weight (x2)","robust","robust","robust","depends on the weapon damage rate","robust"]]
+ ]
+}

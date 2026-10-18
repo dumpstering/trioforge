@@ -1,0 +1,54 @@
+Location	Name	ID	Count	Slots
+Any Slot	Empty	0	0	0
+Ear	Brindle Stud +1	410002	1	10
+Ear-Slot7	Sparkle Shard (Exaltation)	410100	1	10
+Head	Tarnished Quillcap +2	410003	1	10
+Head-Slot7	Ember Facet (Exaltation)	410200	1	10
+Head-Slot8	Empty	0	0	0
+Face	Empty	0	0	0
+Ear	Empty	0	0	0
+Neck	Ashen Torque	410006	1	10
+Shoulders	Empty	0	0	0
+Arms	Empty	0	0	0
+Back	Empty	0	0	0
+Wrist	Empty	0	0	0
+Wrist	Empty	0	0	0
+Range	Empty	0	0	0
+Hands	Empty	0	0	0
+Primary	Empty	0	0	0
+Secondary	Empty	0	0	0
+Fingers	Empty	0	0	0
+Fingers	Empty	0	0	0
+Chest	Moth-Eaten Rag*	410017	1	10
+Legs	Empty	0	0	0
+Feet	Empty	0	0	0
+Waist	Empty	0	0	0
+Any Slot	Empty	0	0	0
+Ammo	Flint Dart	410021	40	10
+General 1	Wicker Basket	420001	1	4
+General 1-Slot1	Tin Flask	440001	20	10
+General 1-Slot2	Empty	0	0	0
+General 1-Slot3	Gilded Locket +1	430010	1	10
+General 1-Slot3-Slot7	Empty	0	0	0
+General 1-Slot4	Empty	0	0	0
+General 2	Burlap Satchel	420002	1	10
+General 2-Slot1	Empty	0	0	0
+General 2-Slot2	Empty	0	0	0
+General 2-Slot3	Empty	0	0	0
+General 2-Slot4	Empty	0	0	0
+General 2-Slot5	Empty	0	0	0
+General 2-Slot6	Empty	0	0	0
+General 2-Slot7	Empty	0	0	0
+General 2-Slot8	Empty	0	0	0
+General 2-Slot9	Empty	0	0	0
+General 2-Slot10	Empty	0	0	0
+Held	Empty	0	0	0
+Bank1	Mossy Greaves +3	430030	1	10
+Bank1-Slot7	Empty	0	0	0
+Bank1-Slot8	Empty	0	0	0
+Bank1-Slot9	Empty	0	0	0
+SharedBank1	Empty	0	0	0
+
+KeyRing	Name	ID	
+Augmentation	Ember Facet (Exaltation)	410200
+Equipment	Spare Quillcap	450002

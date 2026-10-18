@@ -1,0 +1,55 @@
+{
+ "version": "2026-10-13",
+ "seal": "player",
+ "sources": {"stats":[{"kind":"url","ref":"https://eqltools.com/attributes"}],"primary_classes":[{"kind":"public-text","ref":"eqlwiki race pages; developer FAQ and patch notes"}]},
+ "notes": [
+  "Starting attributes: a race's base plus the modifiers of the three chosen classes. Each class adds exactly 30 points in total. Nothing is capped here.",
+  "Ogre stamina 127 and Troll stamina 114 are this table's values; the classic game lists 122 and 109.",
+  "A race restricts only the first (primary) class of a trio; the second and third are open to every race.",
+  "Kerran Druid is disputed: the sources disagree whether a Kerran can start as a Druid, so it is not counted as legal until it is confirmed."
+ ],
+ "stat_order": [
+  "STR",
+  "STA",
+  "AGI",
+  "DEX",
+  "WIS",
+  "INT",
+  "CHA"
+ ],
+ "races": [
+  {"code":"HUM","name":"Human","active":true,"base":{"STR":75,"STA":75,"AGI":75,"DEX":75,"WIS":75,"INT":75,"CHA":75},"primary":["WAR","CLR","PAL","RNG","SHD","DRU","MNK","BRD","ROG","NEC","WIZ","MAG","ENC"],"disputed":[]},
+  {"code":"BAR","name":"Barbarian","active":true,"base":{"STR":103,"STA":95,"AGI":82,"DEX":70,"WIS":70,"INT":60,"CHA":55},"primary":["WAR","ROG","SHM","BST","BER"],"disputed":[]},
+  {"code":"ERU","name":"Erudite","active":true,"base":{"STR":60,"STA":70,"AGI":70,"DEX":70,"WIS":83,"INT":107,"CHA":70},"primary":["CLR","PAL","SHD","NEC","WIZ","MAG","ENC"],"disputed":[]},
+  {"code":"ELF","name":"Wood Elf","active":true,"base":{"STR":65,"STA":65,"AGI":95,"DEX":80,"WIS":80,"INT":75,"CHA":75},"primary":["WAR","RNG","DRU","BRD","ROG"],"disputed":[]},
+  {"code":"HIE","name":"High Elf","active":true,"base":{"STR":55,"STA":65,"AGI":85,"DEX":70,"WIS":95,"INT":92,"CHA":80},"primary":["CLR","PAL","WIZ","MAG","ENC"],"disputed":[]},
+  {"code":"DEF","name":"Dark Elf","active":true,"base":{"STR":60,"STA":65,"AGI":90,"DEX":75,"WIS":83,"INT":99,"CHA":60},"primary":["WAR","CLR","SHD","ROG","NEC","WIZ","MAG","ENC"],"disputed":[]},
+  {"code":"HEF","name":"Half Elf","active":true,"base":{"STR":70,"STA":70,"AGI":90,"DEX":85,"WIS":60,"INT":75,"CHA":75},"primary":["WAR","PAL","RNG","DRU","BRD","ROG"],"disputed":[]},
+  {"code":"DWF","name":"Dwarf","active":true,"base":{"STR":90,"STA":90,"AGI":70,"DEX":90,"WIS":83,"INT":60,"CHA":45},"primary":["WAR","CLR","PAL","ROG","BER"],"disputed":[]},
+  {"code":"TRL","name":"Troll","active":true,"base":{"STR":108,"STA":114,"AGI":83,"DEX":75,"WIS":60,"INT":52,"CHA":40},"primary":["WAR","SHD","SHM","BST","BER"],"disputed":[]},
+  {"code":"OGR","name":"Ogre","active":true,"base":{"STR":130,"STA":127,"AGI":70,"DEX":70,"WIS":67,"INT":60,"CHA":37},"primary":["WAR","SHD","SHM","BST","BER"],"disputed":[]},
+  {"code":"HFL","name":"Halfling","active":true,"base":{"STR":70,"STA":75,"AGI":95,"DEX":90,"WIS":80,"INT":67,"CHA":50},"primary":["WAR","CLR","PAL","RNG","DRU","ROG"],"disputed":[]},
+  {"code":"GNM","name":"Gnome","active":true,"base":{"STR":60,"STA":70,"AGI":85,"DEX":85,"WIS":67,"INT":98,"CHA":60},"primary":["WAR","CLR","PAL","SHD","ROG","NEC","WIZ","MAG","ENC"],"disputed":[]},
+  {"code":"IKS","name":"Iksar","active":true,"base":{"STR":70,"STA":70,"AGI":90,"DEX":85,"WIS":80,"INT":75,"CHA":55},"primary":["WAR","SHD","MNK","SHM","NEC","BST"],"disputed":[]},
+  {"code":"KER","name":"Kerran","active":true,"base":{"STR":90,"STA":75,"AGI":90,"DEX":70,"WIS":70,"INT":65,"CHA":65},"primary":["WAR","DRU","BRD","ROG","SHM","BST","BER"],"disputed":["DRU"]},
+  {"code":"FRG","name":"Froglok","active":true,"base":{"STR":70,"STA":80,"AGI":100,"DEX":100,"WIS":75,"INT":75,"CHA":50},"primary":["WAR","CLR","PAL","SHD","MNK","ROG","SHM","NEC","WIZ"],"disputed":[]}
+ ],
+ "classes": [
+  {"code":"WAR","id":1,"name":"Warrior","mods":{"STR":10,"STA":15,"AGI":5,"DEX":0,"WIS":0,"INT":0,"CHA":0}},
+  {"code":"CLR","id":2,"name":"Cleric","mods":{"STR":5,"STA":10,"AGI":0,"DEX":0,"WIS":15,"INT":0,"CHA":0}},
+  {"code":"PAL","id":3,"name":"Paladin","mods":{"STR":10,"STA":5,"AGI":0,"DEX":0,"WIS":5,"INT":0,"CHA":10}},
+  {"code":"RNG","id":4,"name":"Ranger","mods":{"STR":5,"STA":10,"AGI":10,"DEX":0,"WIS":5,"INT":0,"CHA":0}},
+  {"code":"SHD","id":5,"name":"Shadow Knight","mods":{"STR":10,"STA":5,"AGI":0,"DEX":0,"WIS":0,"INT":10,"CHA":5}},
+  {"code":"DRU","id":6,"name":"Druid","mods":{"STR":0,"STA":15,"AGI":0,"DEX":0,"WIS":15,"INT":0,"CHA":0}},
+  {"code":"MNK","id":7,"name":"Monk","mods":{"STR":5,"STA":5,"AGI":10,"DEX":10,"WIS":0,"INT":0,"CHA":0}},
+  {"code":"BRD","id":8,"name":"Bard","mods":{"STR":5,"STA":0,"AGI":0,"DEX":10,"WIS":0,"INT":0,"CHA":15}},
+  {"code":"ROG","id":9,"name":"Rogue","mods":{"STR":0,"STA":0,"AGI":15,"DEX":15,"WIS":0,"INT":0,"CHA":0}},
+  {"code":"SHM","id":10,"name":"Shaman","mods":{"STR":0,"STA":10,"AGI":0,"DEX":0,"WIS":15,"INT":0,"CHA":5}},
+  {"code":"NEC","id":11,"name":"Necromancer","mods":{"STR":0,"STA":0,"AGI":0,"DEX":15,"WIS":0,"INT":15,"CHA":0}},
+  {"code":"WIZ","id":12,"name":"Wizard","mods":{"STR":0,"STA":15,"AGI":0,"DEX":0,"WIS":0,"INT":15,"CHA":0}},
+  {"code":"MAG","id":13,"name":"Magician","mods":{"STR":0,"STA":15,"AGI":0,"DEX":0,"WIS":0,"INT":15,"CHA":0}},
+  {"code":"ENC","id":14,"name":"Enchanter","mods":{"STR":0,"STA":0,"AGI":0,"DEX":0,"WIS":0,"INT":15,"CHA":15}},
+  {"code":"BST","id":15,"name":"Beastlord","mods":{"STR":0,"STA":10,"AGI":5,"DEX":0,"WIS":10,"INT":0,"CHA":5}},
+  {"code":"BER","id":16,"name":"Berserker","mods":{"STR":15,"STA":5,"AGI":0,"DEX":10,"WIS":0,"INT":0,"CHA":0}}
+ ]
+}

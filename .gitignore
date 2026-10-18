@@ -1,0 +1,28 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+sources/**/raw/
+dist/
+# the marker beside a build folder (site/dist.trioforge-build): it says the folder may be replaced, and is not part of it
+*.trioforge-build
+# the folders a build writes beside its output folder while it works (and removes): site/dist.<token>.trioforge-tmp
+*.trioforge-tmp/
+.wrangler/
+*.log
+.hypothesis/
+derived/seen-flags.json
+# The private seen-in-game flags, and anything built with them, are never committed (the privacy scan refuses
+# them too). A test fixture may carry such a name; the list of accepted player reports is public.
+*seen*.json
+!**/fixtures/**/*seen*.json
+!rules/community-seen.json
+build/
+sources/eqltools/
+
+# benchmark output that depends on the untracked catalog: regenerate with python -m trioforge.bench
+reports/bench-mps/
+reports/*-records.jsonl.gz
+# the fetch cache: raw pages, and the counts each fetch writes beside them (only the top-level folder, not the code package of the same name)
+/sources/

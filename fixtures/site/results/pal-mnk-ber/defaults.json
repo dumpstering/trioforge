@@ -1,0 +1,19 @@
+{
+"version":1,
+"trio":"pal-mnk-ber",
+"classes":["PAL","MNK","BER"],
+"level":50,
+"data_release":"data-2026-10-14",
+"game_patch":"2026-09-22",
+"rules_version":"2026-10-13",
+"view":{"role":"balanced","tier":4,"evidence":"strict","buffs":"own"},
+"strict_pool_empty":false,
+"race":"OGR",
+"runner_up_race":"TRL",
+"margin":812.5,
+"F":10720.0,
+"setup":"dw",
+"races":[{"race":"TRL","legal":true,"F":9907.5,"setup":"dw"},{"race":"OGR","legal":true,"F":10720.0,"setup":"dw"},{"race":"ELF","legal":false,"F":10930.25,"setup":"dw"}],
+"flip_notes":["Iksar, if Iksar AC stacks inside the cap (test B17)"],
+"robustness":"done"
+}

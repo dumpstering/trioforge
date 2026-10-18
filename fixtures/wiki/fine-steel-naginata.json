@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 43087,
+    "ns": 0,
+    "title": "Fine Steel Naginata",
+    "revisions": [
+     {
+      "revid": 194916,
+      "timestamp": "2026-10-14T00:04:09Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Fine Steel Naginata\n|lucy_img_ID = 776\n|statsblock  = \nSlot: PRIMARY<br>\nSkill: 2H Slashing  Atk Delay: 47<br>\nDMG: 14 <br>\nWT: 15.0  Size: GIANT<br>\nClass: WAR PAL RNG SHD<br>\nRace: ALL<br>\n|dropsfrom =\n\n[[Stonebrunt Mountains]]\n* [[Jelquar the Soulslayer]]\n\n[[Category:Warrior Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:2H Slashing]]\n}}</onlyinclude>"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 49376,
+    "ns": 0,
+    "title": "Ogre Bouncer Shield",
+    "revisions": [
+     {
+      "revid": 166517,
+      "parentid": 150097,
+      "timestamp": "2026-08-05T20:13:19Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "\n<onlyinclude>{{Itempage\n|notes       = Note: This recipe incorrectly listed a ring instead of 2x adamantite sheet.\n|itemname    = Ogre Bouncer Shield\n|lucy_img_ID = 542\n|statsblock  = \nSlot: SECONDARY<br>\nAC: 12<br>\nHP: +8<br>\nWT: 6.2  Size: MEDIUM<br>\nClass: WAR SHD SHM<br>\nRace: ALL<br>\n|playercrafted = \n\n* [[Blacksmithing]] (Trivial: 175)\n** '''Yield: Ogre Bouncer Shield''' x1\n** In [[Forge|Oggok Forge]]:\n:: {{SmIcon|698}} 1 x [[Blood Temper]] - Crafted\n:: {{SmIcon|1036}} 2 x [[Sheet of Adamantite]] - Crafted, Bought \n:: {{SmIcon|1151}} 1 x [[Round Shield Mold]] - Bought\n:: {{SmIcon|567}} 1 x [[Smithy Hammer]] - Bought, Returned on Failure, Returned on Success\n\n\n}}</onlyinclude>\n\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Secondary]]\n[[Category:Player Crafted]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

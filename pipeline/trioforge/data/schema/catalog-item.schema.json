@@ -1,0 +1,330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "catalog-item.schema.json",
+  "title": "TrioForge catalog item",
+  "description": "One item of derived/catalog.json, as written by trioforge.data.normalize. Display strings are sanitized (no angle brackets, no control, zero-width, bidi, surrogate or private-use characters, at most 200 characters); warnings are {code, field} with no free text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "key",
+    "name",
+    "wiki",
+    "slots",
+    "classes",
+    "races",
+    "deity",
+    "flags",
+    "stats",
+    "sv",
+    "weight",
+    "size",
+    "item_type",
+    "item_type_source",
+    "weapon",
+    "container_capacity",
+    "instrument_mods",
+    "effects",
+    "required_level",
+    "recommended_level",
+    "sources",
+    "categories",
+    "era_tags",
+    "lucy_img_id",
+    "tier_rule",
+    "parse_warnings",
+    "parse_warnings_overflow"
+  ],
+  "properties": {
+    "key": { "type": "string", "pattern": "^(w[0-9]{1,15}|r[a-z0-9][a-z0-9-]{0,99})$" },
+    "name": { "$ref": "#/$defs/text" },
+    "wiki": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageid", "revid", "title"],
+      "properties": {
+        "pageid": { "type": "integer", "minimum": 1 },
+        "revid": { "type": ["integer", "null"], "minimum": 0 },
+        "title": { "$ref": "#/$defs/text" }
+      }
+    },
+    "slots": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 21,
+      "items": {
+        "enum": [
+          "HEAD", "FACE", "EAR", "NECK", "SHOULDERS", "ARMS", "BACK", "WRIST", "HANDS", "FINGER", "CHEST",
+          "LEGS", "FEET", "WAIST", "RANGE", "AMMO", "PRIMARY", "SECONDARY", "CHARM", "POWERSOURCE"
+        ]
+      }
+    },
+    "classes": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 16,
+      "items": {
+        "enum": [
+          "ALL", "WAR", "CLR", "PAL", "RNG", "SHD", "DRU", "MNK", "BRD", "ROG", "SHM", "NEC", "WIZ", "MAG",
+          "ENC", "BST", "BER"
+        ]
+      }
+    },
+    "races": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 15,
+      "items": {
+        "enum": [
+          "ALL", "HUM", "BAR", "ERU", "ELF", "HIE", "DEF", "HEF", "DWF", "TRL", "OGR", "HFL", "GNM", "IKS",
+          "KER", "FRG"
+        ]
+      }
+    },
+    "deity": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "maxItems": 17,
+          "items": {
+            "enum": [
+              "Agnostic", "Bertoxxulous", "Brell Serilis", "Bristlebane", "Cazic Thule", "Erollisi Marr",
+              "Innoruuk", "Karana", "Mithaniel Marr", "Prexus", "Quellious", "Rallos Zek", "Rodcet Nife",
+              "Solusek Ro", "The Tribunal", "Tunare", "Veeshan"
+            ]
+          }
+        }
+      ]
+    },
+    "flags": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 18,
+      "items": {
+        "enum": [
+          "lore", "no_trade", "no_drop", "magic", "temporary", "attunable", "heirloom", "placeable", "no_rent",
+          "expendable", "quest", "ornament", "summoned", "removed_note", "wiki_banner_delete",
+          "wiki_banner_does_not_exist", "wiki_banner_dne", "wiki_banner_revamped"
+        ]
+      }
+    },
+    "stats": {
+      "type": "object",
+      "propertyNames": {
+        "enum": ["AC", "STR", "STA", "AGI", "DEX", "WIS", "INT", "CHA", "HP", "MANA", "END", "ATK", "HASTE", "HPREG", "MANAREG", "ENDREG"]
+      },
+      "additionalProperties": { "$ref": "#/$defs/nonzeroStat" }
+    },
+    "sv": {
+      "type": "object",
+      "propertyNames": { "enum": ["FIRE", "COLD", "MAGIC", "POISON", "DISEASE", "CORRUPTION"] },
+      "additionalProperties": { "$ref": "#/$defs/nonzeroStat" }
+    },
+    "weight": { "type": ["number", "null"], "minimum": 0, "maximum": 500 },
+    "size": { "enum": ["TINY", "SMALL", "MEDIUM", "LARGE", "GIANT", null] },
+    "item_type": { "$ref": "#/$defs/nullableText" },
+    "item_type_source": {
+      "description": "Where item_type came from: statsblock (the page states a type), name (an off-hand armor piece whose name has a shield word, set by the catalog builder), hand-list (rules/hand-lists.json says it is a shield). Null when item_type is null.",
+      "enum": ["statsblock", "name", "hand-list", null]
+    },
+    "weapon": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["skill", "dmg", "delay", "bonus"],
+          "properties": {
+            "skill": { "$ref": "#/$defs/nullableText" },
+            "dmg": { "type": ["integer", "null"], "minimum": -1000, "maximum": 10000 },
+            "delay": { "type": ["integer", "null"], "minimum": 1, "maximum": 999 },
+            "bonus": { "type": ["integer", "null"], "minimum": -1000, "maximum": 10000 },
+            "backstab": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "elemental": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "value"],
+              "properties": {
+                "type": { "enum": ["Fire", "Cold", "Magic", "Poison", "Disease", "Corruption"] },
+                "value": { "type": "integer", "minimum": -1000, "maximum": 10000, "not": { "const": 0 } }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "container_capacity": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000 },
+    "instrument_mods": {
+      "type": "object",
+      "maxProperties": 10,
+      "propertyNames": { "pattern": "^[A-Z][a-z]{1,19}$" },
+      "additionalProperties": { "type": "integer", "minimum": -1000, "maximum": 1000, "not": { "const": 0 } }
+    },
+    "effects": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "raw"],
+        "properties": {
+          "kind": { "enum": ["focus", "click", "worn", "proc", "spell", "other"] },
+          "name": { "$ref": "#/$defs/text" },
+          "raw": { "$ref": "#/$defs/text" },
+          "charges": { "type": "integer", "minimum": 0, "maximum": 999999 },
+          "required_level": { "type": "integer", "minimum": 1, "maximum": 255 }
+        }
+      }
+    },
+    "charges": { "type": "integer", "minimum": 0, "maximum": 999999 },
+    "required_level": { "type": ["integer", "null"], "minimum": 1, "maximum": 255 },
+    "recommended_level": { "type": ["integer", "null"], "minimum": 1, "maximum": 255 },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drops", "sold_by", "quests", "crafted"],
+      "properties": {
+        "drops": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["zone", "npcs"],
+            "properties": {
+              "zone": { "$ref": "#/$defs/nullableText" },
+              "npcs": { "type": "array", "maxItems": 1000, "items": { "$ref": "#/$defs/text" } },
+              "notes": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/text" } }
+            }
+          }
+        },
+        "sold_by": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["zone", "npc"],
+            "properties": {
+              "zone": { "$ref": "#/$defs/nullableText" },
+              "npc": { "$ref": "#/$defs/text" }
+            }
+          }
+        },
+        "quests": {
+          "description": "The targets of the quest links (page titles): the titles a quest is looked up by.",
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "quest_labels": {
+          "description": "The text of the quest links that have a label of their own, for display. Absent when no link has one.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "label"],
+            "properties": {
+              "title": { "$ref": "#/$defs/text" },
+              "label": { "$ref": "#/$defs/text" }
+            }
+          }
+        },
+        "foraged": {
+          "description": "Zones the item can be foraged in, from the foraged parameter. Absent when the page lists none.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["zone"],
+            "properties": { "zone": { "$ref": "#/$defs/text" } }
+          }
+        },
+        "crafted": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["container", "ingredients"],
+            "properties": {
+              "container": { "$ref": "#/$defs/nullableText" },
+              "ingredients": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/text" } }
+            }
+          }
+        }
+      }
+    },
+    "categories": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/text" } },
+    "era_tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 20,
+      "items": { "allOf": [{ "$ref": "#/$defs/text" }, { "pattern": " Era$" }] }
+    },
+    "lucy_img_id": { "type": ["integer", "null"], "minimum": 0 },
+    "tier_rule": { "enum": ["drop", "fixed0", "spell"] },
+    "parse_warnings": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/warning" }
+    },
+    "parse_warnings_overflow": { "type": "integer", "minimum": 0 },
+    "evidence": {
+      "description": "Added by trioforge.data.evidence when the catalog is built; absent on the bare output of normalize.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "reasons"],
+      "properties": {
+        "level": { "enum": ["strict", "wiki", "disputed", "hidden"] },
+        "reasons": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/reason" } }
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^<>\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff\ud800-\udfff\ue000-\uf8ff]*$"
+    },
+    "nullableText": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/text" }] },
+    "nonzeroStat": { "type": "integer", "minimum": -1000, "maximum": 10000, "not": { "const": 0 } },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "seal", "text"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 240,
+          "pattern": "^[a-z][a-z0-9-]*(?::[^<>\u0000-\u001f\u007f-\u009f​-‏ -‮⁠-⁯﻿\ud800-\udfff-]{1,200})?(?![\\s\\S])"
+        },
+        "seal": { "enum": ["client", "developer", "measured", "player", "model"] },
+        "text": { "$ref": "#/$defs/text" }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "field"],
+      "properties": {
+        "code": {
+          "enum": [
+            "multiple-itempage", "duplicate-param", "nested-template", "bad-lucy-id", "unparsed-line", "bad-value",
+            "non-integer", "out-of-range", "duplicate-key", "unknown-slot", "augment-slot", "unknown-code",
+            "unknown-deity", "unknown-flag", "unknown-sv", "empty-value", "list-truncated", "line-limit",
+            "unknown-warning", "trailing-text", "no-classes", "orphan-continuation", "weapon-incomplete"
+          ]
+        },
+        "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" }
+      }
+    }
+  }
+}

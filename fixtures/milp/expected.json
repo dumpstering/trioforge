@@ -1,0 +1,42 @@
+{
+ "mip-buffs": {
+  "status": "optimal",
+  "objective": 1556.97960272412,
+  "integer_columns": 12
+ },
+ "mip-selection-ordering-haste": {
+  "status": "optimal",
+  "objective": 1650.5147490401998,
+  "integer_columns": 20
+ },
+ "mip-buffs-haste": {
+  "status": "optimal",
+  "objective": 2553.88105590426,
+  "integer_columns": 22
+ },
+ "mip-owned-monk": {
+  "status": "optimal",
+  "objective": 1626.2837439702,
+  "integer_columns": 79
+ },
+ "mip-owned-buffs-haste": {
+  "status": "optimal",
+  "objective": 1640.74788900605,
+  "integer_columns": 20
+ },
+ "mip-prunable-pool": {
+  "status": "optimal",
+  "objective": 2777.3577969999997,
+  "integer_columns": 64
+ },
+ "lp-one-column": {
+  "status": "optimal",
+  "objective": 1200.00364816,
+  "integer_columns": 0
+ },
+ "no-columns": {
+  "status": "optimal",
+  "objective": 1200.00914375,
+  "integer_columns": 0
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 16201,
+    "ns": 0,
+    "title": "Wu's Fist of Mastery",
+    "revisions": [
+     {
+      "revid": 179238,
+      "parentid": 177433,
+      "timestamp": "2026-09-23T20:46:03Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n[[File:WusFistofMastery.png|alt=Wu's Fist of Mastery|thumb|200x200px]]\n<onlyinclude>{{Itempage\n|itemname    = Wu's Fist of Mastery\n|lucy_img_ID = 971\n|statsblock  = \nNo Trade, Placeable<br>\nSlot: PRIMARY SECONDARY<br>\nSkill: Hand to Hand  Atk Delay: 22<br>\nDMG: 16 <br>\nWT: 0.5  Size: TINY<br>\nClass: MNK<br>\nRace: ALL<br>\n|relatedquests = \n\n* [[Plane of Sky#Monk Tests|Monk Test of Fists]]\n\n}}</onlyinclude>\n\n[[Category:Monk Equipment]]\n[[Category:Primary]]\n[[Category:Secondary]]\n[[Category:Hand_to_Hand]]\n[[Category:Fashion: Glowing Red Stone]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

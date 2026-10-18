@@ -1,0 +1,149 @@
+Location	Name	ID	Count	Slots
+Any Slot	Pebble Charm	410001	1	10
+Ear	Brindle Stud +2	410002	1	10
+Ear-Slot7	Sparkle Shard (Exaltation)	410100	1	10
+Ear-Slot8	Empty	0	0	0
+Head	Tarnished Quillcap +3	410003	1	10
+Head-Slot7	Sparkle Shard (Exaltation)	410100	1	10
+Head-Slot8	Ember Facet (Exaltation)	410200	1	10
+Head-Slot9	Empty	0	0	0
+Face	Mothwing Visor	410004	1	10
+Ear	Pewter Hoop +1	410005	1	10
+Ear-Slot7	Empty	0	0	0
+Neck	Ashen Torque	410006	1	10
+Shoulders	Fernwood Mantlet	410007	1	10
+Arms	Lichen Vambraces	410008	1	10
+Back	Gullcloak +4	410009	1	10
+Back-Slot7	Ember Facet (Exaltation)	410200	1	10
+Back-Slot8	Sparkle Shard (Exaltation)	410100	1	10
+Back-Slot9	Empty	0	0	0
+Back-Slot10	Empty	0	0	0
+Wrist	Empty	0	0	0
+Wrist	Reedcord Band	410010	1	10
+Range	Yarrow Tether	410011	1	10
+Hands	Thistle Mitts	410012	1	10
+Primary	Cobbled Maul +1	410013	1	10
+Primary-Slot7	Empty	0	0	0
+Secondary	Dappled Buckler	410014	1	10
+Fingers	Copper Loop	410015	1	10
+Fingers	Rushwater Seal +2	410016	1	10
+Fingers-Slot7	Empty	0	0	0
+Fingers-Slot8	Empty	0	0	0
+Chest	Moth-Eaten Rag*	410017	1	10
+Legs	Burlap Leggings	410018	1	10
+Feet	Mudlark Boots	410019	1	10
+Waist	Hempen Cord	410020	1	10
+Any Slot	Empty	0	0	0
+Ammo	Flint Dart	410021	40	10
+General 1	Wicker Basket	420001	1	8
+General 1-Slot1	Tin Flask	440001	20	10
+General 1-Slot2	Empty	0	0	0
+General 1-Slot3	Marrow Needle	440002	1	10
+General 1-Slot4	Empty	0	0	0
+General 1-Slot5	Empty	0	0	0
+General 1-Slot6	Empty	0	0	0
+General 1-Slot7	Empty	0	0	0
+General 1-Slot8	Empty	0	0	0
+General 2	Burlap Satchel	420002	1	10
+General 2-Slot1	Empty	0	0	0
+General 2-Slot2	Sparkle Shard	410100	1	10
+General 2-Slot3	Gilded Locket +2	430010	1	10
+General 2-Slot3-Slot7	Sparkle Shard (Exaltation)	410100	1	10
+General 2-Slot3-Slot8	Empty	0	0	0
+General 2-Slot4	Tarnished Quillcap	410003	1	10
+General 2-Slot5	Empty	0	0	0
+General 2-Slot6	Empty	0	0	0
+General 2-Slot7	Empty	0	0	0
+General 2-Slot8	Empty	0	0	0
+General 2-Slot9	Empty	0	0	0
+General 2-Slot10	Empty	0	0	0
+General 3	Peddler's Pack	420003	1	10
+General 3-Slot1	Empty	0	0	0
+General 3-Slot2	Reed Pouch	420004	1	6
+General 3-Slot2-Slot1	Dried Moss	440003	3	10
+General 3-Slot2-Slot2	Empty	0	0	0
+General 3-Slot2-Slot3	Empty	0	0	0
+General 3-Slot2-Slot4	Quillback Bracer +1	430020	1	10
+General 3-Slot2-Slot4-Slot7	Empty	0	0	0
+General 3-Slot2-Slot5	Empty	0	0	0
+General 3-Slot2-Slot6	Empty	0	0	0
+General 3-Slot3	Empty	0	0	0
+General 3-Slot4	Empty	0	0	0
+General 3-Slot5	Empty	0	0	0
+General 3-Slot6	Empty	0	0	0
+General 3-Slot7	Empty	0	0	0
+General 3-Slot8	Empty	0	0	0
+General 3-Slot9	Empty	0	0	0
+General 3-Slot10	Empty	0	0	0
+General 4	Wicker Basket*	420009	1	4
+General 4-Slot1	Cobbled Maul	410013	1	10
+General 4-Slot2	Empty	0	0	0
+General 4-Slot3	Empty	0	0	0
+General 4-Slot4	Empty	0	0	0
+General 5	Empty	0	0	0
+General 6	Empty	0	0	0
+General 7	Empty	0	0	0
+General 8	Empty	0	0	0
+General 9	Empty	0	0	0
+General 10	Empty	0	0	0
+General 11	Empty	0	0	0
+General 12	Empty	0	0	0
+Held	Empty	0	0	0
+Bank1	Hempen Chest	420010	1	10
+Bank1-Slot1	Tin Flask	440001	20	10
+Bank1-Slot2	Tidewrack Amulet +2	430060	1	10
+Bank1-Slot2-Slot7	Ember Facet (Exaltation)	410200	1	10
+Bank1-Slot2-Slot8	Empty	0	0	0
+Bank1-Slot3	Empty	0	0	0
+Bank1-Slot4	Empty	0	0	0
+Bank1-Slot5	Empty	0	0	0
+Bank1-Slot6	Empty	0	0	0
+Bank1-Slot7	Empty	0	0	0
+Bank1-Slot8	Empty	0	0	0
+Bank1-Slot9	Empty	0	0	0
+Bank1-Slot10	Empty	0	0	0
+Bank2	Mossy Greaves +3	430030	1	10
+Bank2-Slot7	Empty	0	0	0
+Bank2-Slot8	Empty	0	0	0
+Bank2-Slot9	Empty	0	0	0
+Bank3	Ironwood Hoop +1	430040	1	10
+Bank3-Slot7	Empty	0	0	0
+Bank4	Empty	0	0	0
+Bank5	Empty	0	0	0
+Bank6	Empty	0	0	0
+Bank7	Empty	0	0	0
+Bank8	Empty	0	0	0
+Bank9	Empty	0	0	0
+Bank10	Empty	0	0	0
+Bank11	Empty	0	0	0
+Bank12	Empty	0	0	0
+Bank13	Empty	0	0	0
+Bank14	Empty	0	0	0
+Bank15	Empty	0	0	0
+Bank16	Empty	0	0	0
+Bank17	Empty	0	0	0
+Bank18	Empty	0	0	0
+Bank19	Empty	0	0	0
+Bank20	Empty	0	0	0
+Bank21	Empty	0	0	0
+Bank22	Empty	0	0	0
+Bank23	Empty	0	0	0
+Bank24	Empty	0	0	0
+SharedBank1	Vault Satchel	420020	1	4
+SharedBank1-Slot1	Rime Cloak +1	430050	1	10
+SharedBank1-Slot1-Slot7	Empty	0	0	0
+SharedBank1-Slot2	Empty	0	0	0
+SharedBank1-Slot3	Empty	0	0	0
+SharedBank1-Slot4	Empty	0	0	0
+SharedBank2	Spare Torque	430070	1	10
+SharedBank3	Empty	0	0	0
+SharedBank4	Empty	0	0	0
+SharedBank5	Empty	0	0	0
+SharedBank6	Empty	0	0	0
+
+KeyRing	Name	ID	
+Augmentation	Ember Facet (Exaltation)	410200
+Augmentation	Sparkle Shard (Exaltation)	410100
+Activated	Whistle of Odd Tunes	450001
+Equipment	Spare Quillcap	450002
+Equipment	Spare Hoop +2	450003

@@ -1,0 +1,4 @@
+blank_issues_enabled: false
+# The chooser will also link to the security policy of the repository, and that link needs the name of the account that
+# will own it. Until there is one the link would point at someone else's, so it is left out: add it when the repository
+# is public (a contact link with the name, the policy's address and a line saying that the report is private).

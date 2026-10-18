@@ -1,0 +1,13 @@
+[project]
+name = "trioforge"
+version = "0.0.1"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["pipeline/tests"]
+pythonpath = ["pipeline"]
+addopts = "-q"
+markers = [
+    "client: reads the real game client files; skipped when the install folder is absent",
+]

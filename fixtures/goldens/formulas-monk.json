@@ -1,0 +1,630 @@
+{
+ "schema": "trioforge-goldens/1",
+ "kind": "monk-bonus",
+ "about": "The Monk worn-weight armor class bonus (negative is a penalty) for a worn weight in whole stones, level 50 (softcap 17 stones, hardcap 36) and level 55 (20, 40). stand_in is the fade shape; full_until_34 keeps the full bonus up to 34 whole stones and then follows the stand-in. A weight is given in tenths of a stone and only whole stones count.",
+ "headline": {
+  "level": 50,
+  "stones": [
+   15,
+   20,
+   25,
+   30,
+   32,
+   34,
+   36,
+   40
+  ],
+  "stand_in": [
+   73,
+   58,
+   34,
+   9,
+   0,
+   0,
+   0,
+   -10
+  ],
+  "full_until_34": [
+   73,
+   73,
+   73,
+   73,
+   73,
+   73,
+   0,
+   -10
+  ]
+ },
+ "levels": {
+  "50": {
+   "softcap_stones": 17,
+   "hardcap_stones": 36,
+   "full_bonus": 73,
+   "stones": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+   ],
+   "stand_in": [
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    68,
+    63,
+    58,
+    53,
+    48,
+    43,
+    39,
+    34,
+    29,
+    24,
+    19,
+    14,
+    9,
+    4,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -8,
+    -9,
+    -10,
+    -10,
+    -11,
+    -12,
+    -13,
+    -13
+   ],
+   "full_until_34": [
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    73,
+    0,
+    0,
+    0,
+    -8,
+    -9,
+    -10,
+    -10,
+    -11,
+    -12,
+    -13,
+    -13
+   ],
+   "tenths": {
+    "0": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "9": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "10": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "99": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "100": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "169": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "170": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "171": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "179": {
+     "stand_in": 73,
+     "full_until_34": 73
+    },
+    "180": {
+     "stand_in": 68,
+     "full_until_34": 73
+    },
+    "319": {
+     "stand_in": 4,
+     "full_until_34": 73
+    },
+    "320": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "329": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "330": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "339": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "340": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "341": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "349": {
+     "stand_in": 0,
+     "full_until_34": 73
+    },
+    "350": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "351": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "359": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "360": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "369": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "370": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "371": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "379": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "380": {
+     "stand_in": -8,
+     "full_until_34": -8
+    },
+    "381": {
+     "stand_in": -8,
+     "full_until_34": -8
+    },
+    "389": {
+     "stand_in": -8,
+     "full_until_34": -8
+    },
+    "390": {
+     "stand_in": -9,
+     "full_until_34": -9
+    },
+    "399": {
+     "stand_in": -9,
+     "full_until_34": -9
+    },
+    "400": {
+     "stand_in": -10,
+     "full_until_34": -10
+    },
+    "401": {
+     "stand_in": -10,
+     "full_until_34": -10
+    },
+    "449": {
+     "stand_in": -13,
+     "full_until_34": -13
+    },
+    "450": {
+     "stand_in": -13,
+     "full_until_34": -13
+    },
+    "459": {
+     "stand_in": -13,
+     "full_until_34": -13
+    }
+   }
+  },
+  "55": {
+   "softcap_stones": 20,
+   "hardcap_stones": 40,
+   "full_bonus": 80,
+   "stones": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+   ],
+   "stand_in": [
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    74,
+    69,
+    63,
+    58,
+    53,
+    47,
+    42,
+    37,
+    31,
+    26,
+    21,
+    15,
+    10,
+    5,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -9,
+    -10,
+    -11,
+    -12
+   ],
+   "full_until_34": [
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    80,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -9,
+    -10,
+    -11,
+    -12
+   ],
+   "tenths": {
+    "0": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "9": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "10": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "99": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "100": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "169": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "170": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "171": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "179": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "180": {
+     "stand_in": 80,
+     "full_until_34": 80
+    },
+    "319": {
+     "stand_in": 21,
+     "full_until_34": 80
+    },
+    "320": {
+     "stand_in": 15,
+     "full_until_34": 80
+    },
+    "329": {
+     "stand_in": 15,
+     "full_until_34": 80
+    },
+    "330": {
+     "stand_in": 10,
+     "full_until_34": 80
+    },
+    "339": {
+     "stand_in": 10,
+     "full_until_34": 80
+    },
+    "340": {
+     "stand_in": 5,
+     "full_until_34": 80
+    },
+    "341": {
+     "stand_in": 5,
+     "full_until_34": 80
+    },
+    "349": {
+     "stand_in": 5,
+     "full_until_34": 80
+    },
+    "350": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "351": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "359": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "360": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "369": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "370": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "371": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "379": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "380": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "381": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "389": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "390": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "399": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "400": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "401": {
+     "stand_in": 0,
+     "full_until_34": 0
+    },
+    "449": {
+     "stand_in": -11,
+     "full_until_34": -11
+    },
+    "450": {
+     "stand_in": -12,
+     "full_until_34": -12
+    },
+    "459": {
+     "stand_in": -12,
+     "full_until_34": -12
+    }
+   }
+  }
+ }
+}

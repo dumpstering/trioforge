@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 37017,
+    "ns": 0,
+    "title": "A Bowyers Guide",
+    "revisions": [
+     {
+      "revid": 193568,
+      "timestamp": "2026-10-13T23:37:40Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n<onlyinclude>{{Itempage\n|itemname       = A Bowyers Guide\n|lucy_img_ID    = 778\n|statsblock     = \nSize: TINY  WT: 0.1<br>\nClass: NONE<br>\nRace: NONE<br>\n|merchant_value = 9s 5c\n|notes          = {{Item Lore|A Bowyers Guide}}\n|bookcontents   = \n\nBOWYERS GUIDE - FIFTH EDITION\n\nThe art of the Bowyer, the maker of bows, is as ancient as the oldest of elves. This\ntome details the construction of bows, as well as providing information on the sister\ncraft of Fletching.\n\nBowyers and Fletchers both require a Fletching Kit to practice their trades.\n\nFletching kits can be purchased from archery shops.\n\nBOWS\n\nThere are four components to every bow.\n\nTOOLS\n\nThe use of tools, while not necessary in the construction of a bow, helps to produce a premium product. A whittling\nblade will increase the\tquality of your bow. A planing tool is superior to a whittling blade.\n\nSTRING\n\nThe most commonly used string is hemp twine. One step above hemp is linen string.\n\nOnly the best bows are strung with silk.\n\nCAMS\n\nMost bows are not built with Cams. Composite bows use a series of one or two Cams.\n\nLUMBER\n\nThe material that the bow is constructed from is directly proportional to the performance of the bow.\n\nList of wood, in order of difficulty and quality.\n\n* Hickory\n* Elm\n* Ash\n* Oak\n* Darkwood\n* Steel\n* Ceramic\n\n== See Also ==\n\n* Player Tradeskill [[Skill Fletching|Fletching]]\n\n|soldby         = \n\n{{ItemWhereTable|\n{{ItemWhereRow   | [[Cabilis|East Cabilis]]          | [[Klok Gogon]]                |               | (143, -204) }}\n{{ItemWhereRow   | [[The Feerrott]]                  | [[Fugla]]                     |               | (975, 1267) }}\n{{ItemWhereRow   | [[Firiona Vie]]                   | [[Jessica Winter]]            |               | (-3426, 3310) }}\n{{ItemWhereRow   | [[Freeport|East Freeport]]        | [[Winsa Tanner]]              |               | (38, -539) }}\n{{ItemWhereRow   | [[Freeport|North Freeport]]       | [[Timor Strongbranch]]        |               | (-104, -57) }}\n{{ItemWhereRow   | [[Greater Faydark]]               | [[Merchant Sylnis]]           |               | (-409, -519) }}\n{{ItemWhereRowVel| [[Iceclad Ocean]]                 | [[Sojan the Sleepless]]       |               | (4539, 1269) }}\n{{ItemWhereRow   | [[Neriak|Neriak Commons]]         | [[Dianax C`Luzz]]             |               | (-147, -1064) }}\n{{ItemWhereRow   | [[New Sebilis Expedition]]        | [[Klok Nylsi]]                |               | (238, -131)  }}\n{{ItemWhereRow   | [[Surefall Glade]]                | [[Tonsia]]                    |               | (125, -111) }}\n{{ItemWhereRow   | [[Rivervale]]                     | [[Gerb Jinklebelly]]          |               | (-211, -77) }}\n{{ItemWhereRowVel| [[Thurgadin]]                     | [[Argash]]                    |               | (-203, -298) }}\n}}\n\n}}</onlyinclude>\n\n\n[[Category:Vendor Sold]]\n[[Category:Book]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

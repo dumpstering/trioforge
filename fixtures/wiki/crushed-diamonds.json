@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 34693,
+    "ns": 0,
+    "title": "Crushed Diamonds",
+    "revisions": [
+     {
+      "revid": 194401,
+      "timestamp": "2026-10-13T23:54:01Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Kunark Era}}\n\n<onlyinclude>{{Itempage\n|notes       = Note: Alternately you can pick up the completed item as a ground spawn in [[Timorous Deep]]. It spawns on the Golra island at loc (-8850, -6040). The item respawned immediately after picking it up. The Golra's do not see invis.\n|itemname    = Crushed Diamonds\n|lucy_img_ID = 1075\n|statsblock  = \nMAGIC ITEM  LORE ITEM<br>\nWT: 1.0  Size: SMALL<br>\nClass: ALL<br>\nRace: ALL<br>\n|dropsfrom     =\n* [[Timorous Deep]]\n** Ground Spawn\n*** {{Loc|Timorous Deep|(-8850, -6040)|(-8850, -6040)}}\n|relatedquests = \n\n* [[Cannibalize II (Good)]]\n* [[Cannibalize II (Evil)]]\n\n|playercrafted = \n\n* [[Alchemy]] (Trivial: ?)\n** '''Yield: Crushed Diamonds''' x1\n** In [[Medicine Bag]]:\n:: {{SmIcon|966}} 1 x [[Dread Diamond]] - Returned on Failure\n:: {{SmIcon|732}} 1 x [[Spectral Pestle]] - Dropped\n\n}}</onlyinclude>\n\n\n[[Category:Player Crafted]]\n[[Category:Ground Spawn]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

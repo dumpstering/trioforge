@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 43663,
+    "ns": 0,
+    "title": "Velium Spear",
+    "revisions": [
+     {
+      "revid": 145108,
+      "timestamp": "2026-06-04T00:42:50Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Velious Era}}\n<onlyinclude>{{Itempage\n|notes       = Not to be confused with [[Velium Spear (Dragon Necropolis)]], a much more valuable weapon with the same name.\n|itemname    = Velium Spear\n|lucy_img_ID = 776\n|statsblock  = \nMAGIC ITEM<br>\nSlot: PRIMARY<br>\nSkill: Piercing  Atk Delay: 27<br>\nDMG: 6 <br>\nEffect: [[Velium Shards]] (Combat, Casting Time: Instant) at Level 25<br>\nWT: 6.3  Size: LARGE<br>\nClass: WAR RNG SHD BRD ROG SHM<br>\nRace: ALL<br>\n|merchant_value = 6.1p\n|dropsfrom = \n\n* [[Dragon Necropolis]]\n* [[Great Divide]]\n** [[a frost giant berserker]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Primary]]\n[[Category:Secondary]]\n[[Category:Piercing]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

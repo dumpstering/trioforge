@@ -1,0 +1,722 @@
+{
+ "trio": "pal-mnk-ber",
+ "level": 50,
+ "kits": [
+  {
+   "name": "an Ogre, balanced, own buffs, wiki evidence, dual wield",
+   "race": "OGR",
+   "evidence": "wiki",
+   "deity": null,
+   "setup": "dw",
+   "kit": [
+    "w90001@4",
+    "w90006@4",
+    "w90007@4",
+    "w90009@4",
+    "w90011@4",
+    "w90013@4",
+    "w90014@4",
+    null,
+    "w90021@4",
+    "w90021@4",
+    "w90023@4",
+    "w90026@4",
+    "w90027@4",
+    "w90029@10",
+    "w90030@4",
+    "w90033@4",
+    null,
+    "w90038@4",
+    "w90003@4",
+    "w90041@4",
+    "w80923@4",
+    "w80113@0"
+   ]
+  },
+  {
+   "name": "a Troll, tank, group buffs, strict evidence, one-hander and shield, a follower of the Tribunal",
+   "race": "TRL",
+   "evidence": "strict",
+   "deity": "The Tribunal",
+   "setup": "1h-shield",
+   "kit": [
+    "w90001@4",
+    "w80816@4",
+    "w90009@4",
+    "w90009@4",
+    null,
+    "w90013@4",
+    "w90016@4",
+    "w80712@4",
+    null,
+    null,
+    "w90023@4",
+    "w80631@4",
+    "w90026@4",
+    "w80469@4",
+    "w90030@4",
+    "w90033@4",
+    "w80158@0",
+    null,
+    "w90004@4",
+    "w90046@4",
+    "w80988@4",
+    "w80758@4"
+   ]
+  },
+  {
+   "name": "an Iksar, melee, group and the Enchanter's haste, wiki evidence, two-hander",
+   "race": "IKS",
+   "evidence": "wiki",
+   "deity": null,
+   "setup": "2h",
+   "kit": [
+    "w90003@4",
+    null,
+    "w90007@4",
+    "w90009@4",
+    "w90011@4",
+    null,
+    "w90014@4",
+    "w80712@4",
+    "w90020@4",
+    "w90021@4",
+    "w90023@4",
+    "w80631@4",
+    "w80631@4",
+    "w80469@4",
+    "w90030@4",
+    "w90032@4",
+    "w80677@4",
+    "w90038@4",
+    "w80988@4",
+    "w90027@4",
+    "w80524@4",
+    null
+   ]
+  },
+  {
+   "name": "an Ogre with few items: a hoop of haste, a head piece and a one-hander",
+   "race": "OGR",
+   "evidence": "wiki",
+   "deity": null,
+   "setup": "dw",
+   "kit": [
+    "w90001@4",
+    null,
+    "w90008@0",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "w80988@4",
+    null
+   ]
+  },
+  {
+   "name": "a Human with a two-hander and a hoop of haste",
+   "race": "HUM",
+   "evidence": "wiki",
+   "deity": null,
+   "setup": "2h",
+   "kit": [
+    null,
+    null,
+    "w90008@0",
+    null,
+    null,
+    "w90013@4",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "w80524@4",
+    null
+   ]
+  },
+  {
+   "name": "a Troll with a one-hander, a shield and a chest piece",
+   "race": "TRL",
+   "evidence": "wiki",
+   "deity": null,
+   "setup": "1h-shield",
+   "kit": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "w90029@4",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "w80988@4",
+    "w80583@4"
+   ]
+  }
+ ],
+ "values": [
+  {
+   "kit": 0,
+   "role": "balanced",
+   "buffs": "own",
+   "F": "71575756337/4400000",
+   "value": 16267.217349318182,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 0,
+   "role": "balanced",
+   "buffs": "group",
+   "F": "85042728391/4400000",
+   "value": 19327.892816136362,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 0,
+   "role": "balanced",
+   "buffs": "group+enchanter",
+   "F": "87727128391/4400000",
+   "value": 19937.983725227274,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 0,
+   "role": "balanced",
+   "buffs": "raid",
+   "F": "44366991763/2200000",
+   "value": 20166.814437727273,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 0,
+   "role": "tank",
+   "buffs": "own",
+   "F": "173674426799/11000000",
+   "value": 15788.584254454545,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 0,
+   "role": "melee",
+   "buffs": "own",
+   "F": "92102177443/5500000",
+   "value": 16745.85044418182,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 0,
+   "role": "melee",
+   "buffs": "group",
+   "F": "440832368721/22000000",
+   "value": 20037.834941863635,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 0,
+   "role": "melee",
+   "buffs": "group+enchanter",
+   "F": "457070768721/22000000",
+   "value": 20775.944032772728,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 0,
+   "role": "melee",
+   "buffs": "raid",
+   "F": "463006621281/22000000",
+   "value": 21045.75551277273,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 1,
+   "role": "balanced",
+   "buffs": "own",
+   "F": "155011629633/10400000",
+   "value": 14904.964387788461,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 1,
+   "role": "balanced",
+   "buffs": "group",
+   "F": "185789695397/10400000",
+   "value": 17864.393788173078,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 1,
+   "role": "balanced",
+   "buffs": "group+enchanter",
+   "F": "190457695397/10400000",
+   "value": 18313.23994201923,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 1,
+   "role": "balanced",
+   "buffs": "raid",
+   "F": "192837534807/10400000",
+   "value": 18542.07065451923,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 1,
+   "role": "tank",
+   "buffs": "own",
+   "F": "190166386283/13000000",
+   "value": 14628.18356023077,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 1,
+   "role": "tank",
+   "buffs": "group",
+   "F": "452254237969/26000000",
+   "value": 17394.393768038462,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 1,
+   "role": "tank",
+   "buffs": "group+enchanter",
+   "F": "461434237969/26000000",
+   "value": 17747.470691115384,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 1,
+   "role": "tank",
+   "buffs": "raid",
+   "F": "467827517719/26000000",
+   "value": 17993.366066115384,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 1,
+   "role": "melee",
+   "buffs": "own",
+   "F": "394725375599/26000000",
+   "value": 15181.745215346155,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 1,
+   "role": "melee",
+   "buffs": "group",
+   "F": "119231937879/6500000",
+   "value": 18343.37505830769,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 1,
+   "role": "melee",
+   "buffs": "group+enchanter",
+   "F": "122771937879/6500000",
+   "value": 18887.990442923077,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 1,
+   "role": "melee",
+   "buffs": "raid",
+   "F": "248914153383/13000000",
+   "value": 19147.242567923076,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 2,
+   "role": "balanced",
+   "buffs": "own",
+   "F": "218750712727/15200000",
+   "value": 14391.494258355264,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 2,
+   "role": "balanced",
+   "buffs": "group",
+   "F": "135657659167/7600000",
+   "value": 17849.691995657893,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 2,
+   "role": "balanced",
+   "buffs": "group+enchanter",
+   "F": "139899659167/7600000",
+   "value": 18407.849890394737,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 2,
+   "role": "balanced",
+   "buffs": "raid",
+   "F": "141509225167/7600000",
+   "value": 18619.634890394736,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 2,
+   "role": "tank",
+   "buffs": "own",
+   "F": "4171349443/296875",
+   "value": 14050.86128168421,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 2,
+   "role": "melee",
+   "buffs": "own",
+   "F": "559820834931/38000000",
+   "value": 14732.127235026315,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 2,
+   "role": "melee",
+   "buffs": "group",
+   "F": "175280564813/9500000",
+   "value": 18450.585769789475,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 2,
+   "role": "melee",
+   "buffs": "group+enchanter",
+   "F": "181700564813/9500000",
+   "value": 19126.375243473685,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 2,
+   "role": "melee",
+   "buffs": "raid",
+   "F": "736589394377/38000000",
+   "value": 19383.931430973684,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 3,
+   "role": "balanced",
+   "buffs": "own",
+   "F": "15581632231/1300000",
+   "value": 11985.870946923076,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 3,
+   "role": "balanced",
+   "buffs": "group",
+   "F": "81021096181/5200000",
+   "value": 15580.980034807691,
+   "hasteAssumed": 55
+  },
+  {
+   "kit": 3,
+   "role": "balanced",
+   "buffs": "group+enchanter",
+   "F": "83355096181/5200000",
+   "value": 16029.826188653846,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 3,
+   "role": "balanced",
+   "buffs": "raid",
+   "F": "84335526931/5200000",
+   "value": 16218.370563653847,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 3,
+   "role": "tank",
+   "buffs": "own",
+   "F": "147358482473/13000000",
+   "value": 11335.267882538461,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 3,
+   "role": "tank",
+   "buffs": "group",
+   "F": "383517045349/26000000",
+   "value": 14750.655590346154,
+   "hasteAssumed": 55
+  },
+  {
+   "kit": 3,
+   "role": "tank",
+   "buffs": "group+enchanter",
+   "F": "392697045349/26000000",
+   "value": 15103.732513423078,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 3,
+   "role": "tank",
+   "buffs": "raid",
+   "F": "398902003849/26000000",
+   "value": 15342.384763423077,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 3,
+   "role": "melee",
+   "buffs": "own",
+   "F": "164274162147/13000000",
+   "value": 12636.474011307691,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 3,
+   "role": "melee",
+   "buffs": "group",
+   "F": "427096103961/26000000",
+   "value": 16426.77322926923,
+   "hasteAssumed": 55
+  },
+  {
+   "kit": 3,
+   "role": "melee",
+   "buffs": "group+enchanter",
+   "F": "441256103961/26000000",
+   "value": 16971.388613884614,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 3,
+   "role": "melee",
+   "buffs": "raid",
+   "F": "111988141209/6500000",
+   "value": 17228.944801384616,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 4,
+   "role": "balanced",
+   "buffs": "own",
+   "F": "17871331563/1520000",
+   "value": 11757.454975657894,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 4,
+   "role": "balanced",
+   "buffs": "group",
+   "F": "58963000653/3800000",
+   "value": 15516.579119210526,
+   "hasteAssumed": 55
+  },
+  {
+   "kit": 4,
+   "role": "balanced",
+   "buffs": "group+enchanter",
+   "F": "61084000653/3800000",
+   "value": 16074.737013947368,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 4,
+   "role": "balanced",
+   "buffs": "raid",
+   "F": "30916859639/1900000",
+   "value": 16272.03138894737,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 4,
+   "role": "tank",
+   "buffs": "own",
+   "F": "20858867813/1900000",
+   "value": 10978.351480526317,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 4,
+   "role": "tank",
+   "buffs": "group",
+   "F": "69168860153/4750000",
+   "value": 14561.865295368421,
+   "hasteAssumed": 55
+  },
+  {
+   "kit": 4,
+   "role": "tank",
+   "buffs": "group+enchanter",
+   "F": "71261360153/4750000",
+   "value": 15002.391611157895,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 4,
+   "role": "tank",
+   "buffs": "raid",
+   "F": "289514025817/19000000",
+   "value": 15237.580306157895,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 4,
+   "role": "melee",
+   "buffs": "own",
+   "F": "47638922189/3800000",
+   "value": 12536.558470789474,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 4,
+   "role": "melee",
+   "buffs": "group",
+   "F": "39156059021/2375000",
+   "value": 16486.76169305263,
+   "hasteAssumed": 55
+  },
+  {
+   "kit": 4,
+   "role": "melee",
+   "buffs": "group+enchanter",
+   "F": "40761059021/2375000",
+   "value": 17162.55116673684,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 4,
+   "role": "melee",
+   "buffs": "raid",
+   "F": "82618180447/4750000",
+   "value": 17393.30114673684,
+   "hasteAssumed": 75
+  },
+  {
+   "kit": 5,
+   "role": "balanced",
+   "buffs": "own",
+   "F": "30626513181/2600000",
+   "value": 11779.428146538461,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 5,
+   "role": "balanced",
+   "buffs": "group",
+   "F": "80004468619/5200000",
+   "value": 15385.474734423076,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 5,
+   "role": "balanced",
+   "buffs": "group+enchanter",
+   "F": "82338468619/5200000",
+   "value": 15834.32088826923,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 5,
+   "role": "balanced",
+   "buffs": "raid",
+   "F": "83318899369/5200000",
+   "value": 16022.86526326923,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 5,
+   "role": "tank",
+   "buffs": "own",
+   "F": "146979282999/13000000",
+   "value": 11306.09869223077,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 5,
+   "role": "tank",
+   "buffs": "group",
+   "F": "383114115151/26000000",
+   "value": 14735.158275038462,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 5,
+   "role": "tank",
+   "buffs": "group+enchanter",
+   "F": "392294115151/26000000",
+   "value": 15088.235198115384,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 5,
+   "role": "tank",
+   "buffs": "raid",
+   "F": "398499073651/26000000",
+   "value": 15326.887448115385,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 5,
+   "role": "melee",
+   "buffs": "own",
+   "F": "159285848811/13000000",
+   "value": 12252.757600846155,
+   "hasteAssumed": 25
+  },
+  {
+   "kit": 5,
+   "role": "melee",
+   "buffs": "group",
+   "F": "417332758539/26000000",
+   "value": 16051.259943807692,
+   "hasteAssumed": 40
+  },
+  {
+   "kit": 5,
+   "role": "melee",
+   "buffs": "group+enchanter",
+   "F": "431492758539/26000000",
+   "value": 16595.875328423077,
+   "hasteAssumed": 60
+  },
+  {
+   "kit": 5,
+   "role": "melee",
+   "buffs": "raid",
+   "F": "219094609707/13000000",
+   "value": 16853.431515923075,
+   "hasteAssumed": 60
+  }
+ ]
+}

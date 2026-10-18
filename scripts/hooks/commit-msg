@@ -1,0 +1,14 @@
+#!/bin/sh
+# TrioForge commit-msg hook: scan the commit message ($1 is the file that holds it) for
+# private names and game-log text. Install it once per clone: sh scripts/install-hooks.sh
+if [ -f .venv/Scripts/python.exe ]; then
+    python=.venv/Scripts/python.exe
+elif [ -f .venv/bin/python ]; then
+    python=.venv/bin/python
+else
+    echo "privacy hook: no .venv python found; run the setup in README" >&2
+    exit 2
+fi
+PYTHONPATH=pipeline
+export PYTHONPATH
+exec "$python" -m trioforge.privacy.scan --commit-msg "$1" --require-key

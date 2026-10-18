@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 49251,
+    "ns": 0,
+    "title": "Imbued Northman Long Dagger",
+    "revisions": [
+     {
+      "revid": 163531,
+      "timestamp": "2026-07-28T19:45:42Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "\n<onlyinclude>{{Itempage\n|notes       = '''Note:''' There are two identically named items, diety restricted to either [[The Tribunal]] (if made with Imbued Ivory) or [[Rallos Zek]] (if made with Imbued Jade).\n|itemname    = Imbued Northman Long Dagger\n|lucy_img_ID = 592\n|statsblock  = \nMAGIC ITEM  <br>\nSlot: PRIMARY SECONDARY<br>\nSkill: Piercing  Atk Delay: 24<br>\nDMG: 6 <br>\nSTA: +4<br>\nSV COLD: +2<br>\nWT: 3.0  Size: SMALL<br>\nClass: WAR BRD ROG<br>\nRace: ALL<br>\nDeity: [[The Tribunal]] / [[Rallos Zek]]<br>\n|playercrafted = \n\n* [[Blacksmithing]] (Trivial: 97)\n** '''Yield: Imbued Northman Long Dagger''' x1\n** In [[Forge]]:\n:: {{SmIcon|1151}} 1 x [[Dagger Blade Mold]] - Bought\n:: {{SmIcon|1160}} 1 x [[Frost Temper]] - Crafted\n:: {{SmIcon|1151}} 1 x [[Hilt Mold]] - Bought\n:: {{SmIcon|1129}} 1 x [[Imbued Ivory]] (The Tribunal) or [[Imbued Jade]] (Rallos Zek) - Summoned\n:: {{SmIcon|1036}} 1 x [[Medium Quality Sheet Metal]] - Crafted, Bought\n:: {{SmIcon|1151}} 1 x [[Pommel Mold]] - Bought\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Primary]]\n[[Category:Secondary]]\n[[Category:Piercing]]\n[[Category:Player Crafted]]\n[[Category:The Tribunal Worshiper Equipment]]\n[[Category:Rallos Zek Worshiper Equipment]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

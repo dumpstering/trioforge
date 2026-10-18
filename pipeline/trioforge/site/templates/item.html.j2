@@ -1,0 +1,98 @@
+{% extends "base.html.j2" %}
+{% from "base.html.j2" import seal, rule_seal, rule_links with context %}
+{#- The page of one item: what it is, its stats at every tier, where it comes from, how sure the evidence is, the trios whose default answer wears it and the credit to the wiki page it was read from (an item that has no wiki page has none).
+Every text is the wiki's or the catalog's and is escaped as it is printed; none is ever marked safe. A table of tiers scrolls inside its own region on a narrow screen (the row headers stay
+in view), so the page itself is never wider than the window; the region is named by the caption of its table, so that it does not share the name of the section round it. The page loads the stylesheet, the boot script and the page script that every page loads, and nothing else. -#}
+{% macro tier_table(ident, caption, tiers, rows) -%}
+<div class="scroll" role="region" aria-labelledby="{{ ident }}-cap" tabindex="0">
+<table class="tiers" id="{{ ident }}">
+<caption id="{{ ident }}-cap" class="sr-only">{{ caption }}</caption>
+<thead>
+<tr><th scope="col">Stat</th>{% for tier in tiers %}<th scope="col">{{ tier }}</th>{% endfor %}</tr>
+</thead>
+<tbody>
+{% for row in rows %}
+<tr><th scope="row">{{ row.label }}</th>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{%- endmacro %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap item" data-page="item">
+<h1>{{ page.name }}</h1>
+<dl class="pairs">
+{% for fact in page.facts %}
+<div><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>
+{% endfor %}
+</dl>
+<section aria-labelledby="stats-h">
+<h2 id="stats-h">Stats by tier</h2>
+{% if page.rows %}
+{{ tier_table("tiers", "Stats of " ~ page.name ~ " at each tier, +0 to +10", page.tiers, page.rows) }}
+<p id="tier-rules" class="rules">Worked out from the +0 figures by these rules; none is estimated: {{ rule_links(page.rules) }}</p>
+{% else %}
+<p id="no-stats">No stat or weight is listed for this item.</p>
+{% endif %}
+</section>
+{% if page.weapon %}
+<section id="weapon" aria-labelledby="weapon-h">
+<h2 id="weapon-h">Weapon</h2>
+<dl class="pairs">
+<div><dt>Skill</dt><dd>{{ page.weapon.skill or "not listed" }}</dd></div>
+{% if page.weapon.bonus is not none %}
+<div><dt>Damage bonus</dt><dd>{{ page.weapon.bonus }}</dd></div>
+{% endif %}
+</dl>
+{{ tier_table("weapon-tiers", "Damage and delay of " ~ page.name ~ " at each tier, +0 to +10", page.tiers, page.weapon.rows) }}
+<p class="rules">The damage rises by this rule; the delay and the bonus do not change: <a href="/rules/#{{ page.weapon.rule.id }}">{{ page.weapon.rule.title }}</a> {{ rule_seal(page.weapon.rule) }}</p>
+</section>
+{% endif %}
+
+<section aria-labelledby="sources-h">
+<h2 id="sources-h">Sources</h2>
+{% if page.sources %}
+<ul id="sources" class="plain">
+{% for line in page.sources %}
+<li><strong>{{ line.label }}:</strong> {{ line.text }}</li>
+{% endfor %}
+</ul>
+{% else %}
+<p id="sources-none">The item table lists no source for this item.</p>
+{% endif %}
+</section>
+<section aria-labelledby="evidence-h">
+<h2 id="evidence-h">Evidence</h2>
+<p id="level">{{ seal(page.level, page.level_icon, page.level_seal) }} {{ page.level_text }}</p>
+{% if page.notes %}
+<ul id="notes" class="plain">
+{% for note in page.notes %}
+<li>{{ seal(note.seal, note.icon, note.seal_label) }} {{ note.text }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+</section>
+<section aria-labelledby="best-h">
+<h2 id="best-h">Best for these trios</h2>
+{% if page.best_for %}
+<p class="note">The default answer of each of these trios wears it.</p>
+<ul id="best-for" class="plain">
+{% for trio in page.best_for %}
+<li><a href="/trio/{{ trio.slug }}/">{{ trio.name }}</a></li>
+{% endfor %}
+</ul>
+{% if page.best_more %}
+<p id="best-more">and {{ page.best_more }} more</p>
+{% endif %}
+{% else %}
+<p id="best-none">No trio's default answer wears this item.</p>
+{% endif %}
+</section>
+{% if page.wiki_href %}
+<section aria-labelledby="credit-h">
+<h2 id="credit-h">Wiki credit</h2>
+<p id="credit">Adapted from the eqlwiki.com page <a href="{{ page.wiki_href }}" rel="noopener noreferrer">{{ page.wiki_title }}</a>, revision {{ page.wiki_revid }}, by the eqlwiki contributors, under <a href="{{ licence_url }}" rel="noopener noreferrer">{{ licence_name }}</a>. The footer lists the changes made.</p>
+</section>
+{% endif %}
+</main>
+{% endblock %}

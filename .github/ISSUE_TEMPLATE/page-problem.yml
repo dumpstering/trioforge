@@ -1,0 +1,23 @@
+name: Problem with a page
+description: A page of the site says something wrong or unclear, or does not work.
+labels: [site]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include character names, player names, chat lines or screenshots of chat. Item names, zones and NPC names are fine.
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The link to the page that shows the problem.
+      placeholder: "https://"
+    validations:
+      required: true
+  - type: textarea
+    id: what-is-wrong
+    attributes:
+      label: What is wrong
+      description: What the page says or does, and what it should say or do instead.
+    validations:
+      required: true

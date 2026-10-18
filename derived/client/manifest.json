@@ -1,0 +1,18 @@
+{
+ "generated": "2026-10-14",
+ "inputs": [
+  {"file":"Resources/ACMitigation.txt","sha256":"faa532429452014e7ebf796a3568eb4fd3f9429d0c1506a602435ca0841bc93a","date":"2026-05-11"},
+  {"file":"Resources/ZoneNames.txt","sha256":"44f6870b28571538019f1a2c58112fc60ee5d6149dbec9e1cfca9a262447fb5c","date":"2026-09-22"},
+  {"file":"Resources/basedata.txt","sha256":"85a093b47e713771f2713d57d61f8dc24e9dc205e3753aa23005fd91d50f004e","date":"2026-05-11"},
+  {"file":"Resources/skillcaps.txt","sha256":"f92c3364719db1f9824101c9d7eecb67bb23a1c5c6fd03aba42c46775be1f8f1","date":"2026-06-19"},
+  {"file":"spells_us.txt","sha256":"8a502ccb6fb78e8384196d935f16695a7513878278de9088878006bd94202b21","date":"2026-10-13"}
+ ],
+ "outputs": [
+  {"file":"acmitigation.json","inputs":["Resources/ACMitigation.txt"],"generated":"2026-10-13"},
+  {"file":"basedata.json","inputs":["Resources/basedata.txt"],"generated":"2026-10-13"},
+  {"file":"skillcaps.json","inputs":["Resources/skillcaps.txt"],"generated":"2026-10-13"},
+  {"file":"spells-l50.json","inputs":["spells_us.txt"],"generated":"2026-10-14"},
+  {"file":"spells-l55.json","inputs":["spells_us.txt"],"generated":"2026-10-14"},
+  {"file":"zones.json","inputs":["Resources/ZoneNames.txt"],"generated":"2026-10-13"}
+ ]
+}

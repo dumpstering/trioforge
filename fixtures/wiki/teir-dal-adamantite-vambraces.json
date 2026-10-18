@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 49231,
+    "ns": 0,
+    "title": "Teir`Dal Adamantite Vambraces",
+    "revisions": [
+     {
+      "revid": 160776,
+      "timestamp": "2026-07-23T19:28:14Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Disambig3|[[Teir`Dal Adamantite Vambraces (Enchanted)]]}}\n{{Disambig3|[[Teir`Dal Adamantite Vambraces (Imbued)]]}}\n\n<onlyinclude>{{Itempage\n|notes       = Part of the [[Cultural Tradeskills: Dark Elf|dark elf cultural smithing]] armor sets.<br>\n'''Prices on this page are not accurate. '''All 3 versions share the same name, thus prices are intermixed.\n|itemname    = Teir`Dal Adamantite Vambraces\n|lucy_img_ID = 622\n|statsblock  = \nSlot: ARMS<br>\nAC: 12<br>\nSTR: +4 DEX: +5 WIS +4 INT: +4\nWT: 3.4  Size: SMALL<br>\nClass: WAR CLR SHD BRD<br>\nRace: ALL<br>\n|playercrafted = \n\n* [[Blacksmithing]] (Trivial: 190)\n** '''Yield: Teir`Dal Adamantite Vambraces''' x1\n** In [[Forge|Teir`Dal Forge]]:\n:: {{SmIcon|620}} 1 x [[Adamantite Chain Jointing]] - Crafted\n:: {{SmIcon|1036}} 2 x [[Folded Sheet of Adamantite]] - Crafted\n:: {{SmIcon|555}} 1 x [[Leather Padding]] - Crafted\n:: {{SmIcon|706}} 1 x [[Shadow Temper]] - Crafted\n:: {{SmIcon|1151}} 1 x [[Small Plate Vambrace Mold]] - Bought\n:: {{SmIcon|567}} 1 x [[Teir`Dal Smithy Hammer]] - Bought, Returned on Failure, Returned on Success\n\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Arms]]\n[[Category:Player Crafted]]\n[[Category:Fashion: Plate]]\n[[Category:Fashion: Black Rock]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

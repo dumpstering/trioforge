@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 54156,
+    "ns": 0,
+    "title": "Kejekan Smithy Hammer",
+    "revisions": [
+     {
+      "revid": 148371,
+      "timestamp": "2026-06-04T00:57:47Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Kejekan Smithy Hammer\n|lucy_img_ID = 567\n|statsblock  = \nLORE ITEM  NODROP<br>\nSlot: PRIMARY SECONDARY<br>\nSkill: 1H Blunt  Atk Delay: 42<br>\nDMG: 5 <br>\nWT: 18.0  Size: SMALL<br>\nClass: ALL<br>\nRace: ALL<br>\nDeity: Bertoxxulous Cazic-Thule Innoruuk Rallos Zek<br>\n|relatedquests = \n\n* [[Spirit Aid]]\n\n}}</onlyinclude>\n\n[[Category:Primary]]\n[[Category:Secondary]]\n[[Category:1H Blunt]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

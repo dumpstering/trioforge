@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 59028,
+    "ns": 0,
+    "title": "Talisman of Kejaar Kerrath",
+    "revisions": [
+     {
+      "revid": 164093,
+      "parentid": 164091,
+      "timestamp": "2026-07-30T02:21:56Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Talisman of Kejaar Kerrath\n|lucy_img_ID = 1002\n|statsblock  = \nLore Equipped, No Trade<br>\nSlot: NECK<br>\nHP Regen: 2  Mana Regen: 2  End Regen: 2 <br>\nWT: 0.1  Size: TINY<br>\nClass: ALL<br>\nRace: ALL<br>\n\n|focus_effect = \n\n|relatedquests = \n\n[[This Means Warrr]]\n\n}}</onlyinclude>\n\n[[Category:Bard Equipment]]\n[[Category:Beastlord Equipment]]\n[[Category:Berserker Equipment]]\n[[Category:Cleric Equipment]]\n[[Category:Druid Equipment]]\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Monk Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Paladin Equipment]]\n[[Category:Ranger Equipment]]\n[[Category:Rogue Equipment]]\n[[Category:Shadow Knight Equipment]]\n[[Category:Shaman Equipment]]\n[[Category:Warrior Equipment]]\n[[Category:Wizard Equipment]]\n\n[[Category:Neck]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

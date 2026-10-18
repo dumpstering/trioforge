@@ -1,0 +1,781 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "trioforge-parity-fixtures.schema.json",
+  "title": "TrioForge parity fixtures",
+  "description": "The files of build/fixtures and fixtures/parity. Every file is one JSON document; its kind says which definition applies. The bundle (profiles/*.bundle.json) and the item table (items/table.json) are the browser exports as they are and have no kind: the manifest names them. Exact numbers are reduced p/q strings.",
+  "$defs": {
+    "rational": {"type": "string", "pattern": "^-?[0-9]+/[1-9][0-9]*$"},
+    "key": {"type": "string", "minLength": 1, "pattern": "^[^@\\s]+$"},
+    "ident": {"type": "string", "pattern": "^[^@\\s]+@(10|[0-9])$"},
+    "tier": {"type": "integer", "minimum": 0, "maximum": 10},
+    "release": {"type": ["string", "null"], "pattern": "^data-[0-9A-Za-z._-]+$"},
+    "header": {
+      "type": "object",
+      "properties": {
+        "format": {"const": 1},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string", "minLength": 1}
+      },
+      "required": ["format", "data_release", "rules_version"]
+    },
+    "kit": {
+      "description": "The 22 places of a kit, in the order of the slots of the model: null for an empty place, else [key, tier].",
+      "type": "array",
+      "minItems": 22,
+      "maxItems": 22,
+      "items": {
+        "type": ["array", "null"],
+        "prefixItems": [
+          {"type": "string", "minLength": 1, "pattern": "^[^@\\s]+$"},
+          {"type": "integer", "minimum": 0, "maximum": 10}
+        ],
+        "items": false,
+        "minItems": 2
+      }
+    },
+    "exactTree": {
+      "description": "A tree of reduced p/q strings and class codes (the classes whose pools count). The leaves are checked by validate_document, which is faster than a recursive schema.",
+      "type": ["string", "array", "object"]
+    },
+    "breakdown": {
+      "type": "object",
+      "properties": {
+        "F": {"$ref": "#/$defs/rational"},
+        "parts": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^-?[0-9]+/[1-9][0-9]*$"}, "minProperties": 14},
+        "totals": {
+          "type": "object",
+          "properties": {
+            "attributes": {"$ref": "#/$defs/exactTree"},
+            "pools": {"$ref": "#/$defs/exactTree"},
+            "counted": {"$ref": "#/$defs/exactTree"},
+            "end_average": {"$ref": "#/$defs/rational"},
+            "sheet": {"$ref": "#/$defs/exactTree"},
+            "haste": {"$ref": "#/$defs/exactTree"},
+            "regen": {"$ref": "#/$defs/exactTree"},
+            "resists": {"$ref": "#/$defs/exactTree"},
+            "weight10": {"$ref": "#/$defs/rational"},
+            "atk": {"$ref": "#/$defs/rational"}
+          },
+          "required": ["attributes", "pools", "counted", "end_average", "sheet", "haste", "regen", "resists", "weight10", "atk"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["F", "parts", "totals"],
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "format": {"const": 1},
+        "race": {"type": "string"},
+        "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "level": {"type": "integer", "minimum": 1},
+        "role": {"enum": ["balanced", "tank", "melee", "caster"]},
+        "evidence": {"enum": ["strict", "wiki"]},
+        "aa": {"type": "object"},
+        "naked": {"type": "object"},
+        "buff_totals": {"type": "object"},
+        "spell_haste": {"type": "number"},
+        "haste_cap": {"type": "number"},
+        "softcap": {"type": "array", "minItems": 2, "maxItems": 2},
+        "cs_pct": {"type": "number"},
+        "pe_pct": {"type": "number"},
+        "defense_cap": {"type": "number"},
+        "monk": {"type": ["object", "null"]},
+        "iksar_ac": {"type": "number"},
+        "placement": {"type": "object"},
+        "pools": {"type": "object"},
+        "caps": {"type": "object"},
+        "bands": {"type": ["object", "null"]},
+        "dw_factor": {"type": "number"},
+        "weights": {"type": "object"},
+        "setups": {"type": "array", "items": {"enum": ["1h-shield", "2h", "dw", "stick"]}},
+        "deity": {"type": ["string", "null"]}
+      },
+      "required": [
+        "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap",
+        "cs_pct", "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights",
+        "setups", "deity"
+      ],
+      "additionalProperties": false
+    },
+    "buffset": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "properties": {
+            "set": {
+              "type": "object",
+              "properties": {
+                "always_on": {"type": "array", "items": {"type": "integer"}},
+                "optional": {"type": "array", "items": {"type": "integer"}},
+                "conflicts": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [{"type": "integer"}, {"type": "integer"}, {"type": "array", "items": {"type": "string"}}],
+                    "items": false,
+                    "minItems": 3
+                  }
+                },
+                "cliques": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}}},
+                "cardinality": {"type": ["integer", "null"], "minimum": 0},
+                "dropped": {"type": "array"}
+              },
+              "required": ["always_on", "optional", "conflicts", "cliques", "cardinality", "dropped"],
+              "additionalProperties": false
+            },
+            "table": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "classes": {"type": "object"},
+                  "vec": {"type": "object", "additionalProperties": {"type": "integer"}},
+                  "source": {"enum": ["own", "preset", "synthetic"]},
+                  "illusion": {"const": true}
+                },
+                "required": ["name", "classes", "vec", "source"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["set", "table"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "record": {
+      "type": "object",
+      "properties": {
+        "id": {"type": ["integer", "null"]},
+        "key": {"$ref": "#/$defs/key"},
+        "name": {"type": "string", "minLength": 1},
+        "match_name": {"type": "string"},
+        "aliases": {"type": "array", "items": {"type": "string"}},
+        "slots": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "classes": {"type": "array", "items": {"type": "string"}},
+        "races": {"type": "array", "items": {"type": "string"}},
+        "deity": {"type": "array", "items": {"type": "string"}},
+        "lore": {"type": "boolean"},
+        "stats": {"type": "object", "additionalProperties": {"type": "integer"}},
+        "sv": {"type": "object", "additionalProperties": {"type": "integer"}},
+        "weight10": {"type": ["integer", "null"]},
+        "weapon": {"type": "object"},
+        "item_type": {"type": "string"},
+        "item_type_source": {"type": ["string", "null"]},
+        "tier_rule": {"enum": ["drop", "fixed0", "spell"]},
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "level": {"enum": ["wiki", "disputed", "hidden"]},
+            "codes": {"type": "array", "items": {"type": "string"}}
+          },
+          "required": ["level"],
+          "additionalProperties": false
+        },
+        "owned_only": {"const": true},
+        "source": {"type": "object"}
+      },
+      "required": ["id", "name", "slots", "weight10", "tier_rule", "evidence"],
+      "additionalProperties": false
+    },
+    "records": {"type": "array", "items": {"$ref": "#/$defs/record"}},
+    "options": {
+      "type": "object",
+      "properties": {
+        "any_rule": {"enum": ["all", "explicit"]},
+        "haste_assumed": {"type": ["integer", "null"], "minimum": 0},
+        "owned_caps": {"type": "object", "propertyNames": {"pattern": "^[^@\\s]+@(10|[0-9])$"}, "additionalProperties": {"type": "integer", "minimum": 0}},
+        "new_keys": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+        "max_new": {"type": ["integer", "null"], "minimum": 0},
+        "upgrades": {"type": "object", "propertyNames": {"pattern": "^[^@\\s]+@(10|[0-9])$"}, "additionalProperties": {"$ref": "#/$defs/ident"}}
+      },
+      "required": ["any_rule", "haste_assumed", "owned_caps", "new_keys", "max_new", "upgrades"],
+      "additionalProperties": false
+    },
+    "prune": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "properties": {
+            "tier": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
+            "options": {"$ref": "#/$defs/options"},
+            "owned": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+            "input": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+            "kept": {"type": "array", "items": {"$ref": "#/$defs/ident"}}
+          },
+          "required": ["tier", "options", "owned", "input", "kept"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "status": {"const": "optimal"},
+        "tie_stage": {"enum": ["applied", "kept-first"]},
+        "haste_assumed": {"type": "integer", "minimum": 0},
+        "model_F": {"type": "number"},
+        "F": {"$ref": "#/$defs/rational"},
+        "kit": {"$ref": "#/$defs/kit"},
+        "buffs": {"type": "array", "items": {"type": "integer"}},
+        "breakdown": {"$ref": "#/$defs/breakdown"}
+      },
+      "required": ["status", "tie_stage", "haste_assumed", "model_F", "F", "kit", "buffs", "breakdown"],
+      "additionalProperties": false
+    },
+    "solve": {
+      "type": "object",
+      "properties": {
+        "label": {"type": "string"},
+        "options": {"$ref": "#/$defs/options"},
+        "pool": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+        "prune": {"$ref": "#/$defs/prune"},
+        "model": {"type": "object"},
+        "result": {"$ref": "#/$defs/result"}
+      },
+      "required": ["label", "options", "pool", "prune", "model", "result"],
+      "additionalProperties": false
+    },
+    "caseInputs": {
+      "type": "object",
+      "properties": {
+        "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "level": {"type": "integer", "minimum": 1},
+        "race": {"type": "string"},
+        "role": {"enum": ["balanced", "tank", "melee", "caster"]},
+        "buffs": {"enum": ["own", "group", "group+enchanter", "raid", null]},
+        "evidence": {"enum": ["wiki", "strict-proxy", "synthetic"]},
+        "deity": {"type": ["string", "null"]},
+        "setup": {"enum": ["1h-shield", "2h", "dw", "stick", null]},
+        "tier": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
+        "weapon_pct": {"enum": [5, 10]},
+        "profile": {"$ref": "#/$defs/profile"},
+        "weights": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {
+                "multipliers": {"type": "object"},
+                "custom": {"type": "object"},
+                "regen_T": {"type": ["number", "null"]},
+                "mana_reachable": {"type": "boolean"},
+                "base": {"type": "object"},
+                "result": {"type": "object"}
+              },
+              "required": ["multipliers", "custom", "regen_T", "mana_reachable", "base", "result"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "buffset": {"$ref": "#/$defs/buffset"},
+        "note": {"type": "string"},
+        "seed": {"type": "string"},
+        "owned": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{"$ref": "#/$defs/ident"}, {"type": "integer", "minimum": 1}],
+            "items": false,
+            "minItems": 2
+          }
+        },
+        "candidates": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+        "tier_mode": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {
+                "mode": {"enum": ["ready4", "arrives", "fixed"]},
+                "D": {"type": "integer", "minimum": 0, "maximum": 4},
+                "N": {"type": ["integer", "null"], "minimum": 0, "maximum": 10}
+              },
+              "required": ["mode", "D", "N"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "steps": {"type": "integer", "minimum": 0}
+      },
+      "required": ["trio", "level", "race", "role", "buffs", "evidence", "deity", "setup", "tier", "weapon_pct", "profile", "weights", "buffset", "note"],
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "index": {"type": "integer", "minimum": 1},
+        "item": {"$ref": "#/$defs/ident"},
+        "kind": {"enum": ["new", "copy", "upgrade"]},
+        "source_tier": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
+        "F": {"$ref": "#/$defs/rational"},
+        "gain": {"$ref": "#/$defs/rational"},
+        "haste_assumed": {"type": "integer", "minimum": 0},
+        "owned": {"type": "array", "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/ident"}, {"type": "integer", "minimum": 1}], "items": false, "minItems": 2}},
+        "cost": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {
+                "from": {"$ref": "#/$defs/tier"},
+                "to": {"$ref": "#/$defs/tier"},
+                "D": {"type": "integer", "minimum": 0, "maximum": 4},
+                "exp": {"type": "integer", "minimum": 0},
+                "copies_at_arrival": {"type": "integer", "minimum": 0},
+                "potentials": {"type": "integer", "minimum": 0}
+              },
+              "required": ["from", "to", "D", "exp", "copies_at_arrival", "potentials"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "solve": {"type": "integer", "minimum": 1}
+      },
+      "required": ["index", "item", "kind", "source_tier", "F", "gain", "haste_assumed", "owned", "cost", "solve"],
+      "additionalProperties": false
+    },
+    "bestSet": {
+      "type": "object",
+      "properties": {
+        "k": {"type": "integer", "minimum": 1},
+        "acquired": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
+        "F": {"$ref": "#/$defs/rational"},
+        "gain": {"$ref": "#/$defs/rational"},
+        "haste_assumed": {"type": "integer", "minimum": 0}
+      },
+      "required": ["k", "acquired", "F", "gain", "haste_assumed"],
+      "additionalProperties": false
+    },
+    "slotRow": {
+      "type": "object",
+      "properties": {
+        "place": {"type": "string"},
+        "index": {"type": "integer", "minimum": 0, "maximum": 21},
+        "current": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/ident"}]},
+        "swaps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {"item": {"$ref": "#/$defs/ident"}, "delta": {"$ref": "#/$defs/rational"}},
+            "required": ["item", "delta"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["place", "index", "current", "swaps"],
+      "additionalProperties": false
+    },
+    "case": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "case"},
+        "family": {"enum": ["brute", "matrix", "upgrade", "pmb36"]},
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "label": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "synthetic": {"type": "boolean"},
+        "inputs": {"$ref": "#/$defs/caseInputs"},
+        "records": {"$ref": "#/$defs/records"},
+        "solves": {"type": "array", "items": {"$ref": "#/$defs/solve"}, "minItems": 1},
+        "expected": {
+          "type": "object",
+          "properties": {
+            "brute_F": {"$ref": "#/$defs/rational"},
+            "kits": {"type": "integer", "minimum": 1},
+            "buff_sets": {"type": "integer", "minimum": 1},
+            "session_haste": {"type": "integer", "minimum": 0},
+            "equip_now": {"const": 0},
+            "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+            "stopped": {"enum": ["limit", "no-gain"]},
+            "best_sets": {"type": "array", "items": {"$ref": "#/$defs/bestSet"}, "minItems": 2, "maxItems": 2},
+            "every_slot": {"type": "array", "items": {"$ref": "#/$defs/slotRow"}, "minItems": 22, "maxItems": 22}
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["format", "kind", "family", "id", "label", "tags", "data_release", "rules_version", "synthetic", "inputs", "records", "solves", "expected"],
+      "additionalProperties": false
+    },
+    "evaluateProfiles": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "evaluate-profiles"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "weapon_pct": {"enum": [5, 10]},
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+              "level": {"type": "integer"},
+              "race": {"type": "string"},
+              "role": {"type": "string"},
+              "tier": {"$ref": "#/$defs/tier"},
+              "evidence": {"enum": ["wiki", "strict-proxy"]},
+              "profile": {"$ref": "#/$defs/profile"},
+              "buffset": {"$ref": "#/$defs/buffset"}
+            },
+            "required": ["id", "trio", "level", "race", "role", "tier", "evidence", "profile", "buffset"],
+            "additionalProperties": false
+          }
+        },
+        "monk_bins": {"type": "object", "additionalProperties": {"$ref": "#/$defs/monkBins"}},
+        "records": {"$ref": "#/$defs/records"}
+      },
+      "required": ["format", "kind", "data_release", "rules_version", "weapon_pct", "profiles", "monk_bins", "records"],
+      "additionalProperties": false
+    },
+    "monkBins": {
+      "description": "The monk_bins block of a bundle: the Monk bonus of each whole stone of worn weight, for the curve and for its alternatives.",
+      "type": "object",
+      "properties": {
+        "curve": {"type": "object"},
+        "bonus": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/rational"}},
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "curve": {"type": "object"},
+              "bonus": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/rational"}}
+            },
+            "required": ["curve", "bonus"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["curve", "bonus", "alternatives"],
+      "additionalProperties": false
+    },
+    "evaluateKits": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "evaluate-kits"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "chunk": {"type": "integer", "minimum": 0},
+        "evaluations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "profile": {"type": "integer", "minimum": 0},
+              "setup": {"enum": ["1h-shield", "2h", "dw", "stick", null]},
+              "haste": {"type": "integer", "minimum": 0},
+              "buffs": {"oneOf": [{"type": "null"}, {"type": "array", "items": {"type": "integer"}}]},
+              "kit": {"$ref": "#/$defs/kit"},
+              "breakdown": {"$ref": "#/$defs/breakdown"}
+            },
+            "required": ["profile", "setup", "haste", "buffs", "kit", "breakdown"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["format", "kind", "data_release", "rules_version", "chunk", "evaluations"],
+      "additionalProperties": false
+    },
+    "profiles": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "profiles"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "bundle": {"type": "string", "pattern": "\\.bundle\\.json$"},
+        "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "level": {"type": "integer"},
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "race": {"type": "string"},
+              "role": {"type": "string"},
+              "buffs": {"enum": ["own", "group", "group+enchanter", "raid"]},
+              "options": {
+                "type": "object",
+                "properties": {"evidence": {"enum": ["strict", "wiki"]}, "deity": {"type": "string", "minLength": 1}},
+                "additionalProperties": false
+              },
+              "profile": {"$ref": "#/$defs/profile"}
+            },
+            "required": ["race", "role", "buffs", "options", "profile"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["format", "kind", "data_release", "rules_version", "bundle", "trio", "level", "profiles"],
+      "additionalProperties": false
+    },
+    "weights": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "weights"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "compositions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+              "role": {"enum": ["balanced", "tank", "melee", "caster"]},
+              "mana_reachable": {"type": "boolean"},
+              "base": {"type": "object", "additionalProperties": {"type": "number"}},
+              "multipliers": {"type": "object", "additionalProperties": {"type": "number"}},
+              "custom": {"type": "object", "additionalProperties": {"type": "number"}},
+              "regen_T": {"type": ["number", "null"]},
+              "result": {"type": "object", "additionalProperties": {"type": "number"}}
+            },
+            "required": ["trio", "role", "mana_reachable", "base", "multipliers", "custom", "regen_T", "result"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["format", "kind", "data_release", "rules_version", "compositions"],
+      "additionalProperties": false
+    },
+    "itemVectors": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "item-vectors"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "chunk": {"type": "integer", "minimum": 0},
+        "weapon_pcts": {"const": [5, 10]},
+        "stat_order": {"type": "array", "items": {"type": "string"}, "minItems": 15, "maxItems": 15},
+        "sv_order": {"type": "array", "items": {"type": "string"}, "minItems": 6, "maxItems": 6},
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {"$ref": "#/$defs/key"},
+              "fixed": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "slots": {"type": "array", "items": {"type": "string"}},
+                  "classes": {"type": "array", "items": {"type": "string"}},
+                  "deity": {"type": ["array", "null"], "items": {"type": "string"}},
+                  "lore": {"type": "boolean"},
+                  "is_shield": {"type": "boolean"},
+                  "races": {"type": ["array", "null"], "items": {"type": "string"}},
+                  "weight_known": {"type": "boolean"},
+                  "weapon": {
+                    "oneOf": [
+                      {"type": "null"},
+                      {
+                        "type": "object",
+                        "properties": {
+                          "skill": {"type": ["string", "null"]},
+                          "delay": {"type": "integer"},
+                          "bonus": {"type": ["integer", "null"]},
+                          "two_handed": {"type": "boolean"}
+                        },
+                        "required": ["skill", "delay", "bonus", "two_handed"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "slots", "classes", "deity", "lore", "is_shield", "races", "weight_known", "weapon"],
+                "additionalProperties": false
+              },
+              "tiers": {
+                "type": "array",
+                "minItems": 11,
+                "maxItems": 11,
+                "items": {"type": "array", "items": {"type": "integer"}, "minItems": 23, "maxItems": 23}
+              },
+              "damage": {
+                "oneOf": [
+                  {"type": "null"},
+                  {
+                    "type": "object",
+                    "properties": {
+                      "5": {"type": "array", "items": {"type": "integer"}, "minItems": 11, "maxItems": 11},
+                      "10": {"type": "array", "items": {"type": "integer"}, "minItems": 11, "maxItems": 11}
+                    },
+                    "required": ["5", "10"],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": ["key", "fixed", "tiers", "damage"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["format", "kind", "data_release", "rules_version", "chunk", "weapon_pcts", "stat_order", "sv_order", "items"],
+      "additionalProperties": false
+    },
+    "tiers": {
+      "type": "object",
+      "allOf": [{"$ref": "#/$defs/header"}],
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "tiers"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "exp_needed": {},
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {"enum": ["drop", "fixed0", "spell"]},
+              "mode": {"enum": ["ready4", "arrives", "fixed"]},
+              "D": {"type": "integer", "minimum": 0, "maximum": 4},
+              "N": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
+              "tier": {"$ref": "#/$defs/tier"}
+            },
+            "required": ["rule", "mode", "D", "N", "tier"],
+            "additionalProperties": false
+          }
+        },
+        "costs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {"enum": ["drop", "fixed0", "spell"]},
+              "D": {"type": "integer", "minimum": 0, "maximum": 4},
+              "from": {"$ref": "#/$defs/tier"},
+              "to": {"$ref": "#/$defs/tier"},
+              "exp": {"type": "integer", "minimum": 0},
+              "copies_at_arrival": {"type": "integer", "minimum": 0},
+              "potentials": {"type": "integer", "minimum": 0}
+            },
+            "required": ["rule", "D", "from", "to", "exp", "copies_at_arrival", "potentials"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["format", "kind", "data_release", "rules_version", "exp_needed", "modes", "costs"],
+      "additionalProperties": false
+    },
+    "bundle": {
+      "type": "object",
+      "properties": {
+        "version": {"const": 1},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "level": {"type": "integer"},
+        "profile_common": {"type": "object"},
+        "evidence_levels": {"type": "array"},
+        "races": {"type": "array"},
+        "roles": {"type": "object"},
+        "buffs": {"type": "object"},
+        "buff_table": {"type": "object"},
+        "constants": {"type": "object"},
+        "monk_bins": {"type": ["object", "null"]},
+        "tier_rules": {"type": "object"},
+        "weapon_rules": {"type": "object"},
+        "weight_groups": {"type": "object"},
+        "regen_ratios": {"type": "object"}
+      },
+      "required": [
+        "version", "data_release", "rules_version", "trio", "level", "profile_common", "evidence_levels", "races", "roles", "buffs",
+        "buff_table", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios"
+      ],
+      "additionalProperties": false
+    },
+    "itemTable": {
+      "type": "object",
+      "properties": {
+        "version": {"const": 1},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "count": {"type": "integer", "minimum": 0},
+        "defaults": {"type": "object"},
+        "items": {"$ref": "#/$defs/records"}
+      },
+      "required": ["version", "data_release", "rules_version", "count", "defaults", "items"],
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "format": {"const": 1},
+        "kind": {"const": "manifest"},
+        "name": {"const": "trioforge-parity-fixtures"},
+        "complete": {"type": "boolean"},
+        "data_release": {"$ref": "#/$defs/release"},
+        "rules_version": {"type": "string"},
+        "seed": {"type": "integer"},
+        "scale": {"type": "string"},
+        "level": {"type": "integer"},
+        "solver": {"type": "object"},
+        "families": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "count": {"type": "integer", "minimum": 0},
+              "files": {"type": "integer", "minimum": 0},
+              "bytes": {"type": "integer", "minimum": 0}
+            },
+            "required": ["count", "files", "bytes"],
+            "additionalProperties": false
+          }
+        },
+        "coverage": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}},
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"},
+              "kind": {"enum": ["case", "evaluate-profiles", "evaluate-kits", "profiles", "weights", "item-vectors", "tiers", "bundle", "item-table"]},
+              "bytes": {"type": "integer", "minimum": 0},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "required": ["path", "kind", "bytes", "sha256"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["format", "kind", "name", "complete", "data_release", "rules_version", "seed", "scale", "level", "solver", "families", "coverage", "files"],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/manifest"},
+    {"$ref": "#/$defs/case"},
+    {"$ref": "#/$defs/evaluateProfiles"},
+    {"$ref": "#/$defs/evaluateKits"},
+    {"$ref": "#/$defs/profiles"},
+    {"$ref": "#/$defs/weights"},
+    {"$ref": "#/$defs/itemVectors"},
+    {"$ref": "#/$defs/tiers"},
+    {"$ref": "#/$defs/bundle"},
+    {"$ref": "#/$defs/itemTable"}
+  ]
+}

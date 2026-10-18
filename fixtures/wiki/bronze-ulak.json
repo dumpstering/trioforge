@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 44273,
+    "ns": 0,
+    "title": "Bronze Ulak",
+    "revisions": [
+     {
+      "revid": 163817,
+      "timestamp": "2026-07-28T20:26:11Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{:Does Not Exist}}\n\n<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Bronze Ulak\n|lucy_img_ID = 1180\n|statsblock  = \nMAGIC ITEM  <br>\nSlot: PRIMARY SECONDARY<br>\nSkill: Hand to Hand  Atk Delay: 28<br>\nDMG: 5 <br>\nHP: +10  MANA: +10<br>\nWT: 1.4  Size: SMALL<br>\nClass: MNK<br>\nRace: ALL<br>\n|dropsfrom = \nN O T _ C L A S S I C \n}}</onlyinclude>"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

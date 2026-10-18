@@ -1,0 +1,34 @@
+{% extends "base.html.j2" %}
+{% macro inline(segments) -%}
+{%- for seg in segments -%}
+{%- if seg.kind == "strong" -%}<strong>{{ seg.text }}</strong>
+{%- elif seg.kind == "code" -%}<code>{{ seg.text }}</code>
+{%- elif seg.kind == "link" -%}<a href="{{ seg.href }}" rel="noopener noreferrer">{{ seg.text }}</a>
+{%- else -%}{{ seg.text }}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
+{% block main %}
+<main id="main" tabindex="-1" class="wrap prose" data-page="changelog">
+<h1>Changelog</h1>
+{% if blocks is none %}
+<p>No releases yet. Data releases are named data-YYYY-MM-DD; each one will be listed here with a link to its report of changed picks.</p>
+{% else %}
+{% for block in blocks %}
+{% if block.kind == "h2" %}
+<h2>{{ inline(block.segments) }}</h2>
+{% elif block.kind == "h3" %}
+<h3>{{ inline(block.segments) }}</h3>
+{% elif block.kind == "p" %}
+<p>{{ inline(block.segments) }}</p>
+{% elif block.kind == "ul" %}
+<ul>
+{% for item in block.items %}
+<li>{{ inline(item) }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endfor %}
+{% endif %}
+</main>
+{% endblock %}

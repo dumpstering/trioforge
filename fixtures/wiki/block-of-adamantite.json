@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 37149,
+    "ns": 0,
+    "title": "Block of Adamantite",
+    "revisions": [
+     {
+      "revid": 193955,
+      "parentid": 143475,
+      "timestamp": "2026-10-13T23:45:16Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "<onlyinclude>{{Itempage\n|notes       = \n|itemname    = Block of Adamantite\n|lucy_img_ID = 1138\n|statsblock  = \nWT: 15.0  Size: SMALL<br>\nClass: ALL<br>\nRace: ALL<br>\n|playercrafted = \n\n* [[Cultural Tradeskills: Dark Elf|Blacksmithing]] (Trivial: 29)\n** '''Yield: Block of Adamantite''' x1\n** In [[Forge|Teir`dal Forge]]:\n:: {{SmIcon|825}} 1 x [[Neriak Nectar]] - Bought\n:: {{SmIcon|1138}} 3 x [[Large Brick of Adamantite]] - Crafted, Bought\n** In [[Forge|Oggok Forge]]:\n:: {{SmIcon|829}} 1 x [[Ogre Swill]] - Bought\n:: {{SmIcon|1138}} 3 x [[Large Brick of Adamantite]] - Crafted, Bought\n\n|recipes = \n\n* [[Blacksmithing]]\n** [[Folded Sheet of Adamantite]] (Trivial: 39)\n\n|soldby = \n\n{{ItemWhereTable|\n{{ItemWhereRow   | [[Neriak|Neriak Commons]]         | [[Trista N`Ryt]]              |               | (70, -857) }}\n{{ItemWhereRow   | [[Neriak|Neriak Third Gate]]      | [[Draan N`Ryt]]               |               | (694, -1780) }}\n{{ItemWhereRow   | [[Oggok]]                         | <s>[[Gralbug]]</s>                   |No longer exists| (332, 782) }}\n{{ItemWhereRow   | [[Oggok]]                         | <s>[[Puglala]]</s>                   |No longer sells| (95, 846)  }}\n}}\n\n}}</onlyinclude>\n\n\n[[Category:Vendor Sold]]\n[[Category:Player Crafted]]\n[[Category:Tradeskill Ingredient]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

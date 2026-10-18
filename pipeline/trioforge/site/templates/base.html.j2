@@ -1,0 +1,70 @@
+{#- The frame of every page. Autoescape is on for every template (see build.make_env), so nothing here marks text safe. -#}
+{% macro seal(kind, icon, label) -%}
+<span class="seal seal-{{ kind }}"><svg class="icon" aria-hidden="true" focusable="false"><use href="#{{ icon }}"></use></svg><span>{{ label }}</span></span>
+{%- endmacro %}
+{% macro rule_seal(ref) -%}
+{{ seal(ref.seal, ref.seal_icon, ref.seal_label) }}{% if ref.open_test %} <span class="open-test">open test {{ ref.open_test }}</span>{% endif %}
+{%- endmacro %}
+{% macro rule_link(ref, text=none) -%}
+<a href="/rules/#{{ ref.id }}">{{ text if text else ref.title }}</a> {{ rule_seal(ref) }}
+{%- endmacro %}
+{% macro rule_links(refs) -%}
+{%- for ref in refs -%}{{ rule_link(ref) }}{% if not loop.last %} &middot; {% endif %}{%- endfor -%}
+{%- endmacro %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page_title }}</title>
+<meta name="description" content="{{ page_description }}">
+{% if canonical %}
+<link rel="canonical" href="{{ canonical }}">
+{% endif %}
+{% if noindex %}
+<meta name="robots" content="noindex">
+{% endif %}
+<link rel="icon" href="{{ favicon }}">
+<link rel="stylesheet" href="{{ assets.css }}">
+<script src="{{ assets.boot }}"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the content</a>
+<header class="site-header">
+<div class="wrap bar">
+<a class="brand" href="/"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="9.5" r="7" fill="currentColor" fill-opacity="0.85"></circle><circle cx="9.5" cy="21" r="7" fill="currentColor" fill-opacity="0.6"></circle><circle cx="22.5" cy="21" r="7" fill="currentColor" fill-opacity="0.4"></circle></svg><span>TrioForge</span></a>
+<nav aria-label="Main">
+<ul>
+{% for item in nav %}
+<li><a href="{{ item.href }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+<button type="button" id="theme-toggle" class="theme-toggle" hidden>Theme: auto</button>
+</div>
+<p class="wrap data-strip">Data: <time datetime="{{ meta.data_date }}">{{ meta.data_date }}</time> &middot; Game patch: <time datetime="{{ meta.game_patch }}">{{ meta.game_patch }}</time> &middot; <a href="/rules/#{{ level_rule.id }}">Level {{ meta.level }}</a> {{ rule_seal(level_rule) }}</p>
+{% if partial %}
+<p class="wrap preview-banner">Preview: partial data. Some races or roles are missing from this build.</p>
+{% endif %}
+</header>
+{% block main %}{% endblock %}
+<footer class="site-footer">
+<div class="wrap">
+<p>{{ disclaimer }}</p>
+<p>{% for text, address in attribution_parts %}{% if address %}<a href="{{ address }}" rel="noopener noreferrer">{{ text }}</a>{% else %}{{ text }}{% endif %}{% endfor %}. {{ licence_sentence }} <a href="/sources/">Sources and licences</a></p>
+<p>{% if report_url %}<a id="report-link" href="{{ report_url }}" rel="noopener noreferrer">Report a problem with this page</a>{% else %}{{ reports_not_open }}{% endif %} &middot; <a href="/about/">About</a> &middot; <a href="/changelog/">Changelog</a></p>
+</div>
+</footer>
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+<symbol id="i-strict" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M4.6 8.3l2.3 2.3 4.5-5" fill="none" stroke="currentColor" stroke-width="1.8"></path></symbol>
+<symbol id="i-wiki" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M5.5 6h5M5.5 9h5" fill="none" stroke="currentColor" stroke-width="1.5"></path></symbol>
+<symbol id="i-none" viewBox="0 0 16 16"><path d="M4 8h8" fill="none" stroke="currentColor" stroke-width="1.6"></path></symbol>
+<symbol id="i-client" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" fill="currentColor"></rect></symbol>
+<symbol id="i-developer" viewBox="0 0 16 16"><path d="M8 1.5L14.5 8 8 14.5 1.5 8z" fill="currentColor"></path></symbol>
+<symbol id="i-measured" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="currentColor"></circle></symbol>
+<symbol id="i-player" viewBox="0 0 16 16"><path d="M8 2l6.5 11.5h-13z" fill="currentColor"></path></symbol>
+<symbol id="i-model" viewBox="0 0 16 16"><path d="M8 2.6L13.4 8 8 13.4 2.6 8z" fill="none" stroke="currentColor" stroke-width="1.8"></path></symbol>
+</svg>
+<script type="module" src="{{ assets.app }}"></script>
+</body>
+</html>

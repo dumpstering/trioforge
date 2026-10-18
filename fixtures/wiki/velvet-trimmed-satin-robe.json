@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 43936,
+    "ns": 0,
+    "title": "Velvet-Trimmed Satin Robe",
+    "revisions": [
+     {
+      "revid": 161195,
+      "timestamp": "2026-07-24T16:00:37Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "\n<onlyinclude>{{Itempage\n|notes       = This is uncommonly dropped during the final Qeynos Badge of Honor quest in Qeynos Aqueducts. The discount-store version of [[Shining Metallic Robes]].\n|itemname    = Velvet-Trimmed Satin Robe\n|lucy_img_ID = 929\n|statsblock  = \nMAGIC ITEM  LORE ITEM  <br>\nSlot: CHEST<br>\nAC: 10<br>\nINT: +4  MANA: +15  SV FIRE +5<br>\nWT: 10.0  Size: MEDIUM<br>\nClass: NEC WIZ MAG ENC<br>\nRace: ALL<br>\n\n|dropsfrom = \n\n[[Qeynos Aqueducts]]\n\n* [[a necromancer]]\n\n|relatedquests = \n\n* [[Qeynos Badge Quests]]\n\n}}</onlyinclude>\n\n[[Category:Enchanter Equipment]]\n[[Category:Magician Equipment]]\n[[Category:Necromancer Equipment]]\n[[Category:Wizard Equipment]]\n[[Category:Chest]]\n[[Category:Fashion: Shining Metallic Robes]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

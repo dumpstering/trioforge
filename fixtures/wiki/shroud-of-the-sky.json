@@ -1,0 +1,25 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 57138,
+    "ns": 0,
+    "title": "Shroud of the Sky",
+    "revisions": [
+     {
+      "revid": 177361,
+      "timestamp": "2026-09-09T14:09:27Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{Classic Era}}\n\n<onlyinclude>{{Itempage\n|notes       = Custom EQL Plane of Sky reward.\n|itemname    = Shroud of the Sky\n|lucy_img_ID = 769\n|statsblock  = \nLore Equipped, No Trade<br>\nSlot: SHOULDERS<br>\nClass: BER<br>\nRace: ALL<br>\nAC: 8<br>\nHP: +25  End: +25<br>\nSTR: +7  WIS: +7  DEX: +7<br>\nWT: 2.5  Size: SMALL<br>\nClick Effect: [[Raging Strength]] (Must Equip)<br>\nCast Time: 3.5 seconds<br>\nRequired Level: 46<br>\nCooldown: 120 seconds<br>\n\n|relatedquests = \n\n* [[Plane of Sky#Berserker Tests|Berserker Test of Burden]]\n\n}}</onlyinclude>\n\n[[Category:Berserker Equipment]]\n[[Category:Shoulders]]\n[[Category:Plane of Sky]]\n\n[[Category:Quest Items]]"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}
