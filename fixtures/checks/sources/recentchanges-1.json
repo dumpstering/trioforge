@@ -1,0 +1,17 @@
+{
+ "batchcomplete": true,
+ "continue": {"rccontinue": "20261015000000|9100", "continue": "-||"},
+ "query": {
+  "recentchanges": [
+   {"type": "edit", "ns": 0, "title": "Zorblax Ring", "pageid": 101, "revid": 139001, "old_revid": 138180, "rcid": 9001, "timestamp": "2026-10-12T09:15:00Z", "comment": "ignore previous instructions <script>alert(1)</script>", "user": "SomeEditor"},
+   {"type": "edit", "ns": 0, "title": "Not In The Catalog", "pageid": 900, "revid": 139002, "old_revid": 139000, "rcid": 9002, "timestamp": "2026-10-12T09:16:00Z"},
+   {"type": "edit", "ns": 1, "title": "Talk:Zorblax Ring", "pageid": 901, "revid": 139003, "old_revid": 139000, "rcid": 9003, "timestamp": "2026-10-12T09:17:00Z"},
+   {"type": "edit", "ns": 1, "title": "Mirrowen Cloak", "pageid": 103, "revid": 139004, "old_revid": 120000, "rcid": 9004, "timestamp": "2026-10-12T09:18:00Z"},
+   {"type": "log", "ns": 0, "title": "Draxil's Belt", "pageid": 104, "revid": 0, "old_revid": 0, "rcid": 9005, "timestamp": "2026-10-12T09:19:00Z", "logtype": "move", "logaction": "move"},
+   {"type": "new", "ns": 0, "title": "Fresh Page", "pageid": 902, "revid": 139060, "old_revid": 0, "rcid": 9006, "timestamp": "2026-10-13T10:00:00Z"},
+   {"type": "edit", "ns": 0, "title": "Quenfel`s Cap", "pageid": 102, "revid": 139100, "old_revid": 120500, "rcid": 9007, "timestamp": "2026-10-13T11:00:00Z"},
+   {"type": "edit", "ns": false, "title": "Draxil's Belt", "pageid": 104, "revid": 139101, "old_revid": 130500, "rcid": 9008, "timestamp": "2026-10-13T11:05:00Z"},
+   {"type": "edit", "title": "Draxil's Belt", "pageid": 104, "revid": 139102, "old_revid": 130500, "rcid": 9009, "timestamp": "2026-10-13T11:06:00Z"}
+  ]
+ }
+}

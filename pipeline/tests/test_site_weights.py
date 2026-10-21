@@ -78,7 +78,7 @@ def test_the_weights_assumption_is_collapsed_and_empty_beside_the_other_three(si
     out, _ = site
     html = page(out, PAGES["trio"])
     assumptions = html.find_all("details", cls="assume")
-    assert [d.get("id") for d in assumptions] == ["assume-buffs", "assume-weapons", "assume-evidence", "assume-weights"]
+    assert [d.get("id") for d in assumptions] == ["assume-buffs", "assume-weapons", "assume-weights"]
     weights = html.by_id("assume-weights")
     assert not weights.has("open")
     assert weights.find("summary").text() == "Weights: role's own change"

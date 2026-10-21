@@ -24,7 +24,7 @@ from trioforge.precompute.assemble import ReleaseRefused
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "release-build.py"
-ARGS = ["--tag", "data-2026-10-17", "--seen", "seen-flags.json", "--privacy-key", "privacy.key"]
+ARGS = ["--tag", "data-2026-10-17", "--privacy-key", "privacy.key"]
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +61,8 @@ def test_the_arguments_the_build_is_given(script, recorded, capsys):
     assert script.main([*ARGS, "--processes", "7"]) == 0
     (call,) = recorded
     assert call["tag"] == "data-2026-10-17" and call["processes"] == 7 and call["trios"] is None and call["previous"] == "auto"
-    assert Path(call["seen"]) == Path("seen-flags.json").resolve() and Path(call["privacy_key"]) == Path("privacy.key").resolve()
+    assert Path(call["privacy_key"]) == Path("privacy.key").resolve()
+    assert not {"seen", "wiki", "client"} & set(call)  # (a release is built from the public catalog alone: wiki is its one evidence level)
     assert Path(call["root"]) == REPO and call["parity_stride"] is None  # (none: the largest stride that is allowed)
     assert "a line of counts" in capsys.readouterr().out
 
@@ -80,20 +81,22 @@ def test_some_trios_make_a_trial_build(script, recorded):
 
 def test_the_other_options_are_passed_on(script, recorded, tmp_path):
     script.main([
-        *ARGS, "--wiki", str(tmp_path / "wiki"), "--client", str(tmp_path / "client"), "--catalog", str(tmp_path / "catalog.json"), "--previous", "none",
-        "--parity-stride", "50", "--build-dir", str(tmp_path / "build"),
+        *ARGS, "--catalog", str(tmp_path / "catalog.json"), "--previous", "none", "--parity-stride", "50", "--build-dir", str(tmp_path / "build"),
     ])  # fmt: skip
     call = recorded[0]
-    assert Path(call["wiki"]) == tmp_path / "wiki" and Path(call["client"]) == tmp_path / "client" and Path(call["catalog"]) == tmp_path / "catalog.json"
+    assert Path(call["catalog"]) == tmp_path / "catalog.json"
     assert call["previous"] == "none" and call["parity_stride"] == 50 and Path(call["build_dir"]) == tmp_path / "build"
 
 
 @pytest.mark.parametrize(
     "bad",
     [
-        ["--tag", "data-2026-10-1", "--seen", "s", "--privacy-key", "k"],
-        ["--tag", "data-2026-10-17", "--seen", "s"],
-        ["--seen", "s", "--privacy-key", "k"],
+        ["--tag", "data-2026-10-1", "--privacy-key", "k"],
+        ["--tag", "data-2026-10-17"],
+        ["--privacy-key", "k"],
+        [*ARGS, "--seen", "seen-flags.json"],  # (gone: the release builds from the public catalog, and wiki is the one evidence level)
+        [*ARGS, "--wiki", "sources/eqlwiki/2026-10-14"],  # (gone with the catalog that was built from it)
+        [*ARGS, "--client", "derived/client"],
         [*ARGS, "--processes", "0"],
         [*ARGS, "--processes", "many"],
         [*ARGS, "--trios", "pal-mnk"],
@@ -117,8 +120,9 @@ def test_help_names_every_option(script, capsys):
         script.main(["--help"])
     assert stop.value.code == 0
     text = capsys.readouterr().out
-    for option in ("--tag", "--seen", "--privacy-key", "--processes", "--trios", "--wiki", "--client", "--catalog", "--previous", "--parity-stride", "--build-dir"):
+    for option in ("--tag", "--privacy-key", "--processes", "--trios", "--catalog", "--previous", "--parity-stride", "--build-dir"):
         assert option in text
+    assert not [option for option in ("--seen", "--wiki", "--client") if option in text]
 
 
 def test_a_refused_release_ends_with_status_2_and_one_line(script, monkeypatch, capsys):

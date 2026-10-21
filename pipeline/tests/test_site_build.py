@@ -63,7 +63,7 @@ LICENCE_SENTENCE = (
 #: WebAssembly carries the first 16 hex digits of the SHA-256 of its content, the scripts and the stylesheet esbuild's hash) and its data
 #: files in assets/engine/data/ (the item table and the bundles, with the first 16 hex digits of their SHA-256)
 HASHED_ASSET = (
-    r"(?:(?:site|app|boot|notfound|upgrade-input|shared-kit|weights|chunk)-[A-Z0-9]{8}\.(?:css|js)|engine/(?:client|worker|kitvalue)-[A-Z0-9]{8}\.js|engine/highs-[A-Z0-9]{16}\.wasm"
+    r"(?:(?:site|app|boot|notfound|upgrade-input|shared-kit|weights|chunk)-[A-Z0-9]{8}\.(?:css|js)|[a-z0-9]+(?:-[a-z0-9]+)*-[A-Z0-9]{8}\.png|engine/(?:client|worker|kitvalue)-[A-Z0-9]{8}\.js|engine/highs-[A-Z0-9]{16}\.wasm"
     r"|engine/data/(?:items|[a-z]{3}-[a-z]{3}-[a-z]{3}-l[0-9]{1,3})-[A-Z0-9]{16}\.json)"
 )
 #: the optimizer's list of files: one fixed address, outside /assets/, so that it is asked for again on every visit
@@ -299,7 +299,7 @@ def test_the_trio_page_bakes_the_default_kit_without_javascript(site, results):
         assert row.find("th").text() == label
         assert row.find("th").get("scope") == "row"
         cells = row.find_all("td")
-        assert len(cells) == 5
+        assert len(cells) == 4  # (name, tier, arrival, source: no seal column)
         if item is None:
             assert cells[0].text() == "Leave empty"
         else:
@@ -426,7 +426,7 @@ def test_a_setup_that_only_the_other_evidence_level_has_is_a_hidden_choice_not_a
     out = tmp_path / "dist"
     run_build(out, tmp_path, results=scratch)
     html = page(out, PAGES["trio"])
-    assert [r.get("value") for r in html.find_all("input", name="ev") if r.has("checked")] == ["strict"]
+    assert html.find_all("input", name="ev") == []
     offered = {r.get("value"): r.get("data-setups").split() for r in html.by_id("sw-role").find_all("input")}
     assert offered == {"balanced": ["2h", "dw"], "tank": ["2h", "dw"], "melee": ["2h", "dw"]}  # what the default level has
     setups = {r.get("value"): r for r in html.find_all("input", name="setup")}
@@ -465,20 +465,19 @@ def test_the_label_of_a_setup_the_baked_level_lacks_goes_with_its_radio_button(t
     assert "display: none !important" in rule_body(css_text(), "[hidden]")
 
 
-def test_the_assumes_line_names_the_buffs_weapons_evidence_and_weights_each_with_a_change_control(site):
+def test_the_assumes_line_names_the_buffs_weapons_and_weights_each_with_a_change_control_and_says_nothing_of_evidence(site):
     out, _ = site
     html = page(out, PAGES["trio"])
     summaries = [d.find("summary").text() for d in html.find_all("details", cls="assume")]
     assert summaries == [
         "Buffs: your own buffs change",
         "Weapons: dual wield, scored at 66% haste change",
-        "Evidence: strict evidence change",
         "Weights: role's own change",
     ]
     assert [i.get("value") for i in html.find_all("input", name="buffs")] == ["own", "group", "raid"]
-    assert [i.get("value") for i in html.find_all("input", name="ev")] == ["strict", "wiki"]
+    assert html.find_all("input", name="ev") == [] and not html.find_all("details", id_="assume-evidence")
     for details in html.find_all("details", cls="assume"):
-        assert details.find("fieldset").find("legend").text() in ("Buffs", "Weapons", "Evidence", "Weights")
+        assert details.find("fieldset").find("legend").text() in ("Buffs", "Weapons", "Weights")
         assert not details.has("open")  # collapsed: one answer first
 
 
@@ -618,7 +617,12 @@ def test_every_script_stylesheet_and_image_is_same_origin(site):
     assert "cloudflareinsights" not in raw and "googletagmanager" not in raw
     css = next((out / "assets").glob("site-*.css")).read_text(encoding="utf-8")
     assert "@import" not in css and "@font-face" not in css
-    assert not re.search(r"url\((?!['\"]?data:)", css), "the stylesheet loads something"
+    # the stylesheet loads nothing but the pictures of the theme: PNGs that esbuild copied beside it under a hash of their content (no address, no other kind of file)
+    loaded = re.findall(r"url\(([^)]*)\)", css)
+    assert loaded, "the theme's pictures are not in the stylesheet"
+    for target in loaded:
+        named = re.fullmatch(r'"\./([a-z0-9-]+-[A-Z0-9]{8}\.png)"', target)
+        assert named and (out / "assets" / named.group(1)).is_file(), f"the stylesheet loads {target}"
 
 
 def test_the_javascript_has_no_string_to_dom_sinks(site):
@@ -866,7 +870,7 @@ def test_every_page_carries_the_disclaimer_the_attribution_and_a_report_link(sit
     trio_report = next(a.get("href") for a in page(out, PAGES["trio"]).find("footer").find_all("a") if "/issues/new" in a.get("href"))
     query = parse_qs(urlparse(trio_report).query)
     assert query["template"] == ["wrong-item.yml"]
-    assert query["page"] == [f"{SITE_URL}/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=4&setup=dw&ev=strict&buffs=own"]  # with the view
+    assert query["page"] == [f"{SITE_URL}/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=4&setup=dw&buffs=own"]  # with the view
     assert "Paladin / Monk / Berserker" in query["title"][0]
     assert parse_qs(urlparse(next(a.get("href") for a in page(out, PAGES["rules"]).find("footer").find_all("a") if "/issues/new" in a.get("href"))).query)["template"] == ["rule-correction.yml"]
 
@@ -885,8 +889,8 @@ def test_the_report_link_of_the_trio_page_carries_the_view_it_opens_on(site):
     assert query["template"] == ["wrong-item.yml"]
     address = urlparse(query["page"][0])
     assert f"{address.scheme}://{address.netloc}{address.path}" == f"{SITE_URL}/trio/pal-mnk-ber/"  # the trio is in the address
-    # race, role, tier, weapons, evidence and buffs, all of them (the weapons even where they are the role's best), in this order
-    assert parse_qsl(address.query) == [("race", "OGR"), ("role", "balanced"), ("tier", "4"), ("setup", "dw"), ("ev", "strict"), ("buffs", "own")]
+    # race, role, tier, weapons and buffs, all of them (the weapons even where they are the role's best), in this order; no evidence: wiki is the one level
+    assert parse_qsl(address.query) == [("race", "OGR"), ("role", "balanced"), ("tier", "4"), ("setup", "dw"), ("buffs", "own")]
     assert "Paladin / Monk / Berserker" in query["title"][0]
 
 
@@ -1043,7 +1047,10 @@ def test_the_stylesheet_shows_focus_respects_reduced_motion_and_wraps_long_names
     assert "overflow-wrap: anywhere" in css
     assert "[hidden]" in css
     assert not re.search(r"outline:\s*(none|0)\b", css)
-    assert re.search(r"font-family:\s*system-ui", css)
+    # system fonts only: the stacks of the theme (Verdana, and a serif for the headings) end in a generic family, and the page loads no font
+    families = re.findall(r"font-family:\s*([^;]+);", css)
+    assert families and all(re.search(r"(?:sans-serif|serif|monospace)\s*$", family.strip()) for family in families), families
+    assert "@font-face" not in css and "fonts.googleapis" not in css
 
 
 def test_no_text_container_is_set_not_to_wrap_and_the_tables_stack_under_600_px():
@@ -1943,36 +1950,31 @@ def test_the_baked_answer_is_the_view_that_defaults_json_names_not_a_fixed_one(t
     assert html.by_id("kit-value").text() == f"{view_module.display_int(expected['scenario'].value):,}"
 
 
-def test_with_nothing_seen_in_game_the_answer_comes_from_the_wiki_level_and_the_page_says_so(tmp_path):
+def test_whatever_level_the_answer_is_made_from_the_page_has_no_evidence_wording_picker_note_or_seal_column(tmp_path):
+    """Wiki is the one evidence level (the decision of 2026-10-19): no picker, no note, no "none yet", no Seal column, and no evidence in the headline, the line of the switches or the
+    notes under the runner-ups, for a page made from the wiki level (the shards of a release) as for one made from the strict level."""
     need_node()
     scratch = tmp_path / "results"
     shutil.copytree(RESULTS, scratch)
     expected = retarget(scratch, evidence="wiki", strict_pool_empty=True)
     out = tmp_path / "dist"
     run_build(out, tmp_path, results=scratch)
-    html = page(out, PAGES["trio"])
-    assert [r.get("value") for r in html.find_all("input", name="ev") if r.has("checked")] == ["wiki"]
-    assert html.by_id("assume-evidence").find(data_f="assume-ev").text() == "wiki evidence"
-    assert "Evidence: wiki evidence" in html.by_id("assume-evidence").find("summary").text()
-    note = html.by_id("evidence-note").text()
-    assert "No item has been seen in game yet" in note and "every item the wiki lists" in note
-    labels = {i.get("value"): html.find("label", **{"for": i.get("id")}).text() for i in html.find_all("input", name="ev")}
-    assert labels["strict"] == "Strict: only items seen in game (none yet)" and labels["wiki"] == "Wiki: also items the wiki lists"
-    names = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
-    assert names == [item.name if item else "Leave empty" for item in expected["scenario"].kit]
-    # the runner-ups are for the level of the default answer: the words say which, and the rows are there
-    text = html.by_id("runnerups").find("p").text()
-    assert "default assumptions only" in text and "every item the wiki lists" in text and "items seen in game" not in text
-    assert "every item the wiki lists" in html.by_id("runnerups-na").text()
-    assert not html.by_id("runnerups-table").has("hidden")
-    # the strict page has none of this
     plain = tmp_path / "plain"
     run_build(plain, tmp_path)
-    strict_page = page(plain, PAGES["trio"])
-    assert strict_page.find_all("p", id_="evidence-note") == []
-    assert "items seen in game" in strict_page.by_id("runnerups").find("p").text()
-    labels = {i.get("value"): strict_page.find("label", **{"for": i.get("id")}).text() for i in strict_page.find_all("input", name="ev")}
-    assert labels["strict"] == "Strict: only items seen in game"
+    for built in (out, plain):
+        html = page(built, PAGES["trio"])
+        text = html.find("main").text(skip_hidden=False)
+        assert html.find_all("input", name="ev") == [] and html.find_all("p", id_="evidence-note") == [] and not html.find_all("details", id_="assume-evidence")
+        assert [th.text() for th in html.by_id("kit").find("thead").find_all("th")] == ["Slot", "Item", "Tier", "Arrives at", "Source"]
+        assert not html.by_id("kit-body").find_all(data_f="seal") and not html.by_id("kit-body").find_all(data_f="seal-icon")
+        for word in ("(none yet)", "seen in game", "Seen in game", "strict evidence", "wiki evidence", "items the wiki lists"):
+            assert word not in text, word
+        assert html.by_id("best-race-view").text() == "Balanced view at +4 with your own buffs"
+        assert "evidence" not in html.by_id("view-summary").text().lower()
+        assert "evidence" not in html.by_id("runnerups").find("p").text().lower() and "evidence" not in html.by_id("runnerups-na").text().lower()
+    names = [row.find(data_f="name").text() for row in page(out, PAGES["trio"]).by_id("kit-body").find_all("tr")]
+    assert names == [item.name if item else "Leave empty" for item in expected["scenario"].kit]
+    assert not page(out, PAGES["trio"]).by_id("runnerups-table").has("hidden")
 
 
 def test_a_build_from_a_partial_run_says_so(tmp_path, capsys):
@@ -2106,9 +2108,9 @@ def test_the_margin_names_the_scoring_rules_and_the_view_it_is_the_best_of(site)
     html = page(out, PAGES["trio"])
     best = html.by_id("best-race")
     # the headline names its view itself, so that the claim is never read without it; the figure of the margin is in it
-    assert best.text() == "Best race for this trio: Ogre (+813 over Troll), judged in the Balanced view at +4 with strict evidence and your own buffs."
+    assert best.text() == "Best race for this trio: Ogre (+813 over Troll), judged in the Balanced view at +4 with your own buffs."
     assert set(html.find(cls="margin").get("data-rules").split()) == {"roles.balanced", "roles.templates"}
-    assert html.by_id("best-race-view").text() == "Balanced view at +4 with strict evidence and your own buffs"
+    assert html.by_id("best-race-view").text() == "Balanced view at +4 with your own buffs"
     # the rules it is judged by wait in a closed expander under it: a phone shows the answer first, whatever the notes say
     why = html.by_id("race-why")
     assert why.tag == "details" and not why.has("open") and why.parent is best.parent
@@ -2310,6 +2312,84 @@ def test_every_data_file_carries_the_release_the_licence_and_the_attribution(sit
         assert document["attribution"] == ATTRIBUTION, path.name
 
 
+# ---- the pixel art in the pages ---------------------------------------------------------------------------------------------------------------
+
+
+#: the sprites that move on their own, and the one that moves only while its link is hovered or has the focus (the mail)
+MOVING = ("art-torch", "art-coin", "art-dwarf")
+
+
+def test_the_art_in_the_pages_is_decoration_and_at_most_three_things_move_on_any_page(site):
+    out, _ = site
+    for name in [*PAGES.values(), NOT_FOUND]:
+        html = page(out, name)
+        arts = [node for node in html.find_all("span") if "art" in node.classes]
+        assert arts, name  # the brand has its emblem and torches on every page
+        for node in arts:
+            assert node.get("aria-hidden") == "true" and node.text(skip_hidden=False) == "" and node.get("style") is None, (name, node)
+        moving = [node for node in arts if node.classes & set(MOVING)]
+        assert len(moving) <= 3, (name, [sorted(node.classes) for node in moving])
+        assert html.find_all("img") == [] and all(node.get("style") is None for node in html.iter()), name  # style-src 'self': no style attribute anywhere
+    trio, home = page(out, PAGES["trio"]), page(out, PAGES["home"])
+    assert len([n for n in trio.find_all("span") if n.classes & set(MOVING)]) == 3  # two torches and the coin
+    assert [sorted(n.classes) for n in trio.find_all("span") if "art-mail" in n.classes] == [["art", "art-mail"]]  # the mail rests until the link is hovered
+    assert len([n for n in home.find_all("span") if n.classes & set(MOVING)]) == 3  # two torches and the dwarf, which is there because the other trios are not ready
+    assert page(out, PAGES["about"]).find_all("span", cls="art-dwarf") == []  # a page that is not unfinished has no dwarf under construction
+
+
+def test_the_rows_of_the_kit_have_the_icon_of_their_place_and_the_roles_their_crest(site):
+    out, _ = site
+    trio = page(out, PAGES["trio"])
+    rows = trio.by_id("kit").find_all("tr")
+    icons = {row.find("th").text(skip_hidden=False): [sorted(n.classes) for n in row.find("th").find_all("span")] for row in rows if row.find("th")}
+    assert icons["Head"] == [["art", "art-icon-helm"]] and icons["Wrist 2"] == [["art", "art-icon-wrist"]] and icons["Main hand"] == [["art", "art-icon-sword"]]
+    assert icons["Arms"] == [["art", "art-icon-arms"]] and icons["Back"] == [["art", "art-icon-back"]]
+    assert all(icons[slot] == [] for slot in ("Hands", "Any slot 1", "Any slot 2", "Off hand"))
+    crests = {radio.get("value"): [sorted(n.classes) for n in trio.find("label", **{"for": radio.get("id")}).find_all("span")] for radio in trio.find_all("input", type="radio") if radio.get("name") == "role"}
+    assert crests["tank"] == [["art", "art-crest-tank"]] and crests["melee"] == [["art", "art-crest-damage"]] and crests["balanced"] == [] and crests.get("caster", []) == []
+
+
+def test_the_404_page_has_its_lost_picture_as_decoration_with_the_page_whole_without_it(site):
+    out, _ = site
+    lost = page(out, NOT_FOUND).find_all("span", cls="art-lost")
+    assert len(lost) == 1 and lost[0].get("aria-hidden") == "true" and lost[0].text(skip_hidden=False) == ""
+    assert page(out, NOT_FOUND).find("h1").text() == "Page not found"
+
+
+def test_the_footer_has_its_four_badges_and_the_line_about_daybreak_and_no_line_about_800_by_600(site):
+    out, _ = site
+    for name in [*PAGES.values(), NOT_FOUND]:
+        footer = page(out, name).find("footer")
+        badges = [(n.classes - {"badge"}, n.text(skip_hidden=False)) for n in footer.find_all("span") + footer.find_all("a") if "badge" in n.classes]
+        assert sorted(text for _, text in badges) == ["Best in Slot", "Data: eqlwiki CC BY-SA", "Made with Notepad", "TrioForge"], name
+        assert footer.find_all(cls="not-affiliated")[0].text() == "This site is not affiliated with Daybreak Games"
+        assert "800" not in footer.text(skip_hidden=False)
+    data_badge = page(out, PAGES["home"]).find("footer").find_all("a", cls="badge")[0]
+    assert data_badge.get("href") == "/sources/"  # the data badge leads to the page of the sources
+
+
+def test_the_icon_of_every_page_is_the_emblem_as_a_png_address(site):
+    out, _ = site
+    for name in [*PAGES.values(), NOT_FOUND]:
+        links = [n for n in page(out, name).find("head").find_all("link") if n.get("rel") == "icon"]
+        assert [n.get("href") for n in links] == [build.FAVICON], name
+    assert build.FAVICON.startswith("data:image/png;base64,")
+
+
+def test_the_art_of_the_site_stays_under_120_kb_and_the_build_refuses_more(site):
+    out, summary = site
+    total = sum(p.stat().st_size for p in (out / "assets").glob("*.png"))
+    assert 0 < total <= build.LIMITS["art"] == 120 * 1024
+    assert summary.sizes["art"] == total
+    page_name = "trio/pal-mnk-ber/index.html"
+    files = {page_name: b"<html></html>", "assets/app-AAAAAAAA.js": b"let a=1;", "assets/boot-BBBBBBBB.js": b"let b=2;", "assets/tile-AAAAAAAA.png": b"x" * build.LIMITS["art"]}
+    kwargs = dict(trio_pages=[page_name], first_load_assets={page_name: ["assets/app-AAAAAAAA.js", "assets/boot-BBBBBBBB.js"]})
+    assert build.check_budgets(files, **kwargs)["art"] == 120 * 1024  # at the limit is within it
+    files["assets/coin-BBBBBBBB.png"] = b"x"
+    with pytest.raises(build.BudgetError, match=r"the art is 120\.0 KB in all \(limit 120 KB\)"):
+        build.check_budgets(files, **kwargs)
+
+
 # ---- the fold of the switches, the status on the page, and forced colours -----------------------------------------------------------------------------
 
 
@@ -2350,8 +2430,8 @@ def test_the_switches_sit_in_one_panel_behind_a_line_that_says_what_is_shown(sit
     assert panel.find("section", cls="controls") and panel.find("section", cls="assumes") and not panel.has("data-open")
     order = [n.get("id") for n in html.find("main").iter() if n.get("id") in ("view-bar", "switches", "status", "wear-h")]
     assert order == ["view-bar", "switches", "status", "wear-h"]  # what is shown, the switches, the messages, the answer
-    assert html.by_id("view-summary").text() == "Showing Ogre · Balanced · +4 dual wield, strict evidence, your own buffs"
-    for ident in ("sw-race", "sw-tier", "sw-role", "assume-buffs", "assume-weapons", "assume-evidence"):
+    assert html.by_id("view-summary").text() == "Showing Ogre · Balanced · +4 dual wield, your own buffs"
+    for ident in ("sw-race", "sw-tier", "sw-role", "assume-buffs", "assume-weapons"):
         assert panel.by_id(ident)  # all of them are inside the panel that folds
 
 
@@ -2408,15 +2488,15 @@ def test_forced_colours_draw_a_chosen_radio_button_apart_from_an_unchosen_one():
 
 
 def switch_controls(main):
-    """The controls of the race, role, tier, weapon, buffs and evidence switches."""
-    return [n for n in main.iter() if n.get("id") in ("sw-race", "sw-tier") or (n.tag == "input" and n.get("name") in ("role", "setup", "buffs", "ev"))]
+    """The controls of the race, role, tier, weapon and buffs switches."""
+    return [n for n in main.iter() if n.get("id") in ("sw-race", "sw-tier") or (n.tag == "input" and n.get("name") in ("role", "setup", "buffs"))]
 
 
 def test_without_the_page_code_the_switches_are_disabled_and_the_note_that_says_why_comes_before_them(site):
     out, _ = site
     main = page(out, PAGES["trio"]).find("main")
     controls = switch_controls(main)
-    assert len(controls) >= 12  # two selects and the radio buttons of the role, weapons, buffs and evidence choices
+    assert len(controls) >= 10  # two selects and the radio buttons of the role, weapons and buffs choices
     # the page code enables them: without it a switch would do nothing, so it says so by being disabled
     assert [n.get("id") for n in controls if not n.has("disabled")] == []
     order = [n.tag if n.tag == "noscript" else n.get("id") for n in main.iter() if (n.tag == "noscript" and n.parent is main) or n.get("id") in ("view-bar", "switches")]
@@ -4435,7 +4515,7 @@ def test_the_page_script_loads_the_upgrade_chunk_by_a_dynamic_import_and_imports
     assert not re.search(r"""(?<![\w$.])import\s*[{*"'\w$]""", app), "the page script imports something at once"
     # no chunk shared by the page script and the section: the files under assets/ are the page's, its stylesheet, the section's, the code of a shared kit (a chunk of its own, which the
     # section loads by a dynamic import), the sliders' (a chunk of its own as well) and the modules that those share (the chunks that esbuild makes of them), and the optimizer's folder
-    names = sorted({p.name.split("-")[0] for p in (out / "assets").iterdir() if p.is_file()})
+    names = sorted({p.name.split("-")[0] for p in (out / "assets").iterdir() if p.is_file() and p.suffix != ".png"})  # (the pictures of the theme are PNGs beside the stylesheet)
     assert names == ["app", "boot", "chunk", "notfound", "shared", "site", "upgrade", "weights"]  # (notfound: the 404 page's own script, a bundle that shares nothing with the page script)
     chunk = chunks[0].read_text(encoding="utf-8")
     assert "initUpgrade" in chunk and "createGearInput" in chunk and "createGearInput" not in app

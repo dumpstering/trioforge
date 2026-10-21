@@ -2,13 +2,13 @@
 
 The world is small on purpose: the invented catalog of ``test_precompute.py`` (about 25 items, every name and number invented), a copy of the tables in
 which only the Ogre and the Troll are playable, and two trios that play the balanced role alone. The scope is the real one (+0, +4 and +10), the
-solver is the real one, the seen flags are a made-up list. What is held:
+solver is the real one, and the catalog has no strict item: wiki is the one evidence level of a release. What is held:
 
 * **resumption**: a trio that is finished is not run again; an interrupted one resumes from its chunk files, and no chunk whose inputs did not change is
   made again (a kill by its process id included); a changed input makes the chunks again;
 * **the grid**: a missing trio, a partial one and one at another scope are each refused, and nothing is packed;
-* **each release check** refuses on a fault injected into a copy of the results: the invariants, the bundles against the catalog with the seen flags merged, the
-  pruning spot check against the unpruned optimum;
+* **each release check** refuses on a fault injected into a copy of the results: the invariants, the bundles against the public catalog, the
+  pruning spot check against the unpruned optimum; a catalog with a strict item is refused before any hour is spent;
 * **the build**: the asset, the pointer, the report; what the asset holds and what no output holds; a refusal at any step leaves nothing behind.
 """
 
@@ -29,7 +29,7 @@ from types import SimpleNamespace
 
 import pytest
 from release_helpers import FakeGit, change_sources, edit, load
-from test_precompute import small_world, write_catalog, write_seen
+from test_precompute import small_world, write_catalog
 from test_privacy_helpers import commit, gitenv, make_repo, privacy_files, write_key_file  # noqa: F401 (gitenv is a fixture)
 from test_privacy_helpers import git as run_git
 from test_release_assemble import make_junction
@@ -41,26 +41,10 @@ from trioforge.precompute.assemble import ReleaseRefused
 
 REPO = Path(__file__).resolve().parents[2]
 PIPELINE = REPO / "pipeline"
-TRIOS = ("brd-bst-ber", "brd-rog-ber")  # the balanced role alone: 36 chunks each
-SEEN = {"w9001", "w9002", "w9003", "w9006", "w9007", "w9009", "w9011", "w9012", "w9014", "w9015", "w9021"}  # (w9014 is the shield: the strict level gets the shield setup)
+TRIOS = ("brd-bst-ber", "brd-rog-ber")  # the balanced role alone
+CHUNKS = 30  # the chunks of each: strict (2 setups, since its pool is empty and has no shield) and wiki (3) x buff sets (2) x tiers (3)
 TAG = "data-2026-10-17"
 ASSETS = tuple(f"assets/part-{n:08X}.js" for n in range(14))
-
-
-def emulate_seen_catalog(public: Path, seen: Path, out: Path) -> None:
-    """The catalog with the seen flags merged, as the catalog builder writes it: an item that was seen is strict (its reasons the seen reason, and the marks that
-    keep it out of lists), unless a removal hides it. (The tests of the builder itself are in ``test_catalog.py``.)"""
-    document = json.loads(public.read_text(encoding="utf-8"))
-    flags = set(json.loads(seen.read_text(encoding="utf-8"))["keys"])
-    for item in document["items"]:
-        evidence = item["evidence"]
-        removed = any(r["code"] in ("removed-by-patch", "removed-by-research") for r in evidence["reasons"])
-        if item["key"] in flags and not removed:
-            kept = [r for r in evidence["reasons"] if r["code"] in ("not-for-bis", "not-for-default-kits")]
-            evidence["level"] = "strict"
-            evidence["reasons"] = sorted([{"code": "seen-in-game", "seal": "measured", "text": "Seen in game."}, *kept], key=lambda r: r["code"])
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "catalog.json").write_text(json.dumps(document), encoding="utf-8")
 
 
 def no_check(*args, **kwargs):
@@ -72,12 +56,10 @@ def pass_parity(folder, sample, files):
 
 
 def make_world(directory: Path) -> SimpleNamespace:
-    """A world: tables, catalog, seen flags, privacy lists and key, and empty build/, releases/ and reports/ folders."""
+    """A world: tables, catalog, privacy lists and key, and empty build/, releases/ and reports/ folders."""
     root = directory
     small_world(root)
     catalog = write_catalog(root / "derived" / "catalog.json")
-    (root / "private").mkdir()
-    seen = write_seen(root / "private" / "seen-flags.json", SEEN)
     privacy_files(root)
     key = write_key_file(root / "keys")
     for name in ("build", "releases", "reports"):
@@ -87,12 +69,12 @@ def make_world(directory: Path) -> SimpleNamespace:
 
 def world_at(root: Path) -> SimpleNamespace:
     return SimpleNamespace(
-        root=root, catalog=root / "derived" / "catalog.json", seen=root / "private" / "seen-flags.json", key=root / "keys" / "privacy.key", results=root / "build" / "results"
+        root=root, catalog=root / "derived" / "catalog.json", key=root / "keys" / "privacy.key", results=root / "build" / "results"
     )
 
 
 def spec_for(world, slug: str, **over) -> release.TrioSpec:
-    values = dict(results=str(world.results), catalog=str(world.catalog), seen=str(world.seen), tables_root=str(world.root))
+    values = dict(results=str(world.results), catalog=str(world.catalog), tables_root=str(world.root))
     values.update(over)
     return release.TrioSpec(slug, **values)
 
@@ -132,7 +114,7 @@ def files_under(root: Path) -> list[str]:
 def test_the_grid_is_run_in_a_pool_of_processes_and_every_trio_has_its_files(world):
     assert [o.slug for o in world.outcomes] == list(TRIOS)  # in the order of the specs, whichever finished first
     for outcome in world.outcomes:
-        assert outcome.status == "done" and outcome.violations == [] and outcome.chunks == 36 and outcome.scenarios == 36 * 2
+        assert outcome.status == "done" and outcome.violations == [] and outcome.chunks == CHUNKS and outcome.scenarios == CHUNKS * 2
         folder = world.results / outcome.slug
         assert {p.name for p in folder.glob("*.json")} == {"strict-own.json", "strict-group.json", "wiki-own.json", "wiki-group.json", "defaults.json", "robust.json", "engine-l50.json"}
         assert (folder / "runnerups" / "balanced.json").is_file() and (folder / "chunks" / release.MARKER).is_file()
@@ -148,7 +130,7 @@ def test_a_finished_trio_is_not_run_again(world, tmp_path):
     copy = clone(world, tmp_path)
     before = {p: p.stat().st_mtime_ns for p in (copy.results / TRIOS[0]).rglob("*") if p.is_file()}
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "resumed" and outcome.solved == 0 and outcome.redone == 0 and outcome.reused == outcome.chunks == 36
+    assert outcome.status == "resumed" and outcome.solved == 0 and outcome.redone == 0 and outcome.reused == outcome.chunks == CHUNKS
     assert {p: p.stat().st_mtime_ns for p in (copy.results / TRIOS[0]).rglob("*") if p.is_file()} == before  # not a file was written
 
 
@@ -160,9 +142,9 @@ def test_an_interrupted_trio_resumes_from_its_finished_chunks_and_makes_no_chunk
     assert len(before) == 7 and not (scratch.results / TRIOS[0] / "defaults.json").exists()  # no result file, no marker
     assert not (scratch.results / TRIOS[0] / "chunks" / release.MARKER).exists()
     second = release.run_trio(spec_for(scratch, TRIOS[0]))
-    assert second.status == "done" and second.reused == 7 and second.redone == 0 and second.chunks == 36
+    assert second.status == "done" and second.reused == 7 and second.redone == 0 and second.chunks == CHUNKS
     after = chunk_files(scratch, TRIOS[0])
-    assert len(after) == 36 and all(after[name] == before[name] for name in before)  # the seven are the very files (bytes and time) of the first run
+    assert len(after) == CHUNKS and all(after[name] == before[name] for name in before)  # the seven are the very files (bytes and time) of the first run
 
 
 def test_the_result_files_of_a_resumed_trio_are_those_of_a_run_that_was_not_interrupted(world, tmp_path):
@@ -226,16 +208,9 @@ def test_a_changed_input_makes_the_chunks_again_and_an_unchanged_one_makes_none(
     document["items"][0]["stats"]["STA"] = document["items"][0]["stats"].get("STA", 0) + 1  # one stat of one item
     copy.catalog.write_text(json.dumps(document), encoding="utf-8")
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.reused == 0 and outcome.redone == 36  # every chunk of the trio was made from the old catalog
+    assert outcome.status == "done" and outcome.reused == 0 and outcome.redone == CHUNKS  # every chunk of the trio was made from the old catalog
     again = release.run_trio(spec_for(copy, TRIOS[0]))
     assert again.status == "resumed" and again.solved == 0
-
-
-def test_other_seen_flags_make_the_chunks_again(world, tmp_path):
-    copy = clone(world, tmp_path)
-    write_seen(copy.seen, SEEN - {"w9011"})
-    outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.reused == 0 and outcome.redone == 36
 
 
 def test_a_result_file_that_was_changed_after_the_trio_finished_is_made_again_from_the_chunks(world, tmp_path):
@@ -243,14 +218,14 @@ def test_a_result_file_that_was_changed_after_the_trio_finished_is_made_again_fr
     target = copy.results / TRIOS[0] / "wiki-own.json"
     target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.reused == 36 and outcome.solved == 0  # the marker was not trusted, the chunks were
+    assert outcome.status == "done" and outcome.reused == CHUNKS and outcome.solved == 0  # the marker was not trusted, the chunks were
     assert target.read_bytes() == (world.results / TRIOS[0] / "wiki-own.json").read_bytes()
 
 
 def test_a_scope_other_than_the_one_the_marker_was_made_for_is_not_resumed_but_its_chunks_are_kept(world, tmp_path):
     copy = clone(world, tmp_path)
     outcome = release.run_trio(spec_for(copy, TRIOS[0], tiers=(0, 4)))
-    assert outcome.status == "done" and outcome.chunks == 24 and outcome.reused == 24 and outcome.solved == 0  # (a chunk is one view: the scope is not part of it)
+    assert outcome.status == "done" and outcome.chunks == CHUNKS * 2 // 3 and outcome.reused == CHUNKS * 2 // 3 and outcome.solved == 0  # (a chunk is one view: the scope is not part of it)
     marker = json.loads((copy.results / TRIOS[0] / "chunks" / release.MARKER).read_text(encoding="utf-8"))
     assert marker["tiers"] == [0, 4]
 
@@ -279,7 +254,7 @@ def test_a_precompute_prints_counts_and_never_an_item(world, tmp_path):
     lines: list[str] = []
     release.precompute_grid([spec_for(scratch, TRIOS[0], limit=2)], processes=1, say=lines.append)
     text = "\n".join(lines)
-    assert "1/1" in text and not any(key in text for key in SEEN) and "w9" not in text
+    assert "1/1" in text and "w9" not in text
 
 
 # ---- the grid: a missing, a partial and a wrong-scope trio -----------------------------------------------------------------------------------------
@@ -290,7 +265,7 @@ def test_every_trio_of_the_grid_present_complete_and_at_its_scope_passes(world, 
     assert [f.slug for f in facts] == list(TRIOS)
     for fact in facts:
         assert fact.tiers == (0, 4, 10) and fact.roles == ("balanced",) and fact.levels == (50,) and fact.data_tag == "data-2030-01-02" and fact.level == 50
-        assert fact.chunks == 36  # evidence levels (2) x buff sets (2) x setups (3) x tiers (3): the views the parity suite draws its sample from
+        assert fact.chunks == CHUNKS  # the views the parity suite draws its sample from
 
 
 def test_a_missing_trio_is_refused_by_name(world, tmp_path):
@@ -441,6 +416,9 @@ def test_a_violation_the_run_itself_found_refuses_the_release(world, tmp_path):
 
 def test_a_rounding_unit_of_a_shard_is_no_violation_and_more_than_one_is(world, tmp_path):
     folder = shipped(world, tmp_path)
+    for buffs in ("own", "group"):  # (the strict shards of a release hold the naked-plus-buffs kits: bring them up to wiki's values, so that only the rounding is tried)
+        for tier in (0, 4, 10):
+            set_value(folder, f"strict-{buffs}", "OGR", tier, value_of(folder, f"wiki-{buffs}", "OGR", tier))
     wiki = value_of(folder, "wiki-own", "OGR", 4)
     set_value(folder, "strict-own", "OGR", 4, wiki)  # equal ...
     set_value(folder, "wiki-own", "OGR", 4, round(wiki - 0.01, 2))  # ... and a hundredth the other way: two roundings of the same value
@@ -450,38 +428,27 @@ def test_a_rounding_unit_of_a_shard_is_no_violation_and_more_than_one_is(world, 
         release.check_invariants(folder, TRIOS)
 
 
-# ---- the bundles against the catalog with the seen flags merged ----------------------------------------------------------------------------------
+# ---- the bundles against the public catalog -----------------------------------------------------------------------------------------------------
 
 
-def seen_catalog_path(world, tmp_path) -> Path:
-    out = tmp_path / "catalog-with-seen"
-    emulate_seen_catalog(world.catalog, world.seen, out)
-    return out / "catalog.json"
-
-
-def test_every_bundle_is_the_one_exported_from_the_catalog_with_the_flags_merged_and_follows_the_shard_headers(world, tmp_path):
+def test_every_bundle_is_the_one_exported_from_the_catalog_and_follows_the_shard_headers(world, tmp_path):
     folder = shipped(world, tmp_path)
-    assert release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root) == len(TRIOS)
+    assert release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root) == len(TRIOS)
 
 
-def test_the_strict_level_of_the_bundle_has_the_shield_setup_the_strict_shards_have(world):
+def test_wiki_is_the_one_evidence_level_of_a_release_the_strict_shards_hold_no_pool_and_no_shield(world):
     bundle = load(world.results / TRIOS[0] / "engine-l50.json")
     shard = load(world.results / TRIOS[0] / "strict-own.json")
-    assert "1h-shield" in bundle["roles"]["balanced"]["setups_by_evidence"]["strict"] and "1h-shield" in shard["setups"]["balanced"]
-
-
-def test_a_bundle_made_from_the_public_catalog_alone_is_refused(world, tmp_path):
-    """The export from the public catalog has no strict item and so no shield at the strict level: the strict shards have one."""
-    with pytest.raises(ReleaseRefused, match=r"strict") as raised:
-        release.check_bundles(shipped(world, tmp_path), TRIOS, seen_catalog=world.catalog, tables_root=world.root)
-    assert TRIOS[0] in str(raised.value) and "1h-shield" in str(raised.value)
+    assert shard["flags"] == ["strict pool empty"] and shard["pool"] == 0
+    setups = bundle["roles"]["balanced"]["setups_by_evidence"]
+    assert "1h-shield" not in setups["strict"] and "1h-shield" not in shard["setups"]["balanced"] and "1h-shield" in setups["wiki"]
 
 
 def test_a_bundle_whose_strict_setups_are_not_the_shard_headers_is_refused(world, tmp_path):
     folder = shipped(world, tmp_path)
-    edit(folder / TRIOS[0] / "strict-own.json", lambda d: d["setups"].update(balanced=[s for s in d["setups"]["balanced"] if s != "1h-shield"]))
+    edit(folder / TRIOS[0] / "strict-own.json", lambda d: d["setups"].update(balanced=[*d["setups"]["balanced"], "1h-shield"]))
     with pytest.raises(ReleaseRefused, match=rf"{TRIOS[0]}.*strict") as raised:
-        release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root)
+        release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root)
     assert "balanced" in str(raised.value) and "strict-own.json" in str(raised.value)
 
 
@@ -489,7 +456,7 @@ def test_a_bundle_that_is_not_what_the_exporter_writes_from_that_catalog_is_refu
     folder = shipped(world, tmp_path)
     edit(folder / TRIOS[1] / "engine-l50.json", lambda b: b["constants"].update(hp_pool_constant="1/1"))
     with pytest.raises(ReleaseRefused, match=TRIOS[1]) as raised:
-        release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root)
+        release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root)
     assert "exporter" in str(raised.value)
 
 
@@ -499,35 +466,59 @@ def test_an_item_whose_level_in_the_release_is_not_the_one_in_that_catalog_is_re
     def change(table):
         for record in table["items"]:
             if record.get("key") == "w9014" or record["id"] == 9014:
-                record["evidence"] = {"level": "wiki"}
+                record["evidence"] = {"level": "strict"}
 
     edit(folder / "items.json", change)
     with pytest.raises(ReleaseRefused, match=r"w9014.*level"):
-        release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root)
+        release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root)
 
 
-def test_the_catalog_with_the_flags_merged_must_come_from_the_same_inputs_as_the_public_one(world, tmp_path):
-    good = json.loads(seen_catalog_path(world, tmp_path).read_text(encoding="utf-8"))
-    path = tmp_path / "other-catalog.json"
+# ---- a catalog with a strict item is refused: wiki is the one evidence level ------------------------------------------------------------------------
 
-    def written(document):
-        path.write_text(json.dumps(document), encoding="utf-8")
-        return path
 
-    release.check_seen_catalog(world.catalog, written(good))
-    with pytest.raises(ReleaseRefused, match=r"2030-01-03.*2030-01-02|2030-01-02.*2030-01-03"):
-        release.check_seen_catalog(world.catalog, written({**good, "version": "2030-01-03"}))
-    with pytest.raises(ReleaseRefused, match="same inputs"):
-        release.check_seen_catalog(world.catalog, written({**good, "provenance": {"inputs": [{"file": "x", "sha256": "00" * 32, "date": "2030-01-02"}]}}))
-    with pytest.raises(ReleaseRefused, match="same items|items"):
-        release.check_seen_catalog(world.catalog, written({**good, "items": good["items"][:-1]}))
+def with_a_strict_item(path: Path, count: int = 1) -> list[str]:
+    """Make the first ``count`` items of a catalog strict, as a community report would; the keys of them."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    for item in document["items"][:count]:
+        item["evidence"]["level"] = "strict"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return [item["key"] for item in document["items"][:count]]
+
+
+def test_the_guard_passes_a_catalog_whose_items_are_wiki_disputed_or_hidden_and_refuses_one_strict_item(world):
+    document = json.loads(world.catalog.read_text(encoding="utf-8"))
+    release.check_no_strict_item(document)  # the catalog of the world: every item is a wiki item
+    document["items"][0]["evidence"]["level"] = "disputed"
+    document["items"][1]["evidence"]["level"] = "hidden"
+    release.check_no_strict_item(document)
+    document["items"][2]["evidence"]["level"] = "strict"
+    with pytest.raises(ReleaseRefused, match=r"1 strict item.*rules/community-seen\.json") as raised:
+        release.check_no_strict_item(document)
+    assert document["items"][2]["key"] not in str(raised.value)  # (it names the list of reports, never an item)
+
+
+def test_the_guard_refuses_a_catalog_whose_items_it_cannot_read_and_counts_an_item_whose_evidence_is_not_a_mapping_as_not_strict():
+    for document in ({}, {"items": {"a": {"evidence": {"level": "strict"}}}}, {"items": None}):
+        with pytest.raises(ReleaseRefused, match=r"no list of items"):
+            release.check_no_strict_item(document)
+    release.check_no_strict_item({"items": [{"key": "a", "evidence": "strict"}, "not an item"]})
+
+
+def test_a_release_is_not_built_from_a_catalog_with_a_strict_item_and_the_refusal_comes_before_the_hours(world, tmp_path):
+    copy = clone(world, tmp_path)
+    keys = with_a_strict_item(copy.catalog, 3)
+    calls: list[str] = []
+    with pytest.raises(ReleaseRefused, match=r"3 strict items.*wiki is the one evidence level.*rules/community-seen\.json") as raised:
+        build(world, tmp_path, runner=lambda spec: calls.append(spec.slug))
+    assert calls == [] and not any(key in str(raised.value) for key in keys)
+    nothing_left(copy.root)
 
 
 # ---- the pruning spot check -----------------------------------------------------------------------------------------------------------------------
 
 
 def spot(world, folder, **over):
-    return release.check_pruning(folder, TRIOS, catalog=world.catalog, seen=world.seen, tables_root=world.root, **{"seed": 7, **over})
+    return release.check_pruning(folder, TRIOS, catalog=world.catalog, tables_root=world.root, **{"seed": 7, **over})
 
 
 def test_one_random_scenario_of_each_trio_is_as_good_as_the_unpruned_optimum(world, tmp_path):
@@ -572,8 +563,8 @@ def build(world, tmp_path, *, tag: str = TAG, name: str = "w", **over):
     copy = world_at(tmp_path / name)
     lines: list[str] = []
     options = dict(
-        tag=tag, root=copy.root, seen=copy.seen, privacy_key=copy.key, processes=1, trios=TRIOS, trial=False, whole_grid=TRIOS, git=FakeGit(), say=lines.append,
-        make_seen_catalog=lambda out: emulate_seen_catalog(copy.catalog, copy.seen, out), bundle_reader=no_check, assets=ASSETS, parity_runner=pass_parity, seed=1,
+        tag=tag, root=copy.root, privacy_key=copy.key, processes=1, trios=TRIOS, trial=False, whole_grid=TRIOS, git=FakeGit(), say=lines.append,
+        bundle_reader=no_check, assets=ASSETS, parity_runner=pass_parity, seed=1,
     )  # (whole_grid: the two trios of this world are the whole grid of its releases; git: the copy of the world is no work tree)
     options.update(over)
     return copy, release.build_release(**options), lines
@@ -679,7 +670,7 @@ def test_release_json_says_that_a_checkout_with_no_file_has_no_entries(world, tm
 
 def finished(spec):
     """A stand-in for the solving: the results of the world are whole, and the build only has to find them (a change of the catalog's provenance would make the chunks again)."""
-    return release.TrioOutcome(slug=spec.slug, status="resumed", chunks=36, scenarios=72)
+    return release.TrioOutcome(slug=spec.slug, status="resumed", chunks=CHUNKS, scenarios=CHUNKS * 2)
 
 
 def test_release_json_records_the_entries_of_the_committed_file_that_the_catalog_was_built_from(world, tmp_path, monkeypatch):
@@ -715,6 +706,37 @@ def test_a_catalog_not_built_from_the_file_of_the_checkout_refuses_the_build_bef
     nothing_left(copy.root)
 
 
+def test_a_release_built_in_a_worktree_of_its_own_reads_the_stamps_of_the_checks_folder_and_not_the_build_folder_of_that_worktree(world, tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 10, 17, 12, 0, 0, tzinfo=timezone.utc)
+    fresh = (now - timedelta(days=2)).isoformat().replace("+00:00", "Z") + "\n"
+    stamps = tmp_path / "stamps"  # (the folder of the checks, which are run from another checkout)
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", str(stamps))
+    stamps.mkdir()
+    for name in release.SCHEDULED_CHECKS:
+        (stamps / f"{name}.last-run").write_text(fresh, encoding="utf-8")
+    _, result, _ = build(world, tmp_path, now=now)
+    assert not [warning for warning in result.warnings if "scheduled check" in warning], result.warnings  # (the worktree has no stamp of its own, and none is wanted)
+    # the other way: no stamp in the folder, and fresh ones in the worktree's own build/checks (where the checks left them before): they do not count
+    for stamp in stamps.iterdir():
+        stamp.unlink()
+    other = clone(world, tmp_path, "other")
+    (other.root / "build" / "checks").mkdir(parents=True, exist_ok=True)
+    for name in release.SCHEDULED_CHECKS:
+        (other.root / "build" / "checks" / f"{name}.last-run").write_text(fresh, encoding="utf-8")
+    _, result, _ = build(world, tmp_path, name="other", now=now)
+    warned = [warning for warning in result.warnings if "scheduled check" in warning]
+    assert len(warned) == len(release.SCHEDULED_CHECKS) and all(any(name in warning for warning in warned) for name in release.SCHEDULED_CHECKS)
+
+
+def test_a_folder_of_the_checks_that_is_not_absolute_refuses_the_build_before_anything_is_made(world, tmp_path, monkeypatch):
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", "relative/folder")
+    with pytest.raises(ReleaseRefused, match="TRIOFORGE_CHECKS_DIR must be an absolute path"):
+        build(world, tmp_path)
+    nothing_left(world_at(tmp_path / "w").root)
+
+
 def test_what_the_asset_holds(world, tmp_path):
     copy, result, _ = build(world, tmp_path)
     with tarfile.open(result.asset, "r:gz") as archive:
@@ -727,7 +749,8 @@ def test_what_the_asset_holds(world, tmp_path):
     assert inside["trios"] == {slug: [0, 4, 10] for slug in sorted(TRIOS)} and inside["trial"] is False and inside["release"] == TAG
     assert inside["catalog_date"] == "2030-01-02" and inside["catalog_sha256"] == hashlib.sha256(copy.catalog.read_bytes()).hexdigest()
     assert inside["code_hash"] == assemble.code_hash() and inside["level"] == 50 and inside["rules_version"]
-    assert inside["evidence"]["w9014"] == "strict" and inside["evidence"]["w9004"] == "wiki" and inside["rules"]["level.current"]["value"] == 50
+    assert inside["evidence"]["w9014"] == "wiki" and inside["evidence"]["w9004"] == "wiki" and inside["rules"]["level.current"]["value"] == 50
+    assert "strict" not in set(inside["evidence"].values())  # (wiki is the one evidence level of a release)
     assert inside["solver"]["canonical"] is True and "highs" in inside["solver"]
     assert all("fingerprint" not in body.lower() and "seen-in-game" not in body for body in text.values())
 
@@ -739,25 +762,19 @@ def test_the_evidence_map_is_in_the_asset_and_never_in_the_pointer_or_the_report
     assert list(assemble.read_pointer(copy.root / "releases" / f"{TAG}.json")) == list(assemble.POINTER_KEYS)
 
 
-def test_nothing_made_with_the_seen_flags_reaches_a_published_file_or_the_screen(world, tmp_path):
+def test_no_chunk_fingerprint_reaches_a_published_file_or_the_screen(world, tmp_path):
     copy, result, lines = build(world, tmp_path)
-    secret_digests = {
-        hashlib.sha256("\n".join(sorted(SEEN)).encode()).hexdigest(),  # the digest of the flags that every chunk fingerprint is made with
-        hashlib.sha256(copy.seen.read_bytes()).hexdigest(),
-        hashlib.sha256((copy.root / "build" / "catalog-with-seen" / "catalog.json").read_bytes()).hexdigest(),
-    }
     fingerprints = {json.loads(p.read_text(encoding="utf-8"))["fingerprint"] for p in (copy.results / TRIOS[0] / "chunks").glob("s-*.json")}
     published = [result.asset.read_bytes()]
     with tarfile.open(result.asset, "r:gz") as archive:
         published += [archive.extractfile(m).read() for m in archive.getmembers()]
     published += [p.read_bytes() for p in (copy.root / "releases").glob("*")] + [p.read_bytes() for p in (copy.root / "reports").glob("*")]
     published.append("\n".join(lines).encode("utf-8"))
-    assert fingerprints and secret_digests
+    assert fingerprints
     for blob in published:
-        for secret in secret_digests | fingerprints:
+        for secret in fingerprints:
             assert secret.encode() not in blob
-    screen = "\n".join(lines)
-    assert not any(key in screen for key in SEEN) and "seen-in-game" not in screen
+    assert "seen-in-game" not in "\n".join(lines)
 
 
 def test_a_second_release_is_compared_with_the_first_and_with_nothing_changed_has_nothing_to_report(world, tmp_path):
@@ -785,7 +802,7 @@ def test_a_build_after_an_interruption_resumes_from_the_finished_trios_and_chunk
     (folder / "chunks" / release.MARKER).unlink()
     _, result, lines = build(world, tmp_path)
     by_slug = {o.slug: o for o in result.outcomes}
-    assert by_slug[TRIOS[0]].status == "resumed" and by_slug[TRIOS[1]].status == "done" and by_slug[TRIOS[1]].reused == 36 and by_slug[TRIOS[1]].solved == 0
+    assert by_slug[TRIOS[0]].status == "resumed" and by_slug[TRIOS[1]].status == "done" and by_slug[TRIOS[1]].reused == CHUNKS and by_slug[TRIOS[1]].solved == 0
     assert any("resumed" in line for line in lines)
 
 
@@ -802,12 +819,12 @@ def test_the_default_grid_is_the_560_trios_and_a_trio_that_is_not_there_is_refus
     copy = clone(world, tmp_path)
 
     def quick(spec):  # a stand-in for the hours of solving: every trio is "done", and the files are those of the two that exist
-        return release.TrioOutcome(slug=spec.slug, status="done", chunks=36, scenarios=72)
+        return release.TrioOutcome(slug=spec.slug, status="done", chunks=CHUNKS, scenarios=CHUNKS * 2)
 
     with pytest.raises(ReleaseRefused, match=r"558 trios"):
         release.build_release(
-            tag=TAG, root=copy.root, seen=copy.seen, privacy_key=copy.key, processes=1, say=lambda m: None, runner=quick, git=FakeGit(),
-            make_seen_catalog=lambda out: emulate_seen_catalog(copy.catalog, copy.seen, out), bundle_reader=no_check, assets=ASSETS, parity_runner=pass_parity,
+            tag=TAG, root=copy.root, privacy_key=copy.key, processes=1, say=lambda m: None, runner=quick, git=FakeGit(), bundle_reader=no_check, assets=ASSETS,
+            parity_runner=pass_parity,
         )
     nothing_left(copy.root)
 
@@ -911,48 +928,26 @@ def test_the_build_is_refused_up_front_for_a_bad_tag_a_spent_tag_and_a_missing_i
     with pytest.raises(ReleaseRefused, match="already"):
         build(world, tmp_path, runner=spy, git=tracking)
     report.unlink()
-    copy.seen.unlink()
-    with pytest.raises(ReleaseRefused, match="seen"):
-        build(world, tmp_path, runner=spy)
-    copy.seen.write_text("[]", encoding="utf-8")
-    with pytest.raises(ReleaseRefused, match="seen"):
-        build(world, tmp_path, runner=spy)
-    write_seen(copy.seen, SEEN)
     copy.key.unlink()
     with pytest.raises(ReleaseRefused, match="key"):
         build(world, tmp_path, runner=spy)
     assert calls == []  # nothing was solved for any of them: the hours are not spent on an input that was bad from the start
 
 
-def test_the_catalog_with_the_flags_is_built_from_the_wiki_snapshot_and_the_client_files(world, tmp_path):
-    """The real builder, fed a synthetic wiki snapshot: the file lands in build/catalog-with-seen and has the flagged item strict."""
-    from test_catalog import CLIENT, RULES, make_wiki, synthetic_record
-
-    copy = clone(world, tmp_path)
-    wiki = make_wiki(tmp_path / "wiki", [synthetic_record(9031, "Invented Seen Cap")], date="2030-01-02")
-    quests = tmp_path / "quests.json"
-    quests.write_text(json.dumps({"provenance": {"inputs": [{"file": "x", "sha256": "0" * 64, "date": "2026-10-11"}]}, "quests": []}), encoding="utf-8")
-    flags = write_seen(tmp_path / "flags.json", {"w9031"})
-    release.build_seen_catalog(wiki=wiki, client=CLIENT, seen=flags, out=copy.root / "build" / "catalog-with-seen", quests=quests, rules_dir=RULES, generated="2030-01-02")
-    built = load_strict(copy.root / "build" / "catalog-with-seen" / "catalog.json")
-    (item,) = built["items"]
-    assert item["key"] == "w9031" and item["evidence"]["level"] == "strict" and built["version"] == "2030-01-02"
-
-
 def test_a_bundle_and_an_item_table_made_from_other_inputs_are_refused(world, tmp_path):
     folder = shipped(world, tmp_path)
     edit(folder / TRIOS[0] / "engine-l50.json", lambda b: b.update(inputs="00" * 32))
     with pytest.raises(ReleaseRefused, match=rf"{TRIOS[0]}.*same inputs"):
-        release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root)
+        release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root)
 
 
 def test_a_marker_that_is_not_whole_is_no_marker_and_the_trio_is_run_from_its_chunks(world, tmp_path):
     copy = clone(world, tmp_path)
     marker = copy.results / TRIOS[0] / "chunks" / release.MARKER
-    for broken in ("{", "[]", json.dumps({"format": 1}), json.dumps({**json.loads(marker.read_text(encoding="utf-8")), "outcome": {"chunks": 36}})):
+    for broken in ("{", "[]", json.dumps({"format": 1}), json.dumps({**json.loads(marker.read_text(encoding="utf-8")), "outcome": {"chunks": CHUNKS}})):
         marker.write_text(broken, encoding="utf-8")
         outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-        assert outcome.status == "done" and outcome.reused == 36 and outcome.solved == 0, broken
+        assert outcome.status == "done" and outcome.reused == CHUNKS and outcome.solved == 0, broken
     assert release.run_trio(spec_for(copy, TRIOS[0])).status == "resumed"
 
 
@@ -965,7 +960,7 @@ def test_a_new_game_patch_makes_the_files_again_from_the_chunks(world, tmp_path)
         entry["date"] = "2030-02-03"
     path.write_text(json.dumps(manifest), encoding="utf-8")
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.reused == 36 and outcome.solved == 0
+    assert outcome.status == "done" and outcome.reused == CHUNKS and outcome.solved == 0
     assert json.loads((copy.results / TRIOS[0] / "wiki-own.json").read_text(encoding="utf-8"))["game_patch"] == "2030-02-03"
 
 
@@ -986,7 +981,7 @@ def test_a_changed_writer_makes_the_files_again_from_the_chunks_and_solves_nothi
     change_sources(monkeypatch, "precompute/shards.py")
     before = chunk_files(copy, TRIOS[0])
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.chunks == outcome.reused == 36 and outcome.solved == 0 and outcome.redone == 0
+    assert outcome.status == "done" and outcome.chunks == outcome.reused == CHUNKS and outcome.solved == 0 and outcome.redone == 0
     assert load(copy.results / TRIOS[0] / "defaults.json")["fixed_by"] == "the new writer"
     assert chunk_files(copy, TRIOS[0]) == before  # not a chunk was written
     assert load(copy.results / TRIOS[0] / "chunks" / release.MARKER)["writer"] == assemble.writer_hash()
@@ -998,7 +993,7 @@ def test_a_change_in_any_file_that_writes_a_trio_is_seen_by_a_finished_trio(worl
     copy = clone(world, tmp_path)
     change_sources(monkeypatch, name)
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.reused == 36 and outcome.solved == 0
+    assert outcome.status == "done" and outcome.reused == CHUNKS and outcome.solved == 0
 
 
 def test_the_marker_holds_the_hash_of_the_writer_code(world):
@@ -1013,7 +1008,7 @@ def test_a_marker_from_before_the_writers_were_hashed_is_no_marker(world, tmp_pa
     del marker["writer"]
     path.write_text(json.dumps(marker), encoding="utf-8")
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
-    assert outcome.status == "done" and outcome.reused == 36 and outcome.solved == 0
+    assert outcome.status == "done" and outcome.reused == CHUNKS and outcome.solved == 0
 
 
 def test_the_release_json_carries_the_code_hash_that_covers_the_writers(world, tmp_path, monkeypatch):
@@ -1042,9 +1037,13 @@ def test_the_full_diff_stays_in_the_build_folder_and_only_the_markdown_goes_to_r
 
 
 def test_no_text_that_is_committed_names_an_item_whose_evidence_changed(world, tmp_path):
-    """The public catalog has no strict item, so 'strict' says an item was seen by the maintainer: one key more in the seen file must not show in git."""
+    """The full diff, which stays in build/, names the items whose evidence moved (here the wiki goes back on two of them); what git keeps says how many, never which."""
     copy, _, _ = build(world, tmp_path, tag="data-2026-10-10")
-    write_seen(copy.seen, SEEN | {"w9004", "w9005"})  # two items more are seen: wiki to strict
+    document = json.loads(copy.catalog.read_text(encoding="utf-8"))
+    for item in document["items"]:
+        if item["key"] in {"w9004", "w9005"}:
+            item["evidence"]["level"] = "disputed"
+    copy.catalog.write_text(json.dumps(document), encoding="utf-8")
     _, second, _ = build(world, tmp_path, tag="data-2026-10-17")
     full = results_diff_json(copy.root, "data-2026-10-17")
     changed = {change["key"] for change in full["changes"] if change["kind"] == "item" and change.get("evidence")}
@@ -1132,7 +1131,7 @@ def test_a_scratch_folder_the_bundle_check_is_given_is_made_empty_first_and_remo
     scratch = tmp_path / "scratch.bundles"  # (beside the release folder, and named for a bundle check: the only kind of folder that is made empty)
     scratch.mkdir()
     (scratch / "left-from-a-kill.json").write_text("{", encoding="utf-8")
-    release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root, scratch=scratch)
+    release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root, scratch=scratch)
     assert not scratch.exists()
 
 
@@ -1177,41 +1176,6 @@ def test_some_trios_are_a_release_only_if_they_are_the_grid_and_otherwise_a_tria
     assert result.pointer is not None
 
 
-# ---- one snapshot of the seen flags ----------------------------------------------------------------------------------------------------------------
-
-
-def test_every_worker_and_every_check_reads_one_snapshot_of_the_seen_flags_taken_at_the_start(world, tmp_path):
-    copy = clone(world, tmp_path)
-    original = copy.seen.read_bytes()
-    reads = []
-
-    def runner(spec):
-        reads.append((spec.slug, spec.seen, Path(spec.seen).read_bytes()))
-        write_seen(copy.seen, SEEN - {"w9011"})  # the maintainer makes the flags again while the hours go by
-        return release.run_trio(spec)
-
-    _, result, lines = build(world, tmp_path, runner=runner)
-    assert [slug for slug, _, _ in reads] == sorted(TRIOS, key=lambda slug: (-release._weight(spec_for(copy, slug)), slug))
-    assert len({path for _, path, _ in reads}) == 1  # one file for every trio
-    snapshot = Path(reads[0][1])
-    assert snapshot != copy.seen and snapshot.parent == copy.root / "build" and snapshot.is_file()
-    assert all(content == original for _, _, content in reads)  # as the flags were at the start, though the second trio ran after the change
-    assert copy.seen.read_bytes() != original
-    with tarfile.open(result.asset, "r:gz") as archive:
-        assert not [name for name in archive.getnames() if "seen" in name]
-    assert not any(str(snapshot) in line or snapshot.name in line for line in lines)
-
-
-def test_the_seen_file_is_read_and_checked_once_at_the_start_and_a_bad_one_stops_the_build_before_the_hours(world, tmp_path):
-    copy = clone(world, tmp_path)
-    copy.seen.write_text('{"keys": ["not an item key!"]}', encoding="utf-8")
-    calls = []
-    with pytest.raises(ReleaseRefused, match="seen"):
-        build(world, tmp_path, runner=lambda spec: calls.append(spec.slug))
-    assert calls == []
-    assert not (copy.root / "build" / "seen-flags-snapshot.json").exists()
-
-
 # ---- the sample of the parity suite -------------------------------------------------------------------------------------------------------------
 
 
@@ -1225,7 +1189,7 @@ def test_the_parity_sample_is_drawn_from_the_snapshot_id_bounded_and_recorded_in
     copy, result, lines = build(world, tmp_path, parity_runner=recording)
     with tarfile.open(result.asset, "r:gz") as archive:
         document = json.loads(archive.extractfile("release.json").read())
-    limit = 36 // release.PARITY_MIN_CHUNKS  # (the trios of the world have 36 chunks each)
+    limit = CHUNKS // release.PARITY_MIN_CHUNKS  # (the trios of the world have CHUNKS chunks each)
     assert seen == [document["parity_sample"]] == [release.parity_sample(document["snapshot_id"], limit)]
     assert document["parity_sample"].endswith(f"/{limit}")
     assert any("parity" in line and document["parity_sample"] in line for line in lines)
@@ -1233,8 +1197,8 @@ def test_the_parity_sample_is_drawn_from_the_snapshot_id_bounded_and_recorded_in
 
 def test_a_stride_that_leaves_a_trio_with_too_few_chunks_is_refused_before_any_check_and_a_stride_that_is_no_number_before_the_hours(world, tmp_path):
     with pytest.raises(ReleaseRefused, match=r"stride") as raised:
-        build(world, tmp_path, parity_stride=37)
-    assert "37" in str(raised.value) and "36" in str(raised.value)  # (what is allowed: the smallest trio has 36 chunks)
+        build(world, tmp_path, parity_stride=CHUNKS + 7)
+    assert str(CHUNKS + 7) in str(raised.value) and str(CHUNKS) in str(raised.value)  # (what is allowed: the smallest trio has CHUNKS chunks)
     nothing_left(tmp_path / "w")
     calls = []
     for bad in (0, -2, 2.5, "7"):
@@ -1257,19 +1221,10 @@ def test_a_stride_no_trio_could_allow_is_refused_before_the_hours_and_one_the_sm
         assert str(gross) in str(raised.value)
     assert calls == []
     nothing_left(tmp_path / "w")
-    with pytest.raises(ReleaseRefused, match=r"stride") as raised:  # fewer than the ceiling, more than the smallest trio (36 chunks) allows
+    with pytest.raises(ReleaseRefused, match=r"stride") as raised:  # fewer than the ceiling, more than the smallest trio (CHUNKS chunks) allows
         build(world, tmp_path, parity_stride=100)
-    assert "100" in str(raised.value) and "36" in str(raised.value)
+    assert "100" in str(raised.value) and str(CHUNKS) in str(raised.value)
     nothing_left(tmp_path / "w")
-
-
-def test_the_seen_flags_are_never_copied_to_a_place_that_git_would_commit(world, tmp_path):
-    tree = tmp_path / "tree"
-    (tree / ".git").mkdir(parents=True)  # (a work tree of git: the build folder asked for is a folder of it that is not build/)
-    calls = []
-    with pytest.raises(ReleaseRefused, match="git"):
-        build(world, tmp_path, build_dir=tree / "derived" / "b", runner=lambda spec: calls.append(spec.slug))
-    assert calls == [] and not (tree / "derived").exists()
 
 
 # ---- the code is hashed once, at the start ----------------------------------------------------------------------------------------------------------
@@ -1283,7 +1238,7 @@ def test_the_inputs_are_loaded_with_the_hash_of_the_code_they_are_given_and_with
     from trioforge.precompute import grid
 
     codes = grid.parse_trio(TRIOS[0])
-    args = dict(catalog_path=world.catalog, seen_path=world.seen, tables_root=world.root)
+    args = dict(catalog_path=world.catalog, tables_root=world.root)
     disk, _ = grid.load_inputs(codes, **args)
     same, _ = grid.load_inputs(codes, code_hash=grid._code_hash(), **args)
     other, _ = grid.load_inputs(codes, code_hash="11" * 32, **args)
@@ -1299,7 +1254,7 @@ def test_a_run_takes_the_hash_of_the_chunks_from_its_caller(world, tmp_path):
     (first, *_) = sorted((scratch.results / TRIOS[0] / "chunks").glob("s-*.json"))
     from trioforge.precompute import grid
 
-    expected, _ = grid.load_inputs(grid.parse_trio(TRIOS[0]), catalog_path=scratch.catalog, seen_path=scratch.seen, tables_root=scratch.root, code_hash="11" * 32)
+    expected, _ = grid.load_inputs(grid.parse_trio(TRIOS[0]), catalog_path=scratch.catalog, tables_root=scratch.root, code_hash="11" * 32)
     assert load(first)["fingerprint"] == expected.fingerprint
 
 
@@ -1312,14 +1267,14 @@ def test_the_workers_of_a_pool_use_the_hashes_of_the_parent_and_never_hash_the_d
     specs = [spec_for(scratch, slug) for slug in TRIOS]
     outcomes = release.precompute_grid(specs, processes=2, say=lambda message: None, hashes=fake, check_workers=False)  # (these hashes are no disk's: see the next tests)
     assert [o.status for o in outcomes] == ["done", "done"]
-    expected, _ = grid.load_inputs(grid.parse_trio(TRIOS[0]), catalog_path=scratch.catalog, seen_path=scratch.seen, tables_root=scratch.root, code_hash=fake[0])
+    expected, _ = grid.load_inputs(grid.parse_trio(TRIOS[0]), catalog_path=scratch.catalog, tables_root=scratch.root, code_hash=fake[0])
     for slug in TRIOS:
         marker = load(scratch.results / slug / "chunks" / release.MARKER)
         assert marker["writer"] == fake[1]
         assert {load(p)["fingerprint"] for p in (scratch.results / slug / "chunks").glob("s-*.json")} == {
-            grid.load_inputs(grid.parse_trio(slug), catalog_path=scratch.catalog, seen_path=scratch.seen, tables_root=scratch.root, code_hash=fake[0])[0].fingerprint
+            grid.load_inputs(grid.parse_trio(slug), catalog_path=scratch.catalog, tables_root=scratch.root, code_hash=fake[0])[0].fingerprint
         }
-    assert expected.fingerprint != grid.load_inputs(grid.parse_trio(TRIOS[0]), catalog_path=scratch.catalog, seen_path=scratch.seen, tables_root=scratch.root)[0].fingerprint
+    assert expected.fingerprint != grid.load_inputs(grid.parse_trio(TRIOS[0]), catalog_path=scratch.catalog, tables_root=scratch.root)[0].fingerprint
 
 
 def test_the_build_hashes_the_code_once_before_the_pool_and_a_worker_never_hashes_the_disk(world, tmp_path, monkeypatch):
@@ -1403,8 +1358,8 @@ def test_a_bundle_of_another_level_does_not_make_the_views_of_a_trio_count_twice
         edit(folder / slug / "engine-l55.json", lambda bundle: bundle.update(level=55))
     facts = release.check_grid(folder, TRIOS)
     assert [f.levels for f in facts] == [(50, 55), (50, 55)]
-    assert [f.chunks for f in facts] == [36, 36]  # the views of the four shards, each counted once, at its own level
-    assert release.parity_stride_limit(facts) == 36
+    assert [f.chunks for f in facts] == [CHUNKS, CHUNKS]  # the views of the four shards, each counted once, at its own level
+    assert release.parity_stride_limit(facts) == CHUNKS
 
 
 # ---- the scratch folder of the bundle check is one the build made -------------------------------------------------------------------------------------
@@ -1419,7 +1374,7 @@ def test_the_scratch_folder_is_only_ever_one_named_for_a_check_beside_the_releas
     other.mkdir()
     for bad in (precious, tmp_path, folder, folder.parent / "precious", other / "x.bundles", folder / "x.bundles"):
         with pytest.raises(ReleaseRefused, match="scratch"):
-            release.check_bundles(folder, TRIOS, seen_catalog=seen_catalog_path(world, tmp_path), tables_root=world.root, scratch=bad)
+            release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root, scratch=bad)
     assert (precious / "keep.txt").read_text(encoding="utf-8") == "keep" and folder.is_dir() and tmp_path.is_dir() and other.is_dir()
 
 
@@ -1743,7 +1698,6 @@ def test_a_junction_on_the_way_to_a_private_output_refuses_the_build_before_anyt
     with pytest.raises(ReleaseRefused, match="link|junction"):
         build(world, tmp_path, runner=lambda spec: calls.append(spec.slug))
     assert calls == [] and files_under(copy.root / "reports") == []
-    assert not (copy.root / "build" / "seen-flags-snapshot.json").exists()
 
 
 def test_a_gitignore_that_ignores_the_catalog_names_only_does_not_make_the_private_outputs_safe(world, tmp_path, gitenv):
@@ -1755,15 +1709,15 @@ def test_a_gitignore_that_ignores_the_catalog_names_only_does_not_make_the_priva
     calls: list[str] = []
     with pytest.raises(ReleaseRefused, match="ignore") as raised:
         build(world, tmp_path, git=release.Git(copy.root), runner=lambda spec: calls.append(spec.slug))
-    assert "seen-flags-snapshot" in str(raised.value) or "results-diff" in str(raised.value)
-    assert calls == [] and not (copy.root / "build" / "seen-flags-snapshot.json").exists()
+    assert "results-diff" in str(raised.value)
+    assert calls == []
 
 
 def test_the_paths_the_build_checks_before_it_writes_a_private_file_are_the_files_and_their_temporary_names(world, tmp_path):
     git = FakeGit()
     build(world, tmp_path, git=git)
     asked = {Path(path).name for kind, path in git.asked if kind == "ignored"}
-    assert "seen-flags-snapshot.json" in asked and f"results-diff-{TAG}.json" in asked
+    assert f"results-diff-{TAG}.json" in asked
     assert any(name.startswith(".") and name.endswith(".tmp") for name in asked)  # (a temporary file of the same folder: a narrower rule may miss it)
 
 
@@ -1774,39 +1728,13 @@ def test_a_trial_checks_its_folder_too(world, tmp_path):
     assert f"{TAG}.results-diff.md" in asked and f"{TAG}.results-diff.json" in asked and f"{TAG}.tar.gz" in asked
 
 
-def test_the_files_of_the_catalog_with_the_flags_are_private_outputs_that_are_checked_by_their_paths(world, tmp_path):
-    git = FakeGit()
-    build(world, tmp_path, git=git)
-    asked = {Path(path).name for kind, path in git.asked if kind == "ignored"}
-    assert {"catalog.json", "catalog-summary.json", "catalog-warnings.json", "sources-manifest.json"} <= asked
-    assert any(name.startswith(".catalog.json.") and name.endswith(".tmp") for name in asked)  # (a temporary file of the same folder: a narrower rule may miss it)
-
-
-def test_a_catalog_with_the_flags_in_a_place_git_does_not_ignore_refuses_the_build_before_anything_is_written(world, tmp_path):
-    copy = clone(world, tmp_path)
-    git = FakeGit()
-    git.unignored.append(copy.root / "build" / "catalog-with-seen")  # (the catalog with the flags merged would be written where git does not ignore it)
-    calls: list[str] = []
-
-    def spy(spec):
-        calls.append(spec.slug)
-        return release.run_trio(spec)
-
-    with pytest.raises(ReleaseRefused, match="ignore") as raised:
-        build(world, tmp_path, git=git, runner=spy)
-    assert "catalog.json" in str(raised.value) and calls == []
-    assert not (copy.root / "build" / "seen-flags-snapshot.json").exists() and not (copy.root / "build" / "catalog-with-seen").exists()
-
-
 def test_a_build_folder_that_git_ignores_only_in_part_is_refused_at_the_start_and_not_after_the_hours(world, tmp_path, gitenv):
     copy = clone(world, tmp_path)
     make_repo(copy.root)
-    # the private files, the names of the catalog and the results are ignored, so every check made at the start passes; the folder of the release is not
-    (copy.root / ".gitignore").write_text(
-        "build/seen-flags-snapshot.json*\nbuild/catalog*.json\nbuild/sources-manifest.json\nbuild/catalog-with-seen/\nbuild/reports/\nbuild/results/\n", encoding="utf-8"
-    )
+    # the full diff and the results are ignored, so every check made at the start passes; the folder of the release is not
+    (copy.root / ".gitignore").write_text("build/reports/\nbuild/results/\n", encoding="utf-8")
     run_git(copy.root, "add", ".gitignore")
-    commit(copy.root, "rules that ignore the private files and the results, and not the build folder")
+    commit(copy.root, "rules that ignore the full diff and the results, and not the build folder")
     calls: list[str] = []
 
     def spy(spec):
@@ -1815,7 +1743,7 @@ def test_a_build_folder_that_git_ignores_only_in_part_is_refused_at_the_start_an
 
     with pytest.raises(ReleaseRefused, match=r"the build folder build is not ignored by git as a whole"):
         build(world, tmp_path, git=release.Git(copy.root), runner=spy)
-    assert calls == [] and not (copy.root / "build" / "seen-flags-snapshot.json").exists()  # (nothing was solved or written: the hours were not spent)
+    assert calls == []  # (nothing was solved or written: the hours were not spent)
     nothing_left(copy.root)
 
 
@@ -1827,7 +1755,7 @@ def test_a_private_output_in_a_place_git_does_not_ignore_refuses_the_build_befor
     with pytest.raises(ReleaseRefused, match="ignore") as raised:
         build(world, tmp_path, git=git, runner=lambda spec: calls.append(spec.slug))
     assert "results-diff" in str(raised.value) and calls == []
-    assert not (copy.root / "build" / "seen-flags-snapshot.json").exists() and files_under(copy.root / "reports") == []
+    assert files_under(copy.root / "reports") == []
 
 
 def test_a_junction_made_in_the_middle_of_the_build_is_found_before_the_outputs_are_written(world, tmp_path, gitenv):

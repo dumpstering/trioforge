@@ -1,0 +1,24 @@
+# An invented workflow for the tests of the pins check: three actions pinned to a commit, one local action and one that is not pinned.
+name: test
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: example-org/example-action@1111111111111111111111111111111111111111 # v2.0.0
+        with:
+          persist-credentials: false
+      - uses: example-org/setup-thing@2222222222222222222222222222222222222222 # v1.4.2
+        with:
+          python-version: "3.12"
+      - uses: example-org/setup-other@3333333333333333333333333333333333333333 # v3.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - uses: ./local-action
+      - uses: other-org/unpinned@v4
+      - run: echo done

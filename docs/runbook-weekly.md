@@ -1,0 +1,161 @@
+# Runbook: the checks that run on the maintainer's computer
+
+For the maintainers. Three small checks run from the Task Scheduler of the maintainer's own computer, because nothing in the project runs on a schedule at GitHub. They look at the sources the data comes from (weekly), at the pins of the code (monthly) and at the live site (weekly, and by hand after each deploy). Each leaves a report or a stamp in one folder outside every checkout (see "Where the files go"). None of them changes a file of the repository, and **none of them opens an issue**: you read what they leave, and open an issue by hand when it calls for one (see "When to open an issue").
+
+## What runs, and when
+
+| Task | Command | When | Leaves in the folder of the checks |
+|---|---|---|---|
+| `sources-check` | `scripts/sources_check.py` | weekly, Sundays 09:00 | `sources-check-<UTC time>.md` (the report, one for each run), `sources-check.state.json` (what it saw, for the next run), `sources-check.last-run`, `sources-check.log` |
+| `smoke-live` | `scripts/smoke_live.mjs` | weekly, Sundays 09:30, and by hand after each deploy | `smoke-live.last-run`, only when everything passes; `smoke-live.log`; a short list on the screen when not |
+| `pins-check` | `scripts/pins_check.py` | monthly, the 1st at 10:00 | `pins-check-<UTC time>.md` (the report, one for each run), `pins-check.last-run`, `pins-check.log` |
+
+The two Python checks send a user agent that names the project and points to the about page of the site (`https://trioforge.pages.dev/about/`, or the page that `--contact` gives), so that a site they ask can tell who is asking and where to say it is too much; the repository is private until it is made public, and a link to its issues would be a 404. They go at most one request a second. `sources-check` reads the robots.txt of each site it asks and keeps out of what it forbids; `pins-check` asks only the documented interfaces of GitHub, PyPI and npm, which are for programs. An answer that is not a 200, or is not JSON where JSON is expected, is **unreachable** and never "changed".
+
+They run from the main checkout, the one that has the `.venv` and `node_modules` (see "Running the tests" in CONTRIBUTING.md). `smoke-live` also needs the browser, which `npx playwright install chromium` fetches once.
+
+## Where the files go
+
+All three checks leave their files in **one folder outside every checkout and worktree**. The tasks run from the main checkout, but a release is built in a worktree of its own ("Making a data release" in CONTRIBUTING.md), and the release build reads the stamps from this same folder. A folder under the `build/` of a checkout would be a different folder for each of them, and the build would warn "no stamp" for every release, whatever the checks had done.
+
+- `~/.local/state/trioforge/checks` (on Windows, `$HOME\.local\state\trioforge\checks`) **on Windows too**, and not `%LOCALAPPDATA%`: a program that runs from the Claude app writes to `%LOCALAPPDATA%` in a private copy that the Task Scheduler never sees;
+- or the folder that the environment variable `TRIOFORGE_CHECKS_DIR` names. An empty or blank value counts as unset. It must be an **absolute path**, by one rule in Python and in Node: on Windows a path with a drive (a letter, a colon and a separator) or a UNC path (two separators, then the server and the share), elsewhere a path that starts with `/`. A relative one would mean a different folder for each working folder, and a folder inside a **git work tree** would be a file of that checkout, so both are **refused**: by the checks, and by the release build before it makes anything. Set it as a user variable before you install the tasks, and the tasks and the release build see the same value;
+- `--out FOLDER` names another folder for one run.
+
+Open it with `explorer "$HOME\.local\state\trioforge\checks"`.
+
+## Installing the tasks
+
+The templates are in `scripts/scheduler/`, one XML file for each task. In all three:
+
+- `StartWhenAvailable`: a run that was due while the computer was off is made up when it is next on.
+- They run on battery and wake the computer (`WakeToRun`; Windows wakes a computer only if "Allow wake timers" is on in its power plan).
+- They run with your own account and have **no stored password**, so Windows runs them only while you are logged on; a run that falls due while you are away starts when you log on again.
+- A run that is still going after an hour is ended, and a second copy of a task is not started while one runs.
+
+A task keeps the paths it was made with, so **make the tasks from the main checkout, never from a worktree**: a worktree is removed when its branch is done, and the tasks would go on pointing at it. Fill in the placeholders, make the file the form `schtasks` reads (Unicode), and create the three tasks, in a folder of the Task Scheduler called `TrioForge`. In a normal (not elevated) PowerShell, in the main checkout or in any worktree of it:
+
+```powershell
+$repo = (Resolve-Path (Split-Path (git rev-parse --path-format=absolute --git-common-dir))).Path   # the main checkout (the one with .venv and node_modules), even when you run this in a worktree
+$node = (Get-Command node.exe).Source      # smoke-live runs Node by its full path
+$options = ''                              # '--indexable' once the site is the real, public one
+$sourcesOptions = '--skip eqltools'        # EQL Tools answered the check with HTTP 403, and asking it again every week is not polite: see "Reading the reports" for when to remove this
+foreach ($name in 'sources-check', 'smoke-live', 'pins-check') {
+    $xml = Get-Content "$repo\scripts\scheduler\$name.xml" -Raw -Encoding UTF8
+    foreach ($pair in @{ '@REPO@' = $repo; '@NODE@' = $node; '@SMOKE_OPTIONS@' = $options; '@SOURCES_OPTIONS@' = $sourcesOptions }.GetEnumerator()) {
+        $xml = $xml.Replace($pair.Key, [Security.SecurityElement]::Escape($pair.Value))
+    }
+    $xml = $xml.Replace('encoding="UTF-8"', 'encoding="UTF-16"')
+    $file = Join-Path $env:TEMP "trioforge-$name.xml"
+    [IO.File]::WriteAllText($file, $xml, [Text.Encoding]::Unicode)
+    schtasks /create /tn "TrioForge\$name" /xml $file /f
+    Remove-Item $file
+}
+```
+
+`/f` replaces a task that is there, so the same lines install again after a change. To look at a task, run it now or remove it:
+
+```powershell
+schtasks /query /tn "TrioForge\sources-check" /v /fo list
+schtasks /run /tn "TrioForge\sources-check"
+schtasks /delete /tn "TrioForge\sources-check" /f
+```
+
+The two Python checks run with `pythonw.exe`, which opens no console window, so a fault of theirs shows nowhere: when a stamp goes stale (see "The stamps"), read the end of its log ("The logs"), and run the check by hand if that does not say enough. `smoke-live` runs with `node.exe`, and a console window shows while it runs, about a minute. Move the main checkout, change the account, or make the site indexable, and install again.
+
+## Running a check by hand
+
+From the main checkout, with the virtual environment's Python for the first two:
+
+```powershell
+.venv\Scripts\python.exe scripts\sources_check.py
+.venv\Scripts\python.exe scripts\pins_check.py
+node scripts\smoke_live.mjs
+```
+
+- **After a deploy**, run `node scripts\smoke_live.mjs`. It expects the data release of the **newest pointer** in `releases/` (`releases/<tag>.json`, the newest by day and then by the number after it, in the main checkout): the manifest of the optimizer and every trio and item page must name it, and the output says so (`(the newest pointer in releases/)`; with no pointer it says that nothing was expected). So the pointer of the release that went out has to be in the checkout the check runs from, and the weekly run checks the same, which is what tells you that the live site is not at the release you think it is. `--expect-data data-YYYY-MM-DD` (add `-2` and so on for a second release of the day) names the release instead, which is how a rollback is confirmed, `--expect-data none` expects nothing (the preview of a branch), and `--releases-dir FOLDER` names another folder of pointers. The 404 page names no release and is not asked.
+- **`--indexable`** says the site is the real one, meant to be found: the pages must not send `X-Robots-Tag: noindex`. Without it they must, as a preview does. Put it in `$options` of the install above when the site goes public.
+- **`--base`** names another address: the preview of a branch, or a copy on the computer. `--trios N` and `--items N` change how many pages of each kind are loaded (5 each; 1 to 100, since a stamp that says trio and item pages were checked needs at least one of each), `--seed` repeats the choice of an earlier run (the report prints its seed; the default is the number of the ISO week, so a week's run can be repeated and the next week's looks at other pages), and `--headers-file` names the headers the site is held to (default `site/_headers`, so a build that was made with other headers is checked against its own `_headers`).
+- **`--settle S`** is how long a page is watched for errors after its network has been idle (5 seconds by default, 0 to 60), so that an error that a page makes some seconds after it loaded is seen too; a page that never goes idle is waited for at most 20 seconds first.
+- **`--pace S`** keeps every request at least S seconds from the one before, the browser's own requests included. Use `--pace 1` on a site that is not yours. The Python checks are always at one request a second.
+- **`--skip SOURCE`** (`sources-check`) leaves a source out of the run: `wiki`, `eqltools` or `patch-notes`. The report says it is skipped and its record stays as it was.
+- **`--dry-run FOLDER`** (the two Python checks) replays the answers recorded in the folder, such as `fixtures/checks/sources`, without the network and without waiting; it needs `--out` so that it cannot replace a real report. `--out` also names another folder for the report, the stamp and the log of a real run, and `--days N` how far back `sources-check` looks on a first run (8). `--contact URL` (the two Python checks) names the page that the user agent points to, the about page of the site by default.
+
+## The logs
+
+The two Python checks run with `pythonw.exe`, which has no window, and the console of `smoke-live` closes when it ends, so a task that fails when nobody looks shows nothing. Every run therefore adds **one line** to `<name>.log` in the folder of the checks, and the log keeps its last 200 lines:
+
+```
+2026-10-18T09:00:03Z ok 4 catalog titles changed; EQL Tools: gear unchanged, quests unchanged; patch notes unchanged; 0 unreachable; report sources-check-2026-10-18T090003Z.md
+2026-10-19T09:30:41Z failed smoke-live: FAILED, 2 problems on https://trioforge.pages.dev (seed 202642); first: /trio/pal-mnk-ber/: ended at /, not at its own address (a redirect)
+2026-10-25T09:00:02Z refused cannot read the catalog catalog.json: No such file or directory
+```
+
+After the time comes the outcome: `ok` (the run finished; for `smoke-live`, everything passed), `failed` (`smoke-live` only: something is wrong with the site; the header and the first problem), `refused` (the run could not be made as asked: a wrong option, no catalog, a headers file that cannot be read, a file that could not be written), `error` (a fault that nobody foresaw: only its kind and a sentence, "an unexpected fault (RuntimeError); run the check by hand to see what it was", because the message of a fault can hold a path of this computer, and a log holds none; a run by hand shows the message on the screen, and `TRIOFORGE_DEBUG=1` adds the traceback) or `interrupted`. Then the one line the run printed, with the name of the report. A wrong command line is logged too, in the folder of the checks. The log is a trace and nothing depends on it: a log that cannot be written changes nothing in the run, and a dry run writes its log only into the folder given with `--out`.
+
+## Reading the reports
+
+### `sources-check`
+
+The report starts with a summary line, the same words the command prints, then three parts.
+
+- **Wiki changes since** a time: the changes of eqlwiki in its main namespace since the last run (eight days back for the first run), by the clock of the computer. Each window begins **ten minutes before** the end of the last one, because the clock of the computer and the wiki's can differ and a change can reach the wiki's list late; what the overlap repeats is dropped by the id of the revision (or of the log entry), which the record of the run keeps for that purpose, so a change is listed once. A window that holds more changes than a run reads (40 pages of 500) is read as far as that: the summary says `(partial list)`, the report says up to when, and the next run begins exactly there (with no overlap, since that time is the wiki's own), so a long backlog is read over several runs and nothing is left behind. The line above the list says how many changes there were and how many of the changed pages are items of the catalog. A page is found by the id of its page, so an edit made after the page was renamed is listed too, under the title of the catalog. Each of those is a line with the title as code, the ids of its new revisions, the time of the last edit, and the revision the catalog was built from; **a revision at or below that one is in the catalog already.** A page that was **moved** or **deleted** on the wiki says so, with the number of the log entry and its time (`moved on the wiki (log entry 9005, 2026-10-12T09:19:00Z)`): a moved page has a new title that the catalog does not know, and a deleted one is gone, so look at the log of the wiki and decide whether the item stays. Nothing else of the wiki is shown, and a page that is not in the catalog is counted and never named. Fetch the pages again with the extractor and rebuild the catalog when an item you care about changed ("Making a data release" in CONTRIBUTING.md); the weekly list is a prompt, not an alarm.
+- **EQL Tools**: the SHA-256 of its gear JSON and of its quest JSON. `recorded` is the first time the file was seen; `unchanged` and `changed` compare it with the last run's, byte for byte, so `changed` is any edit at all. Download the new file into `sources/eqltools/` (git ignores it), run the reduction and the comparison report (`trioforge.sources.eqltools_quests`, `trioforge.reports.eqltools_diff`), and look at what moved before the catalog is rebuilt. Each file is held to its own shape: it must declare the licence CC BY-SA 4.0 in `meta.license` and hold what it holds (`items` for the gear file, an object keyed by the lookup key as the real file has it, or a list; `quests` for the quest file, a list). An answer that does not (a notice from the host in JSON, a file that stops declaring the licence, one file at the address of the other) is `unreachable (the file does not declare the licence CC BY-SA 4.0)` or `unreachable (the file has no items)`, never `changed`, and the record stays; a licence that is no longer declared means the file may not be used, so that is a reason to open an issue (see below).
+- **Patch notes**: the text of the wiki's patch notes page, by its hash and its revision. `changed`: read what was added. A patch can change a rule; each rule in `rules/rules.json` has a source and a date, and a rule that is out of date is a "Rule correction" issue.
+
+`unreachable (...)` says that nothing is known of that source, and says why in a few words: a status (`HTTP 503`), a kind of failure (`TimeoutError`), `the answer is not JSON`, or `robots.txt of <host> does not allow <path>`. The record of that source is left as it was, so nothing is mistaken for a change, and the next run asks again (for the wiki's changes, from the time of the last run that read them, less the ten minutes of every window, or from a first run's window when there is no such time; the report says which, so nothing is missed). One unreachable week is noise. Three in a row is a reason to look: a site that moved, a robots.txt that now keeps the check out, or no network at the time of the run. **A site that answers `HTTP 403` is refusing the check.** Do not get round it (no borrowed browser headers, no other address): ask the owner of the site, or take the file by hand with a browser and leave that source out of the report. EQL Tools did, to both of its files, when the check was first run. A host that answers 401, 403 or 429 is asked no more in that run (its other file, its other pages), whatever it says about waiting, and the next run is a week away. That is why the install above sets `$sourcesOptions = '--skip eqltools'`: until EQL Tools allows the check, the weekly run does not ask it at all. **Remove `--skip eqltools`** from `$sourcesOptions` and install again when its owner has said that the check may ask (or when a run by hand, without the option, shows that it now answers 200 to both files and its robots.txt allows them); when you run the check by hand, add the option to the command or leave it out as you need: the report then says `skipped` for both files, their last records stay, and nothing goes to the host. `--skip` takes `wiki` (the recent changes), `eqltools` (its two files) or `patch-notes`, may be given more than once, and cannot leave out every source: a stamp has to say that something was checked.
+
+### `pins-check`
+
+Four parts: the actions of `.github/workflows` that are pinned to a commit, the Python packages of `requirements.txt`, the npm packages of `package.json`, and Node and Python (**every** series the workflows name, including those of a matrix written as a list, each against the version on this computer when this computer runs that series; a series of another line is `not checked` and names the newest release).
+
+- **newer**: a version newer than the pin that is **at least 14 days old** by its release date on GitHub, PyPI or npm, with that date and its age. For an action the comparison is with the **highest final release** of its repository (not the one that was made last: a patch of an older line made after a newer release is not the release to compare with), and the line names the commit of the new release; put that commit and its tag in the workflow together. Pre-releases, yanked and deprecated versions are left out.
+- **too young** (counted as "newer but too young"): newer, but under 14 days old; the line says the day it counts from. Wait.
+- **moved**: the tag in the comment of a pin now points at another commit than the pinned one. Do not take the new commit before you know why; see "When to open an issue".
+- **current**, **unreachable** (as above) and **not checked**: a pin that is not exact (a range, a tag) or is not a final release number (`2.0.0rc1`, a post-release, a local build such as `1.0.0+cpu`: nothing is newer or older than it, so nothing is asked of the registry), an action that is not pinned to a commit, an action pinned to a commit whose comment names a tag that is not a final release number (`# v4.0.0-beta.1`: it is not cut to `v4.0.0`, which it is not, and the repository is not asked about it), a repository with no release, or this computer's version of Node that could not be asked; **a package.json that cannot be read** (not JSON, not an object, a section of dependencies that is not an object, an entry whose version is not text) says so in the npm part and does not make the part vanish; **a version of Node or Python in a workflow that is not a plain series** (an expression such as `${{ matrix.node }}`, `lts/*`, `latest`) is named with its file; so is **a version that the workflow reads from a file** (`node-version-file: .nvmrc`, `python-version-file: pyproject.toml`), which this check does not follow; and a `package.json`, a `requirements.txt` or a workflow that is **not UTF-8 text** is `not checked` in its own part, and the rest is checked.
+- "Later series" lines under Node and Python only tell that a newer line exists (a newer Node, a Python 3.13); they are not counted.
+
+The check changes nothing. To take a newer pin, change it yourself and follow "Running the tests" in CONTRIBUTING.md (the lock of the Python packages is written by `scripts/lock_hashes.py`; npm pins are exact and `package-lock.json` is committed). Nothing here is a reason to hurry.
+
+### `smoke-live`
+
+When everything passes it prints one line (`smoke-live: ok, 7 pages of ... , seed 202642, data-YYYY-MM-DD`) and writes its stamp. When something fails it prints `smoke-live: FAILED, N problems on <site> (seed S)` and a line for each (the first twenty), exits with status 1 and writes no stamp. Each line starts with the page it is about.
+
+| The line says | It means |
+|---|---|
+| `answered 500, not 200` | the page is not served: the deploy is broken or half there |
+| `no content-security-policy header`, `... is not what site/_headers sets` | the headers file was not applied to the deployment, or the site was built with another one; a policy weaker than the repository's is serious, so roll back first |
+| `no x-robots-tag noindex (a preview must keep search engines out)` | a preview without its tag, or the real site checked without `--indexable` |
+| `x-robots-tag keeps search engines out, and the site is meant to be found` | with `--indexable`: the live site still says noindex, and search engines will not list it |
+| `console error: ...`, `page error: ...` | the page is broken for a visitor; the first message is shown, and how many more |
+| `the page script did not run (the theme button never showed)` | the script of the page did not load or did not run (a missing file, a refused script) |
+| `names the data release X, not Y` | a stale deploy or a rollback: the site is not the release you expected; `/engine-manifest.json names ...` is the same said of the optimizer's files |
+| `ended at /, not at its own address (a redirect)` | the page was sent to another address, by the server or by a script of its own, and what the browser came to (the home page, say) answers 200 and has a theme button: it is not the page that was asked for |
+| `is not a trio page (its main element says data-page=about)` | the address answers, at its own address, with a page of another kind |
+| `/no-such-page-smoke-check/: answered 200, not 404` | the site answers a page that does not exist with a page, which search engines read as a real one |
+| `... does not give itself the policy ...`, `... gives its own policy after a stylesheet or a script ...`, `... is not the 404 page of the site ...` | the 404 page has no policy of its own at the top of its head, or it is not the 404 page |
+| `/engine-manifest.json answered 503`, `... is not JSON`, `the item table lists no item that has a page` | the site's own lists cannot be read: it is down or half deployed, and no page was loaded |
+
+The pages are chosen from the site's own lists (the trios of the manifest, the items of its item table that have a page) with a seed, so the same week's run repeats on the same pages, and each week looks at others.
+
+## When to open an issue
+
+The checks open none. Open one by hand for what needs a decision or work of the maintainers, and paste into it the lines of the report that show it (titles are code, so they stay readable) with the date of the run; nothing else from a wiki, and nothing that breaks the privacy rule of CONTRIBUTING.md.
+
+- **`smoke-live` fails and fails again** when you run it by hand a quarter of an hour later (the first failure may be a deploy that was still going out): a "Problem with a page" issue with its lines and the seed. A weaker policy than the repository's, or a page that is not served at all, is not a case for an issue: roll the deployment back first.
+- **A source is unreachable three weeks in a row**, its robots.txt now forbids the check, or an EQL Tools file no longer declares its licence: an issue, so that the decision about the source is written down. A source that only `changed` is a job for the data, not an issue.
+- **A pin has `moved`**: a re-tagged release can be a mistake or an attack. Keep the pin, and report it through a private security advisory (see SECURITY.md), not a public issue.
+- **A rule is out of date** after the patch notes changed: a "Rule correction" issue.
+
+## The stamps
+
+Each check leaves `<name>.last-run` in the folder of the checks ("Where the files go"): one line, the UTC time at which the run finished, such as `2026-10-18T10:00:03Z`. Read one with `Get-Content "$HOME\.local\state\trioforge\checks\sources-check.last-run"`.
+
+- **A run that has finished leaves its stamp, whatever it found.** `sources-check` and `pins-check` stamp even when every source was unreachable (the report says what could be read); a stamp says that the task ran, not that all was well. `smoke-live` stamps **only when everything passes**. A run that crashed, was refused (bad options, no catalog, a report that could not be written) or was interrupted leaves the stamp it found.
+- **The release build reads the weekly two.** `scripts/release-build.py` warns, never refuses, at its start when `sources-check.last-run` or `smoke-live.last-run` is more than 10 days old or is missing or cannot be read, and the warning names the check and says how long ago it last ran (or that it never ran). `pins-check.last-run` is monthly and the build does not read it; it is overdue when it is more than 45 days old.
+- **A stale stamp** means that the task did not run (the computer was off or asleep and cannot wake, the task is disabled, the account was changed) or that it fails: look in the Task Scheduler (`schtasks /query /tn "TrioForge\sources-check" /v /fo list` shows the last run and its result), then run the check by hand.
+- A dry run writes its stamp only into the folder given with `--out`, and that folder **cannot be the folder of the checks**: it is refused there, however the path is spelled, so a dry run can never replace a real report or a real stamp.
+
+## Files
+
+The folder of the checks holds, for each check, the files named above: `sources-check-<UTC time>.md` (such as `sources-check-2026-10-18T090003Z.md`), `sources-check.state.json`, `pins-check-<UTC time>.md`, the `.last-run` stamps and the `.log` files. **A report is never replaced**: each run writes its own, named for the UTC time at which it began (with `-2` after the time for a second run in the same second), so a second run on the same day leaves the first report as it was. Delete a report whenever you like (they are small, and there is one a week); delete `sources-check.state.json` to make the next run a first run, which records the hashes again and looks eight days back.

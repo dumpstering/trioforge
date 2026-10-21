@@ -417,27 +417,26 @@ describe("what the section is given for the value of a shared kit", () => {
     expect(env.words.raceName("OGR")).toBe("Ogre");
     expect(env.words.raceName("TRL")).toBe("Troll");
     expect(env.words.raceName("XXX")).toBe("XXX"); // (a race the page has no name for is shown by its code)
-    expect(env.words.viewText()).toBe("Balanced, strict evidence, your own buffs");
+    expect(env.words.viewText()).toBe("Balanced, your own buffs");
     expect(env.words.viewText()).not.toContain($('[data-f="assume-setup"]').textContent);
     expect([env.words.setupText("dw"), env.words.setupText("1h-shield"), env.words.setupText("2h")]).toEqual(["dual wield", "1H + shield", "two-hander"]);
     expect(env.words.setupText("stick"), "the page of this trio has no stat stick among its weapons: the section has the words").toBeUndefined();
     expect(env.words.setupText("club")).toBeUndefined();
   });
 
-  it("follows the page's role, buffs and evidence switches, and tells the section when the view it shows has changed", async () => {
+  it("follows the page's role and buffs switches, and tells the section when the view it shows has changed", async () => {
     const { app, env } = await started();
     const told = vi.fn();
     env.onView(told);
     choose('input[name="role"][value="tank"]');
     await app.whenIdle();
     expect(env.valueView().role).toBe("tank");
-    expect(env.words.viewText()).toBe("Tank, strict evidence, your own buffs");
+    expect(env.words.viewText()).toBe("Tank, your own buffs");
     expect(told).toHaveBeenCalled();
-    choose('input[name="ev"][value="wiki"]');
     choose('input[name="buffs"][value="group"]');
     await app.whenIdle();
-    expect(env.valueView()).toEqual({ role: "tank", buffs: "group", evidence: "wiki" });
-    expect(env.words.viewText()).toBe("Tank, wiki evidence, common group buffs");
+    expect(env.valueView()).toEqual({ role: "tank", buffs: "group", evidence: "strict" }); // (the one evidence level of the page: no switch moves it)
+    expect(env.words.viewText()).toBe("Tank, common group buffs");
   });
 
   it("does not follow the weapon switch or the tier switch: the value does not depend on them", async () => {

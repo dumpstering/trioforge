@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>TrioForge: the monthly check of the pins (newer commits of the pinned actions, newer versions that are at least 14 days old of the pinned packages, Node and Python). It writes a report and its stamp into the folder of the checks (outside every worktree), changes no pin and never opens an issue. See docs\runbook-weekly.md, which says how to fill in the placeholders and install this file.</Description>
+    <URI>\TrioForge\pins-check</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-11-01T10:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByMonth>
+        <DaysOfMonth>
+          <Day>1</Day>
+        </DaysOfMonth>
+        <Months>
+          <January />
+          <February />
+          <March />
+          <April />
+          <May />
+          <June />
+          <July />
+          <August />
+          <September />
+          <October />
+          <November />
+          <December />
+        </Months>
+      </ScheduleByMonth>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>true</WakeToRun>
+    <ExecutionTimeLimit>PT1H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>@REPO@\.venv\Scripts\pythonw.exe</Command>
+      <Arguments>scripts\pins_check.py</Arguments>
+      <WorkingDirectory>@REPO@</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

@@ -1,0 +1,17 @@
+{
+ "local": {"python": "3.12.7", "node": "24.14.0"},
+ "responses": [
+  {"url": "https://api.github.com/repos/example-org/example-action/releases", "query": {"per_page": "100"}, "status": 200, "file": "github-release-example-action.json"},
+  {"url": "https://api.github.com/repos/example-org/example-action/commits/v2.1.0", "status": 200, "file": "github-commit-example-action.json"},
+  {"url": "https://api.github.com/repos/example-org/setup-thing/releases", "query": {"per_page": "100"}, "status": 200, "file": "github-release-setup-thing.json"},
+  {"url": "https://api.github.com/repos/example-org/setup-thing/commits/v1.4.2", "status": 200, "file": "github-commit-setup-thing.json"},
+  {"url": "https://api.github.com/repos/example-org/setup-other/releases", "query": {"per_page": "100"}, "status": 200, "file": "github-release-setup-other.json"},
+  {"url": "https://api.github.com/repos/example-org/setup-other/commits/v3.1.0", "status": 200, "file": "github-commit-setup-other.json"},
+  {"url": "https://pypi.org/pypi/examplelib/json", "status": 200, "file": "pypi-examplelib.json"},
+  {"url": "https://pypi.org/pypi/otherlib/json", "status": 200, "file": "pypi-otherlib.json"},
+  {"url": "https://registry.npmjs.org/exampleone", "status": 200, "file": "npm-exampleone.json"},
+  {"url": "https://registry.npmjs.org/@example%2Ftool", "status": 200, "file": "npm-example-tool.json"},
+  {"url": "https://api.github.com/repos/nodejs/node/releases", "query": {"per_page": "100"}, "status": 200, "file": "github-node-releases.json"},
+  {"url": "https://api.github.com/repos/actions/python-versions/releases", "query": {"per_page": "100"}, "status": 200, "file": "github-python-releases.json"}
+ ]
+}

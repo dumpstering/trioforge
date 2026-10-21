@@ -11,27 +11,28 @@ this in order:
    status and the digest of its diff are recorded at the start, and the rules and the catalog are read once (:class:`Start`). A pool worker that starts after a
    change imports the code of the two lists and hashes it first (:func:`_init_worker`) and refuses its trios if the hashes are not the parent's. Run the build from
    a worktree of its own, at the commit to release.
-1. **Before any hour is spent**, the tag, the seen-flags file, the privacy key and denylist, the previous release and the outputs are checked: a release tag is
+1. **Before any hour is spent**, the tag, the privacy key and denylist, the previous release and the outputs are checked: a release tag is
    used once, and the key is tried on a folder before the scan that needs it comes at the end. What a build of this tag that was killed left in the build
-   folder is taken away (:func:`clear_leftovers`, by exact name), the seen flags are copied once into ``build/`` and every later step reads the copy
-   (:func:`snapshot_seen`: flags made again during the hours cannot mix two states), and what is already known to be amiss (the asset of the previous release is
+   folder is taken away (:func:`clear_leftovers`, by exact name), and what is already known to be amiss (the asset of the previous release is
    not there, a scheduled check is stale) is said at once as a warning. A tag with no pointer has nothing that is finished: what a run of it that did not end
    left and that looks like a release (its asset, its full diff of the first round, its Markdown report if git does not track it) is taken away too
    (:func:`clear_unfinished`; a report or a temporary file of a cut-short write that is tracked by git is refused, with the reason, and so is a git that cannot say
-   whether one is: a decision to delete fails closed, :meth:`Git.tracked`), and every private file (the catalog with the flags merged among them) is checked against
+   whether one is: a decision to delete fails closed, :meth:`Git.tracked`), and every private file (the full diff, and a trial's files) is checked against
    the path itself before it is written (:func:`check_private_output`: no link or junction on the way, and ``git check-ignore`` says it is ignored). The build folder
    must be ignored as a whole, or lie outside the work tree, before the first private file is written (:func:`check_build_folder`): a folder that ``.gitignore`` covers
    in part would show files in the status of the checkout during the hours, and the check at the end would refuse the release after them. The entries of the committed
    list of reports (``rules/community-seen.json``) are read once, with the reader of the catalog builder, and ``release.json`` records them (:func:`read_community`):
    the public catalog must have been built from that very file, or the entries and the evidence of the items would not describe the same state.
-2. **The catalog with the seen flags merged** is built into ``build/catalog-with-seen/`` (:func:`build_seen_catalog`) and must come from the same inputs as the
-   public ``derived/catalog.json`` (:func:`check_seen_catalog`). It never leaves ``build/``; it stands for the release's own catalog in the checks below.
+2. **Wiki is the one evidence level** (the decision of 2026-10-19). The release is built from the public ``derived/catalog.json`` alone, which must have no strict item
+   (:func:`check_no_strict_item`): a catalog that has one, as a community report in ``rules/community-seen.json`` would make, is refused before the first hour is
+   spent, so that a second level cannot come into a release without a decision. With no strict item the strict pool of every trio is empty, and the precompute makes
+   the wiki view the default one, with its runner-ups and its robust picks.
 3. **The precompute of the grid** (:func:`precompute_grid`): every trio of the grid at its default scope (:mod:`trioforge.scope`), one trio at a time in a
    worker process, a pool of them (``--processes``) with the heaviest trios first. A trio is the unit of the pool because the robustness seals and the flip
    check of :func:`trioforge.precompute.run` work in one process, and trios side by side keep every core busy through them. The item table is written once, by
    the parent, before any worker starts.
 4. **Resumption.** A run that is stopped (killed, out of memory, switched off) is run again with the same command. A chunk file that is whole and was made
-   from the same inputs (the catalog, the seen flags, the rules and tables, the code, the solver options: the fingerprint of the chunks) is kept; one made from
+   from the same inputs (the catalog, the rules and tables, the code, the solver options: the fingerprint of the chunks) is kept; one made from
    other inputs is made again, which is what :func:`trioforge.precompute.run` does. A trio that finished is not even opened: ``chunks/complete.json`` holds the
    fingerprint, the scope and the digest of each result file, and a trio whose files are all as they were left under the same inputs is skipped
    (:func:`run_trio`). The leftovers of a write that was cut short are cleared first.
@@ -43,7 +44,7 @@ this in order:
      grid (a build of some trios is a trial);
    * :func:`check_item_rows`: an item has the same row in every shard of every trio (the report of the changes compares one row for an item);
    * :func:`check_invariants`: the invariants of the design hold in the shipped shards (and no run reported a violation);
-   * :func:`check_bundles`: every bundle is the one the exporter writes from the catalog with the seen flags merged, and its strict setups are the shard
+   * :func:`check_bundles`: every bundle is the one the exporter writes from the public catalog, and its strict setups are the shard
      headers';
    * the browser's own reader of the bundles (:func:`check_bundle_reader`), the exact count of the files of the site (:func:`check_file_count`),
      a pruning spot check (:func:`check_pruning`: one random scenario of each trio solved again with the whole pool) and the parity suite
@@ -55,7 +56,7 @@ this in order:
    **keyed privacy scan** (:class:`PrivacyScanner`), which reads every file of the release and the text of the pointer and of the Markdown report: a finding
    refuses the release. The scan labels a file by its place in the release, so the build folder it stands in is no finding.
 8. **The asset** is packed, held to the manifest of what was scanned, and ``releases/<tag>.json`` and ``reports/results-diff-<tag>.md`` are written, all or
-   none, the pointer last; from the packing to the pointer is one transaction, and an error anywhere in it takes the asset away. The full diff, which names items and so tells which items the maintainer has seen, is written to ``build/reports/results-diff-<tag>.json``,
+   none, the pointer last; from the packing to the pointer is one transaction, and an error anywhere in it takes the asset away. The full diff, which names items, is written to ``build/reports/results-diff-<tag>.json``,
    away from the asset (an upload of what is named for the tag, ``build/release/<tag>.*``, cannot publish it), and is not published. A trial build (some trios only) writes no pointer, nothing in ``releases/`` or ``reports/``, and uses up no tag: its asset and its two
    reports are in ``build/trial/``, and both reports are headed TRIAL.
 
@@ -92,6 +93,7 @@ from typing import Any
 
 from trioforge import community as community_module
 from trioforge import precompute
+from trioforge.checks_dir import checks_dir as folder_of_the_checks
 from trioforge.data import catalog as catalog_module
 from trioforge.data.jsonio import MAX_FILE_BYTES, JsonFileError, load_strict, loads_strict, render
 from trioforge.export import browser
@@ -113,7 +115,6 @@ __all__ = [
     "PARITY_FILES",
     "PARITY_MIN_CHUNKS",
     "SCHEDULED_CHECKS",
-    "SEEN_SNAPSHOT",
     "SPOT_TOLERANCE",
     "Git",
     "PrivacyScanner",
@@ -126,7 +127,6 @@ __all__ = [
     "TrioOutcome",
     "TrioSpec",
     "build_release",
-    "build_seen_catalog",
     "check_build_folder",
     "check_bundle_reader",
     "check_bundles",
@@ -137,10 +137,10 @@ __all__ = [
     "check_invariants",
     "check_item_rows",
     "check_no_local_paths",
+    "check_no_strict_item",
     "check_parity",
     "check_private_output",
     "check_pruning",
-    "check_seen_catalog",
     "choose_parity_sample",
     "clear_leftovers",
     "clear_unfinished",
@@ -154,7 +154,6 @@ __all__ = [
     "resolve_previous",
     "run_trio",
     "scheduled_warnings",
-    "snapshot_seen",
     "work_tree_of",
     "write_item_table",
     "write_outputs",
@@ -168,8 +167,7 @@ SPOT_TOLERANCE = 0.0101  # a shard keeps F to two decimals: the unpruned optimum
 INVARIANT_SLACK = 0.0201  # the invariants are read from values of two decimals, and the naked value from the difference of two of them
 PARITY_FILES = ("tests-js/parity-fixtures.test.mjs", "tests-js/engine-solve-parity.test.mjs", "tests-js/shard-parity.test.mjs")
 PARITY_MIN_CHUNKS = 1  # the chunks of the sample of the shard parity that every trio has at least: the stride is no more than the smallest trio has chunks
-SEEN_SNAPSHOT = "seen-flags-snapshot.json"  # in the build folder: the copy of the seen flags that the hours of a build read
-SCHEDULED_CHECKS = ("sources-check", "smoke-live")  # the weekly checks of the PC: each leaves <build>/checks/<name>.last-run, an ISO time
+SCHEDULED_CHECKS = ("sources-check", "smoke-live")  # the weekly checks of the PC: each leaves <name>.last-run, an ISO time, in the folder of the checks (trioforge.checks_dir)
 STAMP_DAYS = 10
 PROGRESS_SECONDS = 30.0
 SAMPLE = re.compile(r"([0-9]{1,6})/([1-9][0-9]{0,5})")
@@ -664,21 +662,19 @@ def read_community(rules: str | os.PathLike[str], public_document: Mapping[str, 
     return {"reports": document["reports"], "retracted": document["retracted"]}
 
 
-def check_seen_catalog(public: str | os.PathLike[str], merged: str | os.PathLike[str]) -> None:
-    """The catalog with the seen flags merged is of the same snapshot as the public one, made from the same inputs, and lists the same items: it may differ in the
-    evidence of the items and in nothing else that this looks at. :class:`ReleaseRefused` otherwise."""
-    try:
-        one, other = load_strict(public), load_strict(merged)
-    except (OSError, JsonFileError) as error:
-        raise ReleaseRefused(f"a catalog cannot be read: {error}") from None
-    if one.get("version") != other.get("version"):
+def check_no_strict_item(document: Mapping[str, Any]) -> None:
+    """Wiki is the one evidence level of a release (the decision of 2026-10-19): the catalog it is built from has no strict item. A strict item comes from a report of
+    players (``rules/community-seen.json``), from a listing that its owner allows, or from the maintainer's private flags; a release that found one would give the
+    strict view a pool, a second level that nobody decided on. The refusal names the list of reports, and never an item. :class:`ReleaseRefused` otherwise."""
+    items = document.get("items")
+    if not isinstance(items, list):
+        raise ReleaseRefused("the catalog has no list of items, so it cannot be shown to have no strict item")
+    strict = sum(1 for item in items if isinstance(item, Mapping) and isinstance(item.get("evidence"), Mapping) and item["evidence"].get("level") == "strict")
+    if strict:
         raise ReleaseRefused(
-            f"the catalog with the seen flags merged is of the snapshot {other.get('version')} and the public catalog of {one.get('version')}: build both from one fetch"
+            f"the catalog has {strict} strict item{'' if strict == 1 else 's'}, and wiki is the one evidence level of a release: no report in {COMMUNITY_INPUT} may stay in force "
+            "(take the report out of the list, or retract it), then build the catalog again"
         )
-    if (one.get("provenance") or {}).get("inputs") != (other.get("provenance") or {}).get("inputs"):
-        raise ReleaseRefused("the catalog with the seen flags merged and the public catalog were not made from the same inputs (wiki fetch, client files, quests, rules)")
-    if [item["key"] for item in one["items"]] != [item["key"] for item in other["items"]]:
-        raise ReleaseRefused("the catalog with the seen flags merged and the public catalog do not list the same items")
 
 
 @contextlib.contextmanager
@@ -768,25 +764,25 @@ def clear_unfinished(base: str | os.PathLike[str], out_dir: str | os.PathLike[st
 
 
 def check_bundles(
-    folder: str | os.PathLike[str], trios: Sequence[str], *, seen_catalog: str | os.PathLike[str], tables_root: str | os.PathLike[str] | None = None,
+    folder: str | os.PathLike[str], trios: Sequence[str], *, catalog: str | os.PathLike[str], tables_root: str | os.PathLike[str] | None = None,
     scratch: str | os.PathLike[str] | None = None,
 ) -> int:
-    """Every bundle of the release is what the exporter writes from the catalog with the seen flags merged, and its weapon setups follow the shard headers.
+    """Every bundle of the release is what the exporter writes from the public catalog, and its weapon setups follow the shard headers.
 
     The exporter is run as its command does (:func:`trioforge.export.browser.main` with ``--catalog``) for all the trios, into a scratch folder beside the release, and
-    each bundle it writes must equal the shipped one but for the ``inputs`` field the precompute added. A bundle exported from the public catalog has no strict item
-    and so no strict shield: its strict setups would differ from the shards'. The evidence level of every item in ``items.json`` must be the catalog's. Returns the
+    each bundle it writes must equal the shipped one but for the ``inputs`` field the precompute added. The catalog has no strict item, so the strict pool is empty and
+    the strict setups of a bundle are those of the strict shards (which have no shield). The evidence level of every item in ``items.json`` must be the catalog's. Returns the
     number of bundles. The exporter works in ``scratch`` (a folder of the exact name given, made empty first and removed after, so that a build that is killed can
     find and clear it) or in a temporary folder beside the release."""
     base = Path(folder)
     trios = list(trios)
     problems: list[str] = []
     try:
-        merged = load_strict(seen_catalog)
+        merged = load_strict(catalog)
     except (OSError, JsonFileError) as error:
-        raise ReleaseRefused(f"the catalog with the seen flags merged cannot be read: {error}") from None
+        raise ReleaseRefused(f"the catalog cannot be read: {error}") from None
     with _scratch_folder(base.parent, Path(scratch) if scratch is not None else None) as made:
-        argv = ["--out", str(made), "--catalog", str(seen_catalog)]
+        argv = ["--out", str(made), "--catalog", str(catalog)]
         if tables_root is not None:
             argv += ["--root", str(tables_root)]
         for slug in trios:
@@ -796,9 +792,9 @@ def check_bundles(
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errors):
                 status = browser.main(argv)
         except (RuntimeError, ValueError, KeyError, TypeError) as error:  # (a fault of the exporter's own checks: its profiles do not reassemble, say)
-            raise ReleaseRefused(f"the exporter failed on the catalog with the flags merged: {type(error).__name__}: {' '.join(str(error).split())}") from None
+            raise ReleaseRefused(f"the exporter failed on the catalog: {type(error).__name__}: {' '.join(str(error).split())}") from None
         if status != 0:
-            raise ReleaseRefused(f"the exporter refused the catalog with the flags merged: {' '.join(errors.getvalue().split())}")
+            raise ReleaseRefused(f"the exporter refused the catalog: {' '.join(errors.getvalue().split())}")
         table_inputs = load_strict(base / assemble.ITEMS_FILE).get(browser.INPUTS_FIELD)
         for slug in trios:
             problems += _bundle_problems(base, slug, made / "bundles", table_inputs)
@@ -806,7 +802,7 @@ def check_bundles(
     shipped_levels = assemble.evidence_map(load_strict(base / assemble.ITEMS_FILE))
     for key in sorted(set(wearable) | set(shipped_levels)):
         if wearable.get(key) != shipped_levels.get(key):
-            problems.append(f"{key}: its evidence level in items.json is {shipped_levels.get(key)} and {wearable.get(key)} in the catalog with the flags merged")
+            problems.append(f"{key}: its evidence level in items.json is {shipped_levels.get(key)} and {wearable.get(key)} in the catalog")
     if problems:
         raise ReleaseRefused(f"{len(problems)} bundle problem(s): " + _more(problems, 3))
     return len(trios)
@@ -822,7 +818,7 @@ def _bundle_problems(base: Path, slug: str, exported: Path, table_inputs: Any) -
     for path in bundles:
         shipped = loads_strict(path.read_text(encoding="utf-8"), path.name)
         if shipped.pop(browser.INPUTS_FIELD, None) != table_inputs or table_inputs is None:
-            found.append(f"{slug}: the bundle and items.json were not made from the same inputs (another catalog, or other seen flags): make {slug} again")
+            found.append(f"{slug}: the bundle and items.json were not made from the same inputs (another catalog): make {slug} again")
         for evidence in ("strict", "wiki"):
             for buffs in ("own", "group"):
                 header = _json(base / slug / f"{evidence}-{buffs}.json")["setups"]
@@ -841,7 +837,7 @@ def _bundle_problems(base: Path, slug: str, exported: Path, table_inputs: Any) -
                 for role, row in shipped["roles"].items() for evidence in ("strict", "wiki")
                 if row["setups_by_evidence"][evidence] != _setups(expected, role, evidence)
             ]  # fmt: skip
-            found.append(f"{slug}: the bundle is not the one the exporter writes from the catalog with the flags merged" + (f" ({detail[0]})" if detail else ""))
+            found.append(f"{slug}: the bundle is not the one the exporter writes from the catalog" + (f" ({detail[0]})" if detail else ""))
     return found
 
 
@@ -909,7 +905,7 @@ def _spot_task(spec: Mapping[str, Any]) -> SpotResult:
     try:
         codes = grid.parse_trio(slug)
         config, _ = grid.load_inputs(
-            codes, catalog_path=spec["catalog"], seen_path=spec["seen"], tables_root=spec["tables_root"], canonical=True, code_hash=spec.get("chunk_code")
+            codes, catalog_path=spec["catalog"], tables_root=spec["tables_root"], canonical=True, code_hash=spec.get("chunk_code")
         )
         context = grid.Context(config)
         profile = context.profile(race, role, buffs, evidence)
@@ -938,7 +934,7 @@ def _map(function: Callable[[Any], Any], items: Sequence[Any], processes: int) -
 
 
 def check_pruning(
-    folder: str | os.PathLike[str], trios: Sequence[str], *, catalog: str | os.PathLike[str], seen: str | os.PathLike[str] | None,
+    folder: str | os.PathLike[str], trios: Sequence[str], *, catalog: str | os.PathLike[str],
     tables_root: str | os.PathLike[str] | None = None, seed: int | None = None, processes: int = 1, chunk_code: str | None = None,
 ) -> list[SpotResult]:
     """One random scenario of each trio (drawn from the rows of its shipped shards, from ``seed``, which a run chooses at random) is solved again with the **whole**
@@ -946,7 +942,7 @@ def check_pruning(
     seed = secrets.randbits(32) if seed is None else seed
     specs = [
         {
-            "slug": slug, "folder": str(folder), "catalog": str(catalog), "seen": None if seen is None else str(seen),
+            "slug": slug, "folder": str(folder), "catalog": str(catalog),
             "tables_root": None if tables_root is None else str(tables_root), "seed": seed, "chunk_code": chunk_code,
         }
         for slug in trios
@@ -1077,7 +1073,7 @@ class Git:
 
 
 def check_private_output(path: str | os.PathLike[str], git: Any) -> None:
-    """Refuse a place for a private file (the seen flags, the full diff, a trial's files, and the temporary file each is written through) that git could commit.
+    """Refuse a place for a private file (the full diff, a trial's files, and the temporary file each is written through) that git could commit.
     :func:`trioforge.data.catalog.check_seen_output` asks about four file names of the catalog; this asks about the path itself: no link or junction on the way
     inside its work tree (a link from ``build/reports`` to the tracked ``reports/`` would carry the file there), and ``git check-ignore`` must say the path is
     ignored (a rule for the names of the catalog alone would leave it out). A path in no work tree passes."""
@@ -1197,11 +1193,20 @@ def choose_parity_sample(facts: Sequence[TrioFacts], snapshot_id: str, *, stride
 
 
 def scheduled_warnings(
-    stamps: str | os.PathLike[str], now: datetime.datetime | None = None, *, names: Sequence[str] = SCHEDULED_CHECKS, days: int = STAMP_DAYS
+    stamps: str | os.PathLike[str] | None = None, now: datetime.datetime | None = None, *, names: Sequence[str] = SCHEDULED_CHECKS, days: int = STAMP_DAYS
 ) -> list[str]:
-    """A warning (never a refusal) for each scheduled check of the PC whose last-run stamp, ``<stamps>/<name>.last-run`` (an ISO time), is older than ``days`` days or
-    is missing or unreadable."""
+    """A warning for each scheduled check of the PC whose last-run stamp, ``<stamps>/<name>.last-run`` (an ISO time), is older than ``days`` days or is missing or
+    unreadable. A stale or missing stamp is only a warning; a folder of the checks that is **wrong** is a refusal.
+
+    ``stamps`` is the folder of the stamps. Left out (a build leaves it out), it is the folder of the checks, which is outside every worktree: the checks run in one
+    checkout and a release is built in a worktree of its own, so a ``build/checks`` of that worktree would never hold them (:func:`trioforge.checks_dir.checks_dir`).
+    Raises :class:`ReleaseRefused` if ``$TRIOFORGE_CHECKS_DIR`` is set to a path that is not absolute or is in a git work tree, as the checks refuse it too."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
+    if stamps is None:
+        try:
+            stamps = folder_of_the_checks()
+        except ValueError as error:
+            raise ReleaseRefused(str(error)) from None
     found: list[str] = []
     for name in names:
         try:
@@ -1391,23 +1396,6 @@ def privacy_gate(scanner: PrivacyScanner, folder: str | os.PathLike[str] | None,
     return report.files
 
 
-# ---- the catalog with the seen flags merged ------------------------------------------------------------------------------------------------------------------
-
-
-def build_seen_catalog(
-    *, wiki: str | os.PathLike[str], client: str | os.PathLike[str], seen: str | os.PathLike[str], out: str | os.PathLike[str], quests: str | os.PathLike[str],
-    rules_dir: str | os.PathLike[str], generated: str | None = None, workers: int | None = None,
-) -> None:
-    """Build the catalog with the maintainer's seen flags merged into ``out`` (``build/catalog-with-seen``) from the fetch ``wiki`` and the client extract
-    (:func:`trioforge.data.catalog.build_catalog`, which refuses an output folder that git would commit)."""
-    try:
-        catalog_module.build_catalog(
-            wiki, client, out, seen_path=seen, quests_path=quests, rules_dir=rules_dir, generated=generated, workers=workers
-        )
-    except (catalog_module.BuildError, OSError, ValueError) as error:
-        raise ReleaseRefused(f"the catalog with the seen flags merged cannot be built: {' '.join(str(error).split())}") from None
-
-
 # ---- the build ---------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -1450,46 +1438,24 @@ def _rules_snapshot(tables_root: Path) -> dict[str, dict[str, Any]]:
     return {rule["id"]: {name: rule[name] for name in ("value", "levels") if name in rule} for rule in document["rules"]}
 
 
-def snapshot_seen(seen: str | os.PathLike[str], target: str | os.PathLike[str]) -> Path:
-    """Copy the seen-flags file to ``target`` (in the build folder, which git ignores and nothing ships) and check the copy. Every worker, check and step of a build
-    reads the copy and never the file again, so that flags made again during the hours cannot mix two states of them in one release."""
-    try:
-        raw = Path(seen).read_bytes()
-    except OSError as error:
-        raise ReleaseRefused(f"the seen-flags file cannot be read: {error.strerror or type(error).__name__}") from None
-    copy = Path(target)
-    try:
-        catalog_module.check_seen_output(copy.parent)  # (the flags are private: the copy goes where git would never commit it)
-    except catalog_module.BuildError as error:
-        raise ReleaseRefused(str(error)) from None
-    copy.parent.mkdir(parents=True, exist_ok=True)
-    temporary = copy.with_name(copy.name + ".tmp")
-    temporary.write_bytes(raw)
-    os.replace(temporary, copy)
-    try:
-        catalog_module.load_seen_keys(copy)
-    except (catalog_module.BuildError, OSError) as error:
-        copy.unlink(missing_ok=True)
-        raise ReleaseRefused(f"the seen-flags file cannot be used: {' '.join(str(error).split())}") from None
-    return copy
-
-
 def build_release(
-    *, tag: str, root: str | os.PathLike[str], seen: str | os.PathLike[str], privacy_key: str | os.PathLike[str], processes: int = 1,
+    *, tag: str, root: str | os.PathLike[str], privacy_key: str | os.PathLike[str], processes: int = 1,
     trios: Sequence[str] | None = None, trial: bool | None = None, catalog: str | os.PathLike[str] | None = None,
-    tables_root: str | os.PathLike[str] | None = None, build_dir: str | os.PathLike[str] | None = None, wiki: str | os.PathLike[str] | None = None,
-    client: str | os.PathLike[str] | None = None, previous: str = "auto", parity_stride: int | None = None, say: Callable[[str], None] = print,
-    now: datetime.datetime | None = None, seed: int | None = None, make_seen_catalog: Callable[[Path], None] | None = None,
+    tables_root: str | os.PathLike[str] | None = None, build_dir: str | os.PathLike[str] | None = None,
+    previous: str = "auto", parity_stride: int | None = None, say: Callable[[str], None] = print,
+    now: datetime.datetime | None = None, seed: int | None = None,
     runner: Callable[[TrioSpec], TrioOutcome] | None = None, bundle_reader: Callable[..., dict[str, int]] | None = None,
     assets: Sequence[str] | None = None, parity_runner: Callable[[Path, str, Sequence[str]], tuple[int, str]] | None = None, robustness: Any = None,
-    whole_grid: Sequence[str] | None = None, git: Any = None,
+    whole_grid: Sequence[str] | None = None, git: Any = None, checks_dir: str | os.PathLike[str] | None = None,
 ) -> ReleaseResult:
     """Build a release (see the module docstring). ``root`` is the folder with ``derived/``, ``rules/``, ``privacy/``, ``releases/``, ``reports/`` and ``build/``
     (the checkout, in a real run, and it must be a git worktree: ``git`` is the :class:`Git` of it, or a stand-in in a test). ``trios`` is the grid of the release
     (None: all 560); a release is the whole grid, and a build of some trios is a ``trial`` that writes no pointer, nothing in ``releases/`` or ``reports/`` and uses up
     no tag. ``parity_stride`` is the stride of the sample of the parity suite (None: the largest that is allowed). ``whole_grid`` and the keyword arguments from
-    ``make_seen_catalog`` on stand in for the grid and for the slow and external steps in the tests. A failure to say something (a closed pipe) is no failure of the
-    build. Raises :class:`ReleaseRefused`."""
+    ``runner`` on stand in for the grid and for the slow and external steps in the tests. The catalog is the public one (``derived/catalog.json``) and must have no strict
+    item (:func:`check_no_strict_item`). ``checks_dir`` is the folder of the stamps of the scheduled checks
+    (None: the folder of the checks, outside every worktree; see :func:`scheduled_warnings`). A failure to say something (a closed pipe) is no failure of the build.
+    Raises :class:`ReleaseRefused`."""
 
     def tell(text: str) -> None:
         try:
@@ -1526,11 +1492,11 @@ def build_release(
             )
     git = git if git is not None else Git(base)  # (the build root must be a git worktree: it is refused before anything else is done)
     clock = now or datetime.datetime.now(datetime.timezone.utc)
-    results, seen_out = build_path / "results", build_path / "catalog-with-seen"
+    results = build_path / "results"
     out_dir = build_path / ("trial" if is_trial else "release")  # (a trial is kept away from the folder of the releases, and from the tracked folders)
     staging, scratch, asset = out_dir / f"{tag}.stage", out_dir / f"{tag}.bundles", out_dir / f"{tag}.tar.gz"
-    # the full diff names items, and so tells which the maintainer has seen: it stays in the build folder, and not beside the asset, so that an upload of what is
-    # named for the tag (build/release/<tag>.*) cannot publish it
+    # the full diff names items: it stays in the build folder, and not beside the asset, so that an upload of what is named for the tag (build/release/<tag>.*) cannot
+    # publish it
     json_path = out_dir / f"{tag}.results-diff.json" if is_trial else build_path / "reports" / f"results-diff-{tag}.json"
     pointer_name, md_name = f"releases/{tag}.json", f"reports/results-diff-{tag}.md"
     md_path = out_dir / f"{tag}.results-diff.md" if is_trial else base / md_name
@@ -1541,12 +1507,10 @@ def build_release(
         warnings.append(text)
         tell(f"warning: {text}")
 
-    # the files the build writes that must never be committed: the copy of the seen flags, the full diff, the catalog with the flags merged, and for a trial everything
-    # it writes (each through a temporary file of the same folder). Each is checked before it is written, here and again before the outputs of the end.
+    # the files the build writes that must never be committed: the full diff, and for a trial everything it writes (each through a temporary file of the same folder).
+    # Each is checked before it is written, here and again before the outputs of the end.
     def private_outputs() -> list[Path]:
-        names = [build_path / SEEN_SNAPSHOT, build_path / f"{SEEN_SNAPSHOT}.tmp", json_path, json_path.with_name(f".{json_path.name}.x.tmp")]
-        for name in catalog_module.OUTPUT_FILES:
-            names += [seen_out / name, seen_out / f".{name}.x.tmp"]
+        names = [json_path, json_path.with_name(f".{json_path.name}.x.tmp")]
         if is_trial:  # (everything a trial writes is in the trial folder, and none of it is for git)
             names += [md_path, md_path.with_name(f".{md_path.name}.x.tmp"), asset, asset.with_name(asset.name + ".tmp"), staging, scratch]
         return names
@@ -1563,54 +1527,34 @@ def build_release(
     for path in private_outputs():
         check_private_output(path, git)
     check_build_folder(build_path, git)  # (the rest of the folder, which the checks of the private files do not reach: before the first of them is written)
-    snapshot = snapshot_seen(seen, build_path / SEEN_SNAPSHOT)
     scanner = PrivacyScanner(privacy_key, base / "privacy", phrases_catalog=public)
     try:
         public_document, catalog_digest = _read_strict_once(public)  # (read once, here: release.json is written from these, and the checks at the end compare the file with them)
     except (OSError, JsonFileError) as error:
         raise ReleaseRefused(f"the public catalog cannot be read: {error}") from None
+    check_no_strict_item(public_document)  # (wiki is the one evidence level: before the community entries are read, and before any hour is spent)
     community_entries = read_community(base / "rules", public_document)  # (read once, here, with the catalog: release.json records these entries)
     previous_path, note = (None, None) if is_trial and previous == "auto" else resolve_previous(base, build_path, tag, previous)  # (a trial is no release to compare)
     if note:
         warn(note)
-    for stale in scheduled_warnings(build_path / "checks", clock):
+    for stale in scheduled_warnings(checks_dir, clock):
         warn(stale)
-    maker = make_seen_catalog
-    if maker is None:
-        wiki_dir = Path(wiki) if wiki is not None else base / "sources" / "eqlwiki" / str(public_document.get("version"))
-        if not (wiki_dir / "manifest.json").is_file():
-            raise ReleaseRefused(f"the wiki fetch of the catalog's snapshot is not at {wiki_dir}: fetch it, or name the folder with --wiki")
-        client_dir = Path(client) if client is not None else base / "derived" / "client"
-        generated = (public_document.get("provenance") or {}).get("generated")
-
-        def maker(out: Path) -> None:
-            build_seen_catalog(
-                wiki=wiki_dir, client=client_dir, seen=snapshot, out=out, quests=base / "derived" / "quests.json", rules_dir=base / "rules", generated=generated
-            )
-
     tell(
         f"TRIAL build {tag}: {len(wanted)} trio(s), {processes} process(es); no pointer will be written, and nothing goes to releases/ or reports/"
         if is_trial
         else f"release {tag}: {len(wanted)} trio(s), {processes} process(es)"
     )
 
-    # 2. what the build starts from is recorded once, here, before the pool: the hashes of the code, the state of the checkout, the rules and the catalog. Then the
-    # catalog with the flags merged, and 3. the precompute.
+    # 2. what the build starts from is recorded once, here, before the pool: the hashes of the code, the state of the checkout, the rules and the catalog. Then
+    # 3. the precompute.
     rules_file = tables / "rules" / "rules.json"
     rules_digest = _sha256(rules_file)
     begun = Start(*_hashes(), git.state(), _rules_snapshot(tables), rules_digest, catalog_digest)
     if _sha256(rules_file) != rules_digest:
         raise ReleaseRefused("the rules changed while they were read: run the build again when nothing is writing in the checkout")
-    try:
-        catalog_module.check_seen_output(seen_out)
-        catalog_module.check_seen_output(results)
-    except catalog_module.BuildError as error:
-        raise ReleaseRefused(str(error)) from None
-    maker(seen_out)
-    check_seen_catalog(public, seen_out / "catalog.json")
-    tell(f"catalog: {len(public_document['items'])} items, snapshot {public_document['version']}, and the same with the private flags merged in build/")
+    tell(f"catalog: {len(public_document['items'])} items, snapshot {public_document['version']}, no strict item: wiki is the one evidence level")
     specs = [
-        TrioSpec(slug, str(results), str(public), str(snapshot), str(tables), robustness=robustness, chunk_code=begun.chunk_code, writer_code=begun.writer_code)
+        TrioSpec(slug, str(results), str(public), None, str(tables), robustness=robustness, chunk_code=begun.chunk_code, writer_code=begun.writer_code)
         for slug in wanted
     ]
     outcomes = precompute_grid(specs, processes=processes, say=tell, runner=runner)
@@ -1635,14 +1579,14 @@ def build_release(
         tell(f"check: {rows} items, each with the same row in every shard and trio")
         check_invariants(staging, wanted, outcomes)
         tell("check: the invariants of the design hold")
-        check_bundles(staging, wanted, seen_catalog=seen_out / "catalog.json", tables_root=tables, scratch=scratch)
-        tell(f"check: {len(wanted)} bundles are the ones the exporter writes from the catalog with the flags merged")
+        check_bundles(staging, wanted, catalog=public, tables_root=tables, scratch=scratch)
+        tell(f"check: {len(wanted)} bundles are the ones the exporter writes from the catalog")
         counts = (bundle_reader or check_bundle_reader)(staging, wanted)
         tell(f"check: the browser's reader read {counts['bundles']} bundles ({counts['profiles']} profiles)")
         evidence = assemble.evidence_map(load_strict(staging / assemble.ITEMS_FILE))
         site_files = check_file_count(facts, evidence, assets=assets)
         tell(f"check: {site_files:,} files in the site (limit {build.LIMITS['files']:,})")
-        spots = check_pruning(staging, wanted, catalog=public, seen=snapshot, tables_root=tables, seed=seed, processes=processes, chunk_code=begun.chunk_code)
+        spots = check_pruning(staging, wanted, catalog=public, tables_root=tables, seed=seed, processes=processes, chunk_code=begun.chunk_code)
         tell(f"check: {len(spots)} scenarios against the unpruned optimum")
         check_parity(staging, sample=sample, runner=parity_runner)
         tell(f"check: the parity suite passed (sample {sample}, and the defaults of every trio)")

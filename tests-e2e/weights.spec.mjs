@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT, TRIO, axe, expect, open, openSwitches, pick, queryOf, readKit, test } from "./support.mjs";
+import { ROOT, TRIO, axe, expect, madeFrom, open, openSwitches, pick, queryOf, readKit, test } from "./support.mjs";
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -90,14 +90,17 @@ async function askDirectly(page, request, body) {
 const viewOf = (page) =>
   page.evaluate(() => {
     const checked = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
-    return { race: document.querySelector("#sw-race").value, role: checked("role"), tier: Number(document.querySelector("#sw-tier").value), setup: checked("setup"), evidence: checked("ev"), buffs: checked("buffs") };
+    return { race: document.querySelector("#sw-race").value, role: checked("role"), tier: Number(document.querySelector("#sw-tier").value), setup: checked("setup"), evidence: document.querySelector("#main").dataset.ev, buffs: checked("buffs") };
   });
 
-/** The switches the shards answer, set to a view of the reference (nothing is asked of the optimizer for any of them). */
+/**
+ * The switches the shards answer, set to a view of the reference (nothing is asked of the optimizer for any of them). The page has no switch for the evidence level: it is made from one,
+ * and the page is opened again made from the level of the view (a release is made from the wiki level).
+ */
 async function showView(page, { race, role, tier, setup, evidence }) {
+  await madeFrom(page, evidence);
+  await open(page, TRIO);
   await openSwitches(page);
-  await choose(page, "evidence", `ev-${evidence}`);
-  await expect(page.locator('[data-f="assume-ev"]')).toHaveText(evidence === "wiki" ? "wiki evidence" : "strict evidence");
   await page.locator("#sw-race").selectOption(race);
   await pick(page, `role-${role}`);
   await page.locator("#sw-tier").selectOption(String(tier));
@@ -153,7 +156,7 @@ test("a slider at x2 asks the visitor first, then gives Python's answer for the 
   await expect(page.locator("#solve")).toContainText(`Kit value ${grouped(c.value)}`);
   await expect(page.locator("#solve button")).toHaveText("Back to the precomputed answer");
   await expect(page.locator("#announce")).toHaveText(/^Weights armor class x2\. Solved for your settings\. Showing .+\. Kit value 19,069\.$/);
-  expect(queryOf(page)).toMatchObject({ ev: "wiki", buffs: "own", w: "21111" });
+  expect(queryOf(page)).toMatchObject({ buffs: "own", w: "21111" });
   await expect(page.locator(".engine-consent")).toHaveCount(0);
   // a second answer comes from the same worker, with nothing downloaded again
   const second = REFERENCE.cases[1]; // armor class x0.5
@@ -292,13 +295,14 @@ for (const { buffs, reference, direct } of BUFF_SETS) {
 test("a page opened with the address of an answer solves it after the question, and shows the precomputed answer and offers the solve if the visitor declines @once", async ({ page, watch }) => {
   test.skip(FIXTURE_ONLY, REAL_RESULTS);
   const c = REFERENCE.cases[0];
-  const asked = "?race=OGR&role=balanced&tier=4&ev=wiki&buffs=own&w=21111";
+  const asked = "?race=OGR&role=balanced&tier=4&ev=wiki&buffs=own&w=21111"; // (the ev is ignored: the page is made from the wiki level here)
+  await madeFrom(page, "wiki");
   await open(page, `${TRIO}${asked}`);
   await accept(page);
   await solved(page);
   expect(await answerRows(page)).toEqual(namesOf(c.kit));
   expect(await positions(page)).toBe("21111");
-  expect(new URL(page.url()).search).toBe(asked);
+  expect(new URL(page.url()).search).toBe("?race=OGR&role=balanced&tier=4&buffs=own&w=21111"); // (written without the ev)
   // the same address with the visitor saying no (a new session: the yes is kept for the session)
   const other = await page.context().newPage();
   await other.goto(`${TRIO}${asked}`);

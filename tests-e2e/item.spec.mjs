@@ -217,7 +217,10 @@ test("a page of an item asks for the page, the stylesheet, the boot script and t
   const trio = await (await request.get(TRIO)).text();
   const trioAssets = [...trio.matchAll(/(?:href|src)="(\/assets\/[^"]+)"/g)].map((m) => m[1]).sort();
   expect(trioAssets, "a stylesheet and two scripts").toHaveLength(3);
-  expect(asked.filter((path) => path.startsWith("/assets/")).sort()).toEqual(trioAssets);
+  // the files the page names, and besides them the pictures of the theme that its stylesheet asks for: hashed PNGs of this site
+  const wanted = asked.filter((path) => path.startsWith("/assets/"));
+  expect(wanted.filter((path) => !path.endsWith(".png")).sort()).toEqual(trioAssets);
+  for (const path of wanted.filter((path) => path.endsWith(".png"))) expect(path, "a picture of the theme").toMatch(/^\/assets\/[a-z0-9-]+-[A-Z0-9]{8}\.png$/);
 });
 
 // ---- an item with no page ---------------------------------------------------------------------------------------------------------------------------
@@ -274,13 +277,13 @@ test("the page of an item carries the headers of site/_headers like every page @
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
-  test("the page of an item is whole: the facts, the tables, the sources, the evidence, the trios and the credit @once", async ({ page, request }) => {
+  test("the page of an item is whole: the facts, the tables, the sources, the trios and the credit @once", async ({ page, request }) => {
     const [{ key, record }] = await samples(request);
     await page.goto(`/item/${key}/`);
     await expect(page.locator("h1")).toHaveText(record.name);
-    for (const id of ["#tiers", "#level", "#credit"]) await expect(page.locator(id)).toBeVisible();
+    for (const id of ["#tiers", "#credit"]) await expect(page.locator(id)).toBeVisible();
     await expect(page.locator("#tiers tbody tr").first()).toBeVisible();
-    expect(await page.locator("h2").allTextContents()).toEqual(expect.arrayContaining(["Stats by tier", "Sources", "Evidence", "Best for these trios", "Wiki credit"]));
+    expect(await page.locator("h2").allTextContents()).toEqual(expect.arrayContaining(["Stats by tier", "Sources", "Best for these trios", "Wiki credit"]));
     await expect(page.locator("#theme-toggle")).toBeHidden(); // (it is the page script that shows it)
   });
 });

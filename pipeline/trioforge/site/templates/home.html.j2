@@ -37,7 +37,7 @@
 </details>
 {% endif %}
 {% if live|length < trio_total %}
-<p>Every other trio is coming soon.</p>
+<p class="soon">{% if art.has("dwarf") %}<span class="art art-dwarf" aria-hidden="true"></span>{% endif %}Every other trio is coming soon.</p>
 {% else %}
 <p>Every trio is ready.</p>
 {% endif %}

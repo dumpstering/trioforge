@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import loadHighs from "highs";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Rational } from "../pipeline/trioforge/site/static/engine/rational.js";
-import { ResultsError, checkResults, compareRow, parseSample, pythonRound2, readResults } from "./shard-results.mjs";
+import { ResultsError, checkResults, compareRow, isBuffTie, parseSample, pythonRound2, readResults } from "./shard-results.mjs";
 
 // The reading and the comparing of tests-js/shard-results.mjs, which tests-js/shard-parity.test.mjs holds the engine to the shards with: that Python's rounding is
 // reproduced, that a sample names its chunks, and, above all, that the check can fail: a shard of the fixture changed in one view (its value, one place of its kit, its
@@ -72,13 +72,32 @@ describe("compareRow", () => {
     expect(compareRow(shard, row, answer({ F: new Rational(156074099999n, 10_000_000n) }))).toEqual([]); // 15607.4099999 rounds to 15607.41
   });
 
-  it("names the first difference first: F, then the kit, then the buffs, then the haste", () => {
+  it("names the first difference first: F, then the kit, then the haste, then the buffs (the buffs alone are a tie, so they come last)", () => {
     const found = compareRow(shard, row, answer({ F: Rational.fromNumber(15607.42), kit: kit.map((key) => (key === "w80113" ? { key: "w80236", tier: 4 } : key === null ? null : { key, tier: 4 })), buffs: [5], hasteAssumed: 67 }));
     expect(found).toHaveLength(4);
     expect(found[0]).toMatch(/^F: shard 15607\.41, engine 15607\.42 /);
     expect(found[1]).toBe("kit: 1 place differs, the first P3: shard w80113, engine w80236");
-    expect(found[2]).toBe("buffs: shard [5,9], engine [5]");
-    expect(found[3]).toBe("haste assumed: shard 66, engine 67");
+    expect(found[2]).toBe("haste assumed: shard 66, engine 67");
+    expect(found[3]).toBe("buffs: shard [5,9], engine [5]");
+  });
+
+  it("calls a view a tie when the buff sets differ and F, the kit and the haste are equal: two buffs of equal value, and the engine took the other one", () => {
+    const found = compareRow(shard, row, answer({ buffs: [5, 7] }));
+    expect(found).toEqual(["buffs: shard [5,9], engine [5,7]"]);
+    expect(isBuffTie(found)).toBe(true);
+    expect(isBuffTie([])).toBe(false); // the row itself is no tie
+  });
+
+  it("never calls a view a tie when F, the kit or the haste differ, whatever the buffs are", () => {
+    const hands = kit.map((key) => (key === "w80113" ? { key: "w80236", tier: 4 } : key === null ? null : { key, tier: 4 }));
+    for (const changes of [{ F: Rational.fromNumber(15607.42) }, { kit: hands }, { hasteAssumed: 67 }]) {
+      const found = compareRow(shard, row, answer({ buffs: [5, 7], ...changes }));
+      expect(found).toHaveLength(2);
+      expect(found[1]).toBe("buffs: shard [5,9], engine [5,7]");
+      expect(isBuffTie(found), JSON.stringify(Object.keys(changes))).toBe(false);
+    }
+    expect(isBuffTie(["haste assumed: shard 66, engine 67"])).toBe(false);
+    expect(isBuffTie(["the engine found no kit"])).toBe(false);
   });
 
   it("counts the places that differ, and says empty for an empty place", () => {
@@ -166,15 +185,32 @@ describe("the check can fail", () => {
     expect(report.failures[0].shardItems).toHaveLength(1);
   });
 
-  it("reports a view whose buffs differ", () => {
+  /** The first row of wiki-own given another buff set (one buff more) than the engine finds. */
+  const otherBuffs = (d) => {
+    const shard = d["wiki-own"];
+    shard.buff_sets.push([...shard.buff_sets[shard.scenarios[0][8]], 424242]);
+    shard.scenarios[0][8] = shard.buff_sets.length - 1;
+  };
+
+  it("counts a view whose buffs differ, and whose F, kit and haste are equal, as a tie and not as a failure", () => {
+    const { race, report } = checkRow(changed(otherBuffs), "wiki-own", 0);
+    expect(report.failures).toEqual([]);
+    expect(report.ties).toHaveLength(1);
+    expect(report.ties[0].name).toContain(`wiki/own ${race}`);
+    expect(report.ties[0].first).toMatch(/^buffs: shard \[.*424242\], engine \[/);
+    expect(checkRow(FIXTURE, "wiki-own", 0).report.ties).toEqual([]); // (the shard as it is has none)
+  });
+
+  it("still reports a view whose buffs differ when its haste differs too, with the haste first", () => {
     const folder = changed((d) => {
-      const shard = d["wiki-own"];
-      shard.buff_sets.push([...shard.buff_sets[shard.scenarios[0][8]], 424242]);
-      shard.scenarios[0][8] = shard.buff_sets.length - 1;
+      otherBuffs(d);
+      d["wiki-own"].scenarios[0][9] += 1;
     });
     const { report } = checkRow(folder, "wiki-own", 0);
+    expect(report.ties).toEqual([]);
     expect(report.failures).toHaveLength(1);
-    expect(report.failures[0].first).toMatch(/^buffs: shard \[.*424242\], engine \[/);
+    expect(report.failures[0].first).toMatch(/^haste assumed: shard \d+, engine \d+$/);
+    expect(report.failures[0].all).toHaveLength(2);
   });
 
   it("reports a view whose assumed haste differs", () => {

@@ -1,0 +1,11 @@
+{
+ "responses": [
+  {"url": "https://eqlwiki.com/robots.txt", "status": 404, "body": ""},
+  {"url": "https://eqltools.com/robots.txt", "status": 404, "body": ""},
+  {"url": "https://eqlwiki.com/api.php", "query": {"list": "recentchanges"}, "status": 200, "headers": {"Content-Type": "application/json"}, "file": "recentchanges-1.json"},
+  {"url": "https://eqlwiki.com/api.php", "query": {"list": "recentchanges", "rccontinue": "20261015000000|9100"}, "status": 200, "headers": {"Content-Type": "application/json"}, "file": "recentchanges-2.json"},
+  {"url": "https://eqlwiki.com/api.php", "query": {"prop": "revisions", "titles": "Patch Notes"}, "status": 200, "headers": {"Content-Type": "application/json"}, "file": "patch-notes.json"},
+  {"url": "https://eqltools.com/gear/data/gear-data.json", "status": 200, "headers": {"Content-Type": "application/json"}, "file": "gear.json"},
+  {"url": "https://eqltools.com/companion/data/quest-items.json", "status": 200, "headers": {"Content-Type": "application/json"}, "file": "quests.json"}
+ ]
+}

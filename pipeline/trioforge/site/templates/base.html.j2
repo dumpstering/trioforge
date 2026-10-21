@@ -33,7 +33,15 @@
 <a class="skip-link" href="#main">Skip to the content</a>
 <header class="site-header">
 <div class="wrap bar">
-<a class="brand" href="/"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="9.5" r="7" fill="currentColor" fill-opacity="0.85"></circle><circle cx="9.5" cy="21" r="7" fill="currentColor" fill-opacity="0.6"></circle><circle cx="22.5" cy="21" r="7" fill="currentColor" fill-opacity="0.4"></circle></svg><span>TrioForge</span></a>
+<div class="brand-row">
+{% if art.has("torch") %}
+<span class="art art-torch" aria-hidden="true"></span>
+{% endif %}
+<a class="brand" href="/">{% if art.has("emblem") %}<span class="art art-emblem" aria-hidden="true"></span>{% else %}<svg class="logo" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="9.5" r="7" fill="currentColor" fill-opacity="0.85"></circle><circle cx="9.5" cy="21" r="7" fill="currentColor" fill-opacity="0.6"></circle><circle cx="22.5" cy="21" r="7" fill="currentColor" fill-opacity="0.4"></circle></svg>{% endif %}<span>TrioForge</span></a>
+{% if art.has("torch") %}
+<span class="art art-torch art-mirror" aria-hidden="true"></span>
+{% endif %}
+</div>
 <nav aria-label="Main">
 <ul>
 {% for item in nav %}
@@ -51,15 +59,19 @@
 {% block main %}{% endblock %}
 <footer class="site-footer">
 <div class="wrap">
+<ul class="badges">
+<li><span class="badge badge-plain">TrioForge</span></li>
+<li><a class="badge badge-light" href="/sources/">Data: eqlwiki CC BY-SA</a></li>
+<li><span class="badge badge-scroll">Made with Notepad</span></li>
+<li><span class="badge badge-dark">Best in Slot</span></li>
+</ul>
 <p>{{ disclaimer }}</p>
 <p>{% for text, address in attribution_parts %}{% if address %}<a href="{{ address }}" rel="noopener noreferrer">{{ text }}</a>{% else %}{{ text }}{% endif %}{% endfor %}. {{ licence_sentence }} <a href="/sources/">Sources and licences</a></p>
-<p>{% if report_url %}<a id="report-link" href="{{ report_url }}" rel="noopener noreferrer">Report a problem with this page</a>{% else %}{{ reports_not_open }}{% endif %} &middot; <a href="/about/">About</a> &middot; <a href="/changelog/">Changelog</a></p>
+<p>{% if report_url %}<a id="report-link" class="report-link" href="{{ report_url }}" rel="noopener noreferrer">{% if art.has("mail") %}<span class="art art-mail" aria-hidden="true"></span>{% endif %}Report a problem with this page</a>{% else %}{{ reports_not_open }}{% endif %} &middot; <a href="/about/">About</a> &middot; <a href="/changelog/">Changelog</a></p>
+<p class="not-affiliated">This site is not affiliated with Daybreak Games</p>
 </div>
 </footer>
 <svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
-<symbol id="i-strict" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"></circle><path d="M4.6 8.3l2.3 2.3 4.5-5" fill="none" stroke="currentColor" stroke-width="1.8"></path></symbol>
-<symbol id="i-wiki" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect><path d="M5.5 6h5M5.5 9h5" fill="none" stroke="currentColor" stroke-width="1.5"></path></symbol>
-<symbol id="i-none" viewBox="0 0 16 16"><path d="M4 8h8" fill="none" stroke="currentColor" stroke-width="1.6"></path></symbol>
 <symbol id="i-client" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" fill="currentColor"></rect></symbol>
 <symbol id="i-developer" viewBox="0 0 16 16"><path d="M8 1.5L14.5 8 8 14.5 1.5 8z" fill="currentColor"></path></symbol>
 <symbol id="i-measured" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="currentColor"></circle></symbol>

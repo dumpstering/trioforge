@@ -1,56 +1,111 @@
 /*
- * TrioForge. One stylesheet, system fonts, no images, no external requests.
+ * TrioForge. One stylesheet, system fonts, no external requests: the look of a late-90s EverQuest fan site (a dark frame, a menu column on the left,
+ * maroon section bars, a parchment column, the gear tables as an in-game item window, square bevelled controls) in pixel art. The pictures are small
+ * PNGs that scripts/art_process.py makes (static/art/): art.css, which it writes, is imported below and names them, esbuild copies them beside the
+ * stylesheet under a hash of their content, and every rule that uses one has a fallback, so that a picture that is not part of the site leaves a plainer page.
  *
  * Colours are tokens. Light is the default; the system's dark preference switches them unless the visitor chose light with
  * the theme button, and choosing dark with the button switches them whatever the system says. The two dark blocks hold the
- * same values (a test checks that, and that every text pair keeps WCAG AA contrast in each theme).
+ * same values (a test checks that, and that every text pair keeps WCAG AA contrast in each theme, over the pictures too). The tokens
+ * of the frame, the menu, the bars and the item window are the same in both themes (the second :root block).
  */
 
+@import "./art/art.css";
+
 :root {
-  --bg: #faf8f5;
-  --surface: #ffffff;
-  --tint: #f1ece4;
-  --text: #1a1d21;
-  --muted: #4b5460;
-  --border: #cfd4da;
-  --control: #6a7480;
-  --accent: #9a3a0a;
-  --accent-fill: #9a3a0a;
-  --on-accent: #ffffff;
+  --bg: #efe2c0;
+  --surface: #f8efd6;
+  --tint: #ead9b0;
+  --text: #2a1d0e;
+  --muted: #5a4630;
+  --border: #8a6d3b;
+  --control: #6b4f22;
+  --accent: #0000ee;
+  --accent-fill: #7a1f12;
+  --on-accent: #fff6dc;
   --focus: #1d4ed8;
+  --heading: #7a1f12;
+  --visited: #551a8b;
+  --veil: rgba(248, 239, 214, 0.5);
+  --btn-face: #c0c0c0;
+  --btn-text: #000000;
+  --btn-light: #ffffff;
+  --btn-dark: #404040;
+  --btn-shadow: #808080;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #14171b;
-    --surface: #1c2026;
-    --tint: #20252c;
-    --text: #e9ecef;
-    --muted: #aab3bd;
-    --border: #343b44;
-    --control: #8b95a1;
-    --accent: #f2a272;
-    --accent-fill: #f2a272;
+    --bg: #17130e;
+    --surface: #211a12;
+    --tint: #2c2318;
+    --text: #ecdfc3;
+    --muted: #c4b08a;
+    --border: #8a7040;
+    --control: #b0915a;
+    --accent: #9dbdff;
+    --accent-fill: #c9a24a;
     --on-accent: #1a1208;
-    --focus: #8ab4ff;
+    --focus: #9dbdff;
+    --heading: #e8c66a;
+    --visited: #d0a8ff;
+    --veil: rgba(23, 19, 14, 0.8);
+    --btn-face: #3b3f4c;
+    --btn-text: #ecdfc3;
+    --btn-light: #6d7590;
+    --btn-dark: #05060a;
+    --btn-shadow: #1a1d26;
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #14171b;
-  --surface: #1c2026;
-  --tint: #20252c;
-  --text: #e9ecef;
-  --muted: #aab3bd;
-  --border: #343b44;
-  --control: #8b95a1;
-  --accent: #f2a272;
-  --accent-fill: #f2a272;
+  --bg: #17130e;
+  --surface: #211a12;
+  --tint: #2c2318;
+  --text: #ecdfc3;
+  --muted: #c4b08a;
+  --border: #8a7040;
+  --control: #b0915a;
+  --accent: #9dbdff;
+  --accent-fill: #c9a24a;
   --on-accent: #1a1208;
-  --focus: #8ab4ff;
+  --focus: #9dbdff;
+  --heading: #e8c66a;
+  --visited: #d0a8ff;
+  --veil: rgba(23, 19, 14, 0.8);
+  --btn-face: #3b3f4c;
+  --btn-text: #ecdfc3;
+  --btn-light: #6d7590;
+  --btn-dark: #05060a;
+  --btn-shadow: #1a1d26;
   color-scheme: dark;
+}
+
+/* the same in both themes: the dark frame and its menu, the maroon bars, the item window (dark slate with light text) and the footer */
+:root {
+  --frame: #0b0d14;
+  --frame-2: #151a28;
+  --frame-line: #3a3f55;
+  --frame-text: #cfd6ea;
+  --frame-muted: #aab3cc;
+  --frame-link: #9dc4ff;
+  --frame-gold: #f0cf6e;
+  --frame-focus: #ffef5a;
+  --bar-1: #7a1010;
+  --bar-2: #3d0606;
+  --bar-text: #f7e7b4;
+  --win: #1b1f2a;
+  --win-alt: #222838;
+  --win-head: #0f121a;
+  --win-line: #2e3446;
+  --win-border: #6d7590;
+  --win-text: #e8e8e8;
+  --win-muted: #aab3cc;
+  --win-link: #9dc4ff;
+  --win-visited: #c9a8ff;
+  --win-gold: #f0cf6e;
 }
 
 *,
@@ -62,6 +117,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* the type grows with the window from the visitor's own setting (rem, never pixels): the browser's size up to a laptop, about 1.05 of it at 1920 wide, 1.2 at 2560, 1.3 at 4K */
+  font-size: clamp(1rem, calc(0.625rem + 0.35vw), 1.3125rem);
 }
 
 body {
@@ -69,10 +126,14 @@ body {
   flex-direction: column;
   min-height: 100vh;
   margin: 0;
-  background: var(--bg);
+  background-color: var(--frame);
+  background-image: var(--art-tile-stone, none);
+  background-size: calc(var(--art-tile-stone-w, 64) * 2px * var(--art-m, 1)) calc(var(--art-tile-stone-h, 64) * 2px * var(--art-m, 1));
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 1rem;
+  font-family: Verdana, Tahoma, Geneva, system-ui, sans-serif;
+  font-size: 0.95rem;
   line-height: 1.55;
 }
 
@@ -86,6 +147,14 @@ kbd {
 h1,
 h2,
 h3,
+h4,
+.brand {
+  font-family: "Book Antiqua", "Palatino Linotype", Palatino, "Times New Roman", serif;
+}
+
+h1,
+h2,
+h3,
 h4 {
   line-height: 1.25;
   margin: 1.6rem 0 0.6rem;
@@ -93,16 +162,20 @@ h4 {
 }
 
 h1 {
-  font-size: 1.65rem;
+  font-size: 1.9rem;
   margin-top: 0.5rem;
+  color: var(--heading);
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
 }
 
 h2 {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
 }
 
 h3 {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
+  color: var(--heading);
 }
 
 p,
@@ -180,17 +253,29 @@ strong {
   top: 0.5rem;
 }
 
+main a:visited {
+  color: var(--visited);
+}
+
 main {
   flex: 1 0 auto;
   padding-bottom: 2.5rem;
   min-width: 0;
+  color: var(--text);
 }
 
 /* ---- header and footer ---- */
 
+/* the header is the frame's left column on a wide screen (below) and a bar on top of a phone's */
 .site-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: linear-gradient(var(--frame-2), var(--frame));
+  border: 2px solid var(--frame-line);
+  color: var(--frame-text);
+}
+
+.site-header a,
+.site-header a:visited {
+  color: var(--frame-link);
 }
 
 .bar {
@@ -201,21 +286,34 @@ main {
   padding-block: 0.4rem;
 }
 
+/* the torches stand beside the brand; they are drawn art and are not read, and a phone has none (its first screen is short) */
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 700;
-  color: var(--text);
+  color: var(--frame-gold) !important;
   text-decoration: none;
+  text-shadow: 2px 2px 0 #000, 0 0 8px rgba(240, 207, 110, 0.35);
   min-height: 2.75rem;
 }
 
 .logo {
   width: 1.75rem;
   height: 1.75rem;
-  color: var(--accent);
+  color: var(--frame-gold);
+}
+
+.art-mirror {
+  transform: scaleX(-1);
 }
 
 .site-header nav {
@@ -232,49 +330,53 @@ main {
   padding: 0;
 }
 
-.site-header nav a {
+.site-header nav a,
+.site-header nav a:visited {
   display: inline-flex;
   align-items: center;
   min-height: 2.75rem;
   padding: 0 0.45rem;
-  color: var(--text);
+  color: var(--frame-text);
   text-decoration: none;
-  border-radius: 0.4rem;
 }
 
 .site-header nav a:hover {
-  background: var(--tint);
+  color: #ffffff;
+  text-decoration: underline;
 }
 
 .site-header nav a[aria-current="page"] {
-  font-weight: 650;
+  color: var(--frame-gold);
+  font-weight: 700;
   text-decoration: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 0.3em;
 }
 
+/* the square, bevelled controls of a window of 1998: a raised face with a light edge above and left and a dark one below and right; pressed, the edges swap */
 .theme-toggle,
 .btn {
   min-height: 2.75rem;
   padding: 0.4rem 0.9rem;
-  border: 1px solid var(--control);
-  border-radius: 0.5rem;
-  background: var(--surface);
-  color: var(--text);
+  border: 2px solid;
+  border-color: var(--btn-light) var(--btn-dark) var(--btn-dark) var(--btn-light);
+  border-radius: 0;
+  background: var(--btn-face);
+  box-shadow: inset -1px -1px 0 var(--btn-shadow);
+  color: var(--btn-text);
   font: inherit;
   cursor: pointer;
 }
 
 .btn {
   background: var(--accent-fill);
-  border-color: var(--accent-fill);
   color: var(--on-accent);
   font-weight: 600;
   margin-inline-start: 0.5rem;
 }
 
 .theme-toggle:hover {
-  background: var(--tint);
+  filter: brightness(1.12);
 }
 
 .theme-toggle {
@@ -284,7 +386,7 @@ main {
 .data-strip {
   margin: 0 auto;
   padding-block: 0 0.5rem;
-  color: var(--muted);
+  color: var(--frame-muted);
   font-size: 0.85rem;
 }
 
@@ -308,24 +410,123 @@ main {
 .preview-banner {
   margin: 0 auto;
   padding-block: 0.3rem 0.45rem;
-  border-top: 1px solid var(--border);
-  background: var(--tint);
-  color: var(--text);
+  border-top: 1px solid var(--frame-line);
+  background: var(--bar-2);
+  color: var(--bar-text);
   font-size: 0.85rem;
   font-weight: 600;
 }
 
 .site-footer {
-  border-top: 1px solid var(--border);
-  background: var(--surface);
+  border: 2px solid var(--frame-line);
+  background: var(--frame-2);
   padding-block: 1.25rem;
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--frame-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.site-footer a,
+.site-footer a:visited {
+  color: var(--frame-link);
 }
 
 .site-footer p {
   margin-bottom: 0.6rem;
   overflow-wrap: anywhere;
+}
+
+.not-affiliated {
+  font-style: italic;
+}
+
+/* the badges of a fan site's footer: 88 by 31 plates, shown at twice their size (more on a big screen), with the words set over them (the words are text, not part of the picture).
+   The plate is the border of the badge (border-image, its middle stretched); without it the badge is a framed label that has colours of its own, so that its words keep their contrast. */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.site-footer .badge,
+.site-footer .badge:visited {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(88px * 2 * var(--art-m, 1));
+  min-height: calc(31px * 2 * var(--art-m, 1));
+  padding: 0 0.15rem;
+  border: 2px solid var(--frame-gold);
+  background-clip: padding-box;
+  font: 700 0.6rem/1.15 Verdana, Tahoma, Geneva, system-ui, sans-serif;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-decoration: none;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+.site-footer .badge-dark,
+.site-footer .badge-dark:visited {
+  background-color: #151a28;
+  color: var(--frame-gold);
+  border-width: calc(var(--art-plate-dark-st, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-dark-sr, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-dark-sb, 1) * 2px * var(--art-m, 1))
+    calc(var(--art-plate-dark-sl, 1) * 2px * var(--art-m, 1));
+  border-image: var(--art-plate-dark, none) var(--art-plate-dark-slice, 1) fill / calc(var(--art-plate-dark-st, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-dark-sr, 1) * 2px * var(--art-m, 1))
+    calc(var(--art-plate-dark-sb, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-dark-sl, 1) * 2px * var(--art-m, 1)) stretch;
+}
+
+.site-footer .badge-light,
+.site-footer .badge-light:visited {
+  background-color: #ead9b0;
+  color: #1a1208;
+  border-width: calc(var(--art-plate-light-st, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-light-sr, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-light-sb, 1) * 2px * var(--art-m, 1))
+    calc(var(--art-plate-light-sl, 1) * 2px * var(--art-m, 1));
+  border-image: var(--art-plate-light, none) var(--art-plate-light-slice, 1) fill / calc(var(--art-plate-light-st, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-light-sr, 1) * 2px * var(--art-m, 1))
+    calc(var(--art-plate-light-sb, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-light-sl, 1) * 2px * var(--art-m, 1)) stretch;
+}
+
+.site-footer .badge-scroll,
+.site-footer .badge-scroll:visited {
+  background-color: #ead9b0;
+  color: #1a1208;
+  border-width: calc(var(--art-plate-scroll-st, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-scroll-sr, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-scroll-sb, 1) * 2px * var(--art-m, 1))
+    calc(var(--art-plate-scroll-sl, 1) * 2px * var(--art-m, 1));
+  border-image: var(--art-plate-scroll, none) var(--art-plate-scroll-slice, 1) fill / calc(var(--art-plate-scroll-st, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-scroll-sr, 1) * 2px * var(--art-m, 1))
+    calc(var(--art-plate-scroll-sb, 1) * 2px * var(--art-m, 1)) calc(var(--art-plate-scroll-sl, 1) * 2px * var(--art-m, 1)) stretch;
+}
+
+.site-footer .badge-plain,
+.site-footer .badge-plain:visited {
+  background-color: var(--bar-2);
+  border: 2px solid var(--frame-gold);
+  box-shadow: inset 0 0 0 1px #000, 3px 3px 0 rgba(0, 0, 0, 0.45);
+  color: var(--bar-text);
+}
+
+a.badge:hover {
+  filter: brightness(1.1);
+  text-decoration: underline;
+}
+
+.report-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.report-link .art-mail {
+  animation-play-state: paused;
+}
+
+.report-link:hover .art-mail,
+.report-link:focus-visible .art-mail {
+  animation-play-state: running;
 }
 
 /* ---- the trio page ---- */
@@ -713,8 +914,7 @@ tbody th {
 }
 
 .kit th:nth-child(3),
-.kit td:nth-child(3),
-.kit .seal {
+.kit td:nth-child(3) {
   white-space: nowrap;
 }
 
@@ -1491,9 +1691,472 @@ dl.pairs dd {
   margin: 0.2rem 0;
 }
 
+/* ---- the late-90s fan-site look: the frame, the menu column, the bars, the parchment, the item window, the controls ---- */
+
+/* the art is shown whole times its size, and on a big screen one more (a 4K window is 3840 px wide at 100%) */
+@media (min-width: 150rem) {
+  :root {
+    --art-m: 2;
+  }
+}
+
+/* the content is a column of parchment (stone in the dark theme) with a veil over the picture, so that the words keep their contrast on every pixel of it */
+main.wrap {
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--veil), var(--veil)), var(--art-tile-parchment, none);
+  background-size: auto, calc(var(--art-tile-parchment-w, 62) * 2px * var(--art-m, 1)) calc(var(--art-tile-parchment-h, 62) * 2px * var(--art-m, 1));
+  border: 2px solid var(--frame-line);
+  margin-block: 0 1rem;
+  padding: 0 1rem 2rem;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) main.wrap {
+    background-image: linear-gradient(var(--veil), var(--veil)), var(--art-tile-stone, none);
+    background-size: auto, calc(var(--art-tile-stone-w, 64) * 2px * var(--art-m, 1)) calc(var(--art-tile-stone-h, 64) * 2px * var(--art-m, 1));
+  }
+}
+
+:root[data-theme="dark"] main.wrap {
+  background-image: linear-gradient(var(--veil), var(--veil)), var(--art-tile-stone, none);
+  background-size: auto, calc(var(--art-tile-stone-w, 64) * 2px * var(--art-m, 1)) calc(var(--art-tile-stone-h, 64) * 2px * var(--art-m, 1));
+}
+
+main > h1:first-child,
+.page-head {
+  margin-top: 0;
+}
+
+main h1 {
+  padding-top: 1rem;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* the divider under the heading of a page: a line of pixel art, shown at twice its size (the picture's own width, never stretched) */
+main > h1::after,
+.page-head > h1::after {
+  content: "";
+  display: block;
+  height: calc(var(--art-divider-h, 0) * 2px * var(--art-m, 1));
+  margin-top: 0.3rem;
+  background: var(--art-divider, none) left center / calc(var(--art-divider-w, 0) * 2px * var(--art-m, 1)) calc(var(--art-divider-h, 0) * 2px * var(--art-m, 1)) no-repeat;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+main p {
+  max-width: 80ch;
+}
+
+main h2:not(.sr-only) {
+  margin-inline: -1rem;
+  padding: 0.2rem 1rem;
+  background: linear-gradient(var(--bar-1), var(--bar-2));
+  color: var(--bar-text);
+  border-block: 1px solid #000;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* (as specific as the rule of the bars, and later: it must win, or the bar runs out of the panel) */
+main .shared > h2:not(.sr-only) {
+  margin-inline: 0;
+}
+
+/* the gear tables are an item window of the game: dark slate, light text, gold column heads */
+.kit,
+.totals,
+.runnerups,
+.equip,
+.scroll {
+  background: var(--win);
+  color: var(--win-text);
+  border: 2px solid var(--win-border);
+  box-shadow: inset 0 0 0 1px #000, 3px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+.kit th,
+.kit td,
+.totals th,
+.totals td,
+.runnerups th,
+.runnerups td,
+.equip th,
+.equip td,
+.tiers th,
+.tiers td {
+  border-bottom: 1px solid var(--win-line);
+  color: var(--win-text);
+}
+
+.kit thead th,
+.totals thead th,
+.runnerups thead th,
+.tiers thead th {
+  background: var(--win-head);
+  border-bottom: 2px solid var(--win-border);
+  color: var(--win-gold);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.kit tbody tr:nth-child(even),
+.totals tbody tr:nth-child(even),
+.tiers tbody tr:nth-child(even) {
+  background: var(--win-alt);
+}
+
+.tiers thead tr,
+.tiers tbody tr {
+  background: var(--win);
+}
+
+.kit a,
+.totals a,
+.runnerups a,
+.equip a,
+.tiers a {
+  color: var(--win-link);
+}
+
+.kit a:visited,
+.runnerups a:visited,
+.equip a:visited {
+  color: var(--win-visited);
+}
+
+.kit .reach,
+.kit .deity,
+.kit .muted,
+.totals .muted,
+.kit .delta,
+.runnerups .delta,
+.equip .muted,
+.cap-rules {
+  color: var(--win-muted);
+}
+
+.kit .name {
+  color: #ffffff;
+}
+
+/* the caption of a table is the title bar of its window, drawn as one with it (axe takes the table's own slate for what is under it) */
+.kit caption,
+.totals caption {
+  padding: 0.4rem 0.7rem;
+  border: 2px solid var(--win-border);
+  border-bottom: 0;
+  background: var(--win);
+  color: var(--win-muted);
+}
+
+.kit .open-test,
+.totals .open-test,
+.runnerups .open-test,
+.equip .open-test,
+.kit .owned-meta,
+.runnerups .owned-meta,
+.equip .owned-meta,
+.runnerups .deity,
+.runnerups .note,
+.runnerups .muted,
+.runnerups .margin,
+.equip .note,
+.equip .slot-none,
+.equip .margin {
+  color: var(--win-muted);
+}
+
+.kit :focus-visible,
+.totals :focus-visible,
+.runnerups :focus-visible,
+.equip :focus-visible,
+.scroll:focus-visible {
+  outline-color: var(--frame-focus);
+}
+
+/* the picture beside the name of a place sits in a slot of the item window, drawn here: a square of dark slate with a bevelled edge, around the 32 pixel icon (the icon's own
+   background is keyed out, so a re-rolled icon with none fits as well); the art is decoration that is not read, shown at its own size, twice on a 4K window */
+.kit th,
+.kit td {
+  vertical-align: middle;
+}
+
+.kit th .art {
+  box-sizing: content-box;
+  margin-inline-end: 0.5rem;
+  vertical-align: middle;
+  background-color: var(--win);
+  border: 1px solid;
+  border-color: var(--win-border) #05060a #05060a var(--win-border);
+}
+
+/* the crest beside a role's choice, and the lost picture of the 404 page */
+.seg-item label .art {
+  margin-inline-end: 0.45rem;
+}
+
+.art-lost {
+  display: block;
+  margin: 0.8rem 0 1rem;
+  border: 2px solid var(--frame-line);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* the controls are square and bevelled, of the system's grey in the light theme and of slate in the dark one */
+.btn-change,
+.btn-quiet,
+.engine-consent button,
+select {
+  border: 2px solid;
+  border-color: var(--btn-light) var(--btn-dark) var(--btn-dark) var(--btn-light);
+  border-radius: 0;
+  background-color: var(--btn-face);
+  box-shadow: inset -1px -1px 0 var(--btn-shadow);
+  color: var(--btn-text);
+}
+
+.engine-consent button[data-action="accept"] {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+.theme-toggle:active,
+.btn:active,
+.btn-change:active,
+.btn-quiet:active,
+.engine-consent button:active,
+.seg-item label:active,
+.chip label:active {
+  border-color: var(--btn-dark) var(--btn-light) var(--btn-light) var(--btn-dark);
+  box-shadow: inset 1px 1px 0 var(--btn-shadow);
+}
+
+.combo input,
+.share-link {
+  border: 2px solid;
+  border-color: var(--btn-dark) var(--btn-light) var(--btn-light) var(--btn-dark);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: inset 1px 1px 0 var(--btn-shadow);
+}
+
+.seg-item label,
+.chip label {
+  border: 2px solid;
+  border-color: var(--btn-light) var(--btn-dark) var(--btn-dark) var(--btn-light);
+  border-radius: 0;
+  background: var(--btn-face);
+  box-shadow: inset -1px -1px 0 var(--btn-shadow);
+  color: var(--btn-text);
+}
+
+.seg-item input:checked + label,
+.chip input:checked + label {
+  border-color: var(--btn-dark) var(--btn-light) var(--btn-light) var(--btn-dark);
+  background: var(--accent-fill);
+  box-shadow: inset 1px 1px 0 #000;
+  color: var(--on-accent);
+}
+
+.chip input:disabled + label {
+  color: var(--btn-text);
+  opacity: 0.75;
+}
+
+details.expander,
+.assume,
+.cards a,
+.rule,
+.engine-consent,
+.status,
+.banner,
+.shared,
+.view-bar,
+.listbox,
+.dropzone {
+  border-radius: 0;
+}
+
+details.expander > summary {
+  background: var(--tint);
+  color: var(--heading);
+}
+
+.cards a {
+  background: var(--tint);
+}
+
+/* the coin stands in the line of text, at the height of its middle (the line stays one run of words: it is not a flex row) */
+.kit-line {
+  display: flow-root;
+}
+
+.kit-line .art {
+  float: left;
+  margin: 0 0.6rem 0.2rem 0;
+}
+
+.soon {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* the menu: a column on the left of a wide window, with a maroon "Navigation" bar over the buttons; its buttons are the dark plates of the art */
+@media (min-width: 56rem) {
+  body {
+    display: grid;
+    grid-template-columns: clamp(14rem, 14vw, 18rem) minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    column-gap: 1rem;
+    max-width: 112rem;
+    margin-inline: auto;
+    padding: 1rem;
+  }
+
+  .site-header {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    position: sticky;
+    top: 1rem;
+  }
+
+  main.wrap {
+    grid-column: 2;
+    grid-row: 1;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .site-footer {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .site-header .bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+  }
+
+  .site-header .brand-row {
+    padding: 0.8rem 0.5rem 0.4rem;
+  }
+
+  .site-header .brand {
+    flex-direction: column;
+    gap: 0.2rem;
+    min-height: 0;
+    font-size: 1.5rem;
+  }
+
+  .site-header nav::before {
+    content: "Navigation";
+    content: "Navigation" / "";
+    display: block;
+    background: linear-gradient(var(--bar-1), var(--bar-2));
+    border-block: 1px solid #000;
+    color: var(--bar-text);
+    font: 700 0.85rem/2 Verdana, Tahoma, Geneva, system-ui, sans-serif;
+    padding: 0 0.7rem;
+  }
+
+  .site-header nav ul {
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.6rem 0.6rem 0.4rem;
+  }
+
+  .site-header nav a,
+  .site-header nav a:visited {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.4rem;
+    padding: 0 0.3rem;
+    border: 2px solid var(--frame-gold);
+    border-width: calc(var(--art-plate-dark-st, 1) * 2px) calc(var(--art-plate-dark-sr, 1) * 2px) calc(var(--art-plate-dark-sb, 1) * 2px) calc(var(--art-plate-dark-sl, 1) * 2px);
+    border-image: var(--art-plate-dark, none) var(--art-plate-dark-slice, 1) fill / calc(var(--art-plate-dark-st, 1) * 2px) calc(var(--art-plate-dark-sr, 1) * 2px) calc(var(--art-plate-dark-sb, 1) * 2px)
+      calc(var(--art-plate-dark-sl, 1) * 2px) stretch;
+    background-color: #151a28;
+    background-clip: padding-box;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+  }
+
+  .site-header nav a::before {
+    content: "\25B8\00a0";
+    content: "\25B8\00a0" / "";
+    color: var(--frame-gold);
+  }
+
+  .site-header nav a:hover {
+    filter: brightness(1.25);
+    text-decoration: none;
+  }
+
+  .theme-toggle {
+    margin: 0.2rem 0.6rem 0.6rem;
+  }
+
+  /* the slot icons are shown twice their size where there is room (a phone has them at their own size) */
+  .kit th .art {
+    --art-s: 2;
+  }
+
+  .data-strip,
+  .preview-banner {
+    padding-inline: 0.7rem;
+  }
+}
+
+/* a phone has the page as one column, the frame's tile showing only at its edges */
+@media (max-width: 55.99rem) {
+  main.wrap {
+    border-inline-width: 0;
+  }
+
+  .site-header,
+  .site-footer {
+    border-inline-width: 0;
+  }
+}
+
+/* the keyboard's ring has to show on the dark frame and on the dark slate as well as on the page */
+.site-header :focus-visible,
+.site-footer :focus-visible,
+.skip-link:focus-visible {
+  outline-color: var(--frame-focus);
+}
+
 /* ---- narrow screens: the tables become stacked cards ---- */
 
 @media (max-width: 37.5rem) {
+  /* the torches are for a window with room: a phone has its first screen to keep */
+  .art-torch {
+    display: none;
+  }
+
+  /* the first screen of a phone is for the answer: no divider under the heading, and the heading close to the bar above it */
+  main > h1::after,
+  .page-head > h1::after {
+    display: none;
+  }
+
+  main h1 {
+    padding-top: 0;
+    margin-bottom: 0.2rem;
+  }
+
+  /* the lost picture at its own size on a phone (twice it would be wider than the screen) */
+  .art-lost {
+    --art-s: 1;
+  }
+
   .site-header nav {
     order: 3;
     flex: 1 0 100%;
@@ -1556,14 +2219,14 @@ dl.pairs dd {
     gap: 0.1rem 0.9rem;
     margin-bottom: 0.6rem;
     padding: 0.5rem 0.8rem;
-    border: 1px solid var(--border);
-    border-radius: 0.6rem;
-    background: var(--surface);
+    border: 1px solid var(--win-border);
+    border-radius: 0;
+    background: var(--win);
   }
 
   .kit tbody tr:nth-child(even),
   .totals tbody tr:nth-child(even) {
-    background: var(--surface);
+    background: var(--win);
   }
 
   .kit th,
@@ -1571,7 +2234,7 @@ dl.pairs dd {
     flex: 0 0 100%;
     padding: 0;
     border: 0;
-    color: var(--muted);
+    color: var(--win-muted);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -1584,13 +2247,19 @@ dl.pairs dd {
     min-width: 0;
   }
 
+  /* the caption of a card list is inside the window, which is dark */
+  .kit caption,
+  .totals caption {
+    color: var(--win-muted);
+  }
+
   .kit td::before,
   .totals td::before {
-    color: var(--muted);
+    color: var(--win-muted);
     font-size: 0.85rem;
   }
 
-  /* what each small fact is, in words before it (a column's words are said here once, not in each of its cells): the item and the seal need none, nor does the kit's total or its rule */
+  /* what each small fact is, in words before it (a column's words are said here once, not in each of its cells): the item needs none, nor does the kit's total or its rule */
   .kit td:nth-child(3)::before {
     content: "Tier ";
   }
@@ -1713,6 +2382,31 @@ dl.pairs dd {
   .opt label::before {
     border: 2px solid ButtonText;
     background: Canvas;
+  }
+
+  /* the pictures of the theme are backgrounds, which forced colours keep: the ones that sit under words are taken away, and the plates leave their borders to the system */
+  body,
+  main.wrap,
+  .site-header,
+  .site-footer,
+  main h2:not(.sr-only),
+  .kit,
+  .totals,
+  .runnerups,
+  .equip,
+  .scroll {
+    background-image: none;
+  }
+
+  .badge,
+  .site-header nav a {
+    border: 2px solid ButtonText;
+    border-image: none;
+  }
+
+  main > h1::after,
+  .page-head > h1::after {
+    display: none;
   }
 
   .opt input:checked + label::before {

@@ -1,6 +1,6 @@
 {% extends "base.html.j2" %}
 {% from "base.html.j2" import seal, rule_seal, rule_links with context %}
-{#- The page of one item: what it is, its stats at every tier, where it comes from, how sure the evidence is, the trios whose default answer wears it and the credit to the wiki page it was read from (an item that has no wiki page has none).
+{#- The page of one item: what it is, its stats at every tier, where it comes from, the trios whose default answer wears it and the credit to the wiki page it was read from (an item that has no wiki page has none).
 Every text is the wiki's or the catalog's and is escaped as it is printed; none is ever marked safe. A table of tiers scrolls inside its own region on a narrow screen (the row headers stay
 in view), so the page itself is never wider than the window; the region is named by the caption of its table, so that it does not share the name of the section round it. The page loads the stylesheet, the boot script and the page script that every page loads, and nothing else. -#}
 {% macro tier_table(ident, caption, tiers, rows) -%}
@@ -61,17 +61,16 @@ in view), so the page itself is never wider than the window; the region is named
 <p id="sources-none">The item table lists no source for this item.</p>
 {% endif %}
 </section>
-<section aria-labelledby="evidence-h">
-<h2 id="evidence-h">Evidence</h2>
-<p id="level">{{ seal(page.level, page.level_icon, page.level_seal) }} {{ page.level_text }}</p>
 {% if page.notes %}
+<section aria-labelledby="notes-h">
+<h2 id="notes-h">Notes</h2>
 <ul id="notes" class="plain">
 {% for note in page.notes %}
 <li>{{ seal(note.seal, note.icon, note.seal_label) }} {{ note.text }}</li>
 {% endfor %}
 </ul>
-{% endif %}
 </section>
+{% endif %}
 <section aria-labelledby="best-h">
 <h2 id="best-h">Best for these trios</h2>
 {% if page.best_for %}

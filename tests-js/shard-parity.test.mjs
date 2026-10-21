@@ -15,6 +15,8 @@ import { chunksOf, checkResults, parseSample, readResults } from "./shard-result
 // folder, at each level that has a bundle (`engine-l<level>.json`), and `defaults.json` is held to the same values (its race, runner-up, margin, and the value and best
 // setup of each race). The profile, the pool, the pruning and the options of each view are made from the files of the folder, the way the precompute made them: the head of
 // tests-js/shard-results.mjs says how. One view that differs prints its name and the first difference; the check goes on, and all of them are listed at the end, with the count.
+// A view whose F, kit and haste are equal and whose buff sets differ passes, as a tie of buffs of equal value; the ties are counted and printed (the count in the summary
+// line, then the views, as many as TRIOFORGE_SHARD_LINES allows).
 //
 // The folder is the results of a real precompute run (a narrow one) on the invented catalog of the site fixture: fixtures/site/results-solved, which
 // pipeline/tests/shard_fixture.py makes again and test_shard_fixture.py keeps current. That is what the CI runs, in a few seconds. The maintainer's own results, which are
@@ -60,6 +62,14 @@ function describeFailures(report) {
   return lines.join("\n");
 }
 
+/** The ties as text: the views that differ from their shard in the optional buffs alone, which pass (buffs of equal value; see `isBuffTie` of shard-results.mjs). */
+function describeTies(report) {
+  const lines = [`shard parity: ${report.ties.length} of ${report.views} views are ties (the buff set differs; F, the kit and the haste are equal), and pass:`];
+  for (const tie of report.ties.slice(0, LINES)) lines.push(`  ${tie.name}: ${tie.first}`);
+  if (report.ties.length > LINES) lines.push(`  ... and ${report.ties.length - LINES} more (TRIOFORGE_SHARD_LINES=all lists every one)`);
+  return lines.join("\n");
+}
+
 describe(REAL ? "shard parity, the results named by TRIOFORGE_RESULTS" : "shard parity, the results of the invented catalog", () => {
   let highs;
   let results;
@@ -88,11 +98,12 @@ describe(REAL ? "shard parity, the results named by TRIOFORGE_RESULTS" : "shard 
     const rows = chunksOf(results).filter((unit) => sample === null || unit.index % sample.count === sample.index).reduce((sum, unit) => sum + unit.chunk.rows.length, 0);
     const { timing } = report;
     console.log(
-      `shard parity: ${report.views} views in ${report.chunks} chunks${sample === null ? "" : ` (sample ${sample.index}/${sample.count})`}, ${report.failures.length} differ, ` +
+      `shard parity: ${report.views} views in ${report.chunks} chunks${sample === null ? "" : ` (sample ${sample.index}/${sample.count})`}, ${report.failures.length} differ, ${report.ties.length} ties, ` +
         `defaults.json ${report.defaultsChecked === 0 ? "not checked" : `checked, ${report.defaults.length} differ`}; ` +
         `${seconds(timing.totalMs)} s in all (solves ${seconds(timing.solveMs)} s, models ${seconds(timing.buildMs)} s, pruning ${seconds(timing.pruneMs)} s), ` +
         `the slowest solve ${seconds(timing.slowest.ms)} s (${timing.slowest.name})`,
     );
+    if (report.ties.length > 0) console.log(describeTies(report));
     // every view of the folder (or of the sample; the sample 0 also solves the chunks that defaults.json is made from) was checked, and none was left out
     expect(report.views, "the views checked").toBe(report.planned);
     expect(report.views, "the views of the folder or of the sample").toBeGreaterThanOrEqual(rows);

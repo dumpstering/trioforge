@@ -1,7 +1,7 @@
 // The trio page: the race, role, tier and assumption switches.
 //
 // The page arrives with its default answer already in it. This code changes nothing until a switch changes (or the address
-// asks for another view); then it fetches the data file for that evidence and buffs, picks the scenario, and writes the
+// asks for another view); then it fetches the data file for that buff set (of the one evidence level the page is made from), picks the scenario, and writes the
 // answer into the elements that are already there. Text goes in with textContent only (the name of an item in Wear this is a link to the page of the item where the page
 // says its items have pages: one element, made with the DOM, holding that text). If a fetch fails, the answer on the
 // page stays, the controls go back to what the page shows, and a message says so, says what went back, and offers to try again.
@@ -34,14 +34,14 @@
 // gear that the visitor asked the device to remember (it is restored into the list). The check for the second is one guarded read of the device, and nothing more is loaded
 // for a page that has neither. The section is given the kit link that came in the address (`kit`, what first.js took out of it), where the gear is kept (`remember`: the key, the
 // storage, which may be none, and what was stored, which may be nothing: the page script knows the key and no more of the format), and what a shared kit needs to be valued under the
-// view the page shows (`valueView`: the role, buffs and evidence level of the view, and no more: the kit's own hands give its weapon setup and its own items its haste, and the page's
+// view the page shows (`valueView`: the role, buffs and evidence level of the view, the level being the one the page is made from, and no more: the kit's own hands give its weapon setup and its own items its haste, and the page's
 // weapon switch and tier switch, which move the haste of the page's own answer, are not part of it; `words.raceName`, `words.viewText` and `words.setupText`).
 
 import { getStorage } from "./theme.js";
-import { DASH, EMPTY_NAME, EN_DASH, ITEM_SEALS, arrivalText, deityText, displayInt, fmtInt, fmtSigned, reachText, tierLabel } from "./format.js";
+import { DASH, EMPTY_NAME, EN_DASH, arrivalText, deityText, displayInt, fmtInt, fmtSigned, reachText, tierLabel } from "./format.js";
 import { parseRobust, parseRunnerups, parseShard } from "./shard.js";
 
-const SWITCHES = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], input[name="ev"], #buffs-ench';
+const SWITCHES = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], #buffs-ench';
 const EXTRAS = ["runnerups", "robust"];
 const NOT_LOADED = "Couldn't load this view; try again.";
 const UPDATED = "Data updated, reload the page to see the new data.";
@@ -235,22 +235,21 @@ class TrioApp {
       tiers: [...this.q("#sw-tier").options].map((o) => ({ value: Number(o.value), label: o.dataset.label })),
       setups: labelled(this.radios("setup")),
       buffs: labelled(this.radios("buffs")),
-      evidence: labelled(this.radios("ev")),
       defaults: {
         race: this.q("#sw-race").value,
         role: this.checkedValue("role"),
         tier: Number(this.q("#sw-tier").value),
         setup: this.checkedValue("setup"),
-        ev: this.checkedValue("ev"),
+        ev: this.root.dataset.ev ?? "wiki", // the one evidence level the page is made from (wiki, in a release): there is no choice of it, in the page or in the address
         buffs: this.checkedValue("buffs"),
       },
     };
   }
 
   /**
-   * The view an address asks for, and whether it names a value that means nothing here (`malformed`: a race, role, tier, setup, evidence
-   * level or buff set that is not one of the page's own, an empty one included) and whether its `w` (the sliders) is one that this page cannot take (`badWeights`). Anything it
-   * does not say clearly is left at the default.
+   * The view an address asks for, and whether it names a value that means nothing here (`malformed`: a race, role, tier, setup or buff set that is not one of the page's
+   * own, an empty one included) and whether its `w` (the sliders) is one that this page cannot take (`badWeights`). Anything it does not say clearly is left at the default.
+   * An `ev` is taken and ignored, and never malformed: addresses written before wiki became the one evidence level carry it.
    */
   parseQuery(search) {
     const params = new URLSearchParams(search);
@@ -266,7 +265,6 @@ class TrioApp {
     state.role = known(this.config.roles, "code", params.get("role")) ?? state.role;
     const tier = params.get("tier");
     state.tier = known(this.config.tiers, "value", tier !== null && /^\d{1,2}$/.test(tier) ? Number(tier) : tier) ?? state.tier;
-    state.ev = known(this.config.evidence, "code", params.get("ev")) ?? state.ev;
     const spelled = params.get("buffs");
     const buffs = spelled === ENCHANTER_WORD || spelled === "group enchanter" ? ENCHANTER : spelled; // ("group enchanter" is the older spelling typed with a raw plus sign)
     state.buffs = known([...this.config.buffs, { code: ENCHANTER }], "code", buffs) ?? state.buffs;
@@ -306,7 +304,7 @@ class TrioApp {
     const { state: asked, malformed, badWeights } = this.parseQuery(this.win.location.search);
     const d = this.config.defaults;
     // the baked answer is the role's best setup, so an address that names it asks for the best and not for a choice
-    const baked = ["race", "role", "tier", "ev", "buffs"].every((key) => asked[key] === d[key]) && (asked.setup === null || asked.setup === d.setup) && asked.weights === this.own;
+    const baked = ["race", "role", "tier", "buffs"].every((key) => asked[key] === d[key]) && (asked.setup === null || asked.setup === d.setup) && asked.weights === this.own;
     if (!baked) this.track(this.apply(asked, { url: true, notice: badWeights ? BAD_WEIGHTS : null }));
     // the page shows the default answer for an address with a value that means nothing: the address says so too, at once, and without
     // fetching anything, so that a malformed link never passes for a link to the default view
@@ -527,7 +525,7 @@ class TrioApp {
   onChange(target) {
     this.focusAfterRetry = false; // a new choice of the visitor's own ends the retry
     if (target.name === "buffs" && this.ench) this.ench.disabled = target.value !== "group"; // (the box goes with the group choice at once, not when the view has loaded)
-    const kind = target.id === "sw-race" ? "race" : target.id === "sw-tier" ? "tier" : target.id === "buffs-ench" ? "buffs" : target.name; // race, tier, role, setup, buffs or ev
+    const kind = target.id === "sw-race" ? "race" : target.id === "sw-tier" ? "tier" : target.id === "buffs-ench" ? "buffs" : target.name; // race, tier, role, setup or buffs
     this.track(this.apply(this.desired(target.name === "setup" ? target.value : this.wantedSetup), { url: true, announce: kind }));
   }
 
@@ -537,7 +535,7 @@ class TrioApp {
       race: this.q("#sw-race").value,
       role: this.checkedValue("role"),
       tier: Number(this.q("#sw-tier").value),
-      ev: this.checkedValue("ev"),
+      ev: this.state.ev,
       buffs: this.buffsValue(),
       setup,
       weights: this.wantedWeights,
@@ -676,13 +674,11 @@ class TrioApp {
   /** Why the switches look as they did before: what the visitor changed went back, and what the page still shows. */
   revertNote(desired) {
     const shown = this.displayed;
-    const phrase = (list, code) => list.find((entry) => entry.code === code)?.phrase ?? code;
     const changes = [];
     if (desired.race !== shown.race) changes.push(["race", "is", this.raceName(shown.race)]);
     if (desired.role !== shown.role) changes.push(["role", "is", this.roleLabel(shown.role)]);
     if (desired.tier !== shown.tier) changes.push(["tier", "is", tierLabel(shown.tier)]);
     if (desired.setup !== null && desired.setup !== shown.setup) changes.push(["weapons", "are", this.setupLabel(shown.setup)]);
-    if (desired.ev !== shown.ev) changes.push(["evidence", "is", phrase(this.config.evidence, shown.ev)]);
     if (desired.buffs !== shown.buffs) changes.push(["buffs", "are", this.buffsPhrase(shown.buffs)]);
     if (desired.weights !== shown.weights) changes.push(["weights", "are", this.weightsText(shown.weights)]);
     if (changes.length === 1) return "The " + changes[0][0] + " " + changes[0][1] + " back at " + changes[0][2] + ".";
@@ -744,14 +740,12 @@ class TrioApp {
     const node = this.q("#announce");
     if (!node) return;
     const s = view.scenario;
-    const phrase = (list, code) => list.find((entry) => entry.code === code)?.phrase ?? code;
     const lead = {
       race: "Race " + this.raceName(s.race),
       role: "Role " + this.roleLabel(s.role),
       tier: "Tier " + tierLabel(s.tier),
       setup: "Weapons " + this.setupLabel(s.setup),
       buffs: "Buffs " + this.buffsPhrase(view.state.buffs),
-      ev: "Evidence " + phrase(this.config.evidence, view.state.ev),
       weights: "Weights " + this.weightsText(view.state.weights),
       back: "Back at the precomputed answer",
     }[kind];
@@ -782,7 +776,6 @@ class TrioApp {
     const state = view.state;
     const params = new URLSearchParams({ race: state.race, role: state.role, tier: String(state.tier) });
     if (state.setup !== null) params.set("setup", state.setup);
-    params.set("ev", state.ev);
     params.set("buffs", this.buffsWord(state.buffs));
     if (state.weights !== this.own) params.set("w", state.weights); // (the sliders; with every one at x1 it is the role's own, which is not written)
     try {
@@ -811,7 +804,7 @@ class TrioApp {
     const s = view.scenario;
     const shown = view.exact || solved; // (else the table shows the shard of the nearest settings)
     const buffs = shown || view.state.buffs === "own" ? view.state.buffs : "group";
-    const asked = { race: s.race, role: s.role, tier: String(s.tier), setup: s.setup, ev: view.state.ev, buffs: this.buffsWord(buffs) };
+    const asked = { race: s.race, role: s.role, tier: String(s.tier), setup: s.setup, buffs: this.buffsWord(buffs) };
     if (shown && view.state.weights !== this.own) asked.w = view.state.weights;
     page.search = new URLSearchParams(asked).toString();
     url.searchParams.set("page", page.href);
@@ -822,9 +815,7 @@ class TrioApp {
   setControls(shown) {
     this.q("#sw-race").value = shown.race;
     this.q("#sw-tier").value = String(shown.tier);
-    for (const [name, value] of [["role", shown.role], ["ev", shown.ev]]) {
-      for (const radio of this.radios(name)) radio.checked = radio.value === value;
-    }
+    for (const radio of this.radios("role")) radio.checked = radio.value === shown.role;
     // the Enchanter is a box under the group choice: it goes with the group, and keeps what the visitor left in it while the own buffs or the raid are chosen
     const chosen = shown.buffs === ENCHANTER ? "group" : shown.buffs;
     for (const radio of this.radios("buffs")) radio.checked = radio.value === chosen;
@@ -883,15 +874,14 @@ class TrioApp {
     }
   }
 
-  /** The lines that say what is assumed: the buffs, the weapons, the evidence and the weights, in the Assumes panel and in the line of the switches. */
+  /** The lines that say what is assumed: the buffs, the weapons and the weights, in the Assumes panel and in the line of the switches. */
   paintAssumptions(shown) {
     const phrase = (list, code) => list.find((entry) => entry.code === code)?.phrase ?? code;
     const weights = this.weightsText(shown.weights);
     setField(this.root, "assume-buffs", this.buffsPhrase(shown.buffs));
     setField(this.root, "assume-setup", phrase(this.config.setups, shown.setup));
-    setField(this.root, "assume-ev", phrase(this.config.evidence, shown.ev));
     setField(this.root, "assume-weights", weights);
-    const line = [phrase(this.config.setups, shown.setup), phrase(this.config.evidence, shown.ev), this.buffsPhrase(shown.buffs)];
+    const line = [phrase(this.config.setups, shown.setup), this.buffsPhrase(shown.buffs)];
     if (shown.weights !== this.own) line.push(weights);
     setField(this.root, "s-assumes", line.join(", "));
   }
@@ -922,25 +912,18 @@ class TrioApp {
   paintKit(scenario) {
     this.rows.forEach((row, index) => {
       const item = scenario.kit[index] ?? null;
-      const icon = field(row, "seal-icon");
-      const svg = icon?.parentNode;
       if (!item) {
         setName(row, EMPTY_NAME, null);
         setField(row, "deity", "");
-        for (const name of ["tier", "arrival", "source", "seal"]) setField(row, name, DASH);
+        for (const name of ["tier", "arrival", "source"]) setField(row, name, DASH);
         setField(row, "reach", "");
-        if (svg) svg.toggleAttribute("hidden", true); // an SVG element has no hidden property, only the attribute
       } else {
-        const [seal, iconId] = ITEM_SEALS[item.evidence] ?? [item.evidence, "i-none"];
         setName(row, item.name, this.itemHref(item.key));
         setField(row, "deity", deityText(item.deity));
         setField(row, "tier", tierLabel(scenario.tier));
         setField(row, "arrival", arrivalText(item.arrival));
         setField(row, "reach", reachText(item.arrival, scenario.tier));
         setField(row, "source", item.source);
-        setField(row, "seal", seal);
-        if (icon) icon.setAttribute("href", "#" + iconId);
-        if (svg) svg.toggleAttribute("hidden", false);
       }
       const deity = field(row, "deity");
       if (deity) deity.hidden = !(item && item.deity.length > 0);
@@ -1036,8 +1019,7 @@ class TrioApp {
     this.markLoading(name);
     try {
       if (name === "runnerups") {
-        // runner-ups exist for the default assumptions only: the evidence level and buffs the page started with (the wiki level
-        // while nothing is strict) and the role's best setup
+        // runner-ups exist for the default assumptions only: the buffs the page started with and the role's best setup
         const s = view.scenario;
         const d = this.config.defaults;
         const standard = view.exact && view.state.ev === d.ev && view.state.buffs === d.buffs && s.setup === view.best;
@@ -1161,7 +1143,7 @@ class TrioApp {
   /** The note for a view whose assumptions are not the ones the seals were made for. */
   notComputed(sealed) {
     const phrase = (list, code) => list.find((entry) => entry.code === code)?.phrase ?? code;
-    const made = [phrase(this.config.setups, sealed.setup), phrase(this.config.evidence, sealed.ev), this.buffsPhrase(sealed.buffs)];
+    const made = [phrase(this.config.setups, sealed.setup), this.buffsPhrase(sealed.buffs)];
     return "Not computed for this view. The checks were made with " + made.join(", ") + " and the role's own weights. Change the assumptions back to see them.";
   }
 
@@ -1175,10 +1157,9 @@ class TrioApp {
     return { role: shown.role, buffs: shown.buffs, evidence: shown.ev };
   }
 
-  /** The view in words, without the race (a kit has its own) and without the weapons (nor): the role, then the evidence level and the buffs, as the line under the title of the page says them. */
+  /** The view in words, without the race (a kit has its own) and without the weapons (nor): the role, then the buffs, as the line under the title of the page says them. */
   viewText() {
-    const phrase = (list, code) => list.find((entry) => entry.code === code)?.phrase ?? code;
-    return this.roleLabel(this.displayed.role) + ", " + phrase(this.config.evidence, this.displayed.ev) + ", " + this.buffsPhrase(this.displayed.buffs);
+    return this.roleLabel(this.displayed.role) + ", " + this.buffsPhrase(this.displayed.buffs);
   }
 
   /** A weapon setup in the page's words ("dual wield", "two-hander"), or nothing when the page has no such weapon setup among its switches (the section has words of its own for it). */

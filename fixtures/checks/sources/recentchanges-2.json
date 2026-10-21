@@ -1,0 +1,12 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "recentchanges": [
+   {"type": "edit", "ns": 0, "title": "Quenfel`s Cap", "pageid": 102, "revid": 139300, "old_revid": 139100, "rcid": 9101, "timestamp": "2026-10-16T08:00:00Z"},
+   {"type": "edit", "ns": 2, "title": "User:Someone", "pageid": 903, "revid": 139310, "old_revid": 139000, "rcid": 9102, "timestamp": "2026-10-16T08:01:00Z"},
+   {"type": "edit", "ns": 0, "title": "Rune: Sorvath", "pageid": 105, "revid": 139350, "old_revid": 100500, "rcid": 9103, "timestamp": "2026-10-16T09:00:00Z"},
+   {"type": "edit", "ns": 0, "title": "Zorblax Ring", "pageid": 101, "revid": 139050, "old_revid": 139001, "rcid": 9104, "timestamp": "2026-10-16T11:02:00Z"},
+   {"type": "edit", "ns": 0, "title": "Zorblax Ring", "pageid": 101, "revid": 139050, "old_revid": 139001, "rcid": 9104, "timestamp": "2026-10-16T11:02:00Z"}
+  ]
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "version": "2026-10-14",
+ "license": "CC BY-SA 4.0",
+ "items": [
+  {"key": "w101", "name": "Zorblax Ring", "wiki": {"pageid": 101, "revid": 138180, "title": "Zorblax Ring"}},
+  {"key": "w102", "name": "Quenfel`s Cap", "wiki": {"pageid": 102, "revid": 139100, "title": "Quenfel`s Cap"}},
+  {"key": "w103", "name": "Mirrowen Cloak", "wiki": {"pageid": 103, "revid": 120000, "title": "Mirrowen Cloak"}},
+  {"key": "w104", "name": "Draxil's Belt", "wiki": {"pageid": 104, "revid": 130500, "title": "Draxil's Belt"}},
+  {"key": "w105", "name": "Rune: Sorvath", "wiki": {"pageid": 105, "revid": 100500, "title": "Rune: Sorvath"}},
+  {"key": "rfoo", "name": "Brambletop Charm", "wiki": null}
+ ]
+}

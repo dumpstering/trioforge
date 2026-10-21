@@ -2,19 +2,18 @@
 {% from "base.html.j2" import seal, rule_seal, rule_link, rule_links with context %}
 {% macro tr_kit(row) -%}
 <tr role="row">
-<th scope="row" role="rowheader">{{ row.slot }}</th>
+<th scope="row" role="rowheader">{% if row.icon %}<span class="art art-{{ row.icon }}" aria-hidden="true"></span>{% endif %}{{ row.slot }}</th>
 <td role="cell"><span class="name" data-f="name">{% if row.href %}<a href="{{ row.href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</span> <span class="deity" data-f="deity"{% if not row.deity %} hidden{% endif %}>{{ row.deity }}</span></td>
 <td role="cell"><span data-f="tier">{{ row.tier }}</span></td>
 <td role="cell"><span data-f="arrival">{{ row.arrival }}</span> <span class="reach" data-f="reach">{{ row.reach }}</span></td>
 <td role="cell"><span data-f="source">{{ row.source }}</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"{% if row.empty %} hidden{% endif %}><use data-f="seal-icon" href="#{{ row.seal_icon }}"></use></svg><span data-f="seal">{{ row.seal }}</span></span></td>
 </tr>
 {%- endmacro %}
 {% block main %}
-<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-base="{{ page.data_base }}" data-release="{{ page.release }}" data-groups="{{ page.weight_groups|join(' ') }}"{% if page.items_base %} data-items="{{ page.items_base }}"{% endif %}>
+<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="{{ page.default.ev }}" data-base="{{ page.data_base }}" data-release="{{ page.release }}" data-groups="{{ page.weight_groups|join(' ') }}"{% if page.items_base %} data-items="{{ page.items_base }}"{% endif %}>
 <div class="page-head">
 <h1>{{ page.name }}: best gear (<span data-rules="level.current">level {{ page.level }}</span>)</h1>
-<p id="best-race" class="best-race">Best race for this trio: <strong>{{ page.best_name }}</strong> <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">({{ page.margin }} over {{ page.runner_up_name }})</span>, judged in the <span id="best-race-view">{{ page.verdict_role }} view at <span data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> with {{ page.assume_evidence }} and {{ page.assume_buffs }}</span>.</p>
+<p id="best-race" class="best-race">Best race for this trio: <strong>{{ page.best_name }}</strong> <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">({{ page.margin }} over {{ page.runner_up_name }})</span>, judged in the <span id="best-race-view">{{ page.verdict_role }} view at <span data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> with {{ page.assume_buffs }}</span>.</p>
 <details class="expander" id="race-why">
 <summary>How the best race was judged{% if page.flips %}, and what could change it{% endif %}</summary>
 <p id="best-race-rules" class="note">How the score works: {{ rule_links(page.margin_rules) }}</p>
@@ -51,7 +50,7 @@
 <legend>Role</legend>
 <div class="seg-items">
 {% for r in page.roles %}
-<span class="seg-item"><input type="radio" name="role" id="role-{{ r.code }}" value="{{ r.code }}" data-label="{{ r.label }}" data-hint="{{ r.hint }}" data-setups="{{ r.setups|join(' ') }}"{% if r.checked %} checked{% endif %} disabled><label for="role-{{ r.code }}">{{ r.label }}</label></span>
+<span class="seg-item"><input type="radio" name="role" id="role-{{ r.code }}" value="{{ r.code }}" data-label="{{ r.label }}" data-hint="{{ r.hint }}" data-setups="{{ r.setups|join(' ') }}"{% if r.checked %} checked{% endif %} disabled><label for="role-{{ r.code }}">{% if art.role_crest(r.code) %}<span class="art art-{{ art.role_crest(r.code) }}" aria-hidden="true"></span>{% endif %}{{ r.label }}</label></span>
 {% endfor %}
 </div>
 </fieldset>
@@ -88,15 +87,6 @@
 {% endfor %}
 </fieldset>
 </details>
-<details class="assume" id="assume-evidence">
-<summary><span class="sum">Evidence: <span data-f="assume-ev">{{ page.assume_evidence }}</span> <span class="change">change</span></span></summary>
-<fieldset>
-<legend>Evidence</legend>
-{% for e in page.evidence %}
-<span class="opt"><input type="radio" name="ev" id="ev-{{ e.code }}" value="{{ e.code }}" data-phrase="{{ e.phrase }}"{% if e.checked %} checked{% endif %} disabled><label for="ev-{{ e.code }}">{{ e.label }}</label></span>
-{% endfor %}
-</fieldset>
-</details>
 <details class="assume" id="assume-weights">
 <summary><span class="sum">Weights: <span data-f="assume-weights">role's own</span> <span class="change">change</span></span></summary>
 <fieldset>
@@ -106,9 +96,6 @@
 <span class="assume-fixed" id="assume-aa">AA: {% for label, ref in page.aa %}<a href="/rules/#{{ ref.id }}">{{ label }}</a>{% if not loop.last %}, {% endif %}{% endfor %} {{ seal(page.aa_seal.seal, page.aa_seal.seal_icon, page.aa_seal.seal_label) }}; no deity</span>
 </section>
 </div>
-{% if page.evidence_note %}
-<p id="evidence-note" class="note">{{ page.evidence_note }}</p>
-{% endif %}
 <p id="status" class="status quiet" role="status" aria-live="polite"></p>
 <p id="announce" class="sr-only" role="status" aria-live="polite"></p>
 
@@ -123,7 +110,6 @@
 <th scope="col" role="columnheader" data-rules="tier.stat_rule">Tier</th>
 <th scope="col" role="columnheader" data-rules="tier.arrival tier.exp_needed">Arrives at</th>
 <th scope="col" role="columnheader">Source</th>
-<th scope="col" role="columnheader">Seal</th>
 </tr>
 </thead>
 <tbody id="kit-body" role="rowgroup">
@@ -137,7 +123,7 @@
 
 <section class="why" id="why" aria-labelledby="why-h">
 <h2 id="why-h">Why this kit</h2>
-<p data-rules="roles.templates">Kit value <strong id="kit-value">{{ page.value }}</strong> hit-point equivalents; the gear adds <strong id="kit-gain">{{ page.gain }}</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#{{ page.roles_rule.id }}">How roles weigh stats</a> {{ rule_seal(page.roles_rule) }}</p>
+<p data-rules="roles.templates" class="kit-line">{% if art.has("coin") %}<span class="art art-coin" aria-hidden="true"></span>{% endif %}Kit value <strong id="kit-value">{{ page.value }}</strong> hit-point equivalents; the gear adds <strong id="kit-gain">{{ page.gain }}</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#{{ page.roles_rule.id }}">How roles weigh stats</a> {{ rule_seal(page.roles_rule) }}</p>
 <table class="totals" id="totals" role="table">
 <caption class="sr-only">Totals of this kit against the caps</caption>
 <thead role="rowgroup">

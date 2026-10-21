@@ -96,6 +96,47 @@ def test_a_stamp_in_the_future_is_no_reason_to_warn_and_a_stamp_without_a_zone_i
     assert len(release.scheduled_warnings(tmp_path, NOW)) == len(release.SCHEDULED_CHECKS)
 
 
+def test_without_a_folder_the_stamps_are_read_from_the_folder_of_the_checks_which_is_outside_every_worktree(tmp_path, monkeypatch):
+    folder = tmp_path / "stamps"
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", str(folder))
+    for name in release.SCHEDULED_CHECKS:
+        stamp(folder, name, NOW - datetime.timedelta(days=3))
+    assert release.scheduled_warnings(None, NOW) == []
+    assert release.scheduled_warnings(now=NOW) == []
+    stamp(folder, release.SCHEDULED_CHECKS[0], NOW - datetime.timedelta(days=12))
+    (warning,) = release.scheduled_warnings(None, NOW)
+    assert release.SCHEDULED_CHECKS[0] in warning and "12 days" in warning
+
+
+def test_the_build_folder_of_a_worktree_is_not_where_the_stamps_are_looked_for(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", str(tmp_path / "stamps"))
+    for name in release.SCHEDULED_CHECKS:
+        stamp(tmp_path / "worktree" / "build" / "checks", name, NOW)  # (where the checks used to leave them: a checkout other than the one that builds)
+    warnings = release.scheduled_warnings(None, NOW)
+    assert len(warnings) == len(release.SCHEDULED_CHECKS) and all("no stamp" in warning for warning in warnings)
+
+
+@pytest.mark.parametrize("value", ["relative/folder", "build/checks", "~/checks", "./checks"])
+def test_a_folder_of_the_checks_that_is_not_absolute_is_refused_by_the_release_build_as_it_is_by_the_checks(monkeypatch, value):
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", value)
+    with pytest.raises(ReleaseRefused, match=r"TRIOFORGE_CHECKS_DIR must be an absolute path"):
+        release.scheduled_warnings(None, NOW)
+
+
+def test_a_folder_of_the_checks_in_a_git_work_tree_is_refused_too(monkeypatch, tmp_path):
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", str(tmp_path / "repo" / "build" / "checks"))
+    with pytest.raises(ReleaseRefused, match=r"TRIOFORGE_CHECKS_DIR .*git work tree"):
+        release.scheduled_warnings(None, NOW)
+
+
+def test_the_folder_given_to_scheduled_warnings_is_still_the_one_it_reads(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", str(tmp_path / "elsewhere"))
+    for name in release.SCHEDULED_CHECKS:
+        stamp(tmp_path / "given", name, NOW)
+    assert release.scheduled_warnings(tmp_path / "given", NOW) == []
+
+
 # ---- the previous release ------------------------------------------------------------------------------------------------------------
 
 

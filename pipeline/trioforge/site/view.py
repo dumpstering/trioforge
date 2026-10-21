@@ -18,7 +18,7 @@ from typing import Any
 
 from trioforge.classes import CLASS_CODES, CLASS_NAMES
 from trioforge.data import races as races_module
-from trioforge.site import data
+from trioforge.site import art, data
 from trioforge.site.content import SEALS, RuleBook, RuleView, wiki_url
 
 __all__ = [
@@ -29,7 +29,6 @@ __all__ = [
     "Fact",
     "ITEM_BASE",
     "ITEM_NOTES",
-    "ITEM_SEALS",
     "ItemPage",
     "KitRow",
     "RaceOption",
@@ -90,14 +89,8 @@ BUFF_PHRASES = {"own": "your own buffs", "group": "common group buffs", "raid": 
 #: the choices of the Buffs assumption: the two buff sets the precompute has answers for, and the raid, which the optimizer works out for the visitor (with an Enchanter in the group the
 #: page code makes a fourth set of the two, "group+enchanter", a checkbox of its own)
 BUFF_CHOICES = (*data.BUFFS, "raid")
-EVIDENCE_LABELS = {"strict": "Strict: only items seen in game", "wiki": "Wiki: also items the wiki lists"}
-EVIDENCE_PHRASES = {"strict": "strict evidence", "wiki": "wiki evidence"}
-EVIDENCE_ITEMS = {"strict": "items seen in game", "wiki": "every item the wiki lists"}  # what the runner-ups were chosen from
-NONE_YET = " (none yet)"  # the strict choice while no item has been seen in game
-STRICT_EMPTY_NOTE = (
-    "No item has been seen in game yet, so strict evidence has nothing to show and this answer uses every item the wiki lists."
-)
-ITEM_SEALS = {"strict": ("Seen in game", "i-strict"), "wiki": ("Wiki", "i-wiki")}
+#: the evidence levels of an item that have a page (wiki is the one level a release is built from, and no page words a level: the decision of 2026-10-19)
+PAGE_LEVELS = ("strict", "wiki")
 SEAL_ORDER = tuple(SEALS)  # the seals, the surest first: a figure made from several rules is as sure as the least sure of them
 MAX_FLIPS = 3  # the notes of the open rules that could change the best race that the page shows; the rest are counted
 SEAL_ICON = {key: f"i-{key}" for key in SEALS}
@@ -243,7 +236,7 @@ class SetupOption:
 
 @dataclass(frozen=True)
 class BuffOption:
-    """A radio of the Assumes panel: buffs or evidence."""
+    """A radio of the Assumes panel: the buffs."""
 
     code: str
     label: str
@@ -261,9 +254,8 @@ class KitRow:
     arrival: str
     reach: str
     source: str
-    seal: str
-    seal_icon: str
     href: str | None = None  # the page of the item, where it has one: the name is a link to it; plain text where it has none
+    icon: str | None = None  # the art of the place (art.SLOT_ICONS), for the picture beside its name: None where the place has none or the art is not part of the site
 
 
 @dataclass(frozen=True)
@@ -332,7 +324,6 @@ class TrioPage:
     tiers: tuple[TierOption, ...]
     setups: tuple[SetupOption, ...]
     buffs: tuple[BuffOption, ...]
-    evidence: tuple[BuffOption, ...]
     weight_groups: tuple[str, ...]  # the slider groups of the trio's bundle, in its order: the page code draws a slider for each, and a `w` of the address has a character for each
     default: dict[str, Any]
     verdict_race: str
@@ -343,9 +334,7 @@ class TrioPage:
     assume_buffs: str
     assume_setup: str
     assume_haste: str
-    assume_evidence: str
     summary_assumes: str
-    evidence_note: str
     runnerups_assumes: str
     rows: tuple[KitRow, ...]
     value: str
@@ -420,11 +409,11 @@ def kit_rows(scenario: data.Scenario, pages: Collection[str] | None = None) -> t
     """The 22 rows of "Wear this". ``pages`` are the keys of the items that have a page of their own (:func:`trioforge.site.build.item_page_keys`): the name of such an item links to
     its page, and that of any other (a disputed or a hidden item has no page) stays plain text, as it does when no pages are given."""
     rows = []
-    for label, item in zip(SLOT_LABELS, scenario.kit):
+    for label, group, item in zip(SLOT_LABELS, data.SLOT_INSTANCES, scenario.kit, strict=True):
+        icon = art.slot_icon(group)
         if item is None:
-            rows.append(KitRow(label, True, EMPTY_NAME, "", DASH, DASH, "", DASH, DASH, "i-none"))
+            rows.append(KitRow(label, True, EMPTY_NAME, "", DASH, DASH, "", DASH, icon=icon))
             continue
-        seal, icon = ITEM_SEALS[item.evidence]
         rows.append(
             KitRow(
                 slot=label,
@@ -435,9 +424,8 @@ def kit_rows(scenario: data.Scenario, pages: Collection[str] | None = None) -> t
                 arrival=arrival_label(item.arrival),
                 reach=reach_text(item.arrival, scenario.tier),
                 source=item.source,
-                seal=seal,
-                seal_icon=icon,
                 href=item_href(item.key) if pages is not None and item.key in pages else None,
+                icon=icon,
             )
         )
     return tuple(rows)
@@ -551,14 +539,10 @@ def description(scenario: data.Scenario, name: str, level: int) -> str:
         picks.pop()
 
 
-def evidence_label(code: str, strict_empty: bool) -> str:
-    """The label of an evidence choice; strict says so while no item has been seen in game."""
-    return EVIDENCE_LABELS[code] + (NONE_YET if code == "strict" and strict_empty else "")
-
-
 def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Collection[str] | None = None) -> TrioPage:
     """The trio page with its default answer baked in. The answer is the view ``defaults.json`` names: its role, tier,
-    evidence level (the wiki level while no item is strict) and buffs, the best race there and that race's best setup.
+    evidence level (the wiki level: no item is strict in a release) and buffs, the best race there and that race's best setup. The page words no evidence level and offers no
+    choice of one; the level is only the shard the page code reads (``default["ev"]``).
 
     ``pages`` are the keys of the items that have a page (:func:`kit_rows`). The page code paints other kits when a switch changes, and links their names the same way, by
     ``items_base``: it is set when pages are given, and they must then cover every item the page can show, so that a name the code paints is never a link that leads nowhere.
@@ -616,10 +600,6 @@ def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Coll
             SetupOption(s, SETUP_LABELS[s], SETUP_PHRASES[s], s in role_setups[role], s == setup) for s in all_setups
         ),
         buffs=tuple(BuffOption(b, BUFF_LABELS[b], BUFF_PHRASES[b], b == defaults.buffs) for b in BUFF_CHOICES),
-        evidence=tuple(
-            BuffOption(e, evidence_label(e, defaults.strict_empty), EVIDENCE_PHRASES[e], e == defaults.evidence)
-            for e in data.EVIDENCE
-        ),
         weight_groups=tuple(results.bundle.document["weight_groups"]["groups"]),
         default={"race": race, "role": role, "tier": tier, "setup": setup, "ev": defaults.evidence, "buffs": defaults.buffs},
         verdict_race=race_names[race],
@@ -630,10 +610,8 @@ def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Coll
         assume_buffs=BUFF_PHRASES[defaults.buffs],
         assume_setup=SETUP_PHRASES[setup],
         assume_haste=haste_text(scenario.haste_assumed),
-        assume_evidence=EVIDENCE_PHRASES[defaults.evidence],
-        summary_assumes=f"{SETUP_PHRASES[setup]}, {EVIDENCE_PHRASES[defaults.evidence]}, {BUFF_PHRASES[defaults.buffs]}",
-        evidence_note=STRICT_EMPTY_NOTE if defaults.strict_empty else "",
-        runnerups_assumes=f"{EVIDENCE_ITEMS[defaults.evidence]}, {BUFF_PHRASES[defaults.buffs]}, the role's best weapon setup and the role's own weights",
+        summary_assumes=f"{SETUP_PHRASES[setup]}, {BUFF_PHRASES[defaults.buffs]}",
+        runnerups_assumes=f"{BUFF_PHRASES[defaults.buffs]}, the role's best weapon setup and the role's own weights",
         rows=kit_rows(scenario, pages),
         value=fmt_int(value),
         gain=fmt_signed(gain),
@@ -688,14 +666,9 @@ STAT_LABELS = {
 #: where an item comes from, in the order the trio page words it (a drop, a quest, a vendor, a recipe, foraging): the key of the table's ``source`` and the label of the line
 SOURCE_LINES = (("drops", "Drops in"), ("quests", "Quests"), ("sold", "Vendors in"), ("crafted", "Crafted"), ("forage", "Foraged in"))
 LORE_TEXT = "Yes (only one can be carried)"
-#: what an evidence level means for an item, after the words of the trio page ("Seen in game", "Wiki": :data:`ITEM_SEALS`; the choices of the Assumes line)
-EVIDENCE_REASONS = {
-    "strict": "Strict evidence, the surest level: strict kits and wiki kits can use it.",
-    "wiki": "Wiki evidence: the wiki lists a source that the site counts as live. Not seen in game yet, so strict kits leave it out.",
-}
 #: the codes the evidence ladder gives to the evidence of an item, the reasons that it is at its level (data/evidence.py: classify). A page never shows one: the item table keeps the
 #: reasons of the public catalog on an item that a seen flag made strict, so one of them (the reason the item was hidden or disputed for) would tell that a sighting rescued it, and a
-#: page words its evidence by its level (:data:`EVIDENCE_REASONS`). A test holds this list and the notes below to the codes the ladder's source gives, so that a new code has to be worded
+#: page words no evidence at all. A test holds this list and the notes below to the codes the ladder's source gives, so that a new code has to be worded
 #: or set aside here before a page can meet it.
 EVIDENCE_CODES = frozenset(
     {
@@ -774,10 +747,6 @@ class ItemPage:
     rules: tuple[RuleRef, ...]
     weapon: WeaponTable | None
     sources: tuple[SourceLine, ...]
-    level: str
-    level_seal: str
-    level_icon: str
-    level_text: str
     notes: tuple[EvidenceNote, ...]
     best_for: tuple[TrioLink, ...]
     best_more: int
@@ -928,7 +897,7 @@ def _notes(key: str, codes: Sequence[str]) -> tuple[EvidenceNote, ...]:
 
 
 def _description(name: str) -> str:
-    rest = ": stats at every tier from +0 to +10, where it comes from, how sure the evidence is, and the trios it is best for."
+    rest = ": stats at every tier from +0 to +10, where it comes from, and the trios it is best for."
     room = DESCRIPTION_MAX - len(rest)
     return (name if len(name) <= room else name[: room - 1].rstrip() + "…") + rest
 
@@ -958,7 +927,7 @@ def item_page(
     from trioforge.model import items as item_model
 
     level = record["evidence"]["level"]
-    if level not in ITEM_SEALS:
+    if level not in PAGE_LEVELS:
         raise ValueError(f"an item of the {level} level has no page: only a strict or a wiki item does")
     key = browser.record_key(record)
     if has_wiki_page(record) and wiki is None:
@@ -969,7 +938,6 @@ def item_page(
     vecs = [item_model.at_tier(original, tier, rules) for tier in TIERS]
     name = record["name"]
     rows = _rows(vecs)
-    seal, icon = ITEM_SEALS[level]
     ordered = sorted(wearers)
     title, revid = wiki if wiki is not None else (None, None)
     return ItemPage(
@@ -983,10 +951,6 @@ def item_page(
         rules=_rules_of(rows, book),
         weapon=_weapon(vecs, book),
         sources=_sources(record.get("source")),
-        level=level,
-        level_seal=seal,
-        level_icon=icon,
-        level_text=EVIDENCE_REASONS[level],
         notes=_notes(key, record["evidence"].get("codes", ())),
         best_for=tuple(TrioLink(slug, trio) for slug, trio in ordered[:BEST_FOR_MAX]),
         best_more=max(0, len(ordered) - BEST_FOR_MAX),

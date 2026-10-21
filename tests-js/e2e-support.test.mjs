@@ -3,7 +3,7 @@
 // they print for a row of "Wear this" must be the one the page prints, whatever kind of item the row holds.
 
 import { describe, expect, it } from "vitest";
-import { DASH, EMPTY_NAME, ITEM_SEALS, arrivalText, deityText, tierLabel } from "../pipeline/trioforge/site/static/format.js";
+import { DASH, EMPTY_NAME, arrivalText, deityText, tierLabel } from "../pipeline/trioforge/site/static/format.js";
 import { UNKNOWN_TO_THE_TEST_BROWSER, expectedKit, readHeadersFile, unknownToTheTestBrowser } from "../tests-e2e/support.mjs";
 
 // an item row of a data file: [key, name, tier rule, arrival, source, evidence, deities]
@@ -22,10 +22,9 @@ describe("the kit the browser tests expect", () => {
       tier: tierLabel(tier),
       arrival: arrivalText(item[3]),
       source: item[4],
-      seal: ITEM_SEALS[item[5]][0],
     }));
     expect(rows.slice(0, 4)).toEqual(page);
-    expect(rows[4]).toEqual({ name: EMPTY_NAME, deity: "", tier: DASH, arrival: DASH, source: DASH, seal: DASH });
+    expect(rows[4]).toEqual({ name: EMPTY_NAME, deity: "", tier: DASH, arrival: DASH, source: DASH });
   });
 
   it("says spell rank for an item that arrives with no tier, never +null", () => {

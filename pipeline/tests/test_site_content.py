@@ -178,10 +178,9 @@ def js_string(source: str, name: str) -> str:
     return re.sub(r"\\u([0-9a-fA-F]{4})", lambda g: chr(int(g.group(1), 16)), match.group(1))
 
 
-def test_the_browser_code_words_item_seals_and_empty_slots_like_the_pages():
+def test_the_browser_code_words_empty_slots_like_the_pages_and_has_no_words_for_an_evidence_level():
     source = (STATIC / "format.js").read_text(encoding="utf-8")
-    for evidence, (label, icon) in view.ITEM_SEALS.items():
-        assert re.search(rf'{evidence}: \["{re.escape(label)}", "{icon}"\]', source), evidence
+    assert "ITEM_SEALS" not in source and "Seen in game" not in source  # (wiki is the one evidence level: a kit row has no seal)
     assert js_string(source, "EMPTY_NAME") == view.EMPTY_NAME
     assert js_string(source, "DASH") == view.DASH == "—"
     assert js_string(source, "EN_DASH") == view.EN_DASH == "–"
@@ -233,12 +232,13 @@ def test_every_hook_the_browser_code_writes_is_in_the_generated_page():
     names = {node.get("data-f") for node in root.iter() if node.has("data-f")}
     # r-name, r-delta and r-deity are made by the code inside each runner-up list item
     assert sorted(h for h in hooks if h not in names and not h.startswith("r-")) == []
-    assert {"v-race", "v-role", "v-tier", "v-setup", "assume-buffs", "assume-setup", "assume-haste", "assume-ev", "t-ac", "t-endreg"} <= hooks
+    assert {"v-race", "v-role", "v-tier", "v-setup", "assume-buffs", "assume-setup", "assume-haste", "t-ac", "t-endreg"} <= hooks
     ids = {node.get("id") for node in root.iter() if node.has("id")}
     looked_up = set(re.findall(r"#([a-z][a-z0-9-]*)", source)) | {"runnerups", "robust", "runnerups-na", "robust-na"}
     assert sorted(looked_up - ids) == []
-    for name in ("role", "setup", "buffs", "ev"):
+    for name in ("role", "setup", "buffs"):
         assert root.find_all("input", name=name), name
+    assert not root.find_all("input", name="ev")
 
 
 def test_a_kit_item_that_needs_a_deity_carries_the_badge_in_the_page(tmp_path):

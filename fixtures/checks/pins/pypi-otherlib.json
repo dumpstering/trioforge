@@ -1,0 +1,7 @@
+{
+ "info": {"name": "otherlib", "version": "2.0.1"},
+ "releases": {
+  "2.0.0": [{"filename": "otherlib-2.0.0.tar.gz", "upload_time_iso_8601": "2025-01-01T10:00:00.000000Z", "yanked": false}],
+  "2.0.1": [{"filename": "otherlib-2.0.1.tar.gz", "upload_time_iso_8601": "2025-02-01T10:00:00.000000Z", "yanked": false}]
+ }
+}

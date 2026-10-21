@@ -1,7 +1,7 @@
-<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-base="/data/pal-mnk-ber/" data-release="data-2026-10-14" data-groups="AC MANA ATK+HASTE SV regen" data-items="/item/">
+<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="strict" data-base="/data/pal-mnk-ber/" data-release="data-2026-10-14" data-groups="AC MANA ATK+HASTE SV regen" data-items="/item/">
 <div class="page-head">
 <h1>Paladin / Monk / Berserker: best gear (<span data-rules="level.current">level 50</span>)</h1>
-<p id="best-race" class="best-race">Best race for this trio: <strong>Ogre</strong> <span class="margin" data-rules="roles.balanced roles.templates">(+813 over Troll)</span>, judged in the <span id="best-race-view">Balanced view at <span data-rules="tier.stat_rule">+4</span> with strict evidence and your own buffs</span>.</p>
+<p id="best-race" class="best-race">Best race for this trio: <strong>Ogre</strong> <span class="margin" data-rules="roles.balanced roles.templates">(+813 over Troll)</span>, judged in the <span id="best-race-view">Balanced view at <span data-rules="tier.stat_rule">+4</span> with your own buffs</span>.</p>
 <details class="expander" id="race-why">
 <summary>How the best race was judged, and what could change it</summary>
 <p id="best-race-rules" class="note">How the score works: <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
@@ -11,7 +11,7 @@
 
 <noscript><p class="note">The race, role and tier switches need JavaScript. This page shows the best kit for the default view.</p></noscript>
 <div class="view-bar" id="view-bar">
-<p class="view-summary" id="view-summary"><span class="sr-only">Showing </span><span class="view-main"><span data-f="s-race">Ogre</span> &middot; <span data-f="s-role">Balanced</span> &middot; <span data-f="s-tier" data-rules="tier.stat_rule">+4</span></span> <span class="view-assumes" data-f="s-assumes">dual wield, strict evidence, your own buffs</span></p>
+<p class="view-summary" id="view-summary"><span class="sr-only">Showing </span><span class="view-main"><span data-f="s-race">Ogre</span> &middot; <span data-f="s-role">Balanced</span> &middot; <span data-f="s-tier" data-rules="tier.stat_rule">+4</span></span> <span class="view-assumes" data-f="s-assumes">dual wield, your own buffs</span></p>
 <button type="button" id="switches-toggle" class="btn-change" aria-expanded="false" aria-controls="switches" aria-label="Change race, role, tier and assumptions" disabled>Change</button>
 </div>
 <div class="switches" id="switches">
@@ -33,8 +33,8 @@
 <legend>Role</legend>
 <div class="seg-items">
 <span class="seg-item"><input type="radio" name="role" id="role-balanced" value="balanced" data-label="Balanced" data-hint="An equal blend of staying alive and doing damage, for this trio&#39;s classes." data-setups="1h-shield 2h dw" checked disabled><label for="role-balanced">Balanced</label></span>
-<span class="seg-item"><input type="radio" name="role" id="role-tank" value="tank" data-label="Tank" data-hint="Staying alive first: armour class, hit points and haste." data-setups="1h-shield 2h dw" disabled><label for="role-tank">Tank</label></span>
-<span class="seg-item"><input type="radio" name="role" id="role-melee" value="melee" data-label="Melee" data-hint="Damage first: attack, haste and dexterity, then hit points." data-setups="2h dw" disabled><label for="role-melee">Melee</label></span>
+<span class="seg-item"><input type="radio" name="role" id="role-tank" value="tank" data-label="Tank" data-hint="Staying alive first: armour class, hit points and haste." data-setups="1h-shield 2h dw" disabled><label for="role-tank"><span class="art art-crest-tank" aria-hidden="true"></span>Tank</label></span>
+<span class="seg-item"><input type="radio" name="role" id="role-melee" value="melee" data-label="Melee" data-hint="Damage first: attack, haste and dexterity, then hit points." data-setups="2h dw" disabled><label for="role-melee"><span class="art art-crest-damage" aria-hidden="true"></span>Melee</label></span>
 </div>
 </fieldset>
 <div class="control">
@@ -70,14 +70,6 @@
 <span class="opt"><input type="radio" name="setup" id="setup-dw" value="dw" data-label="Dual wield" data-phrase="dual wield" checked disabled><label for="setup-dw"><span class="opt-text">Dual wield<span class="best-flag"> (best for this role)</span></span></label></span>
 </fieldset>
 </details>
-<details class="assume" id="assume-evidence">
-<summary><span class="sum">Evidence: <span data-f="assume-ev">strict evidence</span> <span class="change">change</span></span></summary>
-<fieldset>
-<legend>Evidence</legend>
-<span class="opt"><input type="radio" name="ev" id="ev-strict" value="strict" data-phrase="strict evidence" checked disabled><label for="ev-strict">Strict: only items seen in game</label></span>
-<span class="opt"><input type="radio" name="ev" id="ev-wiki" value="wiki" data-phrase="wiki evidence" disabled><label for="ev-wiki">Wiki: also items the wiki lists</label></span>
-</fieldset>
-</details>
 <details class="assume" id="assume-weights">
 <summary><span class="sum">Weights: <span data-f="assume-weights">role's own</span> <span class="change">change</span></span></summary>
 <fieldset>
@@ -101,89 +93,78 @@
 <th scope="col" role="columnheader" data-rules="tier.stat_rule">Tier</th>
 <th scope="col" role="columnheader" data-rules="tier.arrival tier.exp_needed">Arrives at</th>
 <th scope="col" role="columnheader">Source</th>
-<th scope="col" role="columnheader">Seal</th>
 </tr>
 </thead>
 <tbody id="kit-body" role="rowgroup">
 <tr role="row">
-<th scope="row" role="rowheader">Head</th>
+<th scope="row" role="rowheader"><span class="art art-icon-helm" aria-hidden="true"></span>Head</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90001/">Helm of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Face</th>
+<th scope="row" role="rowheader"><span class="art art-icon-face" aria-hidden="true"></span>Face</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w80816/">Mummer&#39;s Half-Face</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Ear 1</th>
+<th scope="row" role="rowheader"><span class="art art-icon-ear" aria-hidden="true"></span>Ear 1</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90007/">Rune-etched Earring</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Fear</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Ear 2</th>
+<th scope="row" role="rowheader"><span class="art art-icon-ear" aria-hidden="true"></span>Ear 2</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90009/">Stud of the Fallen</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Lower Guk</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Neck</th>
+<th scope="row" role="rowheader"><span class="art art-icon-neck" aria-hidden="true"></span>Neck</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90011/">Choker of the Deep</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Nagafen&#39;s Lair</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Shoulders</th>
+<th scope="row" role="rowheader"><span class="art art-icon-shoulders" aria-hidden="true"></span>Shoulders</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w8091/">Larkspur Pauldrons</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Fear</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Arms</th>
+<th scope="row" role="rowheader"><span class="art art-icon-arms" aria-hidden="true"></span>Arms</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90016/">Vambraces of the Unyielding Stonewarden of the Frozen Deepwatch Citadel Expedition</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Hate</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Back</th>
+<th scope="row" role="rowheader"><span class="art art-icon-back" aria-hidden="true"></span>Back</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w80712/">Weaver&#39;s Evening Drape</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Sky</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Wrist 1</th>
+<th scope="row" role="rowheader"><span class="art art-icon-wrist" aria-hidden="true"></span>Wrist 1</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90020/">Bracer of the Iron Oath</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Hate</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Wrist 2</th>
+<th scope="row" role="rowheader"><span class="art art-icon-wrist" aria-hidden="true"></span>Wrist 2</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90021/">Wristguard of Warding</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Hands</th>
@@ -191,63 +172,55 @@
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Fear</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Finger 1</th>
+<th scope="row" role="rowheader"><span class="art art-icon-ring" aria-hidden="true"></span>Finger 1</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w80631/">Band of Quiet Lanterns</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Finger 2</th>
+<th scope="row" role="rowheader"><span class="art art-icon-ring" aria-hidden="true"></span>Finger 2</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90026/">Band of the Stalwart</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Befallen</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Chest</th>
+<th scope="row" role="rowheader"><span class="art art-icon-chest" aria-hidden="true"></span>Chest</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w80469/">Saltmarsh Jerkin</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Nagafen&#39;s Lair</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Legs</th>
+<th scope="row" role="rowheader"><span class="art art-icon-legs" aria-hidden="true"></span>Legs</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90030/">Greaves of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Feet</th>
+<th scope="row" role="rowheader"><span class="art art-icon-feet" aria-hidden="true"></span>Feet</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90032/">Boots of the Wayfarer</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Befallen</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Waist</th>
+<th scope="row" role="rowheader"><span class="art art-icon-waist" aria-hidden="true"></span>Waist</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w80677/">Riverstone Buckle Strap</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Range</th>
+<th scope="row" role="rowheader"><span class="art art-icon-bow" aria-hidden="true"></span>Range</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w90037/">&lt;b&gt;x&lt;/b&gt;</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane &lt;i&gt;of&lt;/i&gt; Hate &amp; &#34;Fear&#34;</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Any slot 1</th>
@@ -255,7 +228,6 @@
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Lower Guk</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Any slot 2</th>
@@ -263,15 +235,13 @@
 <td role="cell"><span data-f="tier">—</span></td>
 <td role="cell"><span data-f="arrival">—</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">—</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false" hidden><use data-f="seal-icon" href="#i-none"></use></svg><span data-f="seal">—</span></span></td>
 </tr>
 <tr role="row">
-<th scope="row" role="rowheader">Main hand</th>
+<th scope="row" role="rowheader"><span class="art art-icon-sword" aria-hidden="true"></span>Main hand</th>
 <td role="cell"><span class="name" data-f="name"><a href="/item/w80988/">Ferryman&#39;s Pike</a></span> <span class="deity" data-f="deity" hidden></span></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Off hand</th>
@@ -279,7 +249,6 @@
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+0</span> <span class="reach" data-f="reach">16 copies to reach +4</span></td>
 <td role="cell"><span data-f="source">Quest in Lake Rathetear</span></td>
-<td role="cell"><span class="seal"><svg class="icon" aria-hidden="true" focusable="false"><use data-f="seal-icon" href="#i-strict"></use></svg><span data-f="seal">Seen in game</span></span></td>
 </tr>
 </tbody>
 </table>
@@ -288,7 +257,7 @@
 
 <section class="why" id="why" aria-labelledby="why-h">
 <h2 id="why-h">Why this kit</h2>
-<p data-rules="roles.templates">Kit value <strong id="kit-value">10,720</strong> hit-point equivalents; the gear adds <strong id="kit-gain">+7,770</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p data-rules="roles.templates" class="kit-line"><span class="art art-coin" aria-hidden="true"></span>Kit value <strong id="kit-value">10,720</strong> hit-point equivalents; the gear adds <strong id="kit-gain">+7,770</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
 <table class="totals" id="totals" role="table">
 <caption class="sr-only">Totals of this kit against the caps</caption>
 <thead role="rowgroup">
@@ -408,10 +377,10 @@
 
 <details class="expander" id="runnerups" data-files="balanced tank melee">
 <summary>Runner-ups: the next best choices for each slot</summary>
-<p>Shown for the default assumptions only: items seen in game, your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights. Each figure is the change in kit value if you swapped just that slot; an item that needs a deity can be an improvement.</p>
+<p>Shown for the default assumptions only: your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights. Each figure is the change in kit value if you swapped just that slot; an item that needs a deity can be an improvement.</p>
 <p id="runnerups-loading" class="note" hidden>Loading the runner-ups for this view&hellip;</p>
 <p id="runnerups-rules" class="note">The kit value is scored by <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
-<p id="runnerups-na" class="note" hidden>Runner-ups are shown for the default assumptions only (items seen in game, your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights). Change the assumptions back to see them.</p>
+<p id="runnerups-na" class="note" hidden>Runner-ups are shown for the default assumptions only (your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights). Change the assumptions back to see them.</p>
 <table class="runnerups" id="runnerups-table">
 <caption class="sr-only">The next best choices for each slot, with the change in kit value</caption>
 <thead>

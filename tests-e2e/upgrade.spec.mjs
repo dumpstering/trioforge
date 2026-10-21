@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { encodeKit } from "../pipeline/trioforge/site/static/input/kitcode.js";
 import { decodeKit } from "../pipeline/trioforge/site/static/input/kitdecode.js";
-import { ROOT, TRIO, axe, expect, open, openSwitches, pick, tabTo, test } from "./support.mjs";
+import { ROOT, TRIO, axe, expect, madeFrom, open, openSwitches, pick, tabTo, test } from "./support.mjs";
 
 const REAL_RESULTS = "the dumps are made of the synthetic fixture's items, which real results do not have";
 /** The file as /outputfile inventory writes it: CRLF line ends (git keeps the fixtures with LF). */
@@ -1468,16 +1468,16 @@ const RACE_WORDS = { OGR: "Ogre", TRL: "Troll", IKS: "IKS", HUM: "HUM" }; // (th
 const BUFF_WORDS = { own: "your own buffs", group: "common group buffs" };
 /** The assumptions of the page are three disclosures: a choice in them is made once they are open. */
 async function openAssumes(page) {
-  for (const id of ["assume-buffs", "assume-weapons", "assume-evidence"]) {
+  for (const id of ["assume-buffs", "assume-weapons"]) {
     const node = page.locator(`#${id}`);
     if ((await node.getAttribute("open")) === null) await node.locator("> summary").click();
   }
 }
 /** The line the page writes for a row of Python's reference: the number as the page writes a number (rounded half up), and the setup and the haste of the kit. */
 const lineOf = (kit, row) =>
-  `Kit value ${Math.floor(row.value + 0.5).toLocaleString("en-US")} for ${RACE_WORDS[kit.race]}, ${ROLE_WORDS[row.role]}, ${kit.evidence} evidence, ${BUFF_WORDS[row.buffs]}. Weapons: ${SETUP_WORDS[kit.setup]}, read from the kit's hands, at ${row.hasteAssumed}% haste.`;
+  `Kit value ${Math.floor(row.value + 0.5).toLocaleString("en-US")} for ${RACE_WORDS[kit.race]}, ${ROLE_WORDS[row.role]}, ${BUFF_WORDS[row.buffs]}. Weapons: ${SETUP_WORDS[kit.setup]}, read from the kit's hands, at ${row.hasteAssumed}% haste.`;
 
-test("a shared kit is worth what Python's reference says, under each role, buffs and evidence level the page offers, with the weapons of its own hands and the haste of its own items @once", async ({ page, watch }) => {
+test("a shared kit is worth what Python's reference says, under each role and buffs the page offers, made from the evidence level of the kit, with the weapons of its own hands and the haste of its own items @once", async ({ page, watch }) => {
   test.skip(!FIXTURE, "the reference's kits are made of the fixture's items");
   test.setTimeout(240_000);
   const rows = KIT_VALUES.values.filter((row) => ["own", "group"].includes(row.buffs) && KIT_VALUES.kits[row.kit].deity === null);
@@ -1485,11 +1485,11 @@ test("a shared kit is worth what Python's reference says, under each role, buffs
   expect(kitsShown.length).toBeGreaterThanOrEqual(4);
   for (const index of kitsShown) {
     const kit = KIT_VALUES.kits[index];
+    await madeFrom(page, kit.evidence);
     await open(page, `${TRIO}#k=${encodeKit({ v: 1, trio: "pal-mnk-ber", race: kit.race, level: 50, slots: slotsOfKit(kit) })}`);
     await expect(page.locator("#shared-kit-table tbody tr")).toHaveCount(22, { timeout: 30_000 });
     await openAssumes(page);
     for (const row of rows.filter((one) => one.kit === index)) {
-      await pick(page, `ev-${kit.evidence}`);
       await pick(page, `role-${row.role}`);
       await pick(page, `buffs-${row.buffs}`);
       await expect(page.locator("#shared-kit-value"), `${kit.name} / ${row.role} / ${row.buffs}`).toHaveText(lineOf(kit, row), { timeout: 30_000 });
@@ -1503,10 +1503,10 @@ test("the value of a shared kit does not follow the page's weapon switch or its 
   test.setTimeout(120_000);
   const kit = KIT_VALUES.kits[0];
   const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
+  await madeFrom(page, kit.evidence);
   await open(page, `${TRIO}#k=${encodeKit({ v: 1, trio: "pal-mnk-ber", race: kit.race, level: 50, slots: slotsOfKit(kit) })}`);
   await expect(page.locator("#shared-kit-table tbody tr")).toHaveCount(22, { timeout: 30_000 });
   await openAssumes(page);
-  await pick(page, `ev-${kit.evidence}`);
   await expect(page.locator("#shared-kit-value")).toHaveText(lineOf(kit, row), { timeout: 30_000 });
   const hastes = new Set([await page.locator('[data-f="assume-haste"]').textContent()]);
   for (const setup of ["2h", "dw", "1h-shield"]) {

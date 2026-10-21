@@ -241,7 +241,10 @@ test("the 404 page has no analytics beacon: no script of another site, no beacon
   expect(await page.evaluate(() => document.documentElement.outerHTML)).not.toMatch(/cloudflareinsights|data-cf-beacon|beacon\.min/i);
   const network = asked.filter((url) => url.protocol.startsWith("http"));
   expect(new Set(network.map((url) => url.origin)).size, "every request is to the site itself").toBe(1);
-  expect(network.filter((url) => url.pathname.startsWith("/assets/")).map((url) => url.pathname.split("-")[0]).sort()).toEqual(["/assets/boot", "/assets/notfound", "/assets/site"]);
+  const assets = network.filter((url) => url.pathname.startsWith("/assets/"));
+  expect(assets.filter((url) => !url.pathname.endsWith(".png")).map((url) => url.pathname.split("-")[0]).sort()).toEqual(["/assets/boot", "/assets/notfound", "/assets/site"]);
+  // (the stylesheet's own pictures: PNGs beside it, hashed, of this site; nothing else)
+  for (const url of assets.filter((url) => url.pathname.endsWith(".png"))) expect(url.pathname, "a picture of the theme").toMatch(/^\/assets\/[a-z0-9-]+-[A-Z0-9]{8}\.png$/);
   expect(network.filter((url) => url.pathname.endsWith(".json")), "it asks for no data").toEqual([]);
   // the page that answers has the policy of every page, which names no analytics host
   const response = await request.get("/item/no-such-item/");

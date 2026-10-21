@@ -112,7 +112,7 @@ def test_an_item_with_no_wiki_page_has_a_page_with_no_credit_and_the_other_pages
     out = tmp_path / "dist"
     run_build(out, tmp_path, results=results, noindex=True)
     html = item_html(out, "rmoon-cap")
-    assert [h.text() for h in html.find("main").find_all("h2")] == ["Stats by tier", "Sources", "Evidence", "Best for these trios"]
+    assert [h.text() for h in html.find("main").find_all("h2")] == ["Stats by tier", "Sources", "Best for these trios"]
     assert html.find_all(None, id_="credit") == [] and html.find_all(None, id_="credit-h") == []
     assert [a.get("href") for a in html.find("main").find_all("a") if "eqlwiki.com" in a.get("href", "")] == []  # (no link to a wiki page that is not there)
     assert "Wiki credit" not in read(out, "item/rmoon-cap/index.html")
@@ -268,8 +268,9 @@ def test_no_two_landmarks_of_an_item_page_have_the_same_name_the_section_and_the
 
 def test_the_sections_of_a_page_are_the_ones_the_page_promises_in_order(built):
     headings = lambda key: [h.text() for h in item_html(built.out, key).find("main").find_all("h2")]  # noqa: E731
-    assert headings("w90001") == ["Stats by tier", "Sources", "Evidence", "Best for these trios", "Wiki credit"]
-    assert headings("w80524") == ["Stats by tier", "Weapon", "Sources", "Evidence", "Best for these trios", "Wiki credit"]
+    assert headings("w90001") == ["Stats by tier", "Sources", "Best for these trios", "Wiki credit"]  # (no section on the evidence level: wiki is the one level)
+    assert headings("w80524") == ["Stats by tier", "Weapon", "Sources", "Best for these trios", "Wiki credit"]
+    assert headings("w90046") == ["Stats by tier", "Sources", "Notes", "Best for these trios", "Wiki credit"]  # (an item with a note about it has that section)
 
 
 def test_the_facts_sources_evidence_and_credit_are_in_the_page(built):
@@ -278,8 +279,7 @@ def test_the_facts_sources_evidence_and_credit_are_in_the_page(built):
     facts = {dt.text(): dt.parent.find("dd").text() for dt in main.find_all("dt")}
     assert facts["Slot"] == "Chest" and facts["Classes"] == "All" and facts["Deity"] == "Needs deity: The Tribunal or Rodcet Nife" and facts["Weight"] == "6.0 stone"
     assert html.by_id("sources").text() == "Drops in: The Hole"
-    level = html.by_id("level")
-    assert "Wiki" in level.text() and level.find("svg").find("use").get("href") == "#i-wiki"
+    assert not html.find_all("p", id_="level") and "Wiki evidence" not in html.find("main").text(skip_hidden=False)
     assert "Deity-locked" in html.by_id("notes").text() and html.by_id("notes").find(cls="seal-model") is not None
     credit = html.by_id("credit")
     revision = next(a for a in credit.find_all("a") if "oldid=" in a.get("href"))
@@ -290,9 +290,10 @@ def test_the_facts_sources_evidence_and_credit_are_in_the_page(built):
     assert all(a.get("rel") == "noopener noreferrer" for a in credit.find_all("a"))
 
 
-def test_a_strict_item_says_seen_in_game_with_the_icon_of_the_trio_page(built):
-    level = item_html(built.out, "w90001").by_id("level")
-    assert "Seen in game" in level.text() and level.find("svg").find("use").get("href") == "#i-strict"
+def test_an_item_page_says_nothing_of_an_evidence_level_whatever_the_level_of_the_item(built):
+    for key in ("w90001", "w90046"):
+        text = item_html(built.out, key).find("main").text(skip_hidden=False)
+        assert "Seen in game" not in text and "Strict evidence" not in text and "Wiki evidence" not in text and "seen in game" not in text, key
     assert item_html(built.out, "w90040").by_id("sources").text() == "Drops in: Test Zone"  # a cap no kit wears has its page and its source all the same
 
 
@@ -362,9 +363,9 @@ def test_the_name_the_sources_the_quest_and_the_wiki_title_of_a_page_are_text_wh
     assert outside == []  # (no link made of the quest's markup)
 
 
-def test_the_page_of_an_item_that_a_seen_flag_made_strict_shows_its_level_and_the_note_about_the_item_and_none_of_the_reasons_it_was_hidden_for(variant):
+def test_the_page_of_an_item_that_a_seen_flag_made_strict_shows_the_note_about_the_item_and_none_of_the_reasons_it_was_hidden_for_nor_its_level(variant):
     html = parse(variant.raw)
-    assert "Seen in game" in html.by_id("level").text() and "Strict evidence" in html.by_id("level").text()
+    assert "Seen in game" not in variant.raw and "Strict evidence" not in variant.raw and not html.find_all("p", id_="level")
     notes = [li.text() for li in html.by_id("notes").find_all("li")]
     assert len(notes) == 1 and notes[0].startswith("Model") and "not used for best-in-slot" in notes[0]
     for code in ("cultural-container", "out-of-era", "zones-not-in-eql"):

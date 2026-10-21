@@ -34,12 +34,6 @@ export function arrivalText(arrival) {
   return arrival === null ? SPELL_RANK : tierLabel(arrival);
 }
 
-/** Item evidence: the words of the seal column and the id of its icon. */
-export const ITEM_SEALS = {
-  strict: ["Seen in game", "i-strict"],
-  wiki: ["Wiki", "i-wiki"],
-};
-
 export const EMPTY_NAME = "Leave empty";
 export const DASH = "—";
 export const EN_DASH = "–";

@@ -52,7 +52,7 @@ async function wake(t) {
 }
 const sent = (t, count) => vi.waitFor(() => expect(t.engine.runs).toHaveLength(count), { timeout: 4000, interval: 10 });
 const checked = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
-const pageView = () => ({ race: $("#sw-race").value, role: checked("role"), buffs: checked("buffs"), evidence: checked("ev"), setup: checked("setup") });
+const pageView = () => ({ race: $("#sw-race").value, role: checked("role"), buffs: checked("buffs"), evidence: document.getElementById("main").dataset.ev, setup: checked("setup") }); // (the one evidence level the page is made from)
 
 describe("the section on the page", () => {
   it("sends the view the page shows, for the trio and the level the page is for, to the client named by the manifest, with the results area of the section for its question", async () => {
@@ -68,7 +68,7 @@ describe("the section on the page", () => {
     expect(t.engine.options[0].window).toBe(window);
   });
 
-  it("restarts the path when a switch changes the view the page shows: the race, the role, the weapons, the buffs and the evidence", async () => {
+  it("restarts the path when a switch changes the view the page shows: the race, the role, the weapons and the buffs", async () => {
     const t = open();
     await wake(t);
     addByName("larkspur", "4");
@@ -85,22 +85,21 @@ describe("the section on the page", () => {
     expect(t.engine.runs[1].request.scenario.role).toBe("tank");
     await pick('input[name="buffs"][value="group"]', 3);
     expect(t.engine.runs[2].request.scenario).toMatchObject({ role: "tank", buffs: "group" });
-    await pick('input[name="ev"][value="wiki"]', 4);
-    expect(t.engine.runs[3].request.scenario.evidence).toBe("wiki");
+    expect(t.engine.runs[2].request.scenario.evidence).toBe("strict"); // (no switch moves the evidence level: the page asks at the level it is made from)
     const race = $("#sw-race");
     race.value = [...race.options].find((o) => o.value !== race.value).value;
     race.dispatchEvent(new Event("change", { bubbles: true }));
     await t.app.whenIdle();
-    await sent(t, 5);
-    expect(t.engine.runs[4].request.scenario.race).toBe(race.value);
+    await sent(t, 4);
+    expect(t.engine.runs[3].request.scenario.race).toBe(race.value);
     const offered = [...document.querySelectorAll('input[name="setup"]')].filter((r) => !r.disabled && !r.checked);
     expect(offered.length).toBeGreaterThan(0);
-    await pick(`input[name="setup"][value="${offered[0].value}"]`, 6);
-    expect(t.engine.runs[5].request.scenario.setup).toBe(offered[0].value);
+    await pick(`input[name="setup"][value="${offered[0].value}"]`, 5);
+    expect(t.engine.runs[4].request.scenario.setup).toBe(offered[0].value);
   }, 30_000);
 
   it("does not restart for a switch the request does not use (the tier), nor for a view that could not be loaded", async () => {
-    const t = open({ offline: ["wiki-group"] });
+    const t = open({ offline: ["strict-group"] });
     await wake(t);
     addByName("larkspur", "4");
     await sent(t, 1);
@@ -110,9 +109,7 @@ describe("the section on the page", () => {
     await t.app.whenIdle();
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(t.engine.runs).toHaveLength(1);
-    // (the view of another evidence level and buffs is not there: the page goes back to what it shows, and the answer stays as it was)
-    $('input[name="ev"][value="wiki"]').checked = true;
-    $('input[name="ev"][value="wiki"]').dispatchEvent(new Event("change", { bubbles: true }));
+    // (the view of other buffs is not there: the page goes back to what it shows, and the answer stays as it was)
     $('input[name="buffs"][value="group"]').checked = true;
     $('input[name="buffs"][value="group"]').dispatchEvent(new Event("change", { bubbles: true }));
     await t.app.whenIdle();

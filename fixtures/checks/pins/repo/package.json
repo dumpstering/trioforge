@@ -1,0 +1,11 @@
+{
+  "name": "example",
+  "private": true,
+  "dependencies": {
+    "exampleone": "1.0.0"
+  },
+  "devDependencies": {
+    "@example/tool": "2.0.0",
+    "looselib": "^3.1.0"
+  }
+}

@@ -2,14 +2,15 @@
 
 ::
 
-    python scripts/release-build.py --tag data-YYYY-MM-DD[-N] --seen <private seen-flags file> --privacy-key <private key file> --processes 20
+    python scripts/release-build.py --tag data-YYYY-MM-DD[-N] --privacy-key <private key file> --processes 20
 
-It builds the catalog with the private seen flags merged (into ``build/``), precomputes every trio of the grid at its default scope (a pool of worker
-processes; chunk files and fingerprints stay in ``build/results/``), checks the release (every trio present, none partial, each at its scope; the parity suite; a
-pruning spot check of one random scenario of each trio against the unpruned optimum; the invariants; every bundle against the catalog with the flags merged and
-through the browser's own reader; the exact number of the files of the site), runs the **keyed** privacy scan over everything that ships, packs one ``tar.gz`` into
+It builds from the public catalog (``derived/catalog.json``), which must have no strict item: wiki is the one evidence level, and a catalog with a strict item (a
+community report in ``rules/community-seen.json`` made it strict) is refused before the first hour is spent. It precomputes every trio of the grid at its default scope
+(a pool of worker processes; chunk files and fingerprints stay in ``build/results/``), checks the release (every trio present, none partial, each at its scope; the
+parity suite; a pruning spot check of one random scenario of each trio against the unpruned optimum; the invariants; every bundle against the catalog and through the
+browser's own reader; the exact number of the files of the site), runs the **keyed** privacy scan over everything that ships, packs one ``tar.gz`` into
 ``build/release/``, and writes ``releases/<tag>.json`` (the pointer to commit) and ``reports/results-diff-<tag>.md`` (what changed since the last release, and why)
-into the working tree, uncommitted. The full diff, which names items and so says which the maintainer has seen, is ``build/reports/results-diff-<tag>.json``,
+into the working tree, uncommitted. The full diff, which names items, is ``build/reports/results-diff-<tag>.json``,
 away from the asset: it is not for git, and an upload of ``build/release/<tag>.tar.gz`` cannot take it. The build prints counts, the places of what it wrote, and warnings; never an item.
 
 A run that is stopped (Ctrl-C, a crash, the computer switched off) is run again with the same command: trios that are finished are skipped, and chunk files made
@@ -26,7 +27,7 @@ that closes after the build, such as a pipe whose reader has gone, or that is no
 standard error; a line that the encoding of the console cannot write is written with ``?`` for the characters it cannot, and silences nothing), 2 refused or failed (one line
 on standard error; ``TRIOFORGE_DEBUG`` adds the traceback), 130 interrupted.
 
-The two private paths are given here and read at run time; nothing is copied from them, and no output carries them.
+The private key is given here by its path and read at run time; nothing is copied from it, and no output carries it.
 """
 
 from __future__ import annotations
@@ -125,14 +126,11 @@ def _trios(text: str) -> tuple[str, ...]:
 def _parser() -> argparse.ArgumentParser:
     parser = _Parser(prog="release-build.py", description=__doc__.split("\n\n")[0], allow_abbrev=False)
     parser.add_argument("--tag", required=True, type=_tag, help="the release tag: data-YYYY-MM-DD, and -N after it for a second release of a day")
-    parser.add_argument("--seen", required=True, type=Path, help="the private seen-flags file (read at run time, merged into build/ only)")
     parser.add_argument("--privacy-key", required=True, type=Path, help="the private key file of the privacy scan (64 hex digits)")
     parser.add_argument(
         "--processes", type=_positive, default=max(1, (os.cpu_count() or 2) - 4), help="worker processes, one trio each (default: all cores but four)"
     )
     parser.add_argument("--trios", type=_trios, help="build only these trios (comma-separated slugs): a trial, which writes no pointer")
-    parser.add_argument("--wiki", type=Path, help="the finished wiki fetch the catalog is built from (default: sources/eqlwiki/<date of derived/catalog.json>)")
-    parser.add_argument("--client", type=Path, help="the client extract (default: derived/client)")
     parser.add_argument("--catalog", type=Path, help="the public catalog (default: derived/catalog.json)")
     parser.add_argument("--previous", default="auto", help="the release to compare with: auto (the newest older one whose asset is in build/release/), none, or an asset or folder")
     parser.add_argument(
@@ -153,9 +151,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     lines = _Lines()
     try:
         result = release.build_release(
-            tag=args.tag, root=REPO, seen=args.seen.resolve(), privacy_key=args.privacy_key.resolve(), processes=args.processes, trios=args.trios,
-            trial=args.trios is not None, catalog=args.catalog.resolve() if args.catalog else None, wiki=args.wiki.resolve() if args.wiki else None,
-            client=args.client.resolve() if args.client else None, build_dir=args.build_dir.resolve() if args.build_dir else None,
+            tag=args.tag, root=REPO, privacy_key=args.privacy_key.resolve(), processes=args.processes, trios=args.trios,
+            trial=args.trios is not None, catalog=args.catalog.resolve() if args.catalog else None, build_dir=args.build_dir.resolve() if args.build_dir else None,
             previous=args.previous, parity_stride=args.parity_stride, say=lines.say,
         )  # fmt: skip
     except ReleaseRefused as error:

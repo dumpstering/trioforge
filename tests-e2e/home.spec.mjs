@@ -286,7 +286,10 @@ test("the home page asks for the page, the stylesheet, the boot script and the p
   const home = await (await request.get("/")).text();
   const assets = [...home.matchAll(/(?:href|src)="(\/assets\/[^"]+)"/g)].map((m) => m[1]).sort();
   expect(assets, "a stylesheet and two scripts").toHaveLength(3);
-  expect(asked.filter((path) => path.startsWith("/assets/")).sort()).toEqual(assets);
+  // the files the page names, and besides them the pictures of the theme that its stylesheet asks for: hashed PNGs of this site
+  const wanted = asked.filter((path) => path.startsWith("/assets/"));
+  expect(wanted.filter((path) => !path.endsWith(".png")).sort()).toEqual(assets);
+  for (const path of wanted.filter((path) => path.endsWith(".png"))) expect(path, "a picture of the theme").toMatch(/^\/assets\/[a-z0-9-]+-[A-Z0-9]{8}\.png$/);
   const [slug] = await builtTrios(request);
   const trio = await (await request.get(`/trio/${slug}/`)).text();
   expect([...trio.matchAll(/(?:href|src)="(\/assets\/[^"]+)"/g)].map((m) => m[1]).sort(), "the same three files as a trio page").toEqual(assets);

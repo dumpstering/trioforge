@@ -149,8 +149,7 @@ def test_the_site_built_from_a_tiny_run_bakes_the_kit_the_precompute_solved(real
     assert html.by_id("sw-race").find("option", selected=True).get("value") == defaults["race"]
     best = html.by_id("best-race").text()
     assert best.startswith("Best race for this trio: ") and f"(+{round(defaults['margin'])} over " in best
-    assert [r.get("value") for r in html.find_all("input", name="ev") if r.has("checked")] == ["strict"]
-    assert html.find_all("p", id_="evidence-note") == []  # strict items exist: nothing to explain
+    assert html.find_all("input", name="ev") == [] and html.find_all("p", id_="evidence-note") == []  # no evidence picker, no note: wiki is the one level
     # the runner-ups were solved for the same default answer, and one of them needs a deity (a badge, first in its slot)
     runnerups = html.by_id("runnerups-body").find_all("tr")
     assert len(runnerups) == 22 and any(r.find_all("li") for r in runnerups)
@@ -164,7 +163,7 @@ def test_the_site_built_from_a_tiny_run_bakes_the_kit_the_precompute_solved(real
     assert json.loads((out / "data" / SLUG / "runnerups" / "balanced.json").read_text(encoding="utf-8"))["tiers"] == [0, 4, 10]
 
 
-def test_with_no_seen_flags_the_site_is_built_from_the_wiki_level_and_says_why(tmp_path):
+def test_with_no_seen_flags_the_site_is_built_from_the_wiki_level_and_says_nothing_of_it(tmp_path):
     need_node()
     catalog = write_catalog(tmp_path / "catalog.json")
     out = tmp_path / "out"
@@ -178,9 +177,8 @@ def test_with_no_seen_flags_the_site_is_built_from_the_wiki_level_and_says_why(t
     wanted = expand(read(folder / "wiki-own.json"))[(defaults["race"], "balanced", 4, defaults["setup"])]["kit"]
     baked = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
     assert baked == [names[key] if key else "Leave empty" for key in wanted] and any(name != "Leave empty" for name in baked)
-    assert [r.get("value") for r in html.find_all("input", name="ev") if r.has("checked")] == ["wiki"]
-    assert "No item has been seen in game yet" in html.by_id("evidence-note").text()
-    assert html.by_id("assume-evidence").find(data_f="assume-ev").text() == "wiki evidence"
+    assert html.find_all("input", name="ev") == [] and html.find_all("p", id_="evidence-note") == []  # no evidence picker, no note: wiki is the one level
+    assert not html.find_all("details", id_="assume-evidence")
     runnerups = html.by_id("runnerups-body").find_all("tr")
     assert any(r.find_all("li") for r in runnerups) and not html.by_id("runnerups-table").has("hidden")
     # the strict level holds the naked character, which the page shows if it is asked for
@@ -200,7 +198,7 @@ def test_with_nothing_seen_the_strict_level_has_no_shield_setup_and_the_wiki_pag
         assert read(folder / f"wiki-{buffs}.json")["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}
     site, _ = site_from(out, tmp_path, manifest_for(tmp_path / "manifest.json", CATALOG))
     html = parse((site / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
-    assert [r.get("value") for r in html.find_all("input", name="ev") if r.has("checked")] == ["wiki"]
+    assert html.find_all("input", name="ev") == []
     assert html.by_id("role-balanced").get("data-setups") == "1h-shield 2h dw"  # what the wiki level offers the default role
     radios = {r.get("value"): r for r in html.find_all("input", name="setup")}
     assert sorted(radios) == ["1h-shield", "2h", "dw"] and not any(r.has("hidden") for r in radios.values())
@@ -222,7 +220,7 @@ def test_a_strict_level_with_items_but_no_shield_does_not_offer_the_shield_setup
     assert defaults["view"]["evidence"] == "strict" and defaults["setup"] in ("2h", "dw")
     site, _ = site_from(out, tmp_path, manifest_for(tmp_path / "manifest.json", CATALOG))
     html = parse((site / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
-    assert [r.get("value") for r in html.find_all("input", name="ev") if r.has("checked")] == ["strict"]
+    assert html.find_all("input", name="ev") == []
     assert html.by_id("role-balanced").get("data-setups") == "2h dw"
     radios = {r.get("value"): r for r in html.find_all("input", name="setup")}
     assert sorted(radios) == ["1h-shield", "2h", "dw"]
@@ -346,5 +344,5 @@ def test_a_small_run_on_the_real_catalog_builds_into_a_site(tmp_path):
     baked = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
     assert baked == [keys[key] if key else "Leave empty" for key in wanted]
     assert result.partial == (SLUG,) and result.sizes["trio_html"] < 60 * 1024
-    assert "No item has been seen in game yet" in html.by_id("evidence-note").text()
+    assert not html.find_all("p", id_="evidence-note")
     print(f"the small real run and the site build took {time.perf_counter() - started:.0f} s")

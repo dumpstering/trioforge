@@ -108,7 +108,7 @@ import jinja2
 from trioforge import rules as rules_module
 from trioforge import scope as tier_scope
 from trioforge.classes import CLASS_CODES, CLASS_NAMES
-from trioforge.site import content, data, view
+from trioforge.site import art, content, data, view
 
 __all__ = [
     "ASSET_CACHE",
@@ -293,6 +293,8 @@ LIMITS = {
     "notfound_html_gzip": 5 * 1024,
     # the files of the site: Cloudflare Pages takes at most 20,000, and the build holds itself to 15,000
     "files": 15_000,
+    # the pictures of the theme together (the PNGs under assets/; a PNG is sent as it is, so this is what a phone is sent if it loads them all)
+    "art": 120 * 1024,
 }
 
 #: the home page lists the pages of the trios in the page itself, in a list that is open up to this many and folded into an expander beyond it (a list of 560 would be most of the page), and
@@ -300,15 +302,23 @@ LIMITS = {
 HOME_LIST_OPEN = 12
 NOT_FOUND_LISTED = 8
 
-FAVICON = (
+_DRAWN_FAVICON = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E"
     "%3Ccircle cx='16' cy='9.5' r='7' fill='%239a3a0a' fill-opacity='.85'/%3E"
     "%3Ccircle cx='9.5' cy='21' r='7' fill='%239a3a0a' fill-opacity='.6'/%3E"
     "%3Ccircle cx='22.5' cy='21' r='7' fill='%239a3a0a' fill-opacity='.4'/%3E%3C/svg%3E"
 )
 
+
+def _favicon() -> str:
+    """The icon of every page: the 32 pixel emblem of the art as a ``data:`` address (the policy's ``img-src`` allows it), the drawn logo when the site has no emblem."""
+    return art.favicon() or _DRAWN_FAVICON
+
+
+FAVICON = _favicon()
+
 #: what a report about a view names, in this order (the keys of the default view of a trio page)
-REPORT_VIEW = ("race", "role", "tier", "setup", "ev", "buffs")
+REPORT_VIEW = ("race", "role", "tier", "setup", "buffs")
 
 _SHARD_FILE = re.compile(r"data/[^/]+/(?:strict|wiki)-(?:own|group)\.json")
 #: the file of a role's runner-ups (the page fetches it whole, the first time the runner-ups of a view of that role open)
@@ -349,7 +359,7 @@ class BudgetError(BuildError):
 def make_env() -> jinja2.Environment:
     """Autoescape on for every template (the files are ``.html.j2``, which ``select_autoescape`` would miss), and an
     undefined name or attribute is an error, so a template typo cannot print an empty string."""
-    return jinja2.Environment(
+    env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(TEMPLATES)),
         autoescape=True,
         undefined=jinja2.StrictUndefined,
@@ -357,6 +367,8 @@ def make_env() -> jinja2.Environment:
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
+    env.globals["art"] = art  # the pictures a page draws only when the site has them (``art.has("torch")``)
+    return env
 
 
 # ---- the page code and the stylesheet ---------------------------------------------------------------------------------------------
@@ -587,6 +599,10 @@ ESBUILD_COMMON = [
 ]
 
 
+#: the pictures of the stylesheet (static/art/art.css, imported by site.css) are files that esbuild copies next to it under a hash of their content, and the stylesheet names them so
+ART_LOADER = ["--loader:.png=file", "--asset-names=[name]-[hash]"]
+
+
 def _bundle_notfound(out: Path) -> dict[str, Any]:
     """Bundle the script of the 404 page into the folder ``out`` as a module of its own (no ``--splitting``: what it shares with the page script is copied, not imported, so that the page asks
     for one file and the page script's code, which clears a kit link from the address, is not loaded with it), check what it is made of (:func:`check_notfound_script`) and return esbuild's account."""
@@ -646,7 +662,10 @@ def bundle_assets(
         main_out, boot_out, notfound_out = Path(scratch) / "main", Path(scratch) / "boot", Path(scratch) / "notfound"
         meta_path = Path(scratch) / "main-meta.json"
         _run_esbuild(
-            [*common, "--format=esm", "--splitting", f"--metafile={meta_path}", f"--outdir={main_out}", str(STATIC / "app.js"), str(STATIC / "site.css")]
+            [
+                *common, "--format=esm", "--splitting", *ART_LOADER, f"--metafile={meta_path}", f"--outdir={main_out}",
+                str(STATIC / "app.js"), str(STATIC / "site.css"),
+            ]
         )
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         check_page_script(meta)
@@ -1196,6 +1215,9 @@ def check_budgets(
             policy = _policy_problem(text)
             if policy is not None:
                 problems.append(f"{what} {page} {policy}")
+    sizes["art"] = sum(len(content_bytes) for name, content_bytes in files.items() if name.startswith("assets/") and name.endswith(".png"))
+    if sizes["art"] > LIMITS["art"]:
+        problems.append(f"the art is {sizes['art'] / 1024:.1f} KB in all (limit {LIMITS['art'] // 1024} KB)")
     sizes["files"] = len(files)
     if len(files) > LIMITS["files"]:
         problems.append(f"the site has {len(files):,} files (limit {LIMITS['files']:,})")

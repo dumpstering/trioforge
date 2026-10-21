@@ -1,0 +1,33 @@
+{
+ "assets": {
+  "emblem": {"source": "trioforge-emblem.png", "kind": "still", "size": [32, 32], "background": null, "scale": 2, "use": "the brand in the header; the favicon is this picture"},
+  "tile-stone": {"source": "trioforge-tile-stone.png", "kind": "tile", "size": [64, 64], "background": null, "use": "the page behind the frame, and the content column in the dark theme"},
+  "tile-parchment": {"source": "trioforge-tile-parchment.png", "kind": "tile", "size": [64, 64], "background": null, "use": "the content column in the light theme", "trim": [1, 1, 1, 1]},
+  "divider": {"source": "trioforge-divider.png", "kind": "still", "size": [200, 64], "background": null, "crop": "auto", "scale": 2, "use": "under the first heading of a page"},
+  "plate-dark": {"source": "trioforge-button.png", "kind": "still", "size": [120, 64], "background": "#efe2c0", "crop": "auto", "slice": [5, 6, 9, 6], "scale": 2, "use": "the menu buttons, and the dark badges of the footer"},
+  "plate-light": {"source": "trioforge-badge-quill.png", "kind": "still", "size": [88, 64], "background": "#f6e7bd", "crop": "auto", "slice": [9, 8, 11, 8], "scale": 2, "use": "the light badges of the footer"},
+  "torch": {"source": "trioforge-torch-sheet.png", "kind": "strip", "size": [128, 128], "background": null, "grid": [4, 4], "frames": [0, 1, 2, 3, 4, 5, 6, 7], "crop": "auto", "duration_ms": 700, "scale": 2, "use": "two torches beside the brand"},
+  "coin": {"source": "trioforge-coin2-sheet.png", "kind": "strip", "size": [256, 256], "background": null, "grid": [4, 4], "frames": [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4], "crop": "auto", "duration_ms": 1400, "scale": 1, "use": "beside the value of the best kit; the frames start at the front face, so that a visitor who asked for no motion sees the coin face-on"},
+  "mail": {"source": "trioforge-mail-sheet.png", "kind": "strip", "size": [256, 256], "background": null, "grid": [4, 4], "frames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], "crop": "auto", "duration_ms": 1600, "scale": 1, "use": "beside the link that reports a problem; it moves only while the link is hovered or has the focus"},
+  "dwarf": {"source": "trioforge-dwarf-sheet.png", "kind": "strip", "size": [256, 256], "background": null, "grid": [4, 4], "frames": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], "crop": "auto", "duration_ms": 1600, "scale": 1, "use": "the home page, beside the line that says that the other trios are coming"},
+  "plate-scroll": {"source": "trioforge-badge-scroll.png", "kind": "still", "size": [88, 64], "background": "#f6e7bd", "crop": [3, 8, 80, 54], "slice": [7, 5, 7, 21], "scale": 2, "use": "a light badge of the footer"},
+  "icon-helm": {"source": "trioforge-icon2-helm.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Head row of the kit table"},
+  "icon-face": {"source": "trioforge-icon2-face.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Face row of the kit table"},
+  "icon-ear": {"source": "trioforge-icon2-ear.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Ear 1 and Ear 2 row of the kit table"},
+  "icon-neck": {"source": "trioforge-icon2-neck.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Neck row of the kit table"},
+  "icon-shoulders": {"source": "trioforge-icon2-shoulders.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Shoulders row of the kit table"},
+  "icon-wrist": {"source": "trioforge-icon2-wrist.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Wrist 1 and Wrist 2 row of the kit table"},
+  "icon-ring": {"source": "trioforge-icon2-ring.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Finger 1 and Finger 2 row of the kit table"},
+  "icon-chest": {"source": "trioforge-icon2-chest.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Chest row of the kit table"},
+  "icon-legs": {"source": "trioforge-icon2-legs.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Legs row of the kit table"},
+  "icon-feet": {"source": "trioforge-icon2-feet.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Feet row of the kit table"},
+  "icon-waist": {"source": "trioforge-icon2-waist.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Waist row of the kit table"},
+  "icon-bow": {"source": "trioforge-icon2-bow.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Range row of the kit table"},
+  "icon-sword": {"source": "trioforge-icon2-sword.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Main hand row of the kit table"},
+  "crest-tank": {"source": "trioforge-crest-tank.png", "kind": "still", "size": [32, 32], "background": "#ffffff", "crop": "auto", "scale": 1, "use": "beside the Tank role choice"},
+  "crest-damage": {"source": "trioforge-crest-damage.png", "kind": "still", "size": [32, 32], "background": "#ffffff", "crop": "auto", "scale": 1, "use": "beside the Melee and Caster role choice"},
+  "lost": {"source": "trioforge-lost.png", "kind": "still", "size": [160, 100], "background": null, "scale": 2, "use": "the 404 page"},
+  "icon-arms": {"source": "trioforge-icon2-arms.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Arms row of the kit table"},
+  "icon-back": {"source": "trioforge-icon2-back.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Back row of the kit table"}
+ }
+}

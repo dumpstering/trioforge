@@ -1,0 +1,26 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "pages": [
+   {
+    "pageid": 77,
+    "ns": 0,
+    "title": "Patch Notes",
+    "revisions": [
+     {
+      "revid": 150100,
+      "parentid": 150000,
+      "timestamp": "2026-10-10T12:00:00Z",
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "== 2026-10-10 ==\n* An invented change to the Zorblax Ring.\n* Another invented line.\n"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

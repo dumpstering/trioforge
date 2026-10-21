@@ -46,8 +46,9 @@ afterEach(() => {
 // ---- the page, the site and the stand-in ------------------------------------------------------------------------------------------------------------
 
 /** The page with its code started, a site that serves the manifest, the item table and the page's own views, and the stand-in for the optimizer. */
-function open({ search = "", offline = [], consent = "granted", engine = fakeEngine(), loadWeights, site = makeSite(), tableFails = false, tableGate = null, footer = "", gate = null, hold = null } = {}) {
+function open({ search = "", offline = [], consent = "granted", engine = fakeEngine(), loadWeights, site = makeSite(), tableFails = false, tableGate = null, footer = "", gate = null, hold = null, ev = "wiki" } = {}) {
   mountPage(footer);
+  document.getElementById("main").dataset.ev = ev; // (the one evidence level the page is made from: the reference cases are wiki views)
   window.history.replaceState(null, "", `/trio/pal-mnk-ber/${search}`);
   site.files.set(MAIN, encode(site.manifestJson));
   const net = siteFetch(site);
@@ -118,9 +119,9 @@ async function openWeights(t) {
   await t.app.whenIdle();
   expect($$("#assume-weights input[type=radio]")).toHaveLength(15);
 }
-/** The reference's view on the page: the wiki evidence (a view of its own), and the sliders in hand. */
+/** The reference's view on the page: the page is made from the wiki level, so a change event on the buffs it already has makes it read the wiki view; the sliders in hand. */
 async function wikiView(t) {
-  choose("#ev-wiki");
+  choose("#buffs-own");
   await t.app.whenIdle();
   await openWeights(t);
 }
@@ -171,7 +172,6 @@ describe("the Buffs and Weights controls in the page as the generator writes it"
     const t = open();
     await t.app.whenIdle();
     choose("#buffs-group"); // the buffs the answers are precomputed for, and every other switch, are the page's own
-    choose("#ev-wiki");
     $("#sw-tier").value = "10";
     change($("#sw-tier"));
     await t.app.whenIdle();
@@ -297,7 +297,7 @@ describe("a request for the best kit", () => {
     expect(t.engine.runs[0].request.weights).toEqual({ multipliers: { AC: 2, SV: 0.5, regen: 2 } });
   });
 
-  it("changes exactly the field of the switch that was changed: the race, the role, the tier, the weapons, the evidence and the buffs", async () => {
+  it("changes exactly the field of the switch that was changed: the race, the role, the tier, the weapons and the buffs", async () => {
     const t = open();
     await wikiView(t);
     choose(slider(0, "2"));
@@ -335,10 +335,6 @@ describe("a request for the best kit", () => {
     const role = await ask(() => choose("#role-tank"));
     expect(role).toContain("scenario.role");
     expect(role.every((field) => ["scenario.role", "scenario.setup"].includes(field)), "(the role's best weapons follow the role)").toBe(true);
-    // the evidence last: it is the switch that changes the view's data file, and the answer for it is asked for with the same sliders
-    choose("#role-balanced");
-    await sent(t, ++count);
-    expect(await ask(() => choose("#ev-strict"))).toEqual(["scenario.evidence"]);
   }, 30_000);
 
   it("carries the four buff sets: own, common group buffs, common group buffs with an Enchanter, and the full raid", async () => {
@@ -385,10 +381,9 @@ describe("a request for the best kit", () => {
     expect(t.engine.runs[1].request).not.toHaveProperty("weights");
   });
 
-  it("is not sent for what the shards answer: x1 everywhere with the own buffs or the common group buffs, at any evidence, race, role, tier or weapons", async () => {
+  it("is not sent for what the shards answer: x1 everywhere with the own buffs or the common group buffs, at any race, role, tier or weapons", async () => {
     const t = open();
     await t.app.whenIdle();
-    choose("#ev-wiki");
     choose("#buffs-group");
     $("#sw-tier").value = "10";
     change($("#sw-tier"));
@@ -458,7 +453,6 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect(ANNOUNCED).toEqual(["Weights armor class x2. Solved for your settings. Showing Ogre, Balanced, +4, Dual wield. Kit value 19,069."]);
     // the rows are the shard's rows: a name that is a link where the page links its items, the deity badge and the seal of the item's level
     const row = $$("#kit-body tr")[0];
-    expect(row.querySelector('[data-f="seal"]').textContent).toBe("Wiki");
     expect(row.querySelector('[data-f="arrival"]').textContent).toBe("+4");
     expect(row.querySelector('[data-f="source"]').textContent).toBe("Plane of Fear");
     expect($$("#kit-body tr")[7].querySelector('[data-f="arrival"]').textContent).toBe("+0"); // (a crafted item arrives at +0)
@@ -583,7 +577,7 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect($("#main").classList.contains("solved")).toBe(false);
     expect(t.engine.runs).toHaveLength(1);
     expect(document.activeElement.id).toBe("wear-h");
-    expect(query()).toMatchObject({ ev: "wiki", buffs: "group" });
+    expect(query()).toMatchObject({ buffs: "group" });
     expect(query()).not.toHaveProperty("w");
     expect(ANNOUNCED).toHaveLength(1);
     expect(ANNOUNCED[0]).toMatch(/^Back at the precomputed answer\. Showing .+\. Kit value [\d,]+\.$/);
@@ -729,11 +723,11 @@ describe("the address", () => {
   it("carries the buff set, and the slider positions as w= with a character for each group in the bundle's order (h, 1 or 2), and leaves w out when every slider is at x1", async () => {
     const t = open();
     await wikiView(t);
-    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "4", ev: "wiki", buffs: "own" });
+    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "4", buffs: "own" });
     choose(slider(0, "2"));
     choose(slider(3, "h"));
     await sent(t, 1);
-    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "4", ev: "wiki", buffs: "own", w: "211h1" });
+    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "4", buffs: "own", w: "211h1" });
   });
 
   it("writes each buff set by its name, the Enchanter's group as enchanter: a word with no plus sign to be read as a space (G4)", async () => {
@@ -761,7 +755,7 @@ describe("the address", () => {
     await wikiView(t);
     choose(slider(1, "2"));
     await sent(t, 1);
-    expect(Object.keys(query()).sort()).toEqual(["buffs", "ev", "race", "role", "tier", "w"]);
+    expect(Object.keys(query()).sort()).toEqual(["buffs", "race", "role", "tier", "w"]);
     // gear in the Upgrade section never goes in the address (here it is added by name)
     $("#upgrade-pick").dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     await t.app.whenIdle();
@@ -769,7 +763,7 @@ describe("the address", () => {
     choose(slider(2, "2"));
     await vi.waitFor(() => expect(t.engine.runs.length).toBeGreaterThanOrEqual(2));
     const search = window.location.search;
-    expect(Object.keys(query()).sort()).toEqual(["buffs", "ev", "race", "role", "tier", "w"]);
+    expect(Object.keys(query()).sort()).toEqual(["buffs", "race", "role", "tier", "w"]);
     expect(search).not.toMatch(/larkspur|8091|owned|lock|exclude|gear/i);
     expect(window.location.hash).toBe("");
   });
@@ -797,7 +791,7 @@ describe("the address", () => {
     expect(checkedOf("buffs")).toBe("group");
     expect($("#buffs-ench").checked).toBe(true);
     expect(text("#status"), "(it is a buff set, not a malformed address)").toBe("");
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=4&ev=strict&buffs=enchanter&w=2111h");
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=4&buffs=enchanter&w=2111h");
   });
 
   it("goes round: what the page writes opens the same view", async () => {
@@ -826,7 +820,7 @@ describe("the address", () => {
       expect(t.chunk, bad).not.toHaveBeenCalled();
       expect(text("#status"), bad).toMatch(/weights in the address/i);
       expect(text("#status"), bad).toMatch(/role's own weights are shown/i);
-      expect(window.location.search, bad).toBe("?race=OGR&role=balanced&tier=4&ev=strict&buffs=own");
+      expect(window.location.search, bad).toBe("?race=OGR&role=balanced&tier=4&buffs=own");
       // said once: the next change of the page clears it, and nothing says it again
       $("#sw-tier").value = "10";
       change($("#sw-tier"));
@@ -843,7 +837,7 @@ describe("the address", () => {
       expect(t.engine.runs, search).toHaveLength(0);
       expect(t.chunk, search).not.toHaveBeenCalled();
       expect(text("#status"), search).toMatch(/weights in the address/i);
-      expect(window.location.search, search).toBe("?race=OGR&role=balanced&tier=4&ev=strict&buffs=own");
+      expect(window.location.search, search).toBe("?race=OGR&role=balanced&tier=4&buffs=own");
       document.body.innerHTML = "";
     }
   });
@@ -859,10 +853,9 @@ describe("the address", () => {
   it("ignores a bad w and still reads the rest of the address", async () => {
     const t = open({ search: "?tier=10&ev=wiki&w=zz" });
     await t.app.whenIdle();
-    expect(checkedOf("ev")).toBe("wiki");
     expect($("#sw-tier").value).toBe("10");
     expect(text("#status")).toMatch(/weights in the address/i);
-    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "10", ev: "wiki", buffs: "own" });
+    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "10", buffs: "own" });
     expect(t.engine.runs).toHaveLength(0);
   });
 
@@ -873,7 +866,7 @@ describe("the address", () => {
     expect(t.engine.runs[0].request.weights).toEqual({ multipliers: { AC: 2, regen: 0.5 } });
     expect(checkedOf("buffs")).toBe("own");
     expect(positions()).toBe("2111h");
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=4&ev=strict&buffs=own&w=2111h");
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=4&buffs=own&w=2111h");
   });
 
   it("takes w=11111 for the role's own weights: no request", async () => {
@@ -918,7 +911,7 @@ describe("the lines that say what is assumed", () => {
     choose(slider(0, "2"));
     await sent(t, 1);
     expect(text("#assume-weights summary")).toBe("Weights: armor class x2, resists x0.5 change");
-    expect(text('[data-f="s-assumes"]')).toBe("dual wield, wiki evidence, your own buffs, armor class x2, resists x0.5");
+    expect(text('[data-f="s-assumes"]')).toBe("dual wield, your own buffs, armor class x2, resists x0.5");
     choose("#buffs-group");
     $("#buffs-ench").checked = true;
     change($("#buffs-ench"));
@@ -929,7 +922,7 @@ describe("the lines that say what is assumed", () => {
     expect(text('[data-f="assume-buffs"]')).toBe("full raid buffs");
     $("#weights-reset").click();
     await vi.waitFor(() => expect(text('[data-f="assume-weights"]')).toBe("role's own"));
-    expect(text('[data-f="s-assumes"]')).toBe("dual wield, wiki evidence, full raid buffs");
+    expect(text('[data-f="s-assumes"]')).toBe("dual wield, full raid buffs");
   });
 
   it("name, in the link that reports a problem, the answer the table shows, so that a report can be looked at as it was seen: the precomputed answer until the answer for the settings is drawn, then the settings (G7)", async () => {
@@ -937,15 +930,15 @@ describe("the lines that say what is assumed", () => {
     const t = open({ footer: `<p><a id="report-link" href="${report}">Report a problem</a></p>` });
     await wikiView(t);
     const shown = () => Object.fromEntries(new URL(new URL($("#report-link").getAttribute("href")).searchParams.get("page")).searchParams);
-    expect(shown()).toMatchObject({ race: "OGR", ev: "wiki", buffs: "own" });
+    expect(shown()).toMatchObject({ race: "OGR", buffs: "own" });
     expect(shown()).not.toHaveProperty("w");
     choose(slider(1, "2"));
     await sent(t, 1);
-    expect(shown(), "the table still shows the precomputed answer").toMatchObject({ race: "OGR", ev: "wiki", buffs: "own" });
+    expect(shown(), "the table still shows the precomputed answer").toMatchObject({ race: "OGR", buffs: "own" });
     expect(shown()).not.toHaveProperty("w");
     t.engine.runs[0].finish(result());
     await vi.waitFor(() => expect(text("#solve h3")).toBe(HEADING));
-    expect(shown(), "the answer for the sliders is shown").toMatchObject({ race: "OGR", ev: "wiki", buffs: "own", w: "12111" });
+    expect(shown(), "the answer for the sliders is shown").toMatchObject({ race: "OGR", buffs: "own", w: "12111" });
     choose("#buffs-raid");
     await sent(t, 2);
     expect(shown().buffs, "the table shows the common group buffs' answer while the raid is worked out").toBe("group");
@@ -1206,7 +1199,6 @@ describe("the last request wins", () => {
 
   it("draws only the answer to the last of ten changes: the running request's answer is stale and never drawn, eight are cancelled, one worker", async () => {
     const t = openReal();
-    choose("#ev-wiki");
     await t.app.whenIdle();
     await openWeights(t);
     listen();
@@ -1245,7 +1237,6 @@ describe("the last request wins", () => {
 
   it("never draws the answer of a request after the page went back to a precomputed answer", async () => {
     const t = openReal();
-    choose("#ev-wiki");
     await t.app.whenIdle();
     await openWeights(t);
     choose(slider(0, "2"));
@@ -1264,7 +1255,6 @@ describe("the last request wins", () => {
 
   it("shows no fault for a request that is no longer wanted", async () => {
     const t = openReal();
-    choose("#ev-wiki");
     await t.app.whenIdle();
     await openWeights(t);
     choose(slider(0, "2"));
@@ -1284,7 +1274,6 @@ describe("the last request wins", () => {
   it("draws nothing for the request that the Cancel of the loading panel ended, and a late word from the worker that was dropped changes nothing", async () => {
     window.sessionStorage.clear(); // (the yes of an earlier test of this file is not the visitor's here)
     const t = openReal({ panel: true });
-    choose("#ev-wiki");
     await t.app.whenIdle();
     await openWeights(t);
     listen();
@@ -1308,7 +1297,6 @@ describe("the last request wins", () => {
 
   it("keeps the path of the Upgrade section that the worker has when Stop is pressed on the request of the sliders that waits behind it: the worker is not stopped", async () => {
     const t = openReal();
-    choose("#ev-wiki");
     await t.app.whenIdle();
     await openWeights(t);
     $("#upgrade-pick").dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
@@ -1505,47 +1493,47 @@ describe("Stop and Try again", () => {
 });
 
 describe("an answer for a view the page is leaving", () => {
-  it("is neither drawn nor said while the next view loads, and the answer for the next view is: a slider at x2 on the wiki view, then Strict", async () => {
+  it("is neither drawn nor said while the next view loads, and the answer for the next view is: a slider at x2 on the own buffs, then the common group buffs", async () => {
     let release;
     const until = new Promise((resolve) => (release = resolve));
-    const t = open({ hold: { view: "strict-own", until } });
+    const t = open({ hold: { view: "wiki-group", until } });
     await wikiView(t);
     choose(slider(0, "2"));
     await sent(t, 1);
     const wikiRows = rowNames();
     listen();
-    choose("#ev-strict"); // the data of the strict view is on its way
+    choose("#buffs-group"); // the data of the group view is on its way
     await tick(30);
-    t.engine.runs[0].finish(result()); // the answer for the wiki view comes meanwhile
+    t.engine.runs[0].finish(result()); // the answer for the own-buffs view comes meanwhile
     await tick(150);
-    expect($("#main").classList.contains("solved"), "not drawn under Strict").toBe(false);
+    expect($("#main").classList.contains("solved"), "not drawn under the group buffs").toBe(false);
     expect(rowNames()).toEqual(wikiRows);
     expect(ANNOUNCED, "and not said").toEqual([]);
     release();
     await sent(t, 2);
-    expect(t.engine.runs[1].request.scenario.evidence).toBe("strict");
+    expect(t.engine.runs[1].request.scenario.buffs).toBe("group");
     t.engine.runs[1].finish(result());
     await vi.waitFor(() => expect(text("#solve h3")).toBe(HEADING));
     expect(ANNOUNCED).toHaveLength(1);
-    expect(ANNOUNCED[0]).toMatch(/^Evidence strict/i);
+    expect(ANNOUNCED[0]).toMatch(/^Buffs common group buffs/i);
   }, 30_000);
 
   it("is drawn after all when the next view cannot be loaded and the page stays where it was", async () => {
     let release;
     const until = new Promise((resolve) => (release = resolve));
-    const t = open({ hold: { view: "strict-own", until }, offline: ["strict-own"] });
+    const t = open({ hold: { view: "wiki-group", until }, offline: ["wiki-group"] });
     await wikiView(t);
     choose(slider(0, "2"));
     await sent(t, 1);
     listen();
-    choose("#ev-strict");
+    choose("#buffs-group");
     await tick(30);
     t.engine.runs[0].finish(result());
     await tick(150);
     expect($("#main").classList.contains("solved")).toBe(false);
-    release(); // the data of the strict view does not come: the page goes back to the wiki view
+    release(); // the data of the group view does not come: the page goes back to the own-buffs view
     await vi.waitFor(() => expect(text("#solve h3")).toBe(HEADING));
-    expect(checkedOf("ev")).toBe("wiki");
+    expect(checkedOf("buffs")).toBe("own");
     expect($("#main").classList.contains("solved")).toBe(true);
     expect(rowNames()).toEqual(AC2.kit.map((ident) => (ident === null ? "Leave empty" : nameOf(ident))));
     expect(ANNOUNCED).toHaveLength(1);
@@ -1642,7 +1630,7 @@ describe("the notes of the runner-ups and of the robust core", () => {
     choose(slider(0, "2"));
     await t.app.whenIdle();
     await vi.waitFor(() => expect($("#robust-na").hidden).toBe(false));
-    expect(text("#robust-na")).toBe("Not computed for this view. The checks were made with dual wield, strict evidence, your own buffs and the role's own weights. Change the assumptions back to see them.");
+    expect(text("#robust-na")).toBe("Not computed for this view. The checks were made with dual wield, your own buffs and the role's own weights. Change the assumptions back to see them.");
     expect($("#runnerups-na").hidden).toBe(false);
     expect(text("#runnerups-na")).toMatch(/and the role's own weights\)\. Change the assumptions back to see them\.$/);
   }, 30_000);
@@ -1678,20 +1666,20 @@ describe("an answer and the settings the page shows now (G1)", () => {
     // (held here with the page's own steps: the answer parked by the page loading another view is for the view that is still shown if the other cannot be had, and for no view if it can)
     let release;
     const until = new Promise((resolve) => (release = resolve));
-    const t = open({ hold: { view: "strict-own", until } });
+    const t = open({ hold: { view: "wiki-group", until } });
     await wikiView(t);
     choose(slider(0, "2"));
     await sent(t, 1);
-    choose("#ev-strict"); // the other view is loading
+    choose("#buffs-group"); // the other view is loading
     await tick(30);
     t.engine.runs[0].finish(result()); // parked
     await tick(100);
-    choose(slider(0, "h")); // and another change while it loads: the page will show strict at x0.5 (or nothing, if that cannot be had)
+    choose(slider(0, "h")); // and another change while it loads: the page will show the group buffs at x0.5 (or nothing, if that cannot be had)
     release();
     await sent(t, 2);
-    expect(t.engine.runs[1].request).toMatchObject({ scenario: { evidence: "strict" }, weights: { multipliers: { AC: 0.5 } } });
+    expect(t.engine.runs[1].request).toMatchObject({ scenario: { buffs: "group" }, weights: { multipliers: { AC: 0.5 } } });
     await tick(100);
-    expect($("#main").classList.contains("solved"), "the answer for wiki at x2 is nobody's now").toBe(false);
+    expect($("#main").classList.contains("solved"), "the answer for the own buffs at x2 is nobody's now").toBe(false);
     expect(text("#solve h3")).toBe("");
   }, 30_000);
 
@@ -1714,9 +1702,9 @@ describe("a failure to load the sliders' code, for a screen reader (G6)", () => 
 describe("the role's own weights, however the sliders came to be at x1 (G8)", () => {
   it("are said in the same words for an address with w at x1 everywhere, and for sliders moved and put back by hand", async () => {
     const own = () => [text('[data-f="assume-weights"]'), text('[data-f="s-assumes"]')];
-    const t = open({ search: "?ev=wiki&w=11111" });
+    const t = open({ search: "?tier=10&w=11111" });
     await t.app.whenIdle();
-    expect(own()).toEqual(["role's own", "dual wield, wiki evidence, your own buffs"]);
+    expect(own()).toEqual(["role's own", "dual wield, your own buffs"]);
     expect(query()).not.toHaveProperty("w");
     await openWeights(t);
     choose(slider(0, "2"));
@@ -1724,7 +1712,7 @@ describe("the role's own weights, however the sliders came to be at x1 (G8)", ()
     expect(text('[data-f="s-assumes"]')).toContain("armor class x2");
     choose(slider(0, "1")); // put back by hand
     await t.app.whenIdle();
-    expect(own()).toEqual(["role's own", "dual wield, wiki evidence, your own buffs"]);
+    expect(own()).toEqual(["role's own", "dual wield, your own buffs"]);
     expect(query()).not.toHaveProperty("w");
     expect(t.engine.runs).toHaveLength(1);
   }, 30_000);

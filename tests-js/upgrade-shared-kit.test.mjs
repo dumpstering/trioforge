@@ -64,8 +64,9 @@ afterEach(() => {
 });
 
 /** The page code on the contract page with a kit that came in the address. `delay(path)` may give a promise that a request waits for; `serve` answers for a path instead. */
-function open(kit, { made = makeSite(), delay, serve, loadEngine = async () => ({ valueOfKit, loadKitBundle }), release, evaluator = KITVALUE_BYTES, listed = true, loadShared, env } = {}) {
+function open(kit, { ev, made = makeSite(), delay, serve, loadEngine = async () => ({ valueOfKit, loadKitBundle }), release, evaluator = KITVALUE_BYTES, listed = true, loadShared, env } = {}) {
   mountPage();
+  if (ev !== undefined) document.getElementById("main").dataset.ev = ev; // (the one evidence level the page is made from: there is no switch for it)
   if (release !== undefined) document.getElementById("main").dataset.release = release;
   if (listed) made.manifestJson.kitvalue = { path: KITVALUE_PATH, bytes: KITVALUE_BYTES.length, gzip: 20, sha256: sha256(KITVALUE_BYTES) };
   if (!made.files.has(MAIN)) made.files.set(MAIN, new TextEncoder().encode(JSON.stringify(made.manifestJson))); // (the fake site of the engine tests serves the data files and the manifests of the trios)
@@ -111,9 +112,8 @@ const choose = (selector) => {
   radio.checked = true;
   radio.dispatchEvent(new Event("change", { bubbles: true }));
 };
-/** The page shows the view of a row of the reference (the evidence level, the role and the buffs), and the panel has worked the kit out again for it. */
+/** The page shows the view of a row of the reference (the role and the buffs; the evidence level is the one the page was opened with, `open(..., { ev: kit.evidence })`), and the panel has worked the kit out again for it. */
 async function showView(app, row, kit) {
-  choose(`input[name="ev"][value="${kit.evidence}"]`);
   choose(`input[name="role"][value="${row.role}"]`);
   choose(`input[name="buffs"][value="${row.buffs}"]`);
   await app.whenIdle();
@@ -205,13 +205,13 @@ describe("the value of a shared kit", () => {
   const RACE_WORDS = { OGR: "Ogre", TRL: "Troll", IKS: "IKS", HUM: "HUM" }; // (the contract copy of the page lists three races; the page shows the code of one it does not list)
   const BUFF_WORDS = { own: "your own buffs", group: "common group buffs" };
   const sentence = (kit, row) =>
-    `Kit value ${written(row)} for ${RACE_WORDS[kit.race]}, ${ROLE_WORDS[row.role]}, ${kit.evidence} evidence, ${BUFF_WORDS[row.buffs]}. Weapons: ${SETUP_WORDS[kit.setup]}, read from the kit's hands, at ${row.hasteAssumed}% haste.`;
+    `Kit value ${written(row)} for ${RACE_WORDS[kit.race]}, ${ROLE_WORDS[row.role]}, ${BUFF_WORDS[row.buffs]}. Weapons: ${SETUP_WORDS[kit.setup]}, read from the kit's hands, at ${row.hasteAssumed}% haste.`;
 
   it.each(reachable.map((row) => [`${KITS[row.kit].name} / ${row.role} / ${row.buffs}`, row]))(
     "is what Python's reference says for the kit, under the role, buffs and evidence level the page shows, and says the setup of the kit's hands and the haste: %s",
     async (_, row) => {
       const kit = KITS[row.kit];
-      const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })));
+      const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { ev: kit.evidence });
       await settled(app);
       await showView(app, row, kit);
       await vi.waitFor(() => expect(text("#shared-kit-value")).toBe(sentence(kit, row)), { timeout: 5000, interval: 10 });
@@ -221,7 +221,7 @@ describe("the value of a shared kit", () => {
   it("is the kit's own whatever weapon setup the page shows and whatever tier it shows, which move the haste the page's own answer is scored at", async () => {
     const kit = KITS[0];
     const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
-    const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })));
+    const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { ev: kit.evidence });
     await settled(app);
     await showView(app, row, kit);
     await vi.waitFor(() => expect(text("#shared-kit-value")).toBe(sentence(kit, row)), { timeout: 5000, interval: 10 });
@@ -246,17 +246,13 @@ describe("the value of a shared kit", () => {
 
   it("is worked out for the race of the kit, not the race the page shows", async () => {
     const kit = KITS[0];
-    const { app } = open(fromLink(link({ race: "TRL", slots: slotsOfKit(kit) })));
+    const { app } = open(fromLink(link({ race: "TRL", slots: slotsOfKit(kit) })), { ev: "wiki" });
     await settled(app);
-    choose('input[name="ev"][value="wiki"]');
-    await app.whenIdle();
-    await vi.waitFor(() => expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Troll, Balanced, wiki evidence, your own buffs\./), { timeout: 5000, interval: 10 });
+    await vi.waitFor(() => expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Troll, Balanced, your own buffs\./), { timeout: 5000, interval: 10 });
     const asTroll = numberShown();
     document.body.replaceChildren();
-    const again = open(fromLink(link({ race: "OGR", slots: slotsOfKit(kit) })));
+    const again = open(fromLink(link({ race: "OGR", slots: slotsOfKit(kit) })), { ev: "wiki" });
     await settled(again.app);
-    choose('input[name="ev"][value="wiki"]');
-    await again.app.whenIdle();
     await vi.waitFor(() => expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Ogre/), { timeout: 5000, interval: 10 });
     expect(numberShown(), "an Ogre and a Troll are different characters").not.toBe(asTroll);
   });
@@ -264,7 +260,7 @@ describe("the value of a shared kit", () => {
   it("changes with the role switch, and with the buffs, and each is the reference's number for that view", async () => {
     const kit = KITS[0];
     const rowOf = (role, buffs) => KIT_VALUES.values.find((one) => one.kit === 0 && one.role === role && one.buffs === buffs);
-    const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })));
+    const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { ev: kit.evidence });
     await settled(app);
     const seen = [];
     for (const [role, buffs] of [["balanced", "own"], ["melee", "own"], ["melee", "group"], ["balanced", "group"]]) {
@@ -279,7 +275,7 @@ describe("the value of a shared kit", () => {
     const kit = KITS[0];
     const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
     const lowerBound = async () => ({ valueOfKit: (args) => ({ ...valueOfKit(args), exact: false }), loadKitBundle });
-    const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { loadEngine: lowerBound });
+    const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { loadEngine: lowerBound, ev: kit.evidence });
     const aloud = [];
     new MutationObserver(() => aloud.push($("#announce").textContent)).observe($("#announce"), { childList: true, characterData: true, subtree: true });
     await settled(app);
@@ -287,7 +283,7 @@ describe("the value of a shared kit", () => {
     await vi.waitFor(
       () =>
         expect(text("#shared-kit-value")).toBe(
-          `Kit value at least ${written(row)} for Ogre, Balanced, wiki evidence, your own buffs. Weapons: dual wield, read from the kit's hands, at ${row.hasteAssumed}% haste. The best buffs were not searched out completely, so the kit may be worth more.`,
+          `Kit value at least ${written(row)} for Ogre, Balanced, your own buffs. Weapons: dual wield, read from the kit's hands, at ${row.hasteAssumed}% haste. The best buffs were not searched out completely, so the kit may be worth more.`,
         ),
       { timeout: 5000, interval: 10 },
     );
@@ -300,7 +296,7 @@ describe("the value of a shared kit", () => {
     const stick = async () => ({ valueOfKit: (args) => ({ ...valueOfKit(args), setup: "stick", hasteAssumed: 77 }), loadKitBundle });
     const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { loadEngine: stick });
     await settled(app);
-    expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Ogre, Balanced, strict evidence, your own buffs\. Weapons: stat stick, read from the kit's hands\.$/);
+    expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Ogre, Balanced, your own buffs\. Weapons: stat stick, read from the kit's hands\.$/);
   });
 
   it("leaves out an item that cannot be worn where the link puts it, says so in its row and in the value, and counts the others", async () => {

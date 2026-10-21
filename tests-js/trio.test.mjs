@@ -88,7 +88,6 @@ const rowCells = () =>
       arrival: f("arrival"),
       reach: f("reach"),
       source: f("source"),
-      seal: f("seal"),
       deity: f("deity"),
     };
   });
@@ -109,6 +108,10 @@ describe("the baked page the tests start from", () => {
     expect($("#sw-race").value).toBe("OGR");
     expect($("#sw-tier").value).toBe("4");
     expect(shownSetup()).toBe("dw");
+    // wiki is the one evidence level: no seal column in the rows, no picker or note about the evidence, and no evidence in the line of the assumptions
+    expect(document.querySelector('#kit-body [data-f="seal"], #kit-body [data-f="seal-icon"]')).toBeNull();
+    expect(document.querySelector('input[name="ev"], #assume-evidence, #evidence-note, [data-f="assume-ev"]')).toBeNull();
+    expect(document.querySelector("#best-race-view").textContent).toBe("Balanced view at +4 with your own buffs");
   });
 });
 
@@ -129,18 +132,17 @@ describe("switching the tier", () => {
       expect(rows[index].arrival).toBe(`+${item[3]}`);
       expect(rows[index].reach).toBe(`${fmt(2 ** (10 - item[3]))} copies to reach +10`);
       expect(rows[index].source).toBe(item[4]);
-      expect(rows[index].seal).toBe("Seen in game");
     }
     expect($("#kit caption").textContent).toContain("+10");
     // dual wield is the role's best setup here and the visitor did not choose it, so the address does not pin it
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&ev=strict&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
   });
 
   it("keeps the fragment of the address when a switch changes it", async () => {
     const { app } = mount("#robust");
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&ev=strict&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
     expect(window.location.hash).toBe("#robust");
     change($("#sw-tier"), "0"); // and it stays through the next change
     await app.whenIdle();
@@ -227,20 +229,7 @@ describe("switching the tier", () => {
   });
 });
 
-describe("switching the race, the role, the evidence and the buffs", () => {
-  it("loads the wiki shard for wiki evidence and badges a wiki-only item", async () => {
-    const { app, calls } = mount();
-    change($("#sw-tier"), "10");
-    await app.whenIdle();
-    choose("#ev-wiki");
-    await app.whenIdle();
-    expect(calls.at(-1)).toBe("/data/pal-mnk-ber/wiki-own.json");
-    const head = rowCells()[0];
-    expect(head.name).toBe("Crown of the Vanguard");
-    expect(head.seal).toBe("Wiki");
-    expect($('[data-f="assume-ev"]').textContent).toBe("wiki evidence");
-    expect(window.location.search).toContain("ev=wiki");
-  });
+describe("switching the race, the role and the buffs", () => {
 
   it("loads the group-buff shard for common group buffs", async () => {
     const { app, calls } = mount();
@@ -427,10 +416,9 @@ describe("the address and the weapon setup", () => {
   });
 });
 
-// ---- an evidence level with fewer setups --------------------------------------------------------------------------------------------
-// The weapon setups follow the item pool of each evidence level. A strict pool with no shield the trio can wear has no 1H + shield
-// setup, while the wiki pool, which has one, does: the strict shards then have no rows for it. The page code reads the setups of
-// the level it shows, so the choice must come and go with the level.
+// ---- a data file with fewer setups --------------------------------------------------------------------------------------------
+// The weapon setups follow the item pool of the data file. A pool with no shield the trio can wear has no 1H + shield setup, so its shards have no rows for
+// it. The page code reads the setups of the file it shows, so the choice must come and go with the file.
 
 /** The strict data files as a run writes them when the strict pool has no shield: the rows of the shield setup are not there. */
 function noStrictShield() {
@@ -444,60 +432,10 @@ function noStrictShield() {
 
 const shieldRadio = () => document.querySelector('input[name="setup"][value="1h-shield"]');
 
-describe("an evidence level that has no shield setup", () => {
-  it("is never offered it, and the other level offers it again", async () => {
-    const { app } = mount("", noStrictShield());
-    choose("#role-tank");
-    await app.whenIdle();
-    expect(offeredSetups()).toEqual(["2h", "dw"]);
-    expect(shieldRadio().hidden && shieldRadio().disabled && shieldRadio().closest(".opt").hidden).toBe(true);
-    expect(shownSetup()).toBe("dw"); // the best setup the level has for a Tank, not the shield
-    expect(status()).toBe("");
-    choose("#ev-wiki");
-    await app.whenIdle();
-    expect(offeredSetups()).toEqual(["1h-shield", "2h", "dw"]);
-    expect(shieldRadio().hidden || shieldRadio().disabled || shieldRadio().closest(".opt").hidden).toBe(false);
-    expect(shownSetup()).toBe("1h-shield"); // the wiki level's best for a Tank
-    choose("#ev-strict");
-    await app.whenIdle();
-    expect(offeredSetups()).toEqual(["2h", "dw"]);
-    expect(shieldRadio().disabled).toBe(true);
-    expect(shownSetup()).toBe("dw");
-  });
+describe("a data file that has no shield setup", () => {
 
   // (the shield is a choice here only for a role whose best setup it is not: for the Balanced role the best is dual wield. For a role
   // whose best it is, naming it is following the best, and a level without it simply shows that level's best: see the test after.)
-  it("shows the level's best setup and says so when a change of evidence strands the shield that was chosen", async () => {
-    const { app } = mount("?role=balanced&ev=wiki&setup=1h-shield", noStrictShield());
-    await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield");
-    expect(status()).toBe("");
-    choose("#ev-strict");
-    await app.whenIdle();
-    expect(shownSetup()).toBe("dw");
-    expect(offeredSetups()).toEqual(["2h", "dw"]);
-    expect(status()).toMatch(/1H \+ shield is not available for this role/i);
-    expect(status()).toMatch(/Dual wield/);
-    expect(window.location.search).toContain("ev=strict");
-    expect(window.location.search).not.toContain("setup="); // the level's best is shown, and was not chosen
-    const want = scenarioOf("strict-own", "OGR", "balanced", 4, "dw");
-    expect(rowCells()[20].name).toBe(want.kit[20][1]);
-    expect(rowCells()[21].name).toBe(want.kit[21] ? want.kit[21][1] : "Leave empty");
-  });
-
-  it("follows the best of each level when the shield is the role's best, and has nothing to say about it", async () => {
-    const { app } = mount("?role=tank&ev=wiki", noStrictShield());
-    await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield"); // the wiki level's best for a Tank, which nobody chose
-    choose("#ev-strict");
-    await app.whenIdle();
-    expect(shownSetup()).toBe("dw"); // the strict level has no shield: its best is shown
-    expect(status()).toBe("");
-    choose("#ev-wiki");
-    await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield");
-    expect(status()).toBe("");
-  });
 
   it("shows the file's best setup and says so when a change of buffs moves to a file that lacks the shield that was chosen", async () => {
     // each data file carries its own setups: here only the group-buff file of the strict level has no shield rows
@@ -524,7 +462,7 @@ describe("an evidence level that has no shield setup", () => {
     expect(status()).toBe("");
   });
 
-  it("falls back the same way from a link that asks for the shield under strict evidence", async () => {
+  it("falls back the same way from a link that asks for a shield that the file lacks", async () => {
     const { app } = mount("?role=tank&setup=1h-shield", noStrictShield());
     await app.whenIdle();
     expect(shownSetup()).toBe("dw");
@@ -547,14 +485,15 @@ describe("reading the link", () => {
   it("shows the view a full link describes", async () => {
     const { app, calls } = mount("?race=TRL&role=tank&tier=0&setup=2h&ev=wiki&buffs=group");
     await app.whenIdle();
-    expect(calls).toEqual(["/data/pal-mnk-ber/wiki-group.json"]);
-    const want = scenarioOf("wiki-group", "TRL", "tank", 0, "2h");
+    expect(calls).toEqual(["/data/pal-mnk-ber/strict-group.json"]); // (the ev of the link is ignored: the page reads the one evidence level it is made from)
+    const want = scenarioOf("strict-group", "TRL", "tank", 0, "2h");
     expect(rowCells().map((r) => r.name)).toEqual(want.kit.map((item) => (item ? item[1] : "Leave empty")));
     expect($("#sw-race").value).toBe("TRL");
     expect($("#role-tank").checked).toBe(true);
     expect($("#sw-tier").value).toBe("0");
     expect(shownSetup()).toBe("2h");
-    expect($("#ev-wiki").checked && $("#buffs-group").checked).toBe(true);
+    expect($("#buffs-group").checked).toBe(true);
+    expect(window.location.search).not.toContain("ev=");
     expect($('[data-f="assume-setup"]').textContent).toBe("two-hander");
   });
 
@@ -575,7 +514,7 @@ describe("reading the link", () => {
 
   // A value that means nothing is read as the default, and the address is brought back to the view that is shown, so that the link
   // a visitor copies from the address bar is a link to that view and not a malformed one that merely looks like it.
-  const DEFAULT_ADDRESS = "?race=OGR&role=balanced&tier=4&ev=strict&buffs=own";
+  const DEFAULT_ADDRESS = "?race=OGR&role=balanced&tier=4&buffs=own";
 
   // The tier switch is the tiers the shards of the trio have (a run is of a scope: +0, +4 and +10 for most trios), and nothing else is offered. A link that names
   // a tier of the game that this page has no data for is read as a value that means nothing.
@@ -593,7 +532,7 @@ describe("reading the link", () => {
     await other.app.whenIdle();
     expect($("#sw-tier").value).toBe("4");
     expect(document.querySelector('input[name="role"]:checked').value).toBe("tank");
-    expect(window.location.search).toBe("?race=OGR&role=tank&tier=4&ev=strict&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=4&buffs=own");
     for (const tier of ["0", "4", "10"]) {
       const offered = mount(`?tier=${tier}`); // and each tier it offers is one a link can name
       await offered.app.whenIdle();
@@ -610,7 +549,7 @@ describe("reading the link", () => {
     expect(status()).toBe("");
   });
 
-  for (const bad of ["race=XXX", "role=healer", "tier=99", "tier=four", "tier=", "tier=7", "tier=1", "tier=11", "ev=nope", "buffs=lots", "setup=bow", "race=", "setup=", "race=ogr"]) {
+  for (const bad of ["race=XXX", "role=healer", "tier=99", "tier=four", "tier=", "tier=7", "tier=1", "tier=11", "buffs=lots", "setup=bow", "race=", "setup=", "race=ogr"]) {
     it(`treats ${bad} as the default and writes the default address`, async () => {
       const { app, calls } = mount("?" + bad);
       await app.whenIdle();
@@ -619,6 +558,21 @@ describe("reading the link", () => {
     });
   }
 
+  // An ev is taken and ignored, and is never a value that means nothing: addresses written before wiki became the one evidence level carry it.
+  it("takes an ev of a link and ignores it: not malformed, not written back, and no other shard is read for it", async () => {
+    for (const search of ["?ev=nope", "?ev=wiki", "?ev=strict", "?ev="]) {
+      const { app, calls } = mount(search);
+      await app.whenIdle();
+      expect(calls, search).toEqual([]);
+      expect(window.location.search, search).toBe(search); // (the baked view, and a link whose other values are all clear: left as it is)
+    }
+    const { app, calls } = mount("?ev=wiki&tier=10");
+    await app.whenIdle();
+    expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own"); // (the address written has none)
+    expect(status()).toBe("");
+  });
+
   it("writes the default address for one bad value among good ones, and keeps the good ones that ask for another view", async () => {
     const quiet = mount("?race=OGR&role=balanced&tier=nope");
     await quiet.app.whenIdle();
@@ -626,7 +580,7 @@ describe("reading the link", () => {
     const { app, calls } = mount("?tier=10&race=ZZZ"); // a view that is not the baked one: loaded, and its address written whole
     await app.whenIdle();
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&ev=strict&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
     expect($("#sw-tier").value).toBe("10");
   });
 
@@ -900,9 +854,9 @@ describe("runner-ups and the robust core", () => {
     expect(chest.querySelector('[data-f="r-delta"]').textContent).toBe(fmt(Math.round(view[3][13][0][1]))); // worse than the pick
   });
 
-  it("are for the default assumptions only: the wiki view says so instead, and fetches nothing", async () => {
+  it("are for the default assumptions only: another view says so instead, and fetches nothing", async () => {
     const { app, calls } = mount();
-    choose("#ev-wiki");
+    choose("#buffs-group");
     await app.whenIdle();
     openDetails("#runnerups");
     await app.whenIdle();
@@ -994,8 +948,7 @@ describe("runner-ups and the robust core", () => {
     expect(items.some((t) => t.startsWith("Chest: ") && t.includes("depends on the Monk curve (test B9)"))).toBe(true);
   });
 
-  // The seals are made for one view of each role and tier: the default race, the default evidence level, own buffs and the role's
-  // best weapon setup. Any other view gets the note, never the seals of a kit it does not show.
+  // The seals are made for one view of each role and tier: the default race, own buffs and the role's best weapon setup. Any other view gets the note, never the seals of a kit it does not show.
   describe("show the robust core for the exact view it was made for", () => {
     const sealsShown = () => !$("#robust-summary").hidden && $("#robust-na").hidden;
     const notComputed = () => $("#robust-summary").hidden && $("#robust-list").hidden && !$("#robust-na").hidden;
@@ -1006,7 +959,7 @@ describe("runner-ups and the robust core", () => {
       await app.whenIdle();
       openDetails("#robust");
       await app.whenIdle();
-      expect(sealsShown()).toBe(true); // Ogre, Balanced, +10, dual wield, strict, own buffs: what the seals were made for
+      expect(sealsShown()).toBe(true); // Ogre, Balanced, +10, dual wield, own buffs: what the seals were made for
       return { app, calls };
     }
 
@@ -1018,18 +971,6 @@ describe("runner-ups and the robust core", () => {
       expect($("#robust-na").textContent).toMatch(/not computed for this view/i);
       expect($("#robust-na").textContent).toMatch(/dual wield/i); // what it was computed for
       choose("#setup-dw");
-      await app.whenIdle();
-      expect(sealsShown()).toBe(true);
-    });
-
-    it("says it was not computed for another evidence level", async () => {
-      const { app } = await atTen();
-      choose("#ev-wiki");
-      await app.whenIdle();
-      expect(notComputed()).toBe(true);
-      expect($("#robust-na").textContent).toMatch(/not computed for this view/i);
-      expect($("#robust-na").textContent).toMatch(/strict evidence/i);
-      choose("#ev-strict");
       await app.whenIdle();
       expect(sealsShown()).toBe(true);
     });
@@ -1113,11 +1054,9 @@ describe("a summoned item", () => {
 
 // ---- the answer taken from the wiki level while nothing is strict ------------------------------------------------------------------
 
-describe("a page whose default evidence is the wiki level", () => {
+describe("a page that is made from the wiki level", () => {
   function mountWiki(behaviour = {}) {
-    const html = text("trio-main.html")
-      .replace('id="ev-strict" value="strict" data-phrase="strict evidence" checked', 'id="ev-strict" value="strict" data-phrase="strict evidence"')
-      .replace('id="ev-wiki" value="wiki" data-phrase="wiki evidence"', 'id="ev-wiki" value="wiki" data-phrase="wiki evidence" checked');
+    const html = text("trio-main.html").replace('data-ev="strict"', 'data-ev="wiki"'); // (what a release writes: the one level the page reads)
     expect(html).not.toBe(text("trio-main.html"));
     document.body.innerHTML = html;
     window.history.replaceState(null, "", "/trio/pal-mnk-ber/");
@@ -1138,23 +1077,13 @@ describe("a page whose default evidence is the wiki level", () => {
     expect($("#runnerups-table").hidden).toBe(false);
   });
 
-  it("says the runner-ups are for the default assumptions only when strict is chosen", async () => {
-    const { app, calls } = mountWiki();
-    choose("#ev-strict");
-    await app.whenIdle();
-    openDetails("#runnerups");
-    await app.whenIdle();
-    expect($("#runnerups-na").hidden).toBe(false);
-    expect($("#runnerups-table").hidden).toBe(true);
-    expect(runnerupCalls(calls)).toEqual([]);
-    expect(window.location.search).toContain("ev=strict");
-  });
-
   it("treats the baked evidence as the default, so a plain address changes nothing", async () => {
     const { app, calls } = mountWiki();
     await app.whenIdle();
     expect(calls).toEqual([]);
-    expect($("#ev-wiki").checked).toBe(true);
+    choose("#buffs-group");
+    await app.whenIdle();
+    expect(calls).toEqual(["/data/pal-mnk-ber/wiki-group.json"]); // (the buff set changes, the level stays)
   });
 });
 
@@ -1198,29 +1127,28 @@ describe("the line that says what is shown", () => {
 
   it("says the race, the role and the tier, and the assumptions, as the page arrives", () => {
     mount();
-    expect(line()).toBe("Showing Ogre · Balanced · +4 dual wield, strict evidence, your own buffs");
+    expect(line()).toBe("Showing Ogre · Balanced · +4 dual wield, your own buffs");
   });
 
   it("follows every change of the view", async () => {
     const { app } = mount();
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(line()).toBe("Showing Ogre · Balanced · +10 dual wield, strict evidence, your own buffs");
+    expect(line()).toBe("Showing Ogre · Balanced · +10 dual wield, your own buffs");
     choose("#role-tank");
     await app.whenIdle();
-    expect(line()).toBe("Showing Ogre · Tank · +10 1H + shield, strict evidence, your own buffs");
+    expect(line()).toBe("Showing Ogre · Tank · +10 1H + shield, your own buffs");
     change($("#sw-race"), "TRL");
-    choose("#ev-wiki");
     choose("#buffs-group");
     await app.whenIdle();
-    expect(line()).toBe("Showing Troll · Tank · +10 1H + shield, wiki evidence, common group buffs");
+    expect(line()).toBe("Showing Troll · Tank · +10 1H + shield, common group buffs");
   });
 
   it("is untouched by a view that fails to load", async () => {
     const { app } = mount("", { "strict-own": "offline" });
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(line()).toBe("Showing Ogre · Balanced · +4 dual wield, strict evidence, your own buffs");
+    expect(line()).toBe("Showing Ogre · Balanced · +4 dual wield, your own buffs");
   });
 });
 
@@ -1252,15 +1180,14 @@ describe("what a change of a switch announces", () => {
     expect(said()).toBe(`Weapons Two-hander. Showing Troll, Tank, +4, Two-hander. Kit value ${value("strict-own", "TRL", "tank", 4, "2h")}.`);
   });
 
-  it("names the buffs and the evidence, which the line of what is shown does not repeat", async () => {
+  it("names the buffs, which the line of what is shown does not repeat", async () => {
     const { app } = mount();
     choose("#buffs-group");
     await app.whenIdle();
     expect(said()).toBe(`Buffs common group buffs. Showing Ogre, Balanced, +4, Dual wield. Kit value ${value("strict-group", "OGR", "balanced", 4, "dw")}.`);
     choose("#buffs-own");
-    choose("#ev-wiki");
     await app.whenIdle();
-    expect(said()).toBe(`Evidence wiki evidence. Showing Ogre, Balanced, +4, Dual wield. Kit value ${value("wiki-own", "OGR", "balanced", 4, "dw")}.`);
+    expect(said()).toBe(`Buffs your own buffs. Showing Ogre, Balanced, +4, Dual wield. Kit value ${value("strict-own", "OGR", "balanced", 4, "dw")}.`);
   });
 
   it("is not the same text for two changes, even where the view and its value are alike", async () => {
@@ -1271,7 +1198,7 @@ describe("what a change of a switch announces", () => {
     choose("#buffs-own");
     await app.whenIdle();
     const second = said();
-    choose("#ev-wiki");
+    change($("#sw-race"), "TRL");
     await app.whenIdle();
     expect(new Set([first, second, said()]).size).toBe(3);
   });
@@ -1315,7 +1242,6 @@ describe("the status message, its Try again button and the focus", () => {
       [() => choose("#role-tank"), "The role is back at Balanced."],
       [() => choose("#setup-2h"), "The weapons are back at Dual wield."],
       [() => choose("#buffs-group"), "The buffs are back at your own buffs."],
-      [() => choose("#ev-wiki"), "The evidence is back at strict evidence."],
     ];
     for (const [act, words] of cases) {
       const { app } = mount("", { "strict-own": "offline", "strict-group": "offline", "wiki-own": "offline" });
@@ -1540,13 +1466,13 @@ describe("the expanders while the file of a new view loads", () => {
 // The page is baked with every switch disabled: without the page code there is nothing to switch to, and a control that does nothing says so.
 
 describe("the switches before and after the page code", () => {
-  const SWITCH = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], input[name="ev"]';
+  const SWITCH = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"]';
   const controls = () => [...document.querySelectorAll(SWITCH)];
   const disabled = () => controls().filter((control) => control.disabled).map((control) => control.id);
 
   it("are all disabled in the page as it is baked", () => {
     document.body.innerHTML = text("trio-main.html");
-    expect(controls().length).toBeGreaterThanOrEqual(12);
+    expect(controls().length).toBeGreaterThanOrEqual(10);
     expect(controls().filter((control) => !control.disabled).map((control) => control.id)).toEqual([]);
   });
 
@@ -1573,7 +1499,7 @@ describe("the history entry", () => {
     window.history.replaceState({ kit: "a1b2" }, "", window.location.href);
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&ev=strict&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
     expect(window.history.state).toEqual({ kit: "a1b2" });
   });
 
@@ -1589,7 +1515,7 @@ describe("the history entry", () => {
     window.history.replaceState({ kit: "c3d4" }, "", "/trio/pal-mnk-ber/?tier=10&role=tank");
     const app = initTrio({ document, window, fetch: makeFetch([], {}) });
     await app.whenIdle();
-    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&ev=strict&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&buffs=own");
     expect(window.history.state).toEqual({ kit: "c3d4" });
   });
 });
@@ -1689,10 +1615,10 @@ describe("the link that reports a problem", () => {
     const { app } = mount("", {}, { footer: footer() });
     await app.whenIdle();
     expect(link().getAttribute("href")).toBe(baked());
-    expect(parts(baked()).view).toEqual({ race: "OGR", role: "balanced", tier: "4", setup: "dw", ev: "strict", buffs: "own" });
+    expect(parts(baked()).view).toEqual({ race: "OGR", role: "balanced", tier: "4", setup: "dw", buffs: "own" });
   });
 
-  it("names the view that is shown: race, role, tier, weapons, evidence and buffs, with the weapons even where they are the role's best", async () => {
+  it("names the view that is shown: race, role, tier, weapons and buffs, with the weapons even where they are the role's best", async () => {
     const { app } = mount("", {}, { footer: footer() });
     change($("#sw-tier"), "10");
     choose("#role-tank");
@@ -1702,24 +1628,23 @@ describe("the link that reports a problem", () => {
     expect(now.start).toBe(first.start);
     expect(now.template).toBe(first.template);
     expect(now.page).toBe(first.page); // the address of the page as the build knows it, with the view for a query
-    expect(now.view).toEqual({ race: "OGR", role: "tank", tier: "10", setup: "1h-shield", ev: "strict", buffs: "own" });
+    expect(now.view).toEqual({ race: "OGR", role: "tank", tier: "10", setup: "1h-shield", buffs: "own" });
     expect(now.title).toBe(first.title); // the title names the page; the view is in the address of the page
     change($("#sw-race"), "TRL");
-    choose("#ev-wiki");
     choose("#buffs-group");
     choose("#setup-2h");
     await app.whenIdle();
-    expect(parts(link().getAttribute("href")).view).toEqual({ race: "TRL", role: "tank", tier: "10", setup: "2h", ev: "wiki", buffs: "group" });
+    expect(parts(link().getAttribute("href")).view).toEqual({ race: "TRL", role: "tank", tier: "10", setup: "2h", buffs: "group" });
   });
 
   it("is the very text the build wrote when the view is the one the page opened on again: the script and the build word it alike", async () => {
     const { app } = mount("", {}, { footer: footer() });
     change($("#sw-tier"), "10");
-    choose("#ev-wiki");
+    choose("#buffs-group");
     await app.whenIdle();
     expect(link().getAttribute("href")).not.toBe(baked());
     change($("#sw-tier"), "4");
-    choose("#ev-strict");
+    choose("#buffs-own");
     await app.whenIdle();
     expect(link().getAttribute("href")).toBe(baked());
   });
@@ -1727,7 +1652,7 @@ describe("the link that reports a problem", () => {
   it("follows the view a link asks for", async () => {
     const { app } = mount("?tier=10&role=tank", {}, { footer: footer() });
     await app.whenIdle();
-    expect(parts(link().getAttribute("href")).view).toEqual({ race: "OGR", role: "tank", tier: "10", setup: "1h-shield", ev: "strict", buffs: "own" });
+    expect(parts(link().getAttribute("href")).view).toEqual({ race: "OGR", role: "tank", tier: "10", setup: "1h-shield", buffs: "own" });
   });
 
   it("is not changed by a view that could not be loaded", async () => {

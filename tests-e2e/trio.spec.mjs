@@ -73,9 +73,6 @@ async function useTrio(page) {
   // then every other switch once, each of which loads or draws something
   const races = await optionValues(page, "#sw-race");
   await page.locator("#sw-race").selectOption(races.at(-1));
-  await page.locator("#assume-evidence > summary").click();
-  await pick(page, "ev-wiki");
-  await expect(page.locator('[data-f="assume-ev"]')).toHaveText("wiki evidence");
   await page.locator("#assume-buffs > summary").click();
   await pick(page, "buffs-group");
   await expect(page.locator('[data-f="assume-buffs"]')).toHaveText("common group buffs");
@@ -120,7 +117,7 @@ test.describe("keyboard", () => {
     await page.reload();
     await expect(page.locator("#theme-toggle")).toBeVisible();
     await openSwitches(page, { keyboard: true }); // on a phone the Change button comes first, then the switches it opens
-    const stops = ["#sw-race", 'input[name="role"]:checked', "#sw-tier", "#assume-buffs > summary", "#assume-weapons > summary", "#assume-evidence > summary"];
+    const stops = ["#sw-race", 'input[name="role"]:checked', "#sw-tier", "#assume-buffs > summary", "#assume-weapons > summary"];
     let limit = 20; // the skip link, the logo, the five links and the theme button come first
     for (const stop of stops) {
       await tabTo(page, stop, limit);
@@ -206,23 +203,6 @@ test.describe("keyboard", () => {
     expect(watch.problems()).toEqual([]);
   });
 
-  test("evidence: Tab to Change, Enter opens it, an arrow changes it, the table follows", async ({ page, request, watch }) => {
-    await open(page, TRIO);
-    const start = await arrival(page);
-    await openSwitches(page, { keyboard: true });
-    const shard = await loadShard(request, "wiki", start.controls.buffs);
-    await tabTo(page, "#assume-evidence > summary");
-    await page.keyboard.press("Enter");
-    await expect(page.locator("#assume-evidence")).toHaveJSProperty("open", true);
-    await tabTo(page, '#assume-evidence input[name="ev"]:checked', 3);
-    await page.keyboard.press("ArrowRight");
-    expect(await page.evaluate(() => document.activeElement?.value)).toBe("wiki");
-    await expectView(page, shard, { ...start.controls, ev: "wiki", setup: null, announced: "ev" });
-    await expect(page.locator('[data-f="assume-ev"]')).toHaveText("wiki evidence");
-    expect(queryOf(page)).toMatchObject({ ev: "wiki" });
-    expect(watch.problems()).toEqual([]);
-  });
-
   test("weapons: Tab to Change, Enter opens it, an arrow moves to the role's next setup, the table follows", async ({ page, request, watch }) => {
     await open(page, TRIO);
     const shard = await loadShard(request);
@@ -294,7 +274,7 @@ for (const [name, path] of PAGE_LIST) {
 test("axe: the trio page with every expander open and another view shown", async ({ page }, testInfo) => {
   await open(page, TRIO);
   await openSwitches(page);
-  for (const id of ["assume-buffs", "assume-weapons", "assume-evidence", "other-setups", "runnerups", "robust"]) {
+  for (const id of ["assume-buffs", "assume-weapons", "other-setups", "runnerups", "robust"]) {
     const summary = page.locator(`#${id} > summary`);
     if (await summary.isVisible()) await summary.click();
   }
@@ -411,7 +391,7 @@ test("the kit is a table on a wide window and stacked cards on a narrow one, wit
   else expect(display).toMatchObject({ row: "table-row", cell: "table-cell", head: "table-header-group" });
   // the semantics survive the layout: every slot is a row header and every column has a header
   await expect(page.locator("#kit-body").getByRole("rowheader")).toHaveCount(22);
-  await expect(page.locator("#kit").getByRole("columnheader")).toHaveCount(6);
+  await expect(page.locator("#kit").getByRole("columnheader")).toHaveCount(5); // (slot, item, tier, arrives at, source: no seal column)
 });
 
 test("the cards of a narrow window say what each small fact is, and a wide window has no such words", async ({ page }, testInfo) => {
@@ -421,7 +401,7 @@ test("the cards of a narrow window say what each small fact is, and a wide windo
     return { kit: before("#kit-body tr:first-child td"), totals: before("#totals-body tr:first-child td") };
   });
   if (testInfo.project.use.viewport.width <= 600) {
-    expect(labels.kit).toEqual(["none", '"Tier "', '"Arrives at "', '"Source "', "none"]);
+    expect(labels.kit).toEqual(["none", '"Tier "', '"Arrives at "', '"Source "']);
     expect(labels.totals).toEqual(["none", '"cap "', "none"]);
   } else {
     for (const content of [...labels.kit, ...labels.totals]) expect(content).toMatch(/^(none|normal)$/);
@@ -615,16 +595,16 @@ for (const [name, how] of Object.entries(BROKEN)) {
 
 test("when the answers to two choices arrive in the other order, the last choice is the one shown @once", async ({ page, request, watch }) => {
   const strict = await loadShard(request, "strict", "own");
-  await page.route(`**${DATA}wiki-own.json`, async (route) => {
+  await page.route(`**${DATA}strict-group.json`, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.continue();
   });
   await open(page, TRIO);
   const start = await arrival(page);
-  await page.locator("#assume-evidence > summary").click();
-  const slow = page.waitForResponse((r) => r.url().endsWith("/wiki-own.json"));
-  await pick(page, "ev-wiki"); // its answer is slow
-  await pick(page, "ev-strict"); // and the page asks again before it comes
+  await page.locator("#assume-buffs > summary").click();
+  const slow = page.waitForResponse((r) => r.url().endsWith("/strict-group.json"));
+  await pick(page, "buffs-group"); // its answer is slow
+  await pick(page, "buffs-own"); // and the page asks again before it comes
   await expectView(page, strict, { ...start.controls, setup: null });
   await slow;
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 150))); // the slow answer has been handled by now
@@ -639,7 +619,7 @@ test("an address that asks for a view that fails to load shows the default answe
   await page.goto(TRIO);
   await expect(page.locator("#theme-toggle")).toBeVisible();
   const start = await arrival(page);
-  await page.goto(`${TRIO}?tier=${await otherTier(page, start.controls.tier)}&ev=wiki`);
+  await page.goto(`${TRIO}?tier=${await otherTier(page, start.controls.tier)}&buffs=group`);
   await expect(page.locator("#status")).toContainText(STATUS_FAILED);
   expect(await readKit(page)).toEqual(start.kit);
   expect(await readControls(page)).toEqual(start.controls);
@@ -668,7 +648,7 @@ test("runner-ups that fail to load say so and leave the answer alone @once", asy
   expect(watch.problems(["console", "requestfailed", "http"])).toEqual([]);
 });
 
-// The seals are made for one view of each role and tier (the default race, the evidence level and buffs of the default answer, and the
+// The seals are made for one view of each role and tier (the default race, the buffs of the default answer, and the
 // role's best weapon setup). The page shows them for that view alone: for any other it would describe a kit that is not on the screen.
 test("the robust core shows its seals for the view they were made for and says it was not computed for any other @once", async ({ page, request, watch }) => {
   const robust = await (await request.get(`${DATA}robust.json`)).json();
@@ -693,12 +673,7 @@ test("the robust core shows its seals for the view they were made for and says i
   await missing();
   await pick(page, `setup-${start.controls.setup}`);
   await shown();
-  // the other evidence level, and the other buffs
-  await page.locator("#assume-evidence > summary").click();
-  await pick(page, `ev-${start.controls.ev === "strict" ? "wiki" : "strict"}`);
-  await missing();
-  await pick(page, `ev-${start.controls.ev}`);
-  await shown();
+  // the other buffs
   await page.locator("#assume-buffs > summary").click();
   await pick(page, `buffs-${start.controls.buffs === "own" ? "group" : "own"}`);
   await missing();
@@ -759,10 +734,10 @@ test.describe("addresses", () => {
     const races = await optionValues(page, "#sw-race");
     const tiers = await optionValues(page, "#sw-tier");
     const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
-    const want = { race: races.at(-1), role: roles.at(-1), tier: Number(tiers.at(-1)), ev: "wiki", buffs: "group" };
-    const shard = await loadShard(request, want.ev, want.buffs);
+    const want = { race: races.at(-1), role: roles.at(-1), tier: Number(tiers.at(-1)), buffs: "group" };
+    const shard = await loadShard(request, undefined, want.buffs);
     const setup = shard.setupsFor(want.role).at(-1);
-    await page.goto(`${TRIO}?${new URLSearchParams({ ...want, setup })}`);
+    await page.goto(`${TRIO}?${new URLSearchParams({ ...want, ev: "wiki", setup })}`); // (an ev of a link is ignored: the page reads the one level it is made from)
     await expect(page.locator("#theme-toggle")).toBeVisible();
     await expectView(page, shard, { ...want, setup });
     // a setup that is not the role's best is the visitor's choice and stays in the address; the role's best is not a choice and is dropped from it
@@ -791,8 +766,8 @@ test.describe("addresses", () => {
     const { controls } = await arrival(page);
     expect(queryOf(page), "the address of the page is left alone until something changes").toEqual({});
     // the role's best setup is not the visitor's choice, so it is not written down
-    const canonical = { race: controls.race, role: controls.role, tier: String(controls.tier), ev: controls.ev, buffs: controls.buffs };
-    for (const junk of ["race=XXX", "role=%3Cb%3Ex%3C%2Fb%3E", "tier=99", "tier=four", "setup=zzz", "ev=bogus", "buffs=%00", "race="]) {
+    const canonical = { race: controls.race, role: controls.role, tier: String(controls.tier), buffs: controls.buffs };
+    for (const junk of ["race=XXX", "role=%3Cb%3Ex%3C%2Fb%3E", "tier=99", "tier=four", "setup=zzz", "buffs=%00", "race="]) {
       await page.goto(`${TRIO}?${junk}`);
       await expect(page.locator("#theme-toggle")).toBeVisible();
       expect(queryOf(page), junk).toEqual(canonical);
@@ -808,15 +783,16 @@ test.describe("addresses", () => {
 
 // ---- 9. dark mode: the system and the button --------------------------------------------------------------------------------
 
-const LIGHT_PAGE = "rgb(250, 248, 245)";
-const DARK_PAGE = "rgb(20, 23, 27)";
+// the colour the theme paints the content column with (--surface; the frame around it is dark in both themes, so the body says nothing of the theme)
+const LIGHT_PAGE = "rgb(248, 239, 214)";
+const DARK_PAGE = "rgb(33, 26, 18)";
 
 for (const system of ["light", "dark"]) {
   test.describe(`with the system in ${system} mode`, () => {
     test.use({ colorScheme: system });
 
     test("the page follows the system until the button is used; the button's choice is kept @once", async ({ page, watch }) => {
-      const paint = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const paint = () => page.evaluate(() => getComputedStyle(document.querySelector("main")).backgroundColor);
       const attribute = () => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
       const stored = () => page.evaluate(() => localStorage.getItem("trioforge-theme"));
       const [systemPaint, otherPaint] = system === "dark" ? [DARK_PAGE, LIGHT_PAGE] : [LIGHT_PAGE, DARK_PAGE];
@@ -877,7 +853,7 @@ test("blocked storage does not break the theme button @once", async ({ page, wat
   expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("light");
   await button.click();
   await expect(button).toHaveText("Theme: dark");
-  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(DARK_PAGE);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector("main")).backgroundColor)).toBe(DARK_PAGE);
   expect(watch.problems()).toEqual([]);
 });
 
@@ -926,7 +902,7 @@ for (const system of ["light", "dark"]) {
         await recordTheme(page, stored);
         await open(page, TRIO);
         expect(await readTheme(page)).toEqual({ sawBody: true, whenBodyCame: stored, now: stored });
-        const paint = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+        const paint = await page.evaluate(() => getComputedStyle(document.querySelector("main")).backgroundColor);
         expect(paint).toBe((stored ?? system) === "dark" ? DARK_PAGE : LIGHT_PAGE);
         expect(watch.problems()).toEqual([]);
       });
@@ -988,7 +964,7 @@ test("no page scrolls sideways at the widths between a phone and a desktop (200%
 // ---- 10b. a data file that has fewer weapon setups than another ---------------------------------------------------------------------------
 // Each data file carries its own weapon setups, because the setups follow the item pool of the evidence level: a strict pool with no shield the
 // trio can wear has no 1H + shield setup while the wiki pool has one, and the precompute then writes no rows for it in the strict files. The
-// page offers its weapons switch only the setups of the file it shows; when a change of evidence or of buffs moves it to a file that lacks the
+// page offers its weapons switch only the setups of the file it shows; when a change of buffs moves it to a file that lacks the
 // setup that was chosen, it shows that file's best setup for the role and says so. The fixture's files all have the shield setup, so the
 // ones that should not are served as a real run would write them: without its rows.
 
@@ -1011,74 +987,6 @@ async function chooseShield(page, shard, role) {
   if ((await readControls(page)).setup === SHIELD) await pick(page, `setup-${shard.setupsFor(role).find((s) => s !== SHIELD)}`);
   await pick(page, `setup-${SHIELD}`);
 }
-
-test("a setup the strict level lacks is not offered for it, and is offered again for the wiki level @once", async ({ page, request, watch }) => {
-  const strict = readShard(withoutShield(await (await request.get(`${DATA}strict-own.json`)).json()));
-  const wiki = await loadShard(request, "wiki", "own");
-  await serveWithoutShield(page, `**${DATA}strict-*.json`);
-  await open(page, TRIO);
-  const start = await arrival(page);
-  const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
-  // a role for which the shield is a choice at the wiki level: another setup is its best (naming the role's best is following it, which
-  // a change of evidence level does not strand: see the test after this one)
-  const role = roles.find((r) => wiki.setupsFor(r).includes(SHIELD) && wiki.best(start.controls.race, r, start.controls.tier) !== SHIELD);
-  test.skip(!role, "no role of these results has the shield setup as a choice (not its best) at the wiki level");
-  expect(strict.setupsFor(role), "the strict data has no rows for the shield setup").not.toContain(SHIELD);
-
-  // strict evidence: the role's setups are the ones the strict data has, and the shield is out of reach (a change of role makes the page
-  // fetch the strict data, whatever role it started with)
-  const other = roles.find((r) => r !== role);
-  await pick(page, `role-${other}`);
-  await expectView(page, strict, { ...start.controls, role: other, setup: null, announced: "role" });
-  await pick(page, `role-${role}`);
-  await expectView(page, strict, { ...start.controls, role, setup: null, announced: "role" });
-  expect(await offeredSetups(page)).toEqual(strict.setupsFor(role));
-  expect(await page.locator(`#setup-${SHIELD}`).isDisabled()).toBe(true);
-  await expect(page.locator("#status")).toHaveText("");
-
-  // wiki evidence: the setup is offered again, and it is the role's best
-  await page.locator("#assume-evidence > summary").click();
-  await pick(page, "ev-wiki");
-  await expectView(page, wiki, { ...start.controls, role, ev: "wiki", setup: null, announced: "ev" });
-  expect(await offeredSetups(page)).toEqual(wiki.setupsFor(role));
-  expect(wiki.setupsFor(role)).toContain(SHIELD);
-
-  // the shield is chosen there; back to strict evidence it cannot be shown: the strict level's best setup is, and the page says so
-  await chooseShield(page, wiki, role);
-  await expectView(page, wiki, { ...start.controls, role, ev: "wiki", setup: SHIELD, announced: "setup" });
-  await pick(page, "ev-strict");
-  await expect(page.locator("#status")).toContainText("is not available for this role");
-  const controls = await readControls(page);
-  expect(controls.setup).toBe(strict.best(controls.race, role, controls.tier));
-  await expectView(page, strict, { ...controls, setup: null });
-  expect(await offeredSetups(page)).toEqual(strict.setupsFor(role));
-  expect(queryOf(page)).toMatchObject({ ev: "strict", role });
-  expect(queryOf(page).setup, "the fall-back is the level's best, which was not chosen").toBeUndefined();
-  expect(watch.problems()).toEqual([]);
-});
-
-test("when the shield is the role's best, each evidence level shows its own best and has nothing to say about it @once", async ({ page, request, watch }) => {
-  const strict = readShard(withoutShield(await (await request.get(`${DATA}strict-own.json`)).json()));
-  const wiki = await loadShard(request, "wiki", "own");
-  await serveWithoutShield(page, `**${DATA}strict-*.json`);
-  await open(page, TRIO);
-  const start = await arrival(page);
-  const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
-  const role = roles.find((r) => wiki.best(start.controls.race, r, start.controls.tier) === SHIELD && r !== start.controls.role);
-  test.skip(!role, "no other role of these results has the shield as its best setup at the wiki level");
-  await pick(page, `role-${role}`);
-  await expectView(page, strict, { ...start.controls, role, setup: null, announced: "role" });
-  await page.locator("#assume-evidence > summary").click();
-  await pick(page, "ev-wiki");
-  await expectView(page, wiki, { ...start.controls, role, ev: "wiki", setup: null, announced: "ev" });
-  expect((await readControls(page)).setup, "the wiki level's best for this role").toBe(SHIELD);
-  await pick(page, "ev-strict");
-  await expectView(page, strict, { ...start.controls, role, setup: null, announced: "ev" });
-  expect((await readControls(page)).setup, "the strict level has no shield: its best is shown").toBe(strict.best(start.controls.race, role, start.controls.tier));
-  await expect(page.locator("#status"), "nobody chose the shield, so nothing was lost").toHaveText("");
-  expect(queryOf(page).setup).toBeUndefined();
-  expect(watch.problems()).toEqual([]);
-});
 
 test("a change of buffs to a data file that lacks the chosen setup shows that file's best setup, with a message @once", async ({ page, request, watch }) => {
   const own = await loadShard(request, "strict", "own"); // this file has the shield setup ...
@@ -1119,12 +1027,12 @@ test("a change of buffs to a data file that lacks the chosen setup shows that fi
 
 test("an address that asks for the shield setup of a data file that lacks it is shown that file's best setup, with a message @once", async ({ page, request, watch }) => {
   const strict = readShard(withoutShield(await (await request.get(`${DATA}strict-own.json`)).json()));
-  const wiki = await loadShard(request, "wiki", "own");
+  const full = await loadShard(request, "strict", "own"); // (the file as it is, with its shield rows)
   await serveWithoutShield(page, `**${DATA}strict-*.json`);
   await page.goto(TRIO);
   const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
-  const role = roles.find((r) => wiki.setupsFor(r).includes(SHIELD));
-  test.skip(!role, "no role of these results has the shield setup at the wiki level");
+  const role = roles.find((r) => full.setupsFor(r).includes(SHIELD));
+  test.skip(!role, "no role of these results has the shield setup");
   await page.goto(`${TRIO}?role=${role}&setup=${SHIELD}`);
   await expect(page.locator("#theme-toggle")).toBeVisible();
   await expect(page.locator("#status")).toContainText("is not available for this role");
@@ -1615,7 +1523,7 @@ test.describe("without JavaScript, the switches", () => {
 
   test("are disabled, and the note that says why comes before them @once", async ({ page }) => {
     await page.goto(TRIO);
-    for (const selector of ["#sw-race", "#sw-tier", 'input[name="role"]', 'input[name="setup"]', 'input[name="buffs"]', 'input[name="ev"]']) {
+    for (const selector of ["#sw-race", "#sw-tier", 'input[name="role"]', 'input[name="setup"]', 'input[name="buffs"]']) {
       const controls = await page.locator(selector).all();
       expect(controls.length, selector).toBeGreaterThan(0);
       for (const control of controls) await expect(control, selector).toBeDisabled();

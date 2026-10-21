@@ -1,0 +1,6 @@
+[
+ {"tag_name": "3.14.0-rc.2-333", "name": "3.14.0-rc.2", "published_at": "2026-10-01T00:00:00Z", "prerelease": true, "draft": false},
+ {"tag_name": "3.13.1-111", "name": "3.13.1", "published_at": "2026-09-10T00:00:00Z", "prerelease": false, "draft": false},
+ {"tag_name": "3.12.8-222", "name": "3.12.8", "published_at": "2026-09-05T00:00:00Z", "prerelease": false, "draft": false},
+ {"tag_name": "3.12.7-100", "name": "3.12.7", "published_at": "2026-05-01T00:00:00Z", "prerelease": false, "draft": false}
+]

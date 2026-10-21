@@ -380,13 +380,11 @@ def test_an_item_with_no_source_in_the_table_says_so_and_has_no_lines(world):
     assert page.sources == ()
 
 
-def test_the_evidence_level_has_the_seal_and_the_words_of_the_trio_page(world):
-    strict, wiki = page_of(world, "w90001"), page_of(world, "w90003")
-    assert (strict.level, strict.level_seal, strict.level_icon) == ("strict", "Seen in game", "i-strict")
-    assert (wiki.level, wiki.level_seal, wiki.level_icon) == ("wiki", "Wiki", "i-wiki")
-    assert (strict.level_seal, strict.level_icon) == (view.ITEM_SEALS["strict"][0], view.ITEM_SEALS["strict"][1])
-    assert strict.level_text != wiki.level_text and strict.level_text.startswith("Strict evidence") and wiki.level_text.startswith("Wiki evidence")  # (the words of the Assumes line)
-    assert "strict kits leave it out" in wiki.level_text and "Seen in game" not in wiki.level_text  # an item the wiki lists is not one that was seen: it says so
+def test_a_page_has_no_evidence_level_to_word_wiki_is_the_one_level(world):
+    for key in ("w90001", "w90003"):
+        page = page_of(world, key)
+        assert not [name for name in vars(page) if name.startswith("level")], key
+    assert not hasattr(view, "ITEM_SEALS") and not hasattr(view, "EVIDENCE_REASONS")
 
 
 LADDER = REPO / "pipeline" / "trioforge" / "data" / "evidence.py"
@@ -409,14 +407,12 @@ def page_with_codes(world, level: str, codes: list[str], **record):
     )  # fmt: skip
 
 
-def test_the_wiki_reason_does_not_say_where_the_source_is_and_is_the_same_for_an_item_that_is_crafted_only(world):
-    """A wiki item can be live by a drop, a quest, a vendor, a recipe or foraging, so its reason says that the wiki lists a source that the site counts as live, and no more: an item that is
-    crafted and dropped nowhere has no zone, and a sentence about one would be false beside the line that says how it is made."""
-    wiki = page_of(world, "w90003")
-    assert wiki.level_text == "Wiki evidence: the wiki lists a source that the site counts as live. Not seen in game yet, so strict kits leave it out."
-    assert "zone" not in wiki.level_text and "EQL" not in wiki.level_text
+def test_an_item_that_is_crafted_only_lists_its_recipes_as_its_source_and_the_page_words_no_reason_for_its_level(world):
+    """A wiki item can be live by a drop, a quest, a vendor, a recipe or foraging. An item that is crafted and dropped nowhere has no zone, and a sentence about one would be false
+    beside the line that says how it is made: the page words no level at all, and its source line is the recipes."""
     crafted = page_with_codes(world, "wiki", [], source={"crafted": 2})
-    assert crafted.level_text == wiki.level_text and [(line.label, line.text) for line in crafted.sources] == [("Crafted", "2 recipes")]
+    assert [(line.label, line.text) for line in crafted.sources] == [("Crafted", "2 recipes")]
+    assert not [name for name in vars(crafted) if name.startswith("level")]
 
 
 def test_a_note_about_the_item_is_said_with_its_seal_and_a_sentence(world):
@@ -442,13 +438,11 @@ def test_a_reason_of_the_evidence_is_never_shown_on_a_page_of_either_level_even_
     for level in ("strict", "wiki"):
         page = page_with_codes(world, level, [code, "not-for-bis"])
         assert len(page.notes) == 1 and page.notes[0].text.startswith(NOT_FOR_BIS), (level, code, [note.text for note in page.notes])  # the note about the item, and nothing about the evidence
-        assert page.level_text.startswith(("Strict evidence", "Wiki evidence")) and code not in page.level_text
 
 
-def test_an_item_that_a_seen_flag_made_strict_shows_the_words_of_its_level_and_only_the_notes_about_the_item(world):
+def test_an_item_that_a_seen_flag_made_strict_shows_only_the_notes_about_the_item(world):
     hidden_for = ["cultural-container", "out-of-era", "out-of-era-ingredient", "zones-not-in-eql", "no-known-source", "wiki-marked-not-in-eql"]
     page = page_with_codes(world, "strict", [*hidden_for, "not-for-bis"])
-    assert (page.level, page.level_seal) == ("strict", "Seen in game") and page.level_text.startswith("Strict evidence")
     assert len(page.notes) == 1 and page.notes[0].text.startswith(NOT_FOR_BIS), [note.text for note in page.notes]
     assert not any(code in note.text for note in page.notes for code in hidden_for)
 
@@ -484,7 +478,7 @@ def test_an_item_with_no_wiki_page_has_a_page_and_no_wiki_credit(world):
     assert (page.wiki_title, page.wiki_revid, page.wiki_href) == (None, None, None)  # nothing to credit: no empty title, no revision 0, no address of nothing
     original = browser.item_to_catalog(NO_WIKI_PAGE, world.table["defaults"])
     assert shown_rows(page) == expected_rows(original, world.rules)  # (the rest of the page is what any page is: at_tier's figures)
-    assert page.level == "strict" and page.best_for == ()
+    assert page.best_for == ()
 
 
 def test_a_credit_is_given_to_the_wiki_page_an_item_was_read_from_and_only_to_one(world):
@@ -634,5 +628,5 @@ def test_every_wearable_of_the_wiki_catalog_has_a_page_model_that_needs_nothing_
     strict = [key for key in keys if real.records[key]["evidence"]["level"] == "strict"]
     for key in [*keys[:: max(1, len(keys) // 300)], *strict]:
         page = view.item_page(real.records[key], defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=("A wiki page", 1))
-        assert page.key == key and page.level == ("strict" if key in strict else "wiki") and len(page.description) <= 240
+        assert page.key == key and len(page.description) <= 240
     assert strict or not after  # (the catalog after an accepted report has a strict page: the setup holds; the committed one may or may not have one, the day it has)

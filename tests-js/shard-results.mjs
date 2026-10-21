@@ -3,7 +3,7 @@
 //
 //   readResults(directory)                -> {table, trios}: the item table of the folder and, for each trio folder, each level that has a bundle and shards
 //   chunksOf(results)                     -> the views of the folder in a fixed order: one chunk is a view across the races (evidence, buffs, role, setup, tier)
-//   checkResults(results, {highs, ...})   -> {views, chunks, failures, defaults, timing, ...}: every view solved by the engine and compared with its shard
+//   checkResults(results, {highs, ...})   -> {views, chunks, failures, ties, defaults, timing, ...}: every view solved by the engine and compared with its shard
 //   pythonRound2(number)                  -> Python's round(number, 2), which is how a shard keeps F
 //   parseSample("3/20")                   -> {index: 3, count: 20}
 //
@@ -25,6 +25,9 @@
 // What is compared: the exact value F, the kit place for place, the optional buffs and the haste assumed. A shard keeps F as `round(float(F), 2)` (shards.py,
 // `_rounded`), so the engine's exact value is brought to that: the nearest double, then Python's round to two decimals (`pythonRound2`), and the two doubles
 // must be equal. (The exact value is compared in full by the parity tests of the fixtures; a shard cannot hold it.)
+//
+// A tie of buffs. Two optional buffs of equal value give the same kit at the same value, and the engine may name the other one than the precompute did. A view whose F,
+// kit and haste are equal and whose buff sets differ passes, and is counted and printed as a tie (`isBuffTie`); a difference in F, the kit or the haste still fails.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -295,9 +298,12 @@ function kitDifference(want, have, places) {
   return `kit: ${count === 1 ? "1 place differs" : `${count} places differ`}, the first ${places[first]}: shard ${want[first] ?? "empty"}, engine ${have[first] ?? "empty"}`;
 }
 
+const BUFFS_LINE = "buffs: ";
+
 /**
- * The ways the engine's answer for a row differs from the row, in the order F, kit, buffs, haste (the first is the first difference); empty when it is the
- * row. `got` is the answer of `solve` (solve.js). A row kept as a shard keeps it: F rounded as Python rounds it (see the head of this file).
+ * The ways the engine's answer for a row differs from the row, in the order F, kit, haste, buffs (the first is the first difference that matters: the buffs come
+ * last, because they alone are a tie, see `isBuffTie`); empty when it is the row. `got` is the answer of `solve` (solve.js). A row kept as a shard keeps it: F rounded
+ * as Python rounds it (see the head of this file).
  */
 export function compareRow(shard, row, got) {
   const found = [];
@@ -311,11 +317,20 @@ export function compareRow(shard, row, got) {
   const have = keysOf(got.kit);
   const kit = kitDifference(row.kit, have, shard.places);
   if (kit !== null) found.push(kit);
+  if (got.hasteAssumed !== row.haste) found.push(`haste assumed: shard ${row.haste}, engine ${got.hasteAssumed}`);
   const buffs = [...got.buffs].sort((a, b) => a - b);
   const wanted = [...row.buffs].sort((a, b) => a - b);
-  if (!same(buffs, wanted)) found.push(`buffs: shard ${JSON.stringify(wanted)}, engine ${JSON.stringify(buffs)}`);
-  if (got.hasteAssumed !== row.haste) found.push(`haste assumed: shard ${row.haste}, engine ${got.hasteAssumed}`);
+  if (!same(buffs, wanted)) found.push(`${BUFFS_LINE}shard ${JSON.stringify(wanted)}, engine ${JSON.stringify(buffs)}`);
   return found;
+}
+
+/**
+ * Whether the differences `compareRow` found are a tie: the optional buffs differ and nothing else does, so F, the kit and the assumed haste are equal. Two buffs of
+ * equal value give the same kit at the same value, and which of them a solver names is no fault of either (the engine and the precompute break that tie in their own
+ * way). A tie passes, and the check counts it and prints it; a difference in F, the kit or the haste, with the buffs or without them, fails.
+ */
+export function isBuffTie(found) {
+  return found.length === 1 && found[0].startsWith(BUFFS_LINE);
 }
 
 /** What the engine found for a row of a shard, kept to compare `defaults.json` with: by trio, level, evidence level, buff set, role, setup, tier and race. */
@@ -346,7 +361,8 @@ function checkChunk({ highs, table, level, shard, chunk }, tally, seen) {
       if (timings.solveMs > tally.slowest.ms) tally.slowest = { ms: timings.solveMs, name };
       if (got.F !== null) seen.set(seenKey(level, shard, chunk, row.race), got.F);
       const found = compareRow(shard, row, got);
-      if (found.length > 0) {
+      if (isBuffTie(found)) tally.ties.push({ name, first: found[0] });
+      else if (found.length > 0) {
         const model = new Set(solved.pruned.map((item) => item.key));
         const inPool = new Set(solved.pool.map((item) => item.key));
         const engineKit = got.kit === null ? null : keysOf(got.kit);
@@ -442,13 +458,13 @@ function checkDefaults({ level, shard, document, chunks }, seen) {
  * told how far the check is every few seconds. `directory` is the folder, for `defaults.json`: it is checked in every run, of the whole folder or of any sample (the
  * few chunks of the default view are solved besides the sample's own, so no sample leaves the defaults out; n samples run side by side check them n times).
  *
- * Returns `{views, planned, chunks, failures, defaults, defaultsChecked, timing}`: `views` the number of views checked (`planned` the number the chunks asked for hold),
- * `failures` are `{name, first, all, ...}` in the order the views were checked (`first` is the first difference), `defaults` the differences of `defaults.json`,
- * `defaultsChecked` how many trios and levels it was checked for.
+ * Returns `{views, planned, chunks, failures, ties, defaults, defaultsChecked, timing}`: `views` the number of views checked (`planned` the number the chunks asked for hold),
+ * `failures` are `{name, first, all, ...}` in the order the views were checked (`first` is the first difference), `ties` are the `{name, first}` of the views that passed
+ * as ties (`isBuffTie`: only the optional buffs differ), `defaults` the differences of `defaults.json`, `defaultsChecked` how many trios and levels it was checked for.
  */
 export function checkResults(results, { highs, directory = null, sample = null, select = null, progress = null } = {}) {
   const began = performance.now();
-  const tally = { views: 0, pruneMs: 0, buildMs: 0, solveMs: 0, slowest: { ms: 0, name: null } };
+  const tally = { views: 0, pruneMs: 0, buildMs: 0, solveMs: 0, slowest: { ms: 0, name: null }, ties: [] };
   const failures = [];
   const seen = new Map();
   let last = began;
@@ -479,6 +495,7 @@ export function checkResults(results, { highs, directory = null, sample = null, 
     planned: total,
     chunks: wanted.length,
     failures,
+    ties: tally.ties,
     defaults,
     defaultsChecked,
     timing: { totalMs: performance.now() - began, pruneMs: tally.pruneMs, buildMs: tally.buildMs, solveMs: tally.solveMs, slowest: tally.slowest },

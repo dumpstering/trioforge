@@ -283,7 +283,6 @@ export const fmtInt = (number) => (number < 0 ? MINUS : "") + group(number);
 export const fmtSigned = (number) => (number > 0 ? "+" : "") + fmtInt(number);
 const roundHalfUp = (value) => Math.floor(value + 0.5);
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const SEALS = { strict: "Seen in game", wiki: "Wiki" };
 // a summoned item is made at its spell rank, so the data gives it no arrival tier (null) and the page says so
 const arrivalWord = (arrival) => (arrival === null ? "spell rank" : `+${arrival}`);
 
@@ -297,9 +296,8 @@ export function expectedKit(scenario, tier) {
           tier: `+${tier}`,
           arrival: arrivalWord(item[3]),
           source: item[4],
-          seal: SEALS[item[5]],
         }
-      : { name: "Leave empty", deity: "", tier: "—", arrival: "—", source: "—", seal: "—" },
+      : { name: "Leave empty", deity: "", tier: "—", arrival: "—", source: "—" },
   );
 }
 
@@ -315,7 +313,7 @@ export function readKit(page) {
   return page.$$eval("#kit-body tr", (rows) =>
     rows.map((tr) => {
       const text = (name) => tr.querySelector(`[data-f="${name}"]`)?.textContent ?? null;
-      return { name: text("name"), deity: text("deity"), tier: text("tier"), arrival: text("arrival"), source: text("source"), seal: text("seal") };
+      return { name: text("name"), deity: text("deity"), tier: text("tier"), arrival: text("arrival"), source: text("source") };
     }),
   );
 }
@@ -329,9 +327,22 @@ export function readControls(page) {
       role: checked("role"),
       tier: Number(document.querySelector("#sw-tier").value),
       setup: checked("setup"),
-      ev: checked("ev"),
+      ev: document.querySelector("#main").dataset.ev, // (the one evidence level the page is made from: it has no switch)
       buffs: checked("buffs"),
     };
+  });
+}
+
+/**
+ * Make the trio page the way a release makes it from `level` (its `data-ev`): the pages of the fixture are made from the strict level, and a release is made from the wiki level, which
+ * the fixture's data files have too. Call it before `open`; a later call wins.
+ */
+export async function madeFrom(page, level) {
+  await page.route(/\/trio\/[a-z-]+\/(?:\?[^#]*)?$/, async (route) => {
+    if (route.request().resourceType() !== "document") return route.fallback();
+    const response = await route.fetch();
+    const body = (await response.text()).replace(/data-ev="[a-z]+"/, `data-ev="${level}"`);
+    return route.fulfill({ response, body });
   });
 }
 
@@ -357,14 +368,14 @@ export function snapshot(page) {
         role: checked("role"),
         tier: Number(document.querySelector("#sw-tier").value),
         setup: checked("setup"),
-        ev: checked("ev"),
+        ev: document.querySelector("#main").dataset.ev,
         buffs: checked("buffs"),
       },
       caption: (text("#kit-caption") ?? "").replace(/\s+/g, " ").trim(),
-      assumes: { buffs: text('[data-f="assume-buffs"]'), setup: text('[data-f="assume-setup"]'), haste: text('[data-f="assume-haste"]'), ev: text('[data-f="assume-ev"]') },
+      assumes: { buffs: text('[data-f="assume-buffs"]'), setup: text('[data-f="assume-setup"]'), haste: text('[data-f="assume-haste"]') },
       kit: [...document.querySelectorAll("#kit-body tr")].map((tr) => {
         const field = (name) => tr.querySelector(`[data-f="${name}"]`)?.textContent ?? null;
-        return { name: field("name"), deity: field("deity"), tier: field("tier"), arrival: field("arrival"), source: field("source"), seal: field("seal") };
+        return { name: field("name"), deity: field("deity"), tier: field("tier"), arrival: field("arrival"), source: field("source") };
       }),
       totals: Object.fromEntries(names.map((name) => [name, text(`[data-f="t-${name}"]`)])),
       value: text("#kit-value"),
@@ -378,7 +389,7 @@ export function snapshot(page) {
  * The page shows exactly the view `want` describes, which the data says looks like this: the 22 rows, the totals, the kit value and gain,
  * the table caption, the assumptions line and the weapons block. `want.setup` is the setup the visitor asked for, or null for the
  * role's best. The page is given time to finish drawing. With `want.announced` the live region that tells screen readers about a change
- * must say so too: which switch the visitor changed (`want.announced` is its name: race, role, tier, setup, buffs or ev; `true` accepts
+ * must say so too: which switch the visitor changed (`want.announced` is its name: race, role, tier, setup or buffs; `true` accepts
  * any of them), what is shown now, and what the kit is worth. Returns the scenario that was checked.
  */
 export async function expectView(page, shard, want) {
@@ -388,19 +399,18 @@ export async function expectView(page, shard, want) {
   const ev = want.ev ?? shard.evidence;
   const buffs = want.buffs ?? shard.buffs;
   const attribute = (selector, name) => page.locator(selector).first().getAttribute(name);
-  const [raceName, roleName, setupName, setupPhrase, buffsPhrase, evPhrase] = await Promise.all([
+  const [raceName, roleName, setupName, setupPhrase, buffsPhrase] = await Promise.all([
     attribute(`#sw-race option[value="${want.race}"]`, "data-label"),
     attribute(`input[name="role"][value="${want.role}"]`, "data-label"),
     attribute(`input[name="setup"][value="${setup}"]`, "data-label"),
     attribute(`input[name="setup"][value="${setup}"]`, "data-phrase"),
     attribute(`input[name="buffs"][value="${buffs}"]`, "data-phrase"),
-    attribute(`input[name="ev"][value="${ev}"]`, "data-phrase"),
   ]);
   const [main, off] = [scenario.kit[20], scenario.kit[21]];
   const expected = {
     controls: { race: want.race, role: want.role, tier: want.tier, setup, ev, buffs },
     caption: `For ${raceName} · ${roleName} · +${want.tier} · ${setupName}`,
-    assumes: { buffs: buffsPhrase, setup: setupPhrase, haste: `${scenario.haste}%`, ev: evPhrase },
+    assumes: { buffs: buffsPhrase, setup: setupPhrase, haste: `${scenario.haste}%` },
     kit: expectedKit(scenario, want.tier),
     totals: expectedTotals(scenario),
     value: fmtInt(roundHalfUp(scenario.value)),
@@ -417,7 +427,6 @@ export async function expectView(page, shard, want) {
       tier: `Tier +${want.tier}`,
       setup: `Weapons ${setupName}`,
       buffs: `Buffs ${buffsPhrase}`,
-      ev: `Evidence ${evPhrase}`,
     };
     expect(want.announced === true || want.announced in leads, `${want.announced} is a switch`).toBe(true);
     const shown = `Showing ${raceName}, ${roleName}, +${want.tier}, ${setupName}. Kit value ${expected.value}.`;
