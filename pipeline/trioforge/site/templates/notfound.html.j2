@@ -3,6 +3,7 @@
     trio, from the list in data-trios, and has a hint to show for the addresses of an item or a trio that lead nowhere. It replaces the page script of the frame: the code that takes a kit link
     out of the address stays out of this page, and so does any analytics beacon, which its own policy (a meta element in the head, which adds to the header's: no script of another site, no
     connection of any kind) would refuse as well. build.NOTFOUND_POLICY is that policy, and check_budgets requires it. -#}
+{% from "base.html.j2" import scene with context %}
 {% block page_script %}
 <script type="module" src="{{ assets.notfound }}"></script>
 {% endblock %}
@@ -12,8 +13,11 @@
 {% block main %}
 <main id="main" tabindex="-1" class="wrap prose" data-page="notfound" data-trios="{{ live|map(attribute='slug')|join(' ') }}">
 <h1>Page not found</h1>
-{% if art.has("lost") %}
-<span class="art art-lost" aria-hidden="true"></span>
+{% if art.has("treetop-village") or art.has("hyenamen") %}
+<div class="scene-row">
+{{ scene("treetop-village", "You fell off the platform.") }}
+{{ scene("hyenamen", "The locals have not seen this page either.") }}
+</div>
 {% endif %}
 <p class="lead">There is nothing at this address. The page may have moved, or the link may have a mistake in it.</p>
 <p id="notfound-hint" class="note" hidden></p>

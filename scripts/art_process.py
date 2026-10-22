@@ -35,6 +35,7 @@ Manifest, one entry for each asset (its key is the name of its file and of its c
       "crop": "auto",                          or [left, top, width, height] in true pixels, or left out
       "duration_ms": 900,                      strip only: one run through the frames
       "slice": 8,                              still only: the border of a plate in true pixels (border-image-slice): one number, or [top, right, bottom, left]
+      "opaque": true,                          optional: the picture has no transparent pixel, and is written as an RGB PNG (no alpha channel: a scene is a fifth smaller); a transparent pixel is an error
       "scale": 2,                              the scale the classes show it at, 2 to 4 (the stylesheet multiplies it by --art-m on a big screen)
       "use": "what it is for"                  documentation only
     }
@@ -57,8 +58,8 @@ except ImportError:  # pragma: no cover
 REPO = Path(__file__).resolve().parents[1]
 ART_DIR = REPO / "pipeline" / "trioforge" / "site" / "static" / "art"
 KINDS = ("still", "tile", "strip")
-#: the most the art of the site may weigh on the wire together (the PNGs are already compressed, so their size is what is sent)
-BUDGET_BYTES = 120 * 1024
+sys.path.insert(0, str(REPO / "pipeline"))  # (the package is not installed: the tool reads the one budget of the art from it)
+from trioforge.site.art import BUDGET_BYTES  # noqa: E402  the most the art of the site may weigh on the wire together; it is the build's limit too
 
 
 class ArtError(Exception):
@@ -213,6 +214,14 @@ def make_asset(entry: dict[str, Any], source: Any) -> tuple[Any, dict[str, int]]
     return strip, {"w": cw, "h": ch, "frames": len(cells), "scale": scale}
 
 
+def _without_alpha(image: Any) -> Any:
+    """The picture as RGB, for an entry that says it is ``opaque``: an alpha channel that holds only 255 is bytes for nothing, and a picture with a transparent pixel is not what the entry says."""
+    low, _ = image.getchannel("A").getextrema()
+    if low != 255:
+        raise ArtError("the entry says opaque, and the picture has transparent pixels")
+    return image.convert("RGB")
+
+
 def slice_of(entry: dict[str, Any]) -> tuple[int, int, int, int]:
     """The border of a plate, in true pixels, as (top, right, bottom, left): the manifest gives one number for every side, or the four."""
     value = entry["slice"]
@@ -286,6 +295,8 @@ def process(manifest_path: Path, source_dir: Path, out_dir: Path | None = None) 
             with Image.open(path) as source:
                 source.load()
                 made[key], facts[key] = make_asset(entry, source)
+                if entry.get("opaque"):
+                    made[key] = _without_alpha(made[key])
         except ArtError as error:
             raise ArtError(f"{key}: {error}") from None
     for key, image in made.items():

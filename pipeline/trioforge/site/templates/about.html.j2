@@ -1,7 +1,9 @@
 {% extends "base.html.j2" %}
+{% from "base.html.j2" import scene with context %}
 {% block main %}
 <main id="main" tabindex="-1" class="wrap prose" data-page="about">
 <h1>About TrioForge</h1>
+{{ scene("city-gate", "The gate is open to every class.") }}
 <h2>What this is</h2>
 <p>TrioForge works out the best gear for every class trio in EverQuest Legends. It is free, static and has no accounts. Each page opens with one answer, the kit to wear, and keeps the alternatives behind expanders. Every number comes from a rule that carries a confidence seal, a source and a date, and the <a href="/rules/">rules page</a> lists them all.</p>
 <h2>A fan project</h2>

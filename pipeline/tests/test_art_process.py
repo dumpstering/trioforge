@@ -218,6 +218,29 @@ def test_the_tool_writes_the_pngs_and_the_stylesheet_and_nothing_of_this_compute
     assert str(tmp_path) not in css and str(source) not in css and "\\" not in css
 
 
+def colour_type(path: Path) -> int:
+    """The colour type of a PNG, from its header (2: RGB, 6: RGBA)."""
+    return path.read_bytes()[25]
+
+
+@needs_pillow
+def test_an_opaque_picture_is_written_without_an_alpha_channel_and_a_transparent_one_is_refused_for_it(tmp_path):
+    source, out = tmp_path / "artist", tmp_path / "out"
+    write_source(source)
+    manifest = tmp_path / "manifest.json"
+    entries = {"ground": {"source": "ground.png", "kind": "still", "size": [2, 2], "background": None, "opaque": True}, "plain": {"source": "ground.png", "kind": "still", "size": [2, 2], "background": None}}
+    manifest.write_text(json.dumps({"assets": entries}), encoding="utf-8")
+    art_process.process(manifest, source, out)
+    assert colour_type(out / "ground.png") == 2 and colour_type(out / "plain.png") == 6  # the same pixels, one written without the alpha it does not use
+    assert art_process.Image.open(out / "ground.png").convert("RGBA").tobytes() == art_process.Image.open(out / "plain.png").tobytes()
+    assert (out / "ground.png").stat().st_size <= (out / "plain.png").stat().st_size
+    entries["ground"]["source"] = "sheet.png"
+    entries["ground"]["size"] = [4, 2]
+    manifest.write_text(json.dumps({"assets": entries}), encoding="utf-8")
+    with pytest.raises(art_process.ArtError, match="ground: .*opaque.*transparent"):
+        art_process.process(manifest, source, tmp_path / "out2")
+
+
 @needs_pillow
 def test_a_png_that_left_the_manifest_is_taken_away_and_the_files_are_the_same_on_a_second_run(tmp_path):
     source, out = tmp_path / "artist", tmp_path / "out"
@@ -336,15 +359,65 @@ def committed():
     return json.loads((ART / "manifest.json").read_text(encoding="utf-8"))["assets"]
 
 
+def test_every_scene_is_opaque_and_written_without_alpha():
+    for key in SET_PIECES:
+        assert committed()[key].get("opaque") is True, key
+        assert (ART / f"{key}.png").read_bytes()[25] == 2, key
+
+
 def test_every_committed_asset_has_its_file_and_every_file_has_its_asset():
     assets = committed()
     assert {path.name for path in ART.glob("*.png")} == {f"{key}.png" for key in assets}
     assert (ART / "art.css").is_file()
 
 
-def test_the_art_of_the_theme_stays_under_120_kb_on_the_wire():
+def test_the_art_of_the_site_stays_under_its_one_budget_on_the_wire():
+    """The set pieces and the race pictures raised the budget of the whole build from 120 to 200 KB; it is one constant (``art.BUDGET_BYTES``), which the build and this tool both read. What a phone fetches on one page
+    stays under 120 KB, and the browser test (tests-e2e/art-phone.spec.mjs) holds that."""
+    from trioforge.site import art, build
+
+    assert art.BUDGET_BYTES == 200 * 1024 and build.LIMITS["art"] == art.BUDGET_BYTES == art_process.BUDGET_BYTES
     total = sum(path.stat().st_size for path in ART.glob("*.png"))
-    assert total <= 120 * 1024, f"{total} bytes of PNG"
+    assert total <= art.BUDGET_BYTES, f"{total} bytes of PNG"
+
+
+#: the set pieces (scenes: opaque, shown whole) and the character pictures (transparent, cropped to what is drawn): the key, the artist's file, the true size and the kind of picture
+SET_PIECES = {
+    "hero-trio": ("trioforge-hero-trio-v2.png", [192, 128]),
+    "dragon": ("trioforge-dragon.png", [256, 128]),
+    "city-gate": ("city-gate.png", [256, 96]),
+    "campfire": ("trioforge-campfire.png", [128, 96]),
+    "treetop-village": ("treetop-village.png", [256, 128]),
+    "plains": ("trioforge-plains.png", [256, 96]),
+    "hyenamen": ("hyenamen.png", [192, 128]),
+}
+CHARACTERS = {
+    "scholar": ("trioforge-scholar.png", [128, 128]),
+    "race-dwarf": ("bearded-warrior.png", [128, 128]),
+    "race-ogre": ("brute-try3.png", [128, 160]),
+    "race-froglok": ("frogman.png", [128, 128]),
+    "race-iksar": ("lizardman.png", [128, 160]),
+    "race-gnome": ("trioforge-gnome.png", [96, 96]),
+    "race-woodelf": ("trioforge-ranger.png", [128, 160]),
+}
+
+
+def test_the_manifest_has_the_set_pieces_and_the_characters_exactly_as_picked():
+    assets = committed()
+    for key, (source, size) in SET_PIECES.items():
+        entry = assets[key]
+        assert (entry["source"], entry["size"], entry["kind"], entry["background"], entry.get("crop")) == (source, size, "still", None, None), key
+        assert entry["scale"] == 2 and "/" not in entry["source"], key
+    for key, (source, size) in CHARACTERS.items():
+        entry = assets[key]
+        assert (entry["source"], entry["size"], entry["kind"], entry["background"], entry.get("crop")) == (source, size, "still", None, "auto"), key
+        assert entry["scale"] == 2, key
+    assert "race-kerran" not in assets and not [key for key in assets if "catman" in assets[key]["source"]]  # the cat has a stray animal that no crop of the whole figure leaves out
+    assert "lost" not in assets  # the 404 page's old picture is replaced by the treetop village
+    unused = {"brute-try4.png", "reddragon.png", "campfire.png", "trioforge-hero-trio-v1.png", "trioforge-iksar.png", "trioforge-ogre.png", "trioforge-dwarf.png"}
+    sources = {entry["source"] for entry in assets.values()}
+    assert not sources & unused and not [name for name in sources if name.startswith("an_adventuring_party")]
+    assert committed()["treetop-village"]["use"] and all(entry.get("use") for entry in assets.values())
 
 
 def test_the_committed_files_name_no_path_of_any_computer():

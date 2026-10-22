@@ -9,9 +9,15 @@ from __future__ import annotations
 import base64
 import json
 from functools import lru_cache
+from collections.abc import Sequence
 from pathlib import Path
 
 ART_DIR = Path(__file__).resolve().parent / "static" / "art"
+
+#: the most the art of the site may weigh on the wire together (the PNGs are already compressed, so their size is what is sent): the one place that says it. The build holds the site to it (``LIMITS["art"]``) and
+#: ``scripts/art_process.py`` holds what it made to it. It was 120 KB for the theme; the set pieces and the race pictures raised it to 200 KB (DECISIONS.md, the entry of the set pieces). What a *phone* is sent on any one
+#: page stays under 120 KB, which tests-e2e/art-phone.spec.mjs holds, because a scene that is not shown on a phone is never fetched.
+BUDGET_BYTES = 200 * 1024
 
 #: the icon of each place of a kit that has one (the place's group, as :data:`trioforge.site.data.SLOT_INSTANCES` names it, and the asset of the icon): the one table that says
 #: which slot gets which picture. A place that is not here, or whose asset is not in the manifest, has none. Icons that arrive later are added here and to the manifest.
@@ -35,6 +41,18 @@ SLOT_ICONS: dict[str, str] = {
 
 #: the crest beside a role's choice; the roles that have none (balanced: no picture fits "a blend"; caster: the crossed swords would be a false picture) get none
 ROLE_CRESTS: dict[str, str] = {"tank": "crest-tank", "melee": "crest-damage"}
+
+
+#: the picture beside the line "Best race for this trio" for each race that has one (the race's code, as :data:`trioforge.data.races.RACE_NAMES` has it, and the asset): the one table that says which race gets which
+#: picture. Every other race has none. Kerran is not here on purpose: the only picture of a Kerran has a stray small animal at its lower left that no crop that keeps the whole figure can leave out.
+RACE_PICTURES: dict[str, str] = {
+    "DWF": "race-dwarf",
+    "OGR": "race-ogre",
+    "FRG": "race-froglok",
+    "IKS": "race-iksar",
+    "GNM": "race-gnome",
+    "ELF": "race-woodelf",
+}
 
 
 @lru_cache(maxsize=1)
@@ -61,6 +79,22 @@ def slot_icon(group: str) -> str | None:
 def role_crest(role: str) -> str | None:
     """The asset of the crest for a role (``tank``, ``melee``), or None when the role has none or the crest is not part of the site."""
     name = ROLE_CRESTS.get(role)
+    return name if name is not None and has(name) else None
+
+
+def race_picture(race: str) -> str | None:
+    """The asset of the picture for a race (its code, ``DWF``, ``OGR``), or None when the race has none or the picture is not part of the site."""
+    name = RACE_PICTURES.get(race)
+    return name if name is not None and has(name) else None
+
+
+def item_icon(slots: Sequence[str]) -> str | None:
+    """The asset of the icon for an item, from the places it fits (its slot groups, as the item table lists them): the icon of its place when every place it fits has the same one, and None otherwise (no
+    place, a place without an icon, or places with different icons: no picture is claimed for it) or when the icon is not part of the site."""
+    icons = {SLOT_ICONS.get(slot) for slot in slots}
+    if len(icons) != 1:
+        return None
+    name = next(iter(icons))
     return name if name is not None and has(name) else None
 
 

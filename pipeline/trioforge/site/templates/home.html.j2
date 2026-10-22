@@ -1,4 +1,5 @@
 {% extends "base.html.j2" %}
+{% from "base.html.j2" import scene with context %}
 {#- The list of every trio page, in the page itself: it needs no script, and it is how the pages are found by a visitor without one and by a search engine. -#}
 {% macro trio_list(live, kind) -%}
 <ul id="live-trios" class="{{ kind }}">
@@ -11,6 +12,7 @@
 <main id="main" tabindex="-1" class="wrap home" data-page="home">
 <h1>Best gear for every class trio</h1>
 <p class="lead">Pick three classes and see the one kit to wear: exact answers for EverQuest Legends, with the evidence and the confidence behind every rule. TrioForge is a fan project.</p>
+{{ scene("hero-trio", "Pick three. Wear the best.") }}
 <section id="picker" hidden aria-labelledby="pick-h" data-live="{{ live|map(attribute='slug')|join(' ') }}">
 <h2 id="pick-h">Pick your three classes</h2>
 <div class="control">
@@ -26,6 +28,7 @@
 </fieldset>
 <p id="picker-status" role="status" aria-live="polite">Pick three classes.</p>
 </section>
+{{ scene("plains", "The lands where every trio begins.") }}
 <section aria-labelledby="live-h">
 <h2 id="live-h">Trios that are ready</h2>
 {% if list_open %}
@@ -42,5 +45,6 @@
 <p>Every trio is ready.</p>
 {% endif %}
 </section>
+{{ scene("dragon", "The best loot, still guarded.") }}
 </main>
 {% endblock %}

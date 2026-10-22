@@ -2349,11 +2349,19 @@ def test_the_rows_of_the_kit_have_the_icon_of_their_place_and_the_roles_their_cr
     assert crests["tank"] == [["art", "art-crest-tank"]] and crests["melee"] == [["art", "art-crest-damage"]] and crests["balanced"] == [] and crests.get("caster", []) == []
 
 
-def test_the_404_page_has_its_lost_picture_as_decoration_with_the_page_whole_without_it(site):
+def test_the_404_page_has_the_treetop_village_in_a_frame_with_a_caption_as_decoration_and_keeps_its_text_and_links(site):
     out, _ = site
-    lost = page(out, NOT_FOUND).find_all("span", cls="art-lost")
-    assert len(lost) == 1 and lost[0].get("aria-hidden") == "true" and lost[0].text(skip_hidden=False) == ""
-    assert page(out, NOT_FOUND).find("h1").text() == "Page not found"
+    html = page(out, NOT_FOUND)
+    frames = html.find_all("figure", cls="shot")
+    assert [sorted(f.classes) for f in frames] == [["shot", "shot-treetop-village"], ["shot", "shot-hyenamen"]]  # the hyena-men joined in the second art round
+    for frame, name, caption in zip(frames, ["treetop-village", "hyenamen"], ["You fell off the platform.", "The locals have not seen this page either."]):
+        picture = frame.find_all("span", cls=f"art-{name}")
+        assert len(picture) == 1 and picture[0].get("aria-hidden") == "true" and picture[0].text(skip_hidden=False) == "" and not picture[0].has("style")
+        assert frame.find("figcaption").text() == caption
+    assert not html.find_all("span", cls="art-lost")  # the lost picture is gone
+    assert html.find("h1").text() == "Page not found"
+    assert "There is nothing at this address." in html.find(cls="lead").text()
+    assert [a.get("href") for a in html.find("main").find_all("a")][0] == "/"
 
 
 def test_the_footer_has_its_four_badges_and_the_line_about_daybreak_and_no_line_about_800_by_600(site):
@@ -2376,17 +2384,17 @@ def test_the_icon_of_every_page_is_the_emblem_as_a_png_address(site):
     assert build.FAVICON.startswith("data:image/png;base64,")
 
 
-def test_the_art_of_the_site_stays_under_120_kb_and_the_build_refuses_more(site):
+def test_the_art_of_the_site_stays_under_200_kb_and_the_build_refuses_more(site):
     out, summary = site
     total = sum(p.stat().st_size for p in (out / "assets").glob("*.png"))
-    assert 0 < total <= build.LIMITS["art"] == 120 * 1024
+    assert 0 < total <= build.LIMITS["art"] == 200 * 1024  # (was 120 KB: the set pieces raised it, DECISIONS.md; what a phone fetches stays under 120 KB, tests-e2e/art-phone.spec.mjs)
     assert summary.sizes["art"] == total
     page_name = "trio/pal-mnk-ber/index.html"
     files = {page_name: b"<html></html>", "assets/app-AAAAAAAA.js": b"let a=1;", "assets/boot-BBBBBBBB.js": b"let b=2;", "assets/tile-AAAAAAAA.png": b"x" * build.LIMITS["art"]}
     kwargs = dict(trio_pages=[page_name], first_load_assets={page_name: ["assets/app-AAAAAAAA.js", "assets/boot-BBBBBBBB.js"]})
-    assert build.check_budgets(files, **kwargs)["art"] == 120 * 1024  # at the limit is within it
+    assert build.check_budgets(files, **kwargs)["art"] == 200 * 1024  # at the limit is within it
     files["assets/coin-BBBBBBBB.png"] = b"x"
-    with pytest.raises(build.BudgetError, match=r"the art is 120\.0 KB in all \(limit 120 KB\)"):
+    with pytest.raises(build.BudgetError, match=r"the art is 200\.0 KB in all \(limit 200 KB\)"):
         build.check_budgets(files, **kwargs)
 
 

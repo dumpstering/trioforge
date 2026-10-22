@@ -20,7 +20,7 @@ in view), so the page itself is never wider than the window; the region is named
 {%- endmacro %}
 {% block main %}
 <main id="main" tabindex="-1" class="wrap item" data-page="item">
-<h1>{{ page.name }}</h1>
+<h1>{% if page.icon %}<span class="art art-{{ page.icon }}" aria-hidden="true"></span>{% endif %}{{ page.name }}</h1>
 <dl class="pairs">
 {% for fact in page.facts %}
 <div><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>

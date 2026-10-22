@@ -1898,11 +1898,119 @@ main .shared > h2:not(.sr-only) {
   margin-inline-end: 0.45rem;
 }
 
-.art-lost {
-  display: block;
-  margin: 0.8rem 0 1rem;
-  border: 2px solid var(--frame-line);
+/* ---- the set pieces: a scene in a bevelled frame like a window of the late 90s, and a character beside its text ----
+   A scene is a figure (the frame: a raised grey window with a sunken picture and a status bar for the caption, which is text); the picture is the background of a span of its own size, in whole times its
+   size (2x; 3x from a 1920 px window, 4x from a 4K one), so a page never moves when it loads. A character floats beside its words at twice its size (the stylesheet's own --art-m makes it four times on 4K). */
+.shot {
+  box-sizing: content-box;
+  width: fit-content;
+  max-width: 100%;
+  margin: 1rem 0 1.2rem;
+  padding: 3px;
+  background: var(--btn-face);
+  border: 2px solid;
+  border-color: var(--btn-light) var(--btn-dark) var(--btn-dark) var(--btn-light);
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+.shot .art {
+  box-sizing: content-box; /* the border goes round the picture, not into it */
+  display: block;
+  border: 2px solid;
+  border-color: var(--btn-dark) var(--btn-light) var(--btn-light) var(--btn-dark);
+}
+
+.shot figcaption {
+  margin-top: 3px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--btn-text);
+  border: 1px solid;
+  border-color: var(--btn-shadow) var(--btn-light) var(--btn-light) var(--btn-shadow);
+}
+
+@media (min-width: 120rem) {
+  .shot .art {
+    --art-s: 3;
+  }
+}
+
+@media (min-width: 150rem) {
+  .shot .art {
+    --art-s: 2;
+  }
+}
+
+/* the race of the trio stands beside the line that names it, and the scholar beside the first words of the sources: both float at the right of their text, and the block that holds them is as tall as they
+   are (the heading under it never comes up beside the picture) */
+@media (min-width: 37.51rem) {
+  .page-head {
+    display: flow-root;
+  }
+}
+
+[data-page="sources"] .lead {
+  display: flow-root; /* the scholar is shown on a phone too */
+}
+
+.best-race .art,
+.lead .art-scholar {
+  float: right;
+  margin: 0 0 0.6rem 1rem;
+}
+
+/* the line is as wide as the head (the picture is at the head's edge, not at the end of a column of 80 characters), and the expander under it is a block of its own that begins beside the picture, not
+   under it (a box with a background is not shortened by a float otherwise: the picture would be drawn over its border) */
+.page-head .best-race,
+[data-page="sources"] .lead {
+  max-width: none;
+}
+
+@media (min-width: 37.51rem) {
+  .page-head details.expander {
+    display: flow-root;
+  }
+}
+
+/* the Iksar's picture is cut off at the shins: it stands on the bottom edge of its box */
+.art-race-iksar {
+  background-position: left bottom;
+}
+
+/* the footer: two small characters stand at the ends of the row of badges, on its bottom edge, at their own size (the art is decoration; a phone has none of it, and never fetches it) */
+.badge-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.badge-row .badges {
+  margin: 0;
+}
+
+.art-foot {
+  --art-s: 1;
+}
+
+/* two scenes side by side on the 404 page (each is a frame of its own, so a window too narrow for both puts the second under the first) */
+.scene-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 1.5rem;
+}
+
+/* the icon of an item's slot beside its name: the slot of the item window, as in the kit table, at twice its size where there is room */
+.item h1 .art {
+  box-sizing: content-box;
+  margin-inline-end: 0.6rem;
+  vertical-align: middle;
+  background-color: var(--win);
+  border: 1px solid;
+  border-color: var(--win-border) #05060a #05060a var(--win-border);
 }
 
 /* the controls are square and bevelled, of the system's grey in the light theme and of slate in the dark one */
@@ -2108,6 +2216,11 @@ details.expander > summary {
     --art-s: 2;
   }
 
+  /* and so is the icon beside the name of an item */
+  .item h1 .art {
+    --art-s: 2;
+  }
+
   .data-strip,
   .preview-banner {
     padding-inline: 0.7rem;
@@ -2152,9 +2265,31 @@ details.expander > summary {
     margin-bottom: 0.2rem;
   }
 
-  /* the lost picture at its own size on a phone (twice it would be wider than the screen) */
-  .art-lost {
+  /* the scenes at their own size on a phone (twice it would be wider than the screen), and the three that would stand in the first screen are not shown at all: display: none on the span that carries the
+     picture, so the picture is never fetched, and on its frame; the dragon is below the first screen, and the picture of the 404 page is what the page had at its own size before */
+  .shot .art,
+  .lead .art-scholar {
     --art-s: 1;
+  }
+
+  /* the race beside the best race is not shown on a phone: at its own size it takes the width of the line and the kit's first row would end below the first screen (the page's test holds that row
+     to 740 px); display: none on the span that carries the picture, so it is never fetched */
+  .best-race .art {
+    display: none;
+  }
+
+  .art-foot,
+  .shot-plains,
+  .shot-plains .art-plains,
+  .shot-hyenamen,
+  .shot-hyenamen .art-hyenamen,
+  .shot-hero-trio,
+  .shot-hero-trio .art-hero-trio,
+  .shot-city-gate,
+  .shot-city-gate .art-city-gate,
+  .shot-campfire,
+  .shot-campfire .art-campfire {
+    display: none;
   }
 
   .site-header nav {

@@ -1,4 +1,5 @@
 {% extends "base.html.j2" %}
+{% from "base.html.j2" import scene with context %}
 {% macro inline(segments) -%}
 {%- for seg in segments -%}
 {%- if seg.kind == "strong" -%}<strong>{{ seg.text }}</strong>
@@ -11,6 +12,7 @@
 {% block main %}
 <main id="main" tabindex="-1" class="wrap prose" data-page="changelog">
 <h1>Changelog</h1>
+{{ scene("campfire", "Rest by the fire between releases.") }}
 {% if blocks is none %}
 <p>No releases yet. Data releases are named data-YYYY-MM-DD; each one will be listed here with a link to its report of changed picks.</p>
 {% else %}

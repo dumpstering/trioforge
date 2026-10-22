@@ -13,7 +13,7 @@
 <main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="{{ page.default.ev }}" data-base="{{ page.data_base }}" data-release="{{ page.release }}" data-groups="{{ page.weight_groups|join(' ') }}"{% if page.items_base %} data-items="{{ page.items_base }}"{% endif %}>
 <div class="page-head">
 <h1>{{ page.name }}: best gear (<span data-rules="level.current">level {{ page.level }}</span>)</h1>
-<p id="best-race" class="best-race">Best race for this trio: <strong>{{ page.best_name }}</strong> <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">({{ page.margin }} over {{ page.runner_up_name }})</span>, judged in the <span id="best-race-view">{{ page.verdict_role }} view at <span data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> with {{ page.assume_buffs }}</span>.</p>
+<p id="best-race" class="best-race">{% if page.race_picture %}<span class="art art-{{ page.race_picture }}" aria-hidden="true"></span>{% endif %}Best race for this trio: <strong>{{ page.best_name }}</strong> <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">({{ page.margin }} over {{ page.runner_up_name }})</span>, judged in the <span id="best-race-view">{{ page.verdict_role }} view at <span data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> with {{ page.assume_buffs }}</span>.</p>
 <details class="expander" id="race-why">
 <summary>How the best race was judged{% if page.flips %}, and what could change it{% endif %}</summary>
 <p id="best-race-rules" class="note">How the score works: {{ rule_links(page.margin_rules) }}</p>

@@ -2,7 +2,7 @@
 {% block main %}
 <main id="main" tabindex="-1" class="wrap prose" data-page="sources">
 <h1>Sources and licences</h1>
-<p class="lead">Data release {{ meta.data_tag }}, read from the game as of patch {{ meta.game_patch }}. Level {{ meta.level }}.</p>
+<p class="lead">{% if art.has("scholar") %}<span class="art art-scholar" aria-hidden="true"></span>{% endif %}Data release {{ meta.data_tag }}, read from the game as of patch {{ meta.game_patch }}. Level {{ meta.level }}.</p>
 <h2>Item data</h2>
 <p>{{ attribution }}</p>
 <p>The wiki's text is licensed <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a>. TrioForge's derived data is licensed the same way. The wiki is at <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki.com</a>; the pages and revisions behind the items that the trio pages show are listed below. Each item page carries its own credit: the wiki page, its revision, the licence and the changes made.</p>
@@ -29,6 +29,7 @@
 </ul>
 <h2>Licences</h2>
 <p>{{ licence_sentence }} {{ disclaimer }}</p>
+<p>The pixel art was made for TrioForge with Retro Diffusion.</p>
 <p>The data licence covers the rules, the generated site data and the fixtures.</p>
 <h2>Data inputs</h2>
 <ul>

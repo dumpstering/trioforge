@@ -293,8 +293,8 @@ LIMITS = {
     "notfound_html_gzip": 5 * 1024,
     # the files of the site: Cloudflare Pages takes at most 20,000, and the build holds itself to 15,000
     "files": 15_000,
-    # the pictures of the theme together (the PNGs under assets/; a PNG is sent as it is, so this is what a phone is sent if it loads them all)
-    "art": 120 * 1024,
+    # the pictures of the site together (the PNGs under assets/; a PNG is sent as it is, so this is what a phone is sent if it loads them all): one constant, art.BUDGET_BYTES, which art_process.py reads too
+    "art": art.BUDGET_BYTES,
 }
 
 #: the home page lists the pages of the trios in the page itself, in a list that is open up to this many and folded into an expander beyond it (a list of 560 would be most of the page), and
@@ -1637,7 +1637,7 @@ def credit_of(meta: data.Meta) -> data.Credit:
 
 
 def _nav(current: str) -> list[dict[str, object]]:
-    items = [("/", "Trios"), ("/rules/", "Rules"), ("/sources/", "Sources"), ("/about/", "About"), ("/changelog/", "Changelog")]
+    items = [("/", "Trios"), ("/about/", "About"), ("/changelog/", "Changelog")]  # Rules and Sources are pages of the site but not of the menu (the footer links the sources, the trio pages link into the rules)
     return [{"href": href, "label": label, "current": href == current} for href, label in items]
 
 

@@ -361,6 +361,7 @@ class TrioPage:
     delta_rules: tuple[RuleRef, ...]
     aa: tuple[tuple[str, RuleRef], ...]
     aa_seal: RuleRef
+    race_picture: str | None = None  # the asset of the picture beside "Best race for this trio" (``art.RACE_PICTURES``), from the page's static best race and never from the race a visitor picks, or None
     items_base: str = ""  # the address the page code links the names of the items it paints by, or nothing when no pages of items were given
 
 
@@ -636,6 +637,7 @@ def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Coll
         delta_rules=tuple(rule_ref(book, rule_id) for rule_id in ("roles.balanced", "roles.templates")),
         aa=tuple((label, rule_ref(book, rule_id)) for label, rule_id in _aa_labels(caps.cs_rank, caps.pe)),
         aa_seal=weakest([rule_ref(book, rule_id) for _, rule_id in _aa_labels(caps.cs_rank, caps.pe)]),
+        race_picture=art.race_picture(race),
         items_base=ITEM_BASE if pages is not None else "",
     )
 
@@ -753,6 +755,7 @@ class ItemPage:
     wiki_title: str | None  # the credit to the wiki page the item was read from; all three are None for an item that has no wiki page (its page has no credit)
     wiki_revid: int | None
     wiki_href: str | None
+    icon: str | None = None  # the icon of the item's slot (``art.item_icon``), drawn beside its name, or None when its slot has none
 
 
 def default_kit_keys(results: data.TrioResults) -> frozenset[str]:
@@ -957,4 +960,5 @@ def item_page(
         wiki_title=title,
         wiki_revid=revid,
         wiki_href=None if wiki is None else wiki_url(title, revid),
+        icon=art.item_icon(record["slots"]),
     )

@@ -11,6 +11,13 @@
 {% macro rule_links(refs) -%}
 {%- for ref in refs -%}{{ rule_link(ref) }}{% if not loop.last %} &middot; {% endif %}{%- endfor -%}
 {%- endmacro %}
+{#- A set piece: a scene in a bevelled frame like a window of the late 90s, with an optional caption in text. The picture is a decorative span (a background of the stylesheet, so no inline style and no
+    request but the stylesheet's own); a scene that is not part of the site draws nothing, caption included, and the page is whole without it. -#}
+{% macro scene(name, caption=none) -%}
+{% if art.has(name) %}
+<figure class="shot shot-{{ name }}"><span class="art art-{{ name }}" aria-hidden="true"></span>{% if caption %}<figcaption>{{ caption }}</figcaption>{% endif %}</figure>
+{% endif %}
+{%- endmacro %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -59,12 +66,16 @@
 {% block main %}{% endblock %}
 <footer class="site-footer">
 <div class="wrap">
+<div class="badge-row">
+{% if art.has("race-froglok") %}<span class="art art-race-froglok art-foot" aria-hidden="true"></span>{% endif %}
 <ul class="badges">
 <li><span class="badge badge-plain">TrioForge</span></li>
 <li><a class="badge badge-light" href="/sources/">Data: eqlwiki CC BY-SA</a></li>
 <li><span class="badge badge-scroll">Made with Notepad</span></li>
 <li><span class="badge badge-dark">Best in Slot</span></li>
 </ul>
+{% if art.has("race-dwarf") %}<span class="art art-race-dwarf art-foot" aria-hidden="true"></span>{% endif %}
+</div>
 <p>{{ disclaimer }}</p>
 <p>{% for text, address in attribution_parts %}{% if address %}<a href="{{ address }}" rel="noopener noreferrer">{{ text }}</a>{% else %}{{ text }}{% endif %}{% endfor %}. {{ licence_sentence }} <a href="/sources/">Sources and licences</a></p>
 <p>{% if report_url %}<a id="report-link" class="report-link" href="{{ report_url }}" rel="noopener noreferrer">{% if art.has("mail") %}<span class="art art-mail" aria-hidden="true"></span>{% endif %}Report a problem with this page</a>{% else %}{{ reports_not_open }}{% endif %} &middot; <a href="/about/">About</a> &middot; <a href="/changelog/">Changelog</a></p>

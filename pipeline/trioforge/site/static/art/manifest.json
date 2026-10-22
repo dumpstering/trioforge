@@ -26,8 +26,21 @@
   "icon-sword": {"source": "trioforge-icon2-sword.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Main hand row of the kit table"},
   "crest-tank": {"source": "trioforge-crest-tank.png", "kind": "still", "size": [32, 32], "background": "#ffffff", "crop": "auto", "scale": 1, "use": "beside the Tank role choice"},
   "crest-damage": {"source": "trioforge-crest-damage.png", "kind": "still", "size": [32, 32], "background": "#ffffff", "crop": "auto", "scale": 1, "use": "beside the Melee and Caster role choice"},
-  "lost": {"source": "trioforge-lost.png", "kind": "still", "size": [160, 100], "background": null, "scale": 2, "use": "the 404 page"},
   "icon-arms": {"source": "trioforge-icon2-arms.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Arms row of the kit table"},
-  "icon-back": {"source": "trioforge-icon2-back.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Back row of the kit table"}
+  "icon-back": {"source": "trioforge-icon2-back.png", "kind": "still", "size": [32, 32], "background": null, "scale": 1, "use": "the Back row of the kit table"},
+ "hero-trio": {"source": "trioforge-hero-trio-v2.png", "kind": "still", "size": [192, 128], "background": null, "opaque": true, "scale": 2, "use": "the home page, the banner under the heading (not shown on a phone)"},
+ "dragon": {"source": "trioforge-dragon.png", "kind": "still", "size": [256, 128], "background": null, "opaque": true, "scale": 2, "use": "the home page, below the list of the trios: a dragon asleep on its gold"},
+ "city-gate": {"source": "city-gate.png", "kind": "still", "size": [256, 96], "background": null, "opaque": true, "scale": 2, "use": "the about page, under the heading"},
+ "campfire": {"source": "trioforge-campfire.png", "kind": "still", "size": [128, 96], "background": null, "opaque": true, "scale": 2, "use": "the changelog page, under the heading"},
+ "treetop-village": {"source": "treetop-village.png", "kind": "still", "size": [256, 128], "background": null, "opaque": true, "scale": 2, "use": "the 404 page, in place of the lost picture"},
+ "scholar": {"source": "trioforge-scholar.png", "kind": "still", "size": [128, 128], "background": null, "crop": "auto", "scale": 2, "use": "the sources page, beside the first words"},
+ "race-dwarf": {"source": "bearded-warrior.png", "kind": "still", "size": [128, 128], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Dwarf"},
+ "race-ogre": {"source": "brute-try3.png", "kind": "still", "size": [128, 160], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Ogre"},
+ "race-froglok": {"source": "frogman.png", "kind": "still", "size": [128, 128], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Froglok"},
+ "race-iksar": {"source": "lizardman.png", "kind": "still", "size": [128, 160], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Iksar (the picture is cut off at the shins: it stands on the bottom edge of its box)"},
+ "race-gnome": {"source": "trioforge-gnome.png", "kind": "still", "size": [96, 96], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Gnome"},
+ "race-woodelf": {"source": "trioforge-ranger.png", "kind": "still", "size": [128, 160], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Wood Elf"},
+ "plains": {"source": "trioforge-plains.png", "kind": "still", "size": [256, 96], "background": null, "opaque": true, "scale": 2, "use": "the home page, a banner above the list of the trios (not shown on a phone: below the first screen it would still be fetched, so it is hidden)"},
+ "hyenamen": {"source": "hyenamen.png", "kind": "still", "size": [192, 128], "background": null, "opaque": true, "scale": 2, "use": "the 404 page, beside the treetop village (not shown on a phone)"}
  }
 }
