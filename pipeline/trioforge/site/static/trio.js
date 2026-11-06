@@ -64,11 +64,17 @@ const UPGRADE_CONTROLS = "input, select, button, label";
 /** Where the gear a visitor asked the device to remember is kept (the format is the section's: this file reads nothing of it). */
 const GEAR_KEY = "trioforge-gear";
 const KIT_NOT_LOADED = "Couldn't load the shared kit. Reload the page to try again.";
+const NOT_LOADED_EXALT = "Couldn't load the effects. Reload the page to try again.";
+/** The two files of the section Effects to exalt, as the page names them: the shared one and the trio's (the section only fetches an address of this form). */
+const EXALT_FILES = /^\/data\/(?:[a-z]{3}-[a-z]{3}-[a-z]{3}\/)?(?:effects|exalt)\.json$/;
 const NO_KIT = Object.freeze({ payload: null, source: null, cleared: false });
 /** Where the pages of the items are. The build writes it as the `data-items` of the page when every item the page can show has a page, and the names the code paints are links only then. */
 const ITEM_BASE = "/item/";
 /** What the key of an item may be in an address: the one pattern of an item key (data.py: KEY_PATTERN, which the reader of the results and the build use as well), so that nothing a data file holds can steer a link elsewhere. */
 const ITEM_KEY = /^(?:w[1-9][0-9]{0,14}|r[a-z0-9][a-z0-9-]{0,99})$/;
+/** What a row says of an item whose stats the page does not have for the view (an item of the optimizer's answer that no shard of this page lists). */
+const STATS_ON_PAGE = "Its stats at this tier are on the page of the item.";
+const STATS_MISSING = "Its stats are not on this page.";
 
 /** A data file of another release than the page's: the site was published again while the page was open. */
 class DataUpdated extends Error {}
@@ -110,13 +116,14 @@ export function initTrio(env = {}) {
     env.loadEngine,
     env.kit ?? NO_KIT,
     env.loadWeights ?? (() => import("./ui/weights.js")),
+    env.loadExalt ?? (() => import("./ui/exalt.js")),
   );
   app.start();
   return app;
 }
 
 class TrioApp {
-  constructor(root, doc, win, fetchJson, reload, loadUpgrade, loadEngine, kit, loadWeights) {
+  constructor(root, doc, win, fetchJson, reload, loadUpgrade, loadEngine, kit, loadWeights, loadExalt) {
     this.root = root;
     this.doc = doc;
     this.win = win;
@@ -126,6 +133,13 @@ class TrioApp {
     this.loadEngine = loadEngine; // gives the module of the optimizer's client from an address (the section's own import when none is given; tests give another)
     this.kit = kit; // the kit link that came in the address: {payload, source, cleared} (first.js took it out)
     this.loadWeights = loadWeights; // gives the module of the sliders and of the answers for the settings no shard has (tests give another)
+    this.loadExalt = loadExalt; // gives the module of the section Effects to exalt (tests give another)
+    this.exalt = null; // what the module made of the section, once it was loaded
+    this.wakingExalt = false;
+    this.exaltShown = null; // what the section is told of the view: {role, race, tier, exact, kit}, the kit drawn in Wear this (set when the page is started; `kit` is null while the page shows the answer it was made with, whose items the files name)
+    this.exaltWatchers = new Set();
+    this.equipKit = null; // the kit of Equip now in the Upgrade section ({kit, record, defaults}), or null
+    this.equipWatchers = new Set();
     this.weights = null; // what the module made, once it was loaded: {sync, text, settle, release}
     this.wakingWeights = null; // the promise of that, while it is being loaded
     this.groups = (root.dataset.groups ?? "").split(" ").filter(Boolean); // the weight groups of the trio's bundle, in its order: a slider and a character of `w` for each
@@ -148,11 +162,18 @@ class TrioApp {
     this.retries = new Map(); // the line of a message -> what its button does now (#status, and the line of the Upgrade section)
     this.focusAfterRetry = false; // a retry that works moves the focus to the answer, since the button goes away
     this.rows = [...root.querySelectorAll("#kit-body tr")];
+    // what the page was built with in the panel of each row (the stats and the why line of the default view), kept to be put back when the view comes back to it
+    this.bakedKit = this.rows.map((row) => ({ stats: field(row, "stats")?.textContent ?? "", why: field(row, "why")?.textContent ?? null }));
+    this.statIndex = new Map(); // item key -> {tier: text of its stats}, from every shard that was loaded: the stats of an item the optimizer's answer names
+    this.openRows = new Set(); // the rows whose panel (stats and why) is open
+    this.toggles = []; // the button of each row's panel, and the one that opens them all
+    this.toggleAll = null;
     this.linkItems = root.dataset.items === ITEM_BASE; // the page says that every item it can show has a page of its own
     // the roles that have a runner-up file ("balanced"; it holds every tier of the run): nothing else is ever asked for
     this.runnerupFiles = new Set((root.querySelector("#runnerups")?.dataset.files ?? "").split(" ").filter(Boolean));
     this.config = this.readConfig();
     const d = this.config.defaults;
+    this.exaltShown = { role: d.role, race: d.race, tier: d.tier, exact: false, kit: null }; // (the view of the address is not drawn yet: start() says whether it is the baked one)
     // what was asked for last and got. A setup of null means "the role's best": the visitor has not chosen one, so the view follows the
     // best of whatever role, tier and race comes next, and the address does not name a setup
     this.state = { race: d.race, role: d.role, tier: d.tier, ev: d.ev, buffs: d.buffs, setup: null, weights: this.own };
@@ -305,6 +326,7 @@ class TrioApp {
     const d = this.config.defaults;
     // the baked answer is the role's best setup, so an address that names it asks for the best and not for a choice
     const baked = ["race", "role", "tier", "buffs"].every((key) => asked[key] === d[key]) && (asked.setup === null || asked.setup === d.setup) && asked.weights === this.own;
+    this.exaltShown = { role: asked.role, race: asked.race, tier: asked.tier, exact: baked, kit: null }; // (the section is told only what is drawn: the baked answer, or nothing until the view of the address is)
     if (!baked) this.track(this.apply(asked, { url: true, notice: badWeights ? BAD_WEIGHTS : null }));
     // the page shows the default answer for an address with a value that means nothing: the address says so too, at once, and without
     // fetching anything, so that a malformed link never passes for a link to the default view
@@ -314,6 +336,227 @@ class TrioApp {
     }
     this.bindWeights();
     this.bindUpgrade();
+    this.enhanceKit();
+    this.bindExalt();
+  }
+
+  // ---- the section Effects to exalt: its code and its two files come when it is opened or scrolled into view --------------------------------------------------------------
+
+  /**
+   * The section is a details element the page is made with (closed), whose summary gets aria-expanded here. Its code (ui/exalt.js and the matcher it uses) is a chunk of its own, and its
+   * two files are fetched by that code: nothing of it is asked for until the section is opened or its summary comes near the window, so the first load and the first view are what they were
+   * without it. The section is told which kit Wear this draws (`exaltShown`) and which kit Equip now draws in the Upgrade section (`equipKit`), whenever they change.
+   */
+  bindExalt() {
+    const section = this.q("#exalt");
+    if (!section) return;
+    const summary = section.querySelector("summary");
+    summary?.setAttribute("aria-expanded", String(section.open));
+    section.addEventListener("toggle", () => {
+      summary?.setAttribute("aria-expanded", String(section.open));
+      if (section.open) this.wakeExalt(section);
+    });
+    if (section.open) this.wakeExalt(section);
+    else if (typeof this.win.IntersectionObserver === "function") {
+      const watcher = new this.win.IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          watcher.disconnect();
+          this.wakeExalt(section);
+        },
+        { rootMargin: "300px" },
+      );
+      watcher.observe(section);
+    }
+  }
+
+  wakeExalt(section) {
+    if (this.wakingExalt || this.exalt !== null) return;
+    const { effects, exalt } = section.dataset;
+    if (!EXALT_FILES.test(effects ?? "") || !EXALT_FILES.test(exalt ?? "")) return;
+    this.wakingExalt = true;
+    const status = section.querySelector("#exalt-status");
+    if (status && status.textContent === NOT_LOADED_EXALT) {
+      status.hidden = true; // (the message of an earlier try: this one says its own)
+      status.textContent = "";
+    }
+    this.track(
+      this.loadExalt()
+        .then((module) => {
+          this.exalt = module.initExalt(section, {
+            doc: this.doc,
+            win: this.win,
+            fetch: this.fetchJson,
+            release: this.release,
+            effectsUrl: effects,
+            exaltUrl: exalt,
+            view: () => this.exaltShown,
+            onView: (callback) => {
+              this.exaltWatchers.add(callback);
+              return () => this.exaltWatchers.delete(callback);
+            },
+            equipKit: () => this.equipKit,
+            onEquipKit: (callback) => {
+              this.equipWatchers.add(callback);
+              return () => this.equipWatchers.delete(callback);
+            },
+            words: {
+              slotLabel: (index) => this.slotLabel(index),
+              raceName: (code) => this.raceName(code),
+              roleLabel: (code) => this.roleLabel(code),
+              tierLabel,
+              itemHref: (key) => this.itemHref(key),
+            },
+            announce: (text) => this.announce(text),
+            onUpdated: () => this.dataUpdated(),
+            reload: () => this.reload(),
+          });
+          return this.exalt.ready();
+        })
+        .catch(() => {
+          // the code could not be had (a browser keeps a failed module fetch until the page is reloaded, so the way out is a reload)
+          this.wakingExalt = false;
+          if (status) {
+            status.hidden = false;
+            status.textContent = NOT_LOADED_EXALT;
+            if (section.open) this.announce(NOT_LOADED_EXALT); // (a closed section has not been asked for: the line says it where it will be seen)
+          }
+        }),
+    );
+  }
+
+  /** Tell the section what Wear this draws: the kit, the view it is of, and whether it is the kit the section's files were made for (the files have the plan for that kit). */
+  setExaltView(scenario, exact) {
+    const d = this.config.defaults;
+    // the files' plan is for the default race's kit at the default tier, in the default view (evidence, buffs, weights) and the role's best setup; the role may be any the file has
+    this.exaltShown = {
+      role: this.displayed.role,
+      race: this.displayed.race,
+      tier: scenario.tier,
+      exact: exact && this.displayed.race === d.race && scenario.tier === d.tier && this.displayed.ev === d.ev && this.displayed.buffs === d.buffs && this.displayed.weights === this.own,
+      kit: scenario.kit.map((item) => (item ? { key: item.key, name: item.name } : null)),
+    };
+    for (const watcher of [...this.exaltWatchers]) {
+      try {
+        watcher();
+      } catch {
+        // a bug in the section is the section's, not the view's
+      }
+    }
+  }
+
+  /** The kit that Equip now draws (or null: none), as the Upgrade section tells it. */
+  setEquipKit(kit) {
+    this.equipKit = kit;
+    for (const watcher of [...this.equipWatchers]) {
+      try {
+        watcher();
+      } catch {
+        // as above
+      }
+    }
+  }
+
+  // ---- the stats and the why of the rows of Wear this ----------------------------------------------------------------------------
+
+  /**
+   * Each row has a panel of its own (`data-f="more"`: a details element the page is made with, closed, whose summary is the button that opens it, so that it works without script and the
+   * page does not move when this code starts). Here the summary is given what a disclosure button of this page has (aria-expanded and a name that says whose stats), and one button
+   * of the title bar (`#kit-stats-all`, made disabled and out of sight, like the Change button) opens or closes all the rows.
+   */
+  enhanceKit() {
+    const panels = this.rows.map((row) => field(row, "more"));
+    if (!panels.some(Boolean)) return;
+    this.rows.forEach((row, index) => {
+      const panel = panels[index];
+      const summary = panel?.querySelector("summary");
+      if (!panel || !summary) return;
+      summary.setAttribute("aria-expanded", String(panel.open));
+      summary.className = "kit-toggle";
+      this.toggles[index] = summary;
+      if (panel.open) this.openRows.add(index);
+      panel.addEventListener("toggle", () => this.syncRow(index));
+      this.labelToggle(index, field(row, "name")?.textContent ?? "", Boolean(this.bakedKit[index].why));
+    });
+    const all = this.doc.getElementById("kit-stats-all");
+    if (all) {
+      all.disabled = false;
+      all.addEventListener("click", () => {
+        const open = !this.allOpen();
+        this.rows.forEach((row, index) => {
+          const panel = field(row, "more");
+          if (panel && !panel.hidden) panel.open = open;
+        });
+        this.rows.forEach((row, index) => this.syncRow(index));
+      });
+      this.toggleAll = all;
+    }
+  }
+
+  /** Are all the rows that have a panel open? */
+  allOpen() {
+    const shown = this.rows.map((row, index) => [field(row, "more"), index]).filter(([panel]) => panel && !panel.hidden);
+    return shown.length > 0 && shown.every(([panel]) => panel.open);
+  }
+
+  /** Take the state of a row from its panel: the choice of a visitor (the browser opens and closes a details element itself). */
+  syncRow(index) {
+    const panel = field(this.rows[index], "more");
+    if (!panel) return;
+    if (panel.open) this.openRows.add(index);
+    else this.openRows.delete(index);
+    this.toggles[index]?.setAttribute("aria-expanded", String(panel.open));
+    this.toggleAll?.setAttribute("aria-expanded", String(this.allOpen()));
+  }
+
+  labelToggle(index, name, why = false) {
+    this.toggles[index]?.setAttribute("aria-label", (why ? "Stats and why for " : "Stats for ") + name);
+  }
+
+  /** Is the view the one the page was built with (the answer of the default view, which the why lines and the next best items are worked out for)? */
+  isBaked(view) {
+    const d = this.config.defaults;
+    const s = view.scenario;
+    return view.exact === true && view.state.weights === this.own && view.state.ev === d.ev && view.state.buffs === d.buffs && s.race === d.race && s.role === d.role && s.tier === d.tier && s.setup === d.setup;
+  }
+
+  /** The stats of an item at a tier: the shard's own, else those of another shard that lists the item, else nothing. */
+  statsOf(item, tier) {
+    return item.stats?.[tier] ?? this.statIndex.get(item.key)?.[tier] ?? null;
+  }
+
+  /** Keep the stats the shard carries, for the items an answer of the optimizer names (its own items have none). */
+  indexStats(shard) {
+    for (const item of shard.items) {
+      if (item.stats) this.statIndex.set(item.key, { ...this.statIndex.get(item.key), ...item.stats });
+    }
+  }
+
+  /** The panel of each row: the stats of the item at the tier shown and, for the view the page was built with, its why line; any other view has the note instead. */
+  paintDetails(scenario, baked) {
+    const note = this.q("#why-note");
+    this.rows.forEach((row, index) => {
+      const panel = field(row, "more");
+      if (!panel) return;
+      const item = scenario.kit[index] ?? null;
+      const stats = field(panel, "stats");
+      const why = field(panel, "why");
+      let text = "";
+      if (item) {
+        const known = baked ? this.bakedKit[index].stats : this.statsOf(item, scenario.tier);
+        text = known ?? (this.itemHref(item.key) !== null ? STATS_ON_PAGE : STATS_MISSING);
+      }
+      if (stats) stats.textContent = text;
+      if (why) {
+        const kept = baked && item ? this.bakedKit[index].why : null;
+        why.textContent = kept ?? "";
+        why.hidden = kept === null || kept === "";
+      }
+      panel.hidden = !item; // (a place left empty has nothing to open)
+      if (item) this.labelToggle(index, item.name, baked && why !== null && !why.hidden);
+    });
+    this.toggleAll?.setAttribute("aria-expanded", String(this.allOpen()));
+    if (note) note.hidden = baked;
   }
 
   // ---- the Upgrade section: its code comes with the first use ---------------------------------------------------------------------------------
@@ -399,6 +642,7 @@ class TrioApp {
             kit: this.kit.payload === null ? null : this.kit,
             remember: { key: GEAR_KEY, storage: getStorage(this.win), stored: this.stored },
             valueView: () => this.valueView(),
+            onEquipKit: (kit) => this.setEquipKit(kit),
             // the panel of the kit is code of a chunk of its own: when it cannot be had, the page says so at the top, where the kit would be shown
             onKitFailed: () => this.setStatus(KIT_NOT_LOADED, () => this.reload(), "Reload"),
             // the view the page shows, not the state of the switches (a view that could not be loaded is not shown); its setup is the one shown, never none
@@ -560,7 +804,13 @@ class TrioApp {
   loadShard(evidence, buffs) {
     const key = evidence + "-" + buffs;
     if (!this.shards.has(key)) {
-      const promise = this.loadJson(this.base + key + ".json").then(parseShard).then((shard) => this.sameRelease(shard));
+      const promise = this.loadJson(this.base + key + ".json")
+        .then(parseShard)
+        .then((shard) => {
+          this.sameRelease(shard);
+          this.indexStats(shard);
+          return shard;
+        });
       promise.catch(() => {
         if (this.shards.get(key) === promise) this.shards.delete(key);
       });
@@ -862,7 +1112,8 @@ class TrioApp {
     setField(this.root, "s-tier", tierLabel(s.tier));
     this.paintAssumptions(this.displayed);
 
-    this.paintKit(s);
+    this.paintKit(s, this.isBaked(view));
+    this.setExaltView(s, view.exact === true && s.setup === view.best);
     this.paintTotals(s);
     this.paintWeapons(view);
     for (const watcher of [...this.viewWatchers]) {
@@ -894,7 +1145,8 @@ class TrioApp {
    */
   drawSolved({ items, tier, hasteAssumed, value, kind }) {
     if (this.applying !== 0) return false;
-    this.paintKit({ kit: items, tier });
+    this.paintKit({ kit: items, tier }, false);
+    this.setExaltView({ kit: items, tier }, false);
     setField(this.root, "assume-haste", hasteAssumed + "%");
     this.root.classList.add("solved");
     if (this.shown) {
@@ -909,7 +1161,7 @@ class TrioApp {
     return this.linkItems && typeof key === "string" && ITEM_KEY.test(key) ? ITEM_BASE + key + "/" : null;
   }
 
-  paintKit(scenario) {
+  paintKit(scenario, baked = false) {
     this.rows.forEach((row, index) => {
       const item = scenario.kit[index] ?? null;
       if (!item) {
@@ -928,6 +1180,7 @@ class TrioApp {
       const deity = field(row, "deity");
       if (deity) deity.hidden = !(item && item.deity.length > 0);
     });
+    this.paintDetails(scenario, baked);
   }
 
   paintTotals(scenario) {

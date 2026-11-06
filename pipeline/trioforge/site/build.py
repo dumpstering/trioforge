@@ -141,6 +141,7 @@ __all__ = [
     "check_notfound_script",
     "check_owner",
     "check_page_script",
+    "check_exalt_chunk",
     "check_weights_chunk",
     "credit_of",
     "attribution_parts",
@@ -151,6 +152,7 @@ __all__ = [
     "notfound_context",
     "render_manifest",
     "render_trio_manifest",
+    "eqlt_item_rows",
     "revision_rows",
     "site_files",
     "trio_manifest_name",
@@ -217,7 +219,7 @@ DISCLAIMER = (
 ATTRIBUTION = (
     "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; "
     "quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; "
-    "changes: parsed, normalized, filtered, graded by evidence, tier-scaled"
+    "changes: parsed, normalized, filtered, tier-scaled"
 )
 #: the names in ATTRIBUTION that the footer and the sources page link, and where to
 LICENCE_URL = "https://creativecommons.org/licenses/by-sa/4.0/legalcode"
@@ -251,11 +253,15 @@ ASSET_CACHE = "public, max-age=31536000, immutable"
 
 #: the page budgets: a first view stays light and so does every data file
 LIMITS = {
-    "trio_html": 60 * 1024,
+    "trio_html": 66 * 1024,  # (60 KB until p7kit, which puts the stats and the why line of each of the 22 rows in the page: some 7 KB raw and 1.4 KB gzipped)
     "first_load_js_gzip": 30 * 1024,
     "first_load_gzip": 60 * 1024,
     "shard": 200 * 1024,
     "shard_gzip": 50 * 1024,
+    # the section Effects to exalt fetches the shared effects file and the file of the trio when it is opened (they are the layer's own budgets, effects/files.py: a test holds them equal)
+    "effects": 200 * 1024,
+    "effects_gzip": 50 * 1024,
+    "exalt_gzip": 20 * 1024,
     # the script is two budgets. What a page loads by itself (the page script and the boot script) has a raw limit of its own, beside the gzip one above; what it loads on
     # first use (the chunks under assets/ that no page loads by itself, and their styles: the code of the Upgrade section and of a shared kit) is held apart from the first load,
     # whatever that weighs: each chunk has 100 KB raw and 40 KB gzipped of its own (one budget for all the chunks would be spent by the first that came), and all the chunks
@@ -321,6 +327,9 @@ FAVICON = _favicon()
 REPORT_VIEW = ("race", "role", "tier", "setup", "buffs")
 
 _SHARD_FILE = re.compile(r"data/[^/]+/(?:strict|wiki)-(?:own|group)\.json")
+#: the files of the section Effects to exalt, fetched when it is opened: the shared one, and one for each trio
+_EFFECTS_FILE = re.compile(r"data/effects\.json")
+_EXALT_FILE = re.compile(r"data/[^/]+/exalt\.json")
 #: the file of a role's runner-ups (the page fetches it whole, the first time the runner-ups of a view of that role open)
 _RUNNERUP_FILE = re.compile(r"data/[^/]+/runnerups/(?:" + "|".join(data.ROLES) + r")\.json")
 #: the script a browser would run, whatever it is called
@@ -642,6 +651,34 @@ def check_weights_chunk(meta: Mapping[str, Any]) -> None:
         raise BuildError(f"no output but the page script holds {missing[0]}: the code of the sliders is not in the build as a chunk of its own")
 
 
+#: The files of the code of the section Effects to exalt, by the names esbuild's metafile gives its inputs: the section and the matcher of the plan. The page script loads them by a dynamic
+#: import when the section is opened or scrolled into view: no output that a page loads by itself holds them.
+EXALT_INPUTS = ("ui/exalt.js", "ui/exalt-plan.js")
+
+
+def check_exalt_chunk(meta: Mapping[str, Any]) -> None:
+    """Refuse a bundle whose page script holds the code of the section Effects to exalt (a static import of it would put it into the first load, which the budget of the first load would
+    count as if it were not there), and a bundle that has it in no output. ``meta`` is esbuild's metafile of the bundle of ``app.js``."""
+    found = False
+    held: set[str] = set()
+    for output, info in meta.get("outputs", {}).items():
+        mine = {name for name in ("/".join(str(n).replace("\\", "/").split("/")[-2:]) for n in info.get("inputs", {})) if name in EXALT_INPUTS}
+        if Path(str(info.get("entryPoint", ""))).name != "app.js":
+            held |= mine
+            continue
+        found = True
+        if mine:
+            raise BuildError(
+                f"the page script {Path(output).name} holds {sorted(mine)[0]}, the code of the section Effects to exalt: a static import of it puts it into the page script, which the budget "
+                f"of the first load counts as if it were not there (it is loaded by a dynamic import, when the section is opened)"
+            )
+    if not found:
+        raise BuildError("esbuild's account of the bundle has no page script (app.js)")
+    missing = [name for name in EXALT_INPUTS if name not in held]
+    if missing:
+        raise BuildError(f"no output but the page script holds {missing[0]}: the code of the section Effects to exalt is not in the build as a chunk of its own")
+
+
 def _weights_input(name: str) -> str | None:
     """Which file of the code of the sliders an input of esbuild's metafile is, if it is one (named from ``static/`` or from the root of the repository)."""
     tail = "/".join(str(name).replace("\\", "/").split("/")[-2:])
@@ -670,6 +707,7 @@ def bundle_assets(
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         check_page_script(meta)
         check_weights_chunk(meta)
+        check_exalt_chunk(meta)
         if keep_metafile is not None:
             keep_metafile.update(meta)
         _run_esbuild([*common, "--format=iife", f"--outdir={boot_out}", str(STATIC / "boot.js")])
@@ -697,6 +735,10 @@ def _bundle_engine(files: dict[str, bytes]) -> EngineAssets:
     and the client does not carry it). Adds the four files to ``files``.
 
     ``node:module`` stays an external import: the solver's loader asks for it only when it finds itself in Node, which a browser never is.
+    The worker file is a bundle of the project's own ``static/engine/worker.js`` and the solver's loader, and the loader carries a few strings that read like a
+    path of a computer (a URL scheme, and folders of Emscripten's in-memory file system). The release check for local paths
+    (:data:`trioforge.precompute.release.VENDOR_LITERALS`) lets exactly those quoted strings through in that file, a fixed number of times; they name no place on
+    any computer, and every other match in the file, the project's own code included, still refuses the release.
     The target is Firefox 114 because module workers need it."""
     if not HIGHS_PACKAGE.is_file() or not HIGHS_WASM.is_file():
         raise BuildError("the solver package (highs) is missing: run `npm ci --ignore-scripts` first")
@@ -1157,6 +1199,24 @@ def check_budgets(
         zipped = _gzip_size(content_bytes)
         if zipped > LIMITS["shard_gzip"]:
             problems.append(f"runner-up file {name} is {zipped / 1024:.1f} KB gzip (limit {LIMITS['shard_gzip'] // 1024} KB)")
+    # the files of the section Effects to exalt (the page fetches both when the section is opened, and nothing before): their size is the weight of the section
+    shared = {name: content_bytes for name, content_bytes in files.items() if _EFFECTS_FILE.fullmatch(name)}
+    exalts = {name: content_bytes for name, content_bytes in files.items() if _EXALT_FILE.fullmatch(name)}
+    sizes["effects"] = max((len(content_bytes) for content_bytes in shared.values()), default=0)
+    sizes["effects_gzip"] = max((_gzip_size(content_bytes) for content_bytes in shared.values()), default=0)
+    sizes["largest_exalt"] = max((len(content_bytes) for content_bytes in exalts.values()), default=0)
+    sizes["largest_exalt_gzip"] = max((_gzip_size(content_bytes) for content_bytes in exalts.values()), default=0)
+    sizes["exalt_files"] = len(exalts)
+    for name, content_bytes in sorted(shared.items()):
+        if len(content_bytes) > LIMITS["effects"]:
+            problems.append(f"effects file {name} is {len(content_bytes) / 1024:.1f} KB (limit {LIMITS['effects'] // 1024} KB)")
+        if _gzip_size(content_bytes) > LIMITS["effects_gzip"]:
+            problems.append(f"effects file {name} is {_gzip_size(content_bytes) / 1024:.1f} KB gzip (limit {LIMITS['effects_gzip'] // 1024} KB)")
+    for name, content_bytes in sorted(exalts.items()):
+        if _gzip_size(content_bytes) > LIMITS["exalt_gzip"]:
+            problems.append(f"exalt file {name} is {_gzip_size(content_bytes) / 1024:.1f} KB gzip (limit {LIMITS['exalt_gzip'] // 1024} KB)")
+    if exalts and not shared:
+        problems.append("the exalt files of the trios have no effects file to go with them")
     sizes["item_pages"] = len(item_pages)
     sizes["largest_item"] = sizes["largest_item_gzip"] = 0
     for page in item_pages:
@@ -1297,6 +1357,7 @@ class TrioFiles:
     roles: tuple[str, ...]
     tiers: tuple[int, ...]
     levels: tuple[int, ...] = (50,)
+    exalt: bool = False  # whether the trio has the file of the effects layer (``data/<trio>/exalt.json``, which makes the section Effects to exalt of its page)
 
     def check(self) -> None:
         """Refuse a trio that no build could have: the code, each role once, an ascending scope of real tiers, each level once."""
@@ -1332,6 +1393,8 @@ class TrioFiles:
         names += [f"data/{self.slug}/{evidence}-{buffs}.json" for evidence in data.EVIDENCE for buffs in data.BUFFS]
         names += [f"data/{self.slug}/runnerups/{role}.json" for role in self.roles]
         names += [f"data/{self.slug}/robust.json", trio_manifest_name(self.slug)]
+        if self.exalt:
+            names.append(f"data/{self.slug}/{data.EXALT_NAME}")
         names += [f"{ENGINE_DATA_DIR}/{self.slug}-l{level}-{HASH_PLACEHOLDER}.json" for level in self.levels]
         return names
 
@@ -1361,6 +1424,9 @@ def site_files(
             raise BuildError(f"{asset} belongs to the data of a trio or to the item table, which the list makes itself")
     names += list(assets)
     names.append(f"{ENGINE_DATA_DIR}/items-{HASH_PLACEHOLDER}.json")
+    trios = list(trios)
+    if any(trio.exalt for trio in trios):
+        names.append(f"data/{data.EFFECTS_NAME}")  # (the one file of the effects that the trios with an exalt file share)
     seen_trios: set[str] = set()
     for trio in trios:
         if trio.slug in seen_trios:
@@ -1397,6 +1463,16 @@ def revision_rows(keys: Iterable[str], manifest: content.Manifest, pages: Collec
         for key in keys
     ]
     return sorted(rows, key=lambda row: (row.title.lower(), row.key))
+
+
+def eqlt_item_rows(keys: Iterable[str], manifest: content.Manifest, pages: Collection[str]) -> list[SimpleNamespace]:
+    """The rows of the table of items read from EQ Legends Tools on the sources page, sorted by name: the item ``key``, its ``name``, the ``url`` of its page at that site and the
+    address of the item's own ``page`` here (None where it has none)."""
+    rows = [
+        SimpleNamespace(key=key, name=manifest.eqlt[key][0], url=content.eqlt_item_url(manifest.eqlt[key][1]), page=view.item_href(key) if key in pages else None)
+        for key in keys
+    ]
+    return sorted(rows, key=lambda row: (row.name.lower(), row.key))
 
 
 def _tiers_text(tiers: Iterable[int]) -> str:
@@ -1552,6 +1628,16 @@ def check_defaults(results: data.TrioResults) -> None:
         raise BuildError(f"{slug}: the default setup {defaults.setup} is not the best setup of {defaults.race} for the {role} role at +{tier}")
     if abs(defaults.value - chosen) > MARGIN_TOLERANCE:
         raise BuildError(f"{slug}: the default value {defaults.value} does not match the rows ({chosen})")
+    if defaults.why is not None:  # the why is of the kit of the default answer: place by place, the item it names is the one that kit wears
+        scenario = shard.scenario(defaults.race, role, tier, defaults.setup)
+        if scenario is None:
+            raise BuildError(f"{slug}: {level}.json has no row for {defaults.race} {role} +{tier} {defaults.setup}")
+        for n, (place, item) in enumerate(zip(defaults.why.places, scenario.kit, strict=True)):
+            wears = None if item is None else item.key
+            if (None if place is None else place.key) != wears:
+                raise BuildError(
+                    f"{slug}: defaults.json: why.places[{n}] is for {None if place is None else place.key}, but the default kit wears {wears} there: the files are not from one run"
+                )
 
 
 # ---- pages -----------------------------------------------------------------------------------------------------------------------
@@ -1728,8 +1814,9 @@ def build(
                 f"but {rules.name} is version {book.version}; run the precompute again"
             )
         check_defaults(trio)
+    exalt = data.load_exalt(results, trios, items.document)  # (None for results made before the effects layer: no trio page then has the section; read after the defaults are checked, as it is held to them)
     shown = {item.key: item for trio in trios for item in data.used_items(trio)}
-    missing = sorted(set(shown) - set(manifest.items))
+    missing = sorted(set(shown) - set(manifest.items) - set(manifest.eqlt))  # (an item read from EQ Legends Tools alone has no wiki revision, and its page credits that site)
     if missing:
         raise BuildError(f"{sources_manifest.name} has no wiki page for {len(missing)} item(s) shown, first {missing[0]}")
     table = items.document
@@ -1742,6 +1829,11 @@ def build(
         raise BuildError(f"{sources_manifest.name} has no wiki page for {len(uncredited)} item(s) with a page of their own, first {uncredited[0]}: an item page credits its wiki page")
     headers_text = render_headers(headers.read_text(encoding="utf-8"), noindex=noindex)
     rules_obj = rules_module.load(rules)
+    # the stats of an item at a tier, as the model sees it (the same ``at_tier`` the pages of the items use), for the rows of Wear this
+    vecs = view.tier_vecs(records, table["defaults"], rules_obj)
+
+    def stat_lines(key: str, tier: int) -> str:
+        return view.item_stat_text(vecs(key, tier))
 
     # 2. the assets, then the pages
     assets, files = bundle_assets()
@@ -1785,7 +1877,7 @@ def build(
             wearers.setdefault(key, []).append((trio.meta.slug, view.trio_name(trio.meta.trio)))
         caps = view.trio_caps(trio.meta.trio, trio.meta.level, rules_obj)
         try:
-            page = view.trio_page(trio, book, caps, with_page)
+            page = view.trio_page(trio, book, caps, with_page, vecs, exalt)
         except ValueError as error:  # (an item the page can show has no page of its own: one line, naming the trio and the item)
             raise BuildError(str(error)) from None
         path = f"/trio/{trio.meta.slug}/"
@@ -1803,11 +1895,15 @@ def build(
         trio_files.append(name)
         live.append(SimpleNamespace(slug=trio.meta.slug, name=page.name, level=trio.meta.level))
         for shard in trio.shards.values():
-            files[f"data/{trio.meta.slug}/{shard.evidence}-{shard.buffs}.json"] = data.site_shard_json(shard, credit).encode("utf-8")
+            files[f"data/{trio.meta.slug}/{shard.evidence}-{shard.buffs}.json"] = data.site_shard_json(shard, credit, stat_lines).encode("utf-8")
         for role in trio.runnerups.roles():  # a file for each role, with every tier of the run in it
             name = f"data/{trio.meta.slug}/runnerups/{role}.json"
             files[name] = data.site_runnerups_json(trio.runnerups, role, credit).encode("utf-8")
         files[f"data/{trio.meta.slug}/robust.json"] = data.site_robust_json(trio.robust, credit).encode("utf-8")
+        if exalt is not None and exalt.has(trio.meta.slug):
+            files[f"data/{trio.meta.slug}/{data.EXALT_NAME}"] = data.site_exalt_json(exalt, trio.meta.slug, table, credit).encode("utf-8")
+    if exalt is not None and exalt.trios:
+        files[f"data/{data.EFFECTS_NAME}"] = data.site_effects_json(exalt, table, credit, with_page, rules_obj.get("effects.late_level")).encode("utf-8")
 
     pages["index.html"] = render(
         "home.html.j2",
@@ -1827,7 +1923,8 @@ def build(
         book=book,
         seal_legend=[(key, label, meaning) for key, (label, meaning) in content.SEALS.items()],
     )
-    revisions = revision_rows(sorted(shown), manifest, with_page)  # the items the trio pages show, each linked to its own page where it has one (an item page carries its own credit)
+    revisions = revision_rows([key for key in sorted(shown) if key in manifest.items], manifest, with_page)  # the items the trio pages show, each linked to its own page where it has one (an item page carries its own credit)
+    eqlt_rows = eqlt_item_rows(sorted(key for key in manifest.eqlt if key in shown or key in with_page), manifest, with_page)
     pages["sources/index.html"] = render(
         "sources.html.j2",
         "/sources/",
@@ -1836,6 +1933,9 @@ def build(
         subject="the sources page",
         manifest=manifest,
         revisions=revisions,
+        eqlt_rows=eqlt_rows,
+        eqlt_name=content.EQLT_NAME,
+        eqlt_site=content.EQLT_SITE,
     )
     item_files: list[str] = []
     try:
@@ -1847,6 +1947,7 @@ def build(
                 book=book,
                 wiki=manifest.items[key] if view.has_wiki_page(records[key]) else None,
                 wearers=wearers.get(key, ()),
+                origin=manifest.eqlt[key][1] if key in manifest.eqlt else None,
             )
             for key in keys
         ]
@@ -2128,6 +2229,11 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
         f"largest runner-up file (one for each role, every tier in it): {_kb(sizes['largest_runnerup'])} raw (limit {LIMITS['shard'] // 1024} KB), "
         f"{_kb(sizes['largest_runnerup_gzip'])} gzip (limit {LIMITS['shard_gzip'] // 1024} KB)"
     )
+    if sizes["exalt_files"]:
+        print(
+            f"effects to exalt (fetched when the section is opened): the shared file {_kb(sizes['effects'])} raw (limit {LIMITS['effects'] // 1024} KB), {_kb(sizes['effects_gzip'])} gzip "
+            f"(limit {LIMITS['effects_gzip'] // 1024} KB); {sizes['exalt_files']} trio files, the largest {_kb(sizes['largest_exalt'])} raw, {_kb(sizes['largest_exalt_gzip'])} gzip (limit {LIMITS['exalt_gzip'] // 1024} KB)"
+        )
     print(f"first view with its data (first load + the largest shard): {_kb(sizes['first_view_gzip'])} gzip")
     print(f"files: {sizes['files']:,} (limit {LIMITS['files']:,}; Cloudflare Pages takes 20,000)")
     print(

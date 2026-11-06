@@ -343,6 +343,6 @@ def test_a_small_run_on_the_real_catalog_builds_into_a_site(tmp_path):
     wanted = expand(wiki)[(defaults["race"], "balanced", 4, defaults["setup"])]["kit"]
     baked = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
     assert baked == [keys[key] if key else "Leave empty" for key in wanted]
-    assert result.partial == (SLUG,) and result.sizes["trio_html"] < 60 * 1024
+    assert result.partial == (SLUG,) and result.sizes["trio_html"] < build.LIMITS["trio_html"]
     assert not html.find_all("p", id_="evidence-note")
     print(f"the small real run and the site build took {time.perf_counter() - started:.0f} s")

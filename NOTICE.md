@@ -4,7 +4,7 @@ TrioForge is a fan project, not affiliated with or endorsed by Daybreak Game Com
 
 ## Data sources
 
-- **eqlwiki** (<https://eqlwiki.com/>): licensed CC BY-SA 4.0 by the eqlwiki contributors. Item data in this project is adapted from it; changes: parsed, normalized, filtered, graded by evidence, tier-scaled. Licence: <https://creativecommons.org/licenses/by-sa/4.0/legalcode>
+- **eqlwiki** (<https://eqlwiki.com/>): licensed CC BY-SA 4.0 by the eqlwiki contributors. Item data in this project is adapted from it; changes: parsed, normalized, filtered, tier-scaled. Licence: <https://creativecommons.org/licenses/by-sa/4.0/legalcode>
 - **EQL Tools** (<https://eqltools.com/sources>): its gear and quest JSON is licensed CC BY-SA 4.0 (compiled from eqlwiki). The gear data is used as a cross-check; the quest data supplies quest giver zones (`derived/quests.json`). Licence: <https://creativecommons.org/licenses/by-sa/4.0/legalcode>
 - **EQL Tools attributes table** (<https://eqltools.com/attributes>): the race base stats and class modifiers in `rules/races.json` are cited from it. They are game facts (EQL Tools reads them from the game client), so they fall outside the CC BY-SA grant, see LICENSE-DATA.
 

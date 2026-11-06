@@ -10,17 +10,20 @@
 //   TRIOFORGE_PREVIEW_PORT        the port to serve on (default 8788)
 //   TRIOFORGE_SOURCES_MANIFEST    a sources manifest other than the default (derived/, or the fixture's for the fixture)
 //   TRIOFORGE_PYTHON              the Python that runs the build (default: the one in .venv, else python3 or python)
+//   TRIOFORGE_PREVIEW_DIST        the folder the site is built into (default site/dist), so that two previews can run side by side
+//   TRIOFORGE_PREVIEW_EXALT=1     build from a copy of the results (under build/) that has the two files of the effects layer, made by the code that makes them for a release
+//                                 (the fixture results were made before the layer, and the section Effects to exalt of a trio page needs them)
 //
 // Playwright's webServer starts this script (playwright.config.mjs). Stopping it stops wrangler and its workerd too.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, rmSync } from "node:fs";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE = join(ROOT, "fixtures", "site");
-const DIST = join(ROOT, "site", "dist");
+const DIST = process.env.TRIOFORGE_PREVIEW_DIST ? resolve(ROOT, process.env.TRIOFORGE_PREVIEW_DIST) : join(ROOT, "site", "dist");
 // wrangler wants a compatibility date; this is a static site, so the value changes nothing except the warning it prints without one
 const COMPATIBILITY_DATE = "2026-09-26";
 
@@ -40,14 +43,14 @@ const port = Number(process.env.TRIOFORGE_PREVIEW_PORT ?? 8788);
 if (!Number.isInteger(port) || port < 1 || port > 65535) fail("TRIOFORGE_PREVIEW_PORT must be a port number");
 
 const given = args[0] ?? process.env.TRIOFORGE_RESULTS;
-const results = given ? resolve(given) : join(FIXTURE, "results");
-const usingFixture = relative(join(FIXTURE, "results"), results) === ""; // (relative() ignores the case of a Windows path)
+const chosen = given ? resolve(given) : join(FIXTURE, "results");
+const usingFixture = relative(join(FIXTURE, "results"), chosen) === ""; // (relative() ignores the case of a Windows path)
 const manifest = process.env.TRIOFORGE_SOURCES_MANIFEST
   ? resolve(process.env.TRIOFORGE_SOURCES_MANIFEST)
   : usingFixture
     ? join(FIXTURE, "sources-manifest.json")
     : null;
-if (!existsSync(results)) fail(`the results folder ${results} does not exist`);
+if (!existsSync(chosen)) fail(`the results folder ${chosen} does not exist`);
 
 function pythonCommand() {
   if (process.env.TRIOFORGE_PYTHON) return process.env.TRIOFORGE_PYTHON;
@@ -55,6 +58,20 @@ function pythonCommand() {
   if (existsSync(venv)) return venv;
   return process.platform === "win32" ? "python" : "python3";
 }
+
+const pythonEnv = { ...process.env, PYTHONPATH: [join(ROOT, "pipeline"), process.env.PYTHONPATH].filter(Boolean).join(delimiter), PYTHONUTF8: "1" };
+
+/** A copy of the results (in build/, which git ignores) with the two files of the effects layer in it, for a preview of the section Effects to exalt. */
+function withEffects(source) {
+  const copy = join(ROOT, "build", "preview-results-exalt");
+  rmSync(copy, { recursive: true, force: true });
+  cpSync(source, copy, { recursive: true });
+  const made = spawnSync(pythonCommand(), ["-m", "trioforge.effects.fixtures", "--site", copy], { cwd: ROOT, stdio: "inherit", env: pythonEnv });
+  if (made.error || made.status !== 0) fail("could not make the effects files of the preview");
+  return copy;
+}
+
+const results = process.env.TRIOFORGE_PREVIEW_EXALT === "1" ? withEffects(chosen) : chosen;
 
 // 1. build (the generator is run as a module, so the package folder goes on the path)
 const build = spawnSync(

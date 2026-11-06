@@ -277,7 +277,7 @@ def test_weapon_columns_carry_the_damage_index_of_the_weapons_module():
     one = hand_columns(build_milp(prof, [SWORD, SHIELD], "1h-shield", None, BuildOptions(any_rule="explicit", haste_assumed=50)))
     assert one == pytest.approx({("PRIMARY", "sword"): 2 * F(35, 30) * F(3, 2), ("SECONDARY", "shield"): 0.0}, rel=1e-12)
     two = hand_columns(build_milp(prof, HANDS, "2h", None, BuildOptions(any_rule="explicit", haste_assumed=0)))
-    assert two == pytest.approx({("PRIMARY", "axe"): 2 * (40 + F(67, 100) * 60) / 60}, rel=1e-12)
+    assert two == pytest.approx({("PRIMARY", "axe"): 2 * (40 + F(67, 100) * 50) / 60}, rel=1e-12)  # (the delay counts at most 50)
     stick = hand_columns(build_milp(prof, HANDS, "stick", None, BuildOptions(any_rule="explicit", haste_assumed=50)))
     assert stick and all(value == 0.0 for value in stick.values())
 
@@ -324,6 +324,39 @@ def test_worn_haste_counts_up_to_the_headroom_and_a_spell_over_the_cap_leaves_no
     prof = profile(weights={"HASTE": 2}, buff_totals={"HASTE": spell}, haste_cap=cap)
     milp, groups, _, exact = solve(prof, [make_item("h", {"HEAD"}, haste=worn)] if worn else [])
     assert exact == 2 * counted == evaluate(prof, kit_from_groups(groups)).F
+
+
+@pytest.mark.parametrize(
+    "spell, cap, worn, counted",
+    [(0, 85, 0, 10), (45, 85, 40, 85), (20, 85, 30, 60), (45, 75, 40, 75), (0, 85, 25, 35), (80, 85, 30, 85), (70, 75, 20, 75)],
+)
+def test_unbound_alacrity_adds_its_haste_to_the_spell_haste_and_the_room_follows(spell, cap, worn, counted):
+    # the Monk's 10 haste stacks with the spell haste and the best worn piece, and the cap cuts the sum
+    prof = profile(weights={"HASTE": 2}, buff_totals={"HASTE": spell} if spell else {}, haste_cap=cap, haste_bonus=10)
+    _, groups, _, exact = solve(prof, [make_item("h", {"HEAD"}, haste=worn)] if worn else [])
+    assert exact == 2 * counted == evaluate(prof, kit_from_groups(groups)).F
+
+
+def test_unbound_alacrity_shifts_every_spell_haste_choice_and_the_room_left_for_worn_haste():
+    # 10 + 40 leaves room for 35 worn haste, 10 + 60 only for 15: 30 worn counts 30 under the first (80) and 15 under the second (85)
+    prof = profile(weights={"HASTE": 2}, haste_cap=85, haste_bonus=10)
+    buffset = make_buffset(optional=[make_buff(1, haste=40), make_buff(2, haste=60)], conflicts=[(1, 2)])
+    _, groups, buffs, exact = solve(prof, [make_item("boots", {"FEET"}, haste=30)], STICK, buffset)
+    assert buffs == (2,) and exact == 2 * 85 == evaluate(prof, kit_from_groups(groups), eval_totals(buffset, buffs)).F
+    assert solve(prof, [], STICK, buffset)[3] == 2 * 70  # nothing worn: the better spell haste, 60, and the 10 on top
+
+
+def test_the_assumed_haste_counts_unbound_alacrity_whether_the_profile_names_its_spell_haste_or_not():
+    boots = make_item("boots", {"FEET"}, haste=35)
+    always = profile(buff_totals={"HASTE": 30}, haste_cap=85, weights={"DMG": 1}, haste_bonus=10)
+    assert build_milp(always, [boots], STICK, None, OPT).haste_assumed == 75  # 10 + 30 + 35
+    capped = profile(buff_totals={"HASTE": 50}, haste_cap=85, haste_bonus=10)
+    assert build_milp(capped, [boots], STICK, None, OPT).haste_assumed == 85
+    with_buff = make_buffset(optional=[make_buff(1, haste=25)])
+    assert build_milp(profile(haste_cap=85, haste_bonus=10), [boots], STICK, with_buff, OPT).haste_assumed == 70  # 10 + 25 + 35
+    named = profile(haste_cap=85, haste_bonus=10)  # a profile that names its spell haste has the 10 in it already
+    object.__setattr__(named, "spell_haste", 35)
+    assert build_milp(named, [boots], STICK, with_buff, OPT).haste_assumed == 70
 
 
 def test_spell_haste_over_the_cap_keeps_the_model_feasible_with_no_haste_from_gear():

@@ -156,6 +156,7 @@ function spareText(entry, elsewhere) {
 
 export function createUpgradeAnswer(root, env) {
   const { gear, records, trio, level, view, onView, words, clientPath, announce, onUpdated, reload } = env;
+  const onEquipKit = typeof env.onEquipKit === "function" ? env.onEquipKit : null; // told the kit of Equip now whenever it is drawn, and null when there is none (the section Effects to exalt matches a plan to it)
   const doc = env.doc ?? root.ownerDocument;
   const win = env.win ?? doc.defaultView;
   const loadEngine = env.loadEngine ?? ((url) => import(url));
@@ -285,8 +286,31 @@ export function createUpgradeAnswer(root, env) {
     stopButton = null;
   }
 
+  /** Tell the page the kit that Equip now shows, or that there is none: each place `{key, name, tier}` or null, and the record of an item of the item table (it says what a class may wear and where). */
+  function publishEquip(kit) {
+    if (onEquipKit === null) return;
+    try {
+      onEquipKit(
+        kit === null
+          ? null
+          : {
+              kit: kit.map((ident) => {
+                if (ident === null) return null;
+                const [key, tier] = split(ident);
+                return { key, name: nameOf(key), tier };
+              }),
+              record: (key) => records.get(key) ?? null,
+              defaults: env.itemDefaults ?? null,
+            },
+      );
+    } catch {
+      // a fault in the other section is its own, not the answer's
+    }
+  }
+
   /** Nothing of an answer on the page. */
   function reset() {
+    publishEquip(null);
     for (const part of [equip, next, then]) part.hidden = true;
     equipLabel.textContent = "";
     share.show(false);
@@ -356,6 +380,7 @@ export function createUpgradeAnswer(root, env) {
     equip.hidden = false;
     ctx.drawn = true;
     ctx.equip = step.kit === null ? null : { kit: [...step.kit], buffs: [...(step.buffs ?? [])] }; // (what Every slot starts from; none when no kit was found)
+    publishEquip(step.kit === null || filledOf(step.kit) === 0 ? null : step.kit);
     share.show(step.kit !== null && filledOf(step.kit) > 0);
     if (more !== null) more.hidden = false;
     ctx.equipSaid = step.kit === null ? `Equip now: ${step.label}.` : `Equip now is ready: ${filledOf(step.kit)} of ${PLACES} places filled.`;

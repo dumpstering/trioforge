@@ -31,7 +31,7 @@ from trioforge.data.races import RACE_NAMES
 from trioforge.model.items import ItemVec, at_tier
 from trioforge.precompute import grid, shards
 from trioforge.solver import solve as solver_solve
-from trioforge.solver.model import build_milp
+from trioforge.solver.haste import solve_scenario
 from trioforge.solver.prune import prune
 
 __all__ = [
@@ -51,7 +51,7 @@ PHRASES = {
     "race.iksar_ac_placement": "Iksar AC stacks inside the cap",
     "monk.bonus_placement": "the Monk worn-weight bonus counts inside the AC cap",
     "monk.weight_curve": "the Monk worn-weight curve is the other one",
-    "mana.wis_bands": "mana from WIS follows the other bands",
+    "mana.wis_bands": "mana from WIS follows the other bands",  # (settled today and listing no alternative; a rules file that lists one gets the variant again, and this is its wording)
     "tier.weapon_damage_pct": "weapon damage grows at the other rate a tier",
 }
 FLIP_TOLERANCE = 1e-9  # relative: another race is on top only if it is worth more than this above the default race
@@ -146,7 +146,7 @@ def flip_variants(
             best: float | None = None
             for setup in setups:
                 items = prune(pool(variant.item_options), variant.profile, tier, setup, buffset, grid.BUILD_OPTIONS)
-                solution = solve(build_milp(variant.profile, items, setup, buffset, grid.BUILD_OPTIONS))
+                solution = solve_scenario(variant.profile, items, setup, buffset, grid.BUILD_OPTIONS, solver=solve).solution
                 if solution.status != "optimal" or solution.F is None:
                     raise SealError(
                         f"the solve of {RACE_NAMES.get(race, race)} under '{variant.label}' ended {solution.status}, not optimal"

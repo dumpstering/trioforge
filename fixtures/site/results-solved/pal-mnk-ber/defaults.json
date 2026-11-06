@@ -10,10 +10,11 @@
 "strict_pool_empty":false,
 "race":"OGR",
 "runner_up_race":"IKS",
-"margin":405.3,
-"F":17455.7,
+"margin":456.93,
+"F":18378.02,
 "setup":"dw",
-"races":[{"race":"OGR","legal":true,"F":17455.7,"setup":"dw"},{"race":"IKS","legal":true,"F":17050.4,"setup":"dw"}],
+"races":[{"race":"OGR","legal":true,"F":18378.02,"setup":"dw"},{"race":"IKS","legal":true,"F":17921.09,"setup":"dw"}],
 "flip_notes":[],
-"robustness":"skipped: disabled"
+"robustness":"skipped: disabled",
+"why":{"places":[{"key":"w90001","loss":[["STA",128.2512,null],["HP",96.6,null],["AC",51.975,null]]},{"key":"w80816","loss":[["STA",120.2355,null],["ATK",35.0,null],["AC",19.8,null]]},{"key":"w90008","loss":[["HASTE",670.1904545454546,null],["AGI",27.60440625,null]]},{"key":"w90009","loss":[["STA",104.2041,null],["HP",56.35,null]]},{"key":"w90011","loss":[["STA",112.2198,null],["HP",88.55,null],["MAGIC",4.8,null]]},{"key":"w8091","loss":[["STA",104.2041,null],["HP",72.45,null],["AC",27.225,null]]},{"key":"w90016","loss":[["HP",104.65,null],["AC",28.4625,null]]},{"key":"w80417","loss":[["HP",80.5,null],["MANA",21.0,null],["AC",16.0875,null]]},{"key":"w90021","loss":[["HP",64.4,null],["AC",17.325,null],["DISEASE",3.6,null]]},{"key":"w90021","loss":[["HP",64.4,null],["AC",17.325,null],["DISEASE",3.6,null]]},{"key":"w90024","loss":[["STA",104.2041,null],["AC",18.5625,null]]},{"key":"w80631","loss":[["HP",96.6,null],["STR",50.1041775,null],["ATK",40.0,null]]},{"key":"w90026","loss":[["STA",112.2198,null],["HP",80.5,null]]},{"key":"w90029","loss":[["HP",128.8,null],["STA",128.2512,null],["AC",71.775,null]]},{"key":"w90030","loss":[["STA",112.2198,null],["AC",40.8375,null]]},{"key":"w90033","loss":[["STR",50.1041775,null],["AC",27.225,null]]},{"key":"w80158","loss":[["HP",64.4,null],["WIS",31.5,null],["AC",18.5625,null]]},{"key":"w90038","loss":[["DEX",31.65,null],["DAMAGE",0.0,null]]},{"key":"w90029","loss":[["HP",128.8,null],["STA",128.2512,null],["AC",71.775,null]]},{"key":"w90029","loss":[["HP",128.8,null],["STA",128.2512,null],["AC",71.775,null]]},{"key":"w80923","loss":[["DAMAGE",3360.0,null],["WIS",31.5,null],["MANA",28.0,null]]},{"key":"w80113","loss":[["DAMAGE",1725.57,null],["STR",46.25001,null],["ATK",35.0,null]]}]}
 }

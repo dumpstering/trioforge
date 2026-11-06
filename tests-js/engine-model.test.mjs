@@ -785,12 +785,12 @@ describe("hand-made models", () => {
     expect(index(dw, "SECONDARY", "sword")).toBe(q(2).mul(q(20, 30)).mul(q(3, 2)).mul(q(1, 2)).toNumber());
     expect(index(dw, "PRIMARY", "dagger")).toBe(q(2).mul(q(12, 20)).mul(q(3, 2)).toNumber());
     expect(index(dw, "SECONDARY", "dagger")).toBe(q(2).mul(q(8, 20)).mul(q(3, 2)).mul(q(1, 2)).toNumber());
-    // the shield setup scores the main hand only, the stick scores nothing, a two-hander has a bonus of its own (67 hundredths of the delay)
+    // the shield setup scores the main hand only, the stick scores nothing, a two-hander has a bonus of its own (67 hundredths of the delay, at most 50)
     const shielded = modelOf(profile, [SWORD, SHIELD], { setup: "1h-shield", haste_assumed: 50 });
     expect(index(shielded, "PRIMARY", "sword")).toBe(q(2).mul(q(35, 30)).mul(q(3, 2)).toNumber());
     expect(index(shielded, "SECONDARY", "shield")).toBe(0);
     const two = modelOf(profile, HANDS, { setup: "2h", haste_assumed: 0 });
-    expect(index(two, "PRIMARY", "axe")).toBe(q(2).mul(q(40).add(q(67, 100).mul(q(60)))).div(q(60)).toNumber());
+    expect(index(two, "PRIMARY", "axe")).toBe(q(2).mul(q(40).add(q(67, 100).mul(q(50)))).div(q(60)).toNumber()); // (the delay counts at most 50)
     const stick = modelOf(profile, HANDS, { setup: "stick", haste_assumed: 50 });
     expect(stick.item_cols.filter(([, group]) => group === "PRIMARY" || group === "SECONDARY").every(([column]) => stick.c[column] === 0)).toBe(true);
     // a weapon in an Any place scores its stats and no damage
@@ -838,6 +838,36 @@ describe("hand-made models", () => {
     const profile = profileWith({ weights: { HASTE: 2 }, buff_totals: { HASTE: spell }, haste_cap: cap });
     const { exact } = solved(profile, worn > 0 ? [gear("h", ["HEAD"], { haste: worn })] : []);
     expect(exact.toString()).toBe(`${2 * counted}/1`);
+  });
+
+  it.each([
+    [0, 85, 0, 10],
+    [45, 85, 40, 85],
+    [20, 85, 30, 60],
+    [45, 75, 40, 75],
+    [0, 85, 25, 35],
+    [80, 85, 30, 85],
+    [70, 75, 20, 75],
+  ])("adds the 10 haste of Unbound Alacrity to the spell haste %i under the cap %i: a worn %i is worth %i", (spell, cap, worn, counted) => {
+    const profile = profileWith({ weights: { HASTE: 2 }, buff_totals: spell > 0 ? { HASTE: spell } : {}, haste_cap: cap, haste_bonus: 10 });
+    const { exact } = solved(profile, worn > 0 ? [gear("h", ["HEAD"], { haste: worn })] : []);
+    expect(exact.toString()).toBe(`${2 * counted}/1`);
+  });
+
+  it("shifts every spell haste choice by the haste of Unbound Alacrity, and the room left for worn haste with it, and assumes it", () => {
+    const profile = profileWith({ weights: { HASTE: 2 }, haste_cap: 85, haste_bonus: 10 });
+    const buffset = buffsetOf({ optional: [buffOf(1, { HASTE: 40 }), buffOf(2, { HASTE: 60 })], conflicts: [[1, 2]] });
+    const best = solved(profile, [gear("boots", ["FEET"], { haste: 30 })], { buffset });
+    expect(best.buffs).toEqual([2]); // 10 + 40 + 30 = 80 against 10 + 60 + 15 = 85
+    expect(best.exact.toString()).toBe("170/1");
+    expect(solved(profile, [], { buffset }).exact.toString()).toBe("140/1"); // the better spell haste, 60, and the 10 on top
+    const boots = gear("boots", ["FEET"], { haste: 35 });
+    const assumed = (p, items, buff = null) => buildMilp(p, items, "stick", buff, { any_rule: "explicit" }).info.haste_assumed;
+    expect(assumed(profileWith({ buff_totals: { HASTE: 30 }, haste_cap: 85, weights: { DMG: 1 }, haste_bonus: 10 }), [boots])).toBe(75);
+    expect(assumed(profileWith({ buff_totals: { HASTE: 50 }, haste_cap: 85, haste_bonus: 10 }), [boots])).toBe(85);
+    expect(assumed(profileWith({ haste_cap: 85, haste_bonus: 10 }), [boots], buffsetOf({ optional: [buffOf(1, { HASTE: 25 })] }))).toBe(70);
+    // a profile that names its spell haste has the 10 in it already
+    expect(assumed(profileWith({ haste_cap: 85, haste_bonus: 10, spell_haste: 35 }), [boots], buffsetOf({ optional: [buffOf(1, { HASTE: 25 })] }))).toBe(70);
   });
 
   it("counts only the best worn haste, and the best spell haste of a choice up to the cap", () => {

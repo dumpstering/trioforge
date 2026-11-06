@@ -228,20 +228,27 @@ describe("the haste the weapons are scored at", () => {
   const hasteOf = (records, list, over) => valueOfKit({ bundle, records, ...AS_OF_THE_PAGE, ...over, places: list }).hasteAssumed;
   const spell = (buffs) => bundle.buffs[buffs].spell_haste;
 
-  it("is the best spell haste the buff set offers when the kit wears no haste", () => {
-    for (const buffs of ["own", "group", "group+enchanter", "raid"]) expect(run({ buffs, places: [] }).hasteAssumed, buffs).toBe(spell(buffs));
-    expect([25, 40, 60, 60]).toEqual(["own", "group", "group+enchanter", "raid"].map(spell)); // (what the fixture's bundle says)
+  it("is the spell haste of the buffs the value counts when the kit wears no haste: the best of the haste buffs it takes, with the 10 of the Monk's Unbound Alacrity", () => {
+    const bonus = bundle.profile_common.haste_bonus;
+    for (const buffs of ["own", "group", "group+enchanter", "raid"]) {
+      const answer = run({ buffs, places: [] });
+      const { set, table: spells } = { set: bundle.buffs[buffs].set, table: bundle.buff_table };
+      const taken = [...set.always_on, ...answer.buffs].map((id) => spells[String(id)].vec.HASTE ?? 0);
+      expect(answer.hasteAssumed, buffs).toBe(Math.min(bundle.profile_common.haste_cap, Math.max(0, ...taken) + bonus));
+      expect(answer.hasteAssumed, buffs).toBeLessThanOrEqual(spell(buffs)); // (never more than the best spell haste on offer: what the fixture's bundle says is 25, 40, 60 and 60 and the 10 of the Monk)
+    }
+    expect([35, 50, 70, 70]).toEqual(["own", "group", "group+enchanter", "raid"].map(spell));
   });
 
   it("adds the best worn haste of the items the value counts", () => {
     const records = tableWith(hoop);
-    expect(hasteOf(records, places("w90703"), { buffs: "own" })).toBe(25 + 30);
-    expect(hasteOf(records, places("w90703"), { buffs: "group" })).toBe(40 + 30);
-    expect(hasteOf(records, [...places("w90703"), { slotIndex: 3, key: "w90008", tier: 0 }], { buffs: "own" }), "the best one counts, not the sum").toBe(25 + 30);
+    expect(hasteOf(records, places("w90703"), { buffs: "own" })).toBe(35 + 30);
+    expect(hasteOf(records, places("w90703"), { buffs: "group" })).toBe(50 + 30);
+    expect(hasteOf(records, [...places("w90703"), { slotIndex: 3, key: "w90008", tier: 0 }], { buffs: "own" }), "the best one counts, not the sum").toBe(35 + 30);
     const read = readBundle(structuredClone(bundle));
     const worn = atTier(table.records.get("w90008"), 4, read).haste;
     expect(worn).toBeGreaterThan(15); // (a hoop of haste is scored by its tier)
-    expect(hasteOf(table.records, [{ slotIndex: 2, key: "w90008", tier: 4 }], { buffs: "own" })).toBe(25 + worn);
+    expect(hasteOf(table.records, [{ slotIndex: 2, key: "w90008", tier: 4 }], { buffs: "own" })).toBe(35 + worn);
   });
 
   it("stops at the cap of the bundle", () => {
@@ -253,17 +260,17 @@ describe("the haste the weapons are scored at", () => {
 
   it("does not count an item the value leaves out: one the trio cannot use, one in a place it does not fit, one the table does not have", () => {
     const records = tableWith(hoop, wizard);
-    expect(hasteOf(records, places("w90704"), { buffs: "own" })).toBe(25);
-    expect(hasteOf(records, [{ slotIndex: 0, key: "w90703", tier: 0 }], { buffs: "own" }), "an ear piece in the head place").toBe(25);
-    expect(hasteOf(records, places("w99999"), { buffs: "own" })).toBe(25);
-    expect(hasteOf(records, [...places("w90703"), { slotIndex: 0, key: "w90704", tier: 0 }], { buffs: "own" })).toBe(55);
+    expect(hasteOf(records, places("w90704"), { buffs: "own" })).toBe(35);
+    expect(hasteOf(records, [{ slotIndex: 0, key: "w90703", tier: 0 }], { buffs: "own" }), "an ear piece in the head place").toBe(35);
+    expect(hasteOf(records, places("w99999"), { buffs: "own" })).toBe(35);
+    expect(hasteOf(records, [...places("w90703"), { slotIndex: 0, key: "w90704", tier: 0 }], { buffs: "own" })).toBe(65);
   });
 
   it("is the haste the value is worked out at: the evaluator's value for the kit at that haste, with the setup and the buffs of the answer, is the answer's", () => {
     const records = tableWith(hoop);
     const worn = placesOf(CASES[0].kit).map((place) => (place.slotIndex === 3 ? { slotIndex: 3, key: "w90703", tier: 0 } : place));
     const answer = valueOfKit({ bundle, records, ...AS_OF_THE_PAGE, places: worn });
-    expect(answer.hasteAssumed).toBe(25 + 30);
+    expect(answer.hasteAssumed).toBe(35 + 30);
     const read = readBundle(structuredClone(bundle));
     const profile = assembleProfile(read, AS_OF_THE_PAGE);
     const kit = Array.from({ length: 22 }, (_, index) => {
@@ -354,7 +361,7 @@ describe("the optional buffs", () => {
   it("are reported as a lower bound when the search runs out of calls: the value is at least what was found, never more than the best, and the answer says it is not exact", () => {
     const full = ofKit();
     expect(full.exact).toBe(true);
-    for (const searchLimit of [1, 5, 40, 300]) {
+    for (const searchLimit of [1, 5, 40, 150]) {
       const cut = ofKit({ searchLimit });
       expect(cut.exact, String(searchLimit)).toBe(false);
       expect(cut.evaluations, String(searchLimit)).toBeLessThanOrEqual(searchLimit);
@@ -363,7 +370,7 @@ describe("the optional buffs", () => {
       expect(cut.buffs.length).toBeLessThanOrEqual(set.cardinality);
       for (const [a, b] of set.conflicts) expect(cut.buffs.includes(a) && cut.buffs.includes(b)).toBe(false);
     }
-    expect(ofKit({ searchLimit: 300 }).value, "a longer search finds at least as much").toBeGreaterThanOrEqual(ofKit({ searchLimit: 40 }).value);
+    expect(ofKit({ searchLimit: 150 }).value, "a longer search finds at least as much").toBeGreaterThanOrEqual(ofKit({ searchLimit: 40 }).value);
     expect(() => ofKit({ searchLimit: 0 })).toThrow(RangeError);
     expect(() => ofKit({ searchLimit: 1.5 })).toThrow(RangeError);
   });

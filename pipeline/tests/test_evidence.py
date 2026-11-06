@@ -298,6 +298,18 @@ def test_bad_hand_lists_are_refused_with_the_problem_named(edit, mention):
     assert any(mention in problem for problem in problems_of(data)), (mention, problems_of(data))
 
 
+def test_an_exists_unflagged_zone_without_a_seal_is_a_load_error_naming_the_zone_not_a_half_built_list():
+    player = {"names": ["Nektropos Castle"], "ids": [28], "seal": "player", "source": SOURCE, "date": "2026-10-25"}
+    data = hand_data(exists_unflagged_zones=[*hand_data()["exists_unflagged_zones"], {k: v for k, v in player.items() if k != "seal"}])
+    assert any("exists_unflagged_zones[2]" in problem and "seal" in problem for problem in problems_of(data))
+    # a defect anywhere else is a load error too (never a list whose by-name and by-id lookups are empty while the zones still exist)
+    data = hand_data(exists_unflagged_zones=[*hand_data()["exists_unflagged_zones"], player], eql_only_zones=[99, 99])
+    assert any("eql_only_zones" in problem for problem in problems_of(data))
+    whole = HandLists.from_data(hand_data(exists_unflagged_zones=[*hand_data()["exists_unflagged_zones"], player]))
+    assert whole.exists_unflagged_ids == {77, 28} and set(whole.exists_unflagged_by_id) == {77, 28}
+    assert set(whole.exists_unflagged_by_name) == whole.exists_unflagged_names
+
+
 def test_every_problem_is_listed_not_just_the_first():
     data = hand_data(version="soon", in_era_tags=["Classic"])
     data["removed"][0]["seal"] = "rumour"
@@ -905,7 +917,7 @@ def test_the_codes_that_are_no_reason_to_hide_an_item_are_the_notes_and_the_outw
     """The summary of the catalog counts the items hidden for each reason: a note is none, and the record that a report was received and outweighed is none either (the mark or
     the closed zone beside it is the reason). The notes stay the notes the pages word (``NOTE_CODES``)."""
     assert NOT_HIDING_CODES == NOTE_CODES | {"community-report-outweighed"}
-    assert NOTE_CODES == {"not-for-bis", "not-for-default-kits", "wiki-marked-revamped"}
+    assert NOTE_CODES == {"not-for-bis", "not-for-default-kits", "source-eql-tools", "wiki-marked-revamped"}  # (source-eql-tools: p7nek, an item read from EQ Legends Tools)
     hidden_for = {code for flag in ("wiki_banner_delete", "removed_note") for code in codes(classify(make_item(flags=[flag]), ctx(community_keys={"w1"})))} - NOT_HIDING_CODES
     assert hidden_for == {"wiki-marked-not-in-eql", "wiki-marked-removed"}
 
@@ -1688,3 +1700,49 @@ def test_a_recipe_with_a_skill_and_no_container_is_not_a_live_source(real_contex
 
 def test_a_note_that_an_item_is_no_trade_skill_recipe_is_no_source(real_context):
     assert recorded_verdict("Air Tight Box", real_context) == ("hidden", ["no-known-source"])
+
+
+# ---- the seal of an exists-unflagged zone is its own entry's (p7nekfix) -----------------------------
+
+PLAYER_SOURCE = [{"kind": "url", "ref": "https://example.invalid/zone-page"}]
+
+
+def player_zone_ctx():
+    zones = hand_data()["exists_unflagged_zones"] + [
+        {"names": ["Castle Blarg"], "ids": [], "seal": "player", "source": PLAYER_SOURCE, "date": "2026-10-25"}
+    ]
+    return ctx(hand=HandLists.from_data(hand_data(exists_unflagged_zones=zones)))
+
+
+def seals(result):
+    return {reason["code"]: reason["seal"] for reason in result["reasons"]}
+
+
+def test_a_player_sealed_exists_zone_shows_its_seal_and_source_in_every_kind_of_source():
+    context = player_zone_ctx()
+    drop = classify(make_item(drops=[("Castle Blarg", ["a"])]), context)
+    assert seals(drop) == {"live-source:Castle Blarg": "player"}
+    assert "https://example.invalid/zone-page" in drop["reasons"][0]["text"]
+    vendor = classify(make_item(sold_by=[("Castle Blarg", "V")]), context)
+    assert seals(vendor) == {"live-source:vendor": "player"} and "https://example.invalid/zone-page" in vendor["reasons"][0]["text"]
+    foraged = make_item()
+    foraged["sources"]["foraged"] = [{"zone": "Castle Blarg"}]
+    assert seals(classify(foraged, context)) == {"live-source:foraged": "player"}
+
+
+def test_a_client_flagged_zone_beside_a_player_exists_zone_keeps_the_client_seal():
+    result = classify(make_item(sold_by=[("Castle Blarg", "V"), ("Zorblax Hollow", "W")]), player_zone_ctx())
+    assert seals(result) == {"live-source:vendor": "client"}
+
+
+def test_the_developer_exists_zones_read_exactly_as_before():
+    result = classify(make_item(drops=[("The Arena", ["a gladiator"])]), ctx())
+    assert result["reasons"] == [
+        {
+            "code": "live-source:The Arena",
+            "seal": "developer",
+            "text": "Drops in The Arena, a zone that exists in EQL although the client does not flag it.",
+        }
+    ]
+    vendor = classify(make_item(sold_by=[("Tutorial", "V")]), ctx())
+    assert vendor["reasons"][0]["text"] == "Sold by a vendor in a zone that is part of EQL."

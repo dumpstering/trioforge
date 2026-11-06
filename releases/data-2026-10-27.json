@@ -1,0 +1,12 @@
+{
+ "format": 1,
+ "release": "data-2026-10-27",
+ "asset_sha256": "af8f14699bea8f1342daf1387b199ab57001058bf8ce0429f4ea3ab1b58dc70f",
+ "catalog_sha256": "3be76c76e65e3494511ccdd7849cb161e7626a5263f378f862e7739d841d1284",
+ "catalog_date": "2026-10-27",
+ "rules_version": "2026-10-13",
+ "code_hash": "5a9925d7714cd26316c761f344eed5d0be5e8fce53ec3c7d3faaca4d5fe4ec4f",
+ "solver": {"canonical":true,"mip_rel_gap":0.0,"mip_abs_gap":1e-09,"presolve":"off","random_seed":0,"threads":1,"mip_feasibility_tolerance":1e-09,"primal_feasibility_tolerance":1e-09,"time_limit":null,"highs":"1.15.1","revision":"04024d7"},
+ "build_options": {"any_rule":"all","haste_assumed":null},
+ "snapshot_id": "0e7a60cdce7004effa2a46b8b824957d"
+}

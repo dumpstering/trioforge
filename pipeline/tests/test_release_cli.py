@@ -72,6 +72,20 @@ def test_the_default_number_of_processes_leaves_some_cores_free(script, recorded
     assert recorded[0]["processes"] == max(1, (os.cpu_count() or 2) - 4)
 
 
+def test_the_default_number_of_parity_processes_is_half_the_cores_up_to_twelve(script, recorded):
+    script.main(ARGS)
+    assert recorded[0]["parity_processes"] == max(1, min(12, (os.cpu_count() or 2) // 2))
+
+
+def test_the_number_of_parity_processes_is_an_option_of_at_least_one(script, recorded, capsys):
+    assert script.main([*ARGS, "--parity-processes", "5"]) == 0
+    assert recorded[0]["parity_processes"] == 5
+    for bad in ("0", "-3", "many", "2.5"):
+        assert script.main([*ARGS, "--parity-processes", bad]) == 2
+        assert "parity-processes" in capsys.readouterr().err
+    assert len(recorded) == 1
+
+
 def test_some_trios_make_a_trial_build(script, recorded):
     assert script.main([*ARGS, "--trios", "pal-mnk-ber, war-clr-pal"]) == 0
     assert recorded[0]["trios"] == ("pal-mnk-ber", "war-clr-pal") and recorded[0]["trial"] is True
@@ -120,7 +134,7 @@ def test_help_names_every_option(script, capsys):
         script.main(["--help"])
     assert stop.value.code == 0
     text = capsys.readouterr().out
-    for option in ("--tag", "--privacy-key", "--processes", "--trios", "--catalog", "--previous", "--parity-stride", "--build-dir"):
+    for option in ("--tag", "--privacy-key", "--processes", "--trios", "--catalog", "--previous", "--parity-stride", "--parity-processes", "--build-dir"):
         assert option in text
     assert not [option for option in ("--seen", "--wiki", "--client") if option in text]
 

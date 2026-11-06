@@ -207,7 +207,7 @@ def test_the_trio_page_of_the_real_results_stays_under_its_limit_with_the_weight
     summary = build.build(results=folder, out=out, noindex=True)
     pages = sorted((out / "trio").glob("*/index.html"))
     assert pages, "the build wrote no trio page"
-    assert max(p.stat().st_size for p in pages) == summary.sizes["trio_html"] <= build.LIMITS["trio_html"] == 61440
+    assert max(p.stat().st_size for p in pages) == summary.sizes["trio_html"] <= build.LIMITS["trio_html"] == 67584
     assert len(list((out / "assets").glob("weights-*.js"))) == 1
     assert summary.sizes["first_load_js"] <= build.LIMITS["first_load_js"] and summary.sizes["first_load_js_gzip"] <= build.LIMITS["first_load_js_gzip"]
     assert summary.sizes["lazy_chunk_js"] <= build.LIMITS["lazy_chunk_js"] and summary.sizes["lazy_chunk_js_gzip"] <= build.LIMITS["lazy_chunk_js_gzip"]

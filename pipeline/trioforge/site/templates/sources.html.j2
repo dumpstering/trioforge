@@ -5,7 +5,7 @@
 <p class="lead">{% if art.has("scholar") %}<span class="art art-scholar" aria-hidden="true"></span>{% endif %}Data release {{ meta.data_tag }}, read from the game as of patch {{ meta.game_patch }}. Level {{ meta.level }}.</p>
 <h2>Item data</h2>
 <p>{{ attribution }}</p>
-<p>The wiki's text is licensed <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a>. TrioForge's derived data is licensed the same way. The wiki is at <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki.com</a>; the pages and revisions behind the items that the trio pages show are listed below. Each item page carries its own credit: the wiki page, its revision, the licence and the changes made.</p>
+<p>The wiki's text is licensed <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a>. TrioForge's derived data is licensed the same way. The wiki is at <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki.com</a>; the pages and revisions behind the items that the trio pages show are listed below. Each item page carries its own credit: the wiki page, its revision, the licence and the changes made. The effects that items carry (their names, which items carry them and how an item is got) are item data too, from the same wiki pages, and so are covered by the same credit and licence.</p>
 <details class="expander" id="revisions-box">
 <summary>Pages and revisions used ({{ revisions|length }})</summary>
 <table class="revisions" id="revisions">
@@ -22,8 +22,25 @@
 </details>
 <h2>Other sources</h2>
 <ul>
+{% if manifest.eqlt %}
+<li><strong>{{ eqlt_name }}</strong> (<a href="{{ eqlt_site }}" rel="noopener noreferrer">eqlegendstools.com</a>): the source of the Nektropos Castle items. The stats, classes, effects and drop sources of the {{ manifest.eqlt|length }} items listed on its page <a href="{{ eqlt_site }}zones/nektropos-castle/" rel="noopener noreferrer">Nektropos Castle</a> are read from the item pages of that site, and they override the wiki's copy of an item the wiki also has. Each of those item pages says so and links the page it was read from. The credit goes to that site; its data is not covered by the wiki's CC BY-SA licence above.
+{% if eqlt_rows %}<details class="expander" id="eqlt-box">
+<summary>Items read from {{ eqlt_name }} ({{ eqlt_rows|length }})</summary>
+<table class="revisions" id="eqlt-items">
+<caption>The page at {{ eqlt_name }} each item shown was read from</caption>
+<thead>
+<tr><th scope="col">Item</th><th scope="col">Page</th><th scope="col">Item key</th></tr>
+</thead>
+<tbody>
+{% for row in eqlt_rows %}
+<tr><th scope="row">{% if row.page %}<a href="{{ row.page }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</th><td><a href="{{ row.url }}" rel="noopener noreferrer">eqlegendstools.com</a></td><td><code>{{ row.key }}</code></td></tr>
+{% endfor %}
+</tbody>
+</table>
+</details>{% endif %}</li>
+{% endif %}
 <li><strong>EQL Tools</strong> (<a href="https://eqltools.com/sources" rel="noopener noreferrer">eqltools.com/sources</a>): its gear and quest data are licensed CC BY-SA 4.0 (compiled from the wiki). The gear data is used to cross-check ours and the quest data supplies the zones of quest givers. The race base stats and class modifiers are cited from its <a href="https://eqltools.com/attributes" rel="noopener noreferrer">published attributes table</a>.</li>
-<li><strong>Game files</strong>: some rules are facts read as text from resource files that ship with the game client, such as zone flags, class tables, skill caps and spell data. The files themselves are never published. These game facts belong to Daybreak and fall outside our CC BY-SA licence.</li>
+<li><strong>Game files</strong>: some rules are facts read as text from resource files that ship with the game client, such as zone flags, class tables, skill caps and spell data. The files themselves are never published. These game facts belong to Daybreak and fall outside our CC BY-SA licence. The section Effects to exalt of a trio page reads what an effect does (its numbers, its limits and who casts it) from the client's spell text, <code>spells_us.txt</code>; the section publishes the numbers it works out and the names of the effects the wiki lists on items, not the file.</li>
 <li><strong>EQEmu</strong>: some formulas and constants are modelled on the EQEmu server project (<a href="https://github.com/EQEmu/Server" rel="noopener noreferrer">GPL-3.0</a>); no EQEmu code is used.</li>
 <li><strong>HiGHS</strong>: the exact solver behind every kit (<a href="https://github.com/ERGO-Code/HiGHS" rel="noopener noreferrer">MIT licence</a>).</li>
 </ul>

@@ -53,7 +53,7 @@ DISCLAIMER = (
 ATTRIBUTION = (
     "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; "
     "quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; "
-    "changes: parsed, normalized, filtered, graded by evidence, tier-scaled"
+    "changes: parsed, normalized, filtered, tier-scaled"
 )
 LICENCE_SENTENCE = (
     "The site's data is licensed CC BY-SA 4.0, except the game facts read from Daybreak Game Company's files, "
@@ -63,7 +63,7 @@ LICENCE_SENTENCE = (
 #: WebAssembly carries the first 16 hex digits of the SHA-256 of its content, the scripts and the stylesheet esbuild's hash) and its data
 #: files in assets/engine/data/ (the item table and the bundles, with the first 16 hex digits of their SHA-256)
 HASHED_ASSET = (
-    r"(?:(?:site|app|boot|notfound|upgrade-input|shared-kit|weights|chunk)-[A-Z0-9]{8}\.(?:css|js)|[a-z0-9]+(?:-[a-z0-9]+)*-[A-Z0-9]{8}\.png|engine/(?:client|worker|kitvalue)-[A-Z0-9]{8}\.js|engine/highs-[A-Z0-9]{16}\.wasm"
+    r"(?:(?:site|app|boot|notfound|upgrade-input|shared-kit|weights|exalt|chunk)-[A-Z0-9]{8}\.(?:css|js)|[a-z0-9]+(?:-[a-z0-9]+)*-[A-Z0-9]{8}\.png|engine/(?:client|worker|kitvalue)-[A-Z0-9]{8}\.js|engine/highs-[A-Z0-9]{16}\.wasm"
     r"|engine/data/(?:items|[a-z]{3}-[a-z]{3}-[a-z]{3}-l[0-9]{1,3})-[A-Z0-9]{16}\.json)"
 )
 #: the optimizer's list of files: one fixed address, outside /assets/, so that it is asked for again on every visit
@@ -215,7 +215,9 @@ def test_the_data_files_are_the_browser_format_of_the_results(site, results):
     out, _ = site
     shard = results.shards[("wiki", "group")]
     credit = build.credit_of(results.meta)
-    assert read(out, "data/pal-mnk-ber/wiki-group.json") == data.site_shard_json(shard, credit)
+    table = json.loads((RESULTS / "items.json").read_text(encoding="utf-8"))  # (the shard carries the stats of its items at each of its tiers: the build makes them from the item table)
+    vecs = view_module.tier_vecs({r.get("key") or f"w{r['id']}": r for r in table["items"]}, table["defaults"], rules_module.load())
+    assert read(out, "data/pal-mnk-ber/wiki-group.json") == data.site_shard_json(shard, credit, lambda key, tier: view_module.item_stat_text(vecs(key, tier)))
     for role in results.runnerups.roles():
         assert read(out, f"data/pal-mnk-ber/runnerups/{role}.json") == data.site_runnerups_json(results.runnerups, role, credit)
     assert read(out, "data/pal-mnk-ber/robust.json") == data.site_robust_json(results.robust, credit)
@@ -301,7 +303,7 @@ def test_the_trio_page_bakes_the_default_kit_without_javascript(site, results):
         cells = row.find_all("td")
         assert len(cells) == 4  # (name, tier, arrival, source: no seal column)
         if item is None:
-            assert cells[0].text() == "Leave empty"
+            assert cells[0].text(skip_hidden=True) == "Leave empty"  # (the panel of the stats is there and out of sight)
         else:
             assert cells[0].find(data_f="name").text() == item.name, number
             assert cells[1].text() == "+4"
@@ -310,7 +312,7 @@ def test_the_trio_page_bakes_the_default_kit_without_javascript(site, results):
     assert rows[0].find(data_f="name").text() == "Helm of the Stoneward"
     assert rows[4].find(data_f="name").text() == "Choker of the Deep"
     assert rows[17].find(data_f="name").text() == "<b>x</b>"
-    assert rows[19].find("td").text() == "Leave empty"
+    assert rows[19].find("td").text(skip_hidden=True) == "Leave empty"
     assert rows[20].find(data_f="name").text() == "Ferryman's Pike"
     assert rows[21].find(data_f="name").text() == "Pellbrook Mallet"
     # the long name is in the page whole
@@ -1259,15 +1261,26 @@ def test_the_rules_page_lists_every_rule_with_its_seal_source_and_open_test(site
     open_tests = html.by_id("open-tests").find_all("a")
     expected = sorted(r["id"] for r in rules if r["status"] == "open")
     assert sorted(a.get("href").removeprefix("#") for a in open_tests) == expected
-    assert any(a.text().startswith("B4") for a in open_tests)
+    assert any(a.text().startswith("B1") for a in open_tests)
+    assert not any(a.text().startswith("B4") for a in open_tests)  # B4 was done: mana.wis_bands is settled
     assert "https://github.com/EQEmu/Server" in [a.get("href") for a in html.by_id("hp.sta_curve").find_all("a")]
 
 
 def test_the_rules_page_shows_alternatives_for_open_rules(site):
     out, _ = site
+    node = page(out, PAGES["rules"]).by_id("monk.weight_curve")
+    assert "Open" in node.text() and "B9" in node.text()
+    assert "34" in node.text()  # the alternative value
+
+
+def test_the_rules_page_shows_the_settled_mana_curve_with_its_source_and_no_open_test(site):
+    out, _ = site
     node = page(out, PAGES["rules"]).by_id("mana.wis_bands")
-    assert "Open" in node.text() and "B4" in node.text()
-    assert "0.654" in node.text()  # the alternative value
+    text = node.text()
+    assert "Measured" in text and "Maintainer's private observation" in text and "2026-10-27" in text
+    assert "1.25" in text and "0.654" not in text  # the value; the flatter reading is ruled out and not listed
+    assert "Open" not in text and "B4" not in text
+    assert "https://github.com/EQEmu/Server" in [a.get("href") for a in node.find_all("a")]
 
 
 def wiki_link(row):
@@ -1375,7 +1388,7 @@ def gz(data_bytes: bytes) -> int:
 def test_the_page_budgets_hold(site):
     out, summary = site
     trio_html = (out / PAGES["trio"]).read_bytes()
-    assert len(trio_html) <= 60 * 1024, len(trio_html)
+    assert len(trio_html) <= build.LIMITS["trio_html"] == 66 * 1024, len(trio_html)
     trio = page(out, PAGES["trio"])
     scripts = [out / s.get("src").lstrip("/") for s in trio.find_all("script")]
     sheets = [out / s.get("href").lstrip("/") for s in trio.find_all("link", rel="stylesheet")]
@@ -1386,7 +1399,7 @@ def test_the_page_budgets_hold(site):
     first_load_raw = sum(p.stat().st_size for p in scripts)
     assert first_load_raw <= 100 * 1024, first_load_raw
     lazy = [p for p in (out / "assets").glob("*.js") if p not in scripts and not p.name.startswith("notfound-")]  # (the script of the 404 page is the first load of that page, not code loaded on first use)
-    assert {p.name.split("-")[0] for p in lazy} == {"upgrade", "shared", "weights", "chunk"}  # (the section's, the panel of a shared kit, the sliders', and what they share: how many chunks esbuild makes of that is its own)
+    assert {p.name.split("-")[0] for p in lazy} == {"upgrade", "shared", "weights", "exalt", "chunk"}  # (the section's, the panel of a shared kit, the sliders', the effects', and what they share: how many chunks esbuild makes of that is its own)
     for chunk in lazy:
         assert chunk.stat().st_size <= 100 * 1024, chunk.name
         assert gz(chunk.read_bytes()) <= 40 * 1024, chunk.name
@@ -1414,7 +1427,7 @@ def test_the_page_budgets_hold(site):
 def test_the_budget_check_reports_each_limit_that_is_broken():
     noise = random.Random(7)
     files = {
-        "trio/pal-mnk-ber/index.html": b"x" * (61 * 1024),
+        "trio/pal-mnk-ber/index.html": b"x" * (67 * 1024),
         "assets/app-AAAAAAAA.js": noise.randbytes(40 * 1024),  # incompressible: 40 KB gzip on the first load
         "assets/other-BBBBBBBB.js": noise.randbytes(70 * 1024),  # 110 KB of JavaScript in all
         "data/pal-mnk-ber/strict-own.json": b"{" + b" " * (201 * 1024) + b"}",  # over 200 KB raw (but tiny gzipped)
@@ -1916,6 +1929,7 @@ def retarget(scratch: Path, **changes) -> dict:
         race=ranked[0], runner_up_race=ranked[1], margin=round(best[ranked[0]].value - best[ranked[1]].value, 2),
         F=round(best[ranked[0]].value, 2), setup=best[ranked[0]].setup, strict_pool_empty=changes.get("strict_pool_empty", False),
     )  # fmt: skip
+    document.pop("why", None)  # (the why is of the kit of the view the fixture was made for: a precompute would write another for this view, and this helper cannot)
     path.write_text(json.dumps(document), encoding="utf-8")
     if "evidence" in changes:
         runnerups = folder / "runnerups"
@@ -2153,9 +2167,10 @@ def test_a_table_of_the_trio_page_does_not_say_the_same_thing_in_every_row(site)
 
 def test_the_markup_of_the_trio_page_stays_small():
     """A guard on the size of the page (not a budget: the build holds the page to its own): the contract copy of the page, with the invented items of the fixture, was 49.8 KB with the label
-    and the rules said again in every row, and the real page is a good 10 KB bigger. It stays under what the headers and the stylesheet's labels leave."""
+    and the rules said again in every row, and the real page is a good 10 KB bigger. It stays under what the headers and the stylesheet's labels leave. (44 KB until p7kit put the stats and
+    the why line of the 22 rows in the page: 5.8 KB more in the fixture, some 7 KB in a real page.)"""
     contract = (REPO / "fixtures" / "site" / "contract" / "trio-main.html").read_bytes()
-    assert len(contract) <= 44_000, len(contract)
+    assert len(contract) <= 52_000, len(contract)
 
 
 def test_the_flip_notes_are_three_at_most_and_say_how_many_more():
@@ -4524,14 +4539,14 @@ def test_the_page_script_loads_the_upgrade_chunk_by_a_dynamic_import_and_imports
     # no chunk shared by the page script and the section: the files under assets/ are the page's, its stylesheet, the section's, the code of a shared kit (a chunk of its own, which the
     # section loads by a dynamic import), the sliders' (a chunk of its own as well) and the modules that those share (the chunks that esbuild makes of them), and the optimizer's folder
     names = sorted({p.name.split("-")[0] for p in (out / "assets").iterdir() if p.is_file() and p.suffix != ".png"})  # (the pictures of the theme are PNGs beside the stylesheet)
-    assert names == ["app", "boot", "chunk", "notfound", "shared", "site", "upgrade", "weights"]  # (notfound: the 404 page's own script, a bundle that shares nothing with the page script)
+    assert names == ["app", "boot", "chunk", "exalt", "notfound", "shared", "site", "upgrade", "weights"]  # (notfound: the 404 page's own script, a bundle that shares nothing with the page script)
     chunk = chunks[0].read_text(encoding="utf-8")
     assert "initUpgrade" in chunk and "createGearInput" in chunk and "createGearInput" not in app
 
 
 def test_what_the_section_adds_is_counted_apart_from_the_first_load(site):
     out, summary = site
-    lazy = [p.read_bytes() for p in sorted((out / "assets").glob("*.js")) if p.name.split("-")[0] in ("upgrade", "shared", "weights", "chunk")]
+    lazy = [p.read_bytes() for p in sorted((out / "assets").glob("*.js")) if p.name.split("-")[0] in ("upgrade", "shared", "weights", "exalt", "chunk")]
     assert len(lazy) == len(list((out / "assets").glob("*.js"))) - 3  # (every script but the page script, the boot script and the 404 page's own script is loaded on first use)
     assert summary.sizes["lazy_js"] == sum(len(c) for c in lazy) and summary.sizes["lazy_js_gzip"] == sum(gz(c) for c in lazy)  # (all the code loaded on first use: the sum of its chunks)
     app = next((out / "assets").glob("app-*.js")).read_bytes()

@@ -132,7 +132,7 @@ class Rules:
     def alternatives(self, id: str) -> list[dict[str, Any]]:
         """Return the rule's alternative readings: a list of ``{"value", "seal", "source"}`` objects, in file order.
 
-        An open rule can list the other values it might take (``mana.wis_bands`` lists the measured WIS band); the
+        An open rule can list the other values it might take (``tier.weapon_damage_pct`` lists the 5 percent reading); the
         robustness runs try each. The result is a copy, so callers may change it freely, and it is empty for a rule
         with no alternatives. Raises ``KeyError`` like :meth:`get`.
         """

@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CONSTANTS } from "../pipeline/trioforge/site/static/engine/evaluate.js";
 import { ModelError, buildMilp } from "../pipeline/trioforge/site/static/engine/model.js";
 import { PruneError, fitGroups, prune, pruneReport, scoredDimensions } from "../pipeline/trioforge/site/static/engine/prune.js";
+import { closeSession, createSession, solveScenario } from "../pipeline/trioforge/site/static/engine/solve.js";
 import { solveModelWith } from "../pipeline/trioforge/site/static/engine/worker.js";
 import { FAMILIES, caseOf, clone, deepFreeze, exact, identOf, sharedOf, shuffled } from "./engine-cases.mjs";
 import { MONK_BINS, MONK_CURVE, PMB_POOLS, buffOf, buffsetOf, gear, oneHand, profileWith, twoHand } from "./engine-hand.mjs";
@@ -34,6 +35,18 @@ function optimum(profile, items, setup, buffset, options) {
   const got = solveModelWith(highs, model, { budgetMs: 60_000, startedAt: performance.now(), onProgress() {} });
   expect(got.status).toBe("optimal");
   return got.objective;
+}
+
+/** The truthful optimum of a pool (the weapons are paid the haste the kit counts, the options fixing none), as the worker finds it. */
+function truthfulOptimum(profile, items, setup, buffset, options, monkBins) {
+  const session = createSession({ highs, profile, setup, buffset, monkBins });
+  try {
+    const got = solveScenario(session, { name: "main", items, options: { ...options, haste_assumed: null, haste_floor: null, haste_exact: false }, budgetMs: 600_000 });
+    expect(got.status).toBe("optimal");
+    return got.F.toNumber();
+  } finally {
+    closeSession(session);
+  }
 }
 
 // ---- parity with Python ---------------------------------------------------------------------------------------------------------------
@@ -124,7 +137,8 @@ function stepTests(set) {
         const input = recording.input.map(c.itemNamed);
         // the full pool under the options the step had, less the idents that the builder would not find in the pruned pool, as the step does
         const want = exact(solve.result.F).toNumber();
-        const full = optimum(c.profile, input, c.setup, c.buffset, options);
+        // (the value the step recorded is the truthful one: the best over the haste levels a kit can count, which pruning must not change)
+        const full = truthfulOptimum(c.profile, input, c.setup, c.buffset, options, c.bins);
         expect(relative(full, want), `${doc.id} ${solve.label}: the full pool of ${input.length} items`).toBeLessThanOrEqual(REL);
       }
     }, 300_000);

@@ -23,9 +23,9 @@
 //   hand, "dw" a one-hander in either, "1h-shield" a one-hander and a shield, "stick" anything), and a two-hander in the main hand leaves the off hand empty (the row "two_hander" of
 //   the builder). An item the rules refuse is left out, with the reason "hands".
 //
-//   The haste the weapons are scored at is the model's rule (`hastePercent` of prune.js, which `_assumed_haste` of the builder and `session_haste` of upgrade.py are): the best
-//   spell haste the buff set offers, plus the best worn haste of the items the value counts, up to the cap. It is a whole number, and not the page's: the one the page shows is its
-//   own answer's, a scenario's, and moves with the tier, the weapons and the race.
+//   The haste the weapons are scored at is the haste the kit counts (`evaluateTruthful` of evaluate.js, as the solver's truthful solve values a kit): the spell haste of the buffs
+//   the value counts, plus the best worn haste of the items it counts, up to the cap. It is a whole number, and not the page's: the one the page shows is its own answer's, a
+//   scenario's, and moves with the tier, the weapons and the race.
 //
 //   The buffs are the best the set allows for this kit: a choice of its optional buffs, at most the cardinality of the set and no two that exclude each other, with the greatest
 //   value. The search is exact (`exact` is true), or it ran out of calls (`exact` is false) and the value is the best that was found: at least that.
@@ -60,11 +60,10 @@
 // page for a shared kit and by nothing else: the optimizer's client does not carry it.
 
 import { DATA_FILE, EngineFault, fetchBytes, sameOriginUrl, sha256Hex } from "./download.js";
-import { SLOT_INSTANCES, evaluate } from "./evaluate.js";
+import { SLOT_INSTANCES, evaluateTruthful } from "./evaluate.js";
 import { atTier } from "./items.js";
 import { ManifestReleaseError, fetchTextWithin, parseTrioManifest, trioManifestPath } from "./manifest.js";
 import { allowedInHand, readItem } from "./model.js";
-import { hastePercent } from "./prune.js";
 import { assembleProfile, readBundle } from "./profile.js";
 import { LIMITS, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "./protocol.js";
 
@@ -153,7 +152,7 @@ function idAbove({ set, table }) {
 }
 
 /**
- * The best choice of the optional buffs for a kit, `{chosen, F, exact, evaluations}`: see the header for how. `options` are the evaluator's (setup, haste, Monk bins) and `buffset`
+ * The best choice of the optional buffs for a kit, `{chosen, F, exact, evaluations}`: see the header for how. `options` are the evaluator's (setup, Monk bins) and `buffset`
  * the buff set of the bundle; `limit` is the most calls to the evaluator that may be made (the first, for the kit with no optional buff, always is).
  */
 function bestBuffs(profile, kit, options, buffset, limit) {
@@ -166,7 +165,7 @@ function bestBuffs(profile, kit, options, buffset, limit) {
   };
   const worth = (ids) => {
     spend();
-    return evaluate(profile, kit, ids, { ...options, buffset }).F;
+    return evaluateTruthful(profile, kit, ids, { ...options, buffset }).F;
   };
 
   // what each buff adds to which component of the buffs (the amounts of the table, as numbers), and the buffs that exclude each other
@@ -207,7 +206,7 @@ function bestBuffs(profile, kit, options, buffset, limit) {
       virtualVec[name] = Number.isInteger(sum) ? sum : Math.ceil(sum);
     }
     spend();
-    return evaluate(profile, kit, [virtual, ...chosen], { ...options, buffset: boundBuffset }).F;
+    return evaluateTruthful(profile, kit, [virtual, ...chosen], { ...options, buffset: boundBuffset }).F;
   };
 
   let best = null;
@@ -244,7 +243,7 @@ function bestBuffs(profile, kit, options, buffset, limit) {
 
 export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity = null, places, searchLimit = BUFF_SEARCH_LIMIT, ...unasked }) {
   for (const name of ["setup", "hasteAssumed"]) {
-    if (name in unasked) throw new TypeError(`valueOfKit takes no ${name}: the setup is read from the kit's hands and the haste is the model's rule for the kit's items`);
+    if (name in unasked) throw new TypeError(`valueOfKit takes no ${name}: the setup is read from the kit's hands and the haste is the one the kit counts`);
   }
   if (!(records instanceof Map)) throw new TypeError("records is the item table's Map from a key to a record");
   if (!Array.isArray(places)) throw new TypeError("places is a list of {slotIndex, key, tier}");
@@ -297,9 +296,10 @@ export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity
   left.sort((a, b) => a.slotIndex - b.slotIndex);
 
   const counted = kit.filter((item) => item !== null);
-  const hasteAssumed = hastePercent(profile, counted.map((item) => item.haste), null);
-  const options = { setup, hasteAssumed, monkBins: read.monk_bins === null ? undefined : read.monk_bins };
-  const found = bestBuffs(profile, kit, options, buffsetOf(entry, buffs), searchLimit);
+  const options = { setup, monkBins: read.monk_bins === null ? undefined : read.monk_bins };
+  const buffset = buffsetOf(entry, buffs);
+  const found = bestBuffs(profile, kit, options, buffset, searchLimit);
+  const hasteAssumed = Number(evaluateTruthful(profile, kit, found.chosen, { ...options, buffset }).breakdown.totals.haste.counted.floor());
   return {
     value: found.F.toNumber(),
     F: found.F.toString(),

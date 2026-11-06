@@ -17,17 +17,18 @@ The variants (:func:`perturbations`)
   ========================================  ===================================  ======================
   label                                     what changes                         rule, test
   ========================================  ===================================  ======================
-  ``WIS band 0.654``                        ``Profile.bands`` (WIS and INT)      ``mana.wis_bands``, B4
   ``Monk curve full until 34``              ``Profile.monk``                     ``monk.weight_curve``, B9
   ``Monk placement inside``                 ``Profile.placement["monk"]``        ``monk.bonus_placement``, B9
   ``Iksar placement inside``                ``Profile.placement["iksar"]``       ``race.iksar_ac_placement``, B17
-  ``Weapon damage +10%``                    the items (``at_tier(weapon_pct=)``) ``tier.weapon_damage_pct``, B5
+  ``Weapon damage +5%``                     the items (``at_tier(weapon_pct=)``) ``tier.weapon_damage_pct``, B5
   ========================================  ===================================  ======================
 
+  ``mana.wis_bands`` is settled (it lists no alternative), so it adds no variant; a rules file that lists an alternative
+  for it gets a ``WIS band <slope>`` variant again, naming the rule's test, if it has one.
   The numbers in the labels are the alternative's own. The Iksar rule lists no alternative of its own; it has the same
   two readings as the Monk bonus, so it takes the Monk rule's alternative placement unless the rules file gives it one.
   The weapon rate changes the item views, not the profile, so its profile is the base profile and its
-  :attr:`Perturbation.item_options` carry ``{"weapon_pct": 10}``.
+  :attr:`Perturbation.item_options` carry ``{"weapon_pct": 5}`` (the rule is 10 now and 5 its alternative).
 
 A variant is listed only if it can change the answer: a weight group needs a weight above zero (the mana group also a
 mana pool), the band needs a mana pool with a mana weight, the Monk variants a Monk and an armor class weight, the Iksar
@@ -56,7 +57,8 @@ from trioforge.model.buffs import BuffSet
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, ItemVec, at_tier
 from trioforge.model.profile import Profile
 from trioforge.model.roles import MULTIPLIERS, WEIGHT_GROUPS
-from trioforge.solver.model import BuildOptions, build_milp
+from trioforge.solver.haste import solve_scenario
+from trioforge.solver.model import BuildOptions
 from trioforge.solver.prune import prune
 from trioforge.solver.solve import Solution, solve_canonical
 
@@ -263,8 +265,9 @@ def _solve(
     items = list(scenario.pool(**item_options))
     if scenario.prune:
         items = prune(items, profile, scenario.tier, scenario.setup, scenario.buffset, scenario.options)
-    milp = build_milp(profile, items, scenario.setup, scenario.buffset, scenario.options)
-    solution = solver(milp, time_limit=time_limit)
+    solution = solve_scenario(
+        profile, items, scenario.setup, scenario.buffset, scenario.options, solver=solver, time_limit=time_limit
+    ).solution
     if solution.status != "optimal":
         raise RobustnessError(f"the solve for {what} ended {solution.status}, not optimal: the robustness is not known")
     return solution

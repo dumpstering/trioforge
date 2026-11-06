@@ -38,7 +38,8 @@
     "key": { "type": "string", "pattern": "^(w[0-9]{1,15}|r[a-z0-9][a-z0-9-]{0,99})$" },
     "name": { "$ref": "#/$defs/text" },
     "wiki": {
-      "type": "object",
+      "description": "The wiki page the item was read from. Null for an item that has no page on the wiki (it comes from origin alone).",
+      "type": ["object", "null"],
       "additionalProperties": false,
       "required": ["pageid", "revid", "title"],
       "properties": {
@@ -276,6 +277,17 @@
       "items": { "$ref": "#/$defs/warning" }
     },
     "parse_warnings_overflow": { "type": "integer", "minimum": 0 },
+    "origin": {
+      "description": "Present on an item whose data was read from EQ Legends Tools (eqlegendstools.com), and only then: its page is https://eqlegendstools.com/items/<slug>/. overrides_wiki is true where the tooltip of that page replaced the wiki's copy of the item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "slug", "overrides_wiki"],
+      "properties": {
+        "source": { "const": "eqlegendstools" },
+        "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,95}$" },
+        "overrides_wiki": { "type": "boolean" }
+      }
+    },
     "evidence": {
       "description": "Added by trioforge.data.evidence when the catalog is built; absent on the bare output of normalize.",
       "type": "object",

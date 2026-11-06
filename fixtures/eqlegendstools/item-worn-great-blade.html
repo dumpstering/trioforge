@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Worn Great Blade - EQ Legends Tools</title>
+  <meta name="description" content="Worn Great Blade details for EQ Legends Tools: Slot: PRIMARY. Includes tooltip data, acquisition, and ZAM resources." />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <meta name="version" content="v4.9.13" />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="canonical" href="https://eqlegendstools.com/items/worn-great-blade/" />
+  <link rel="manifest" href="/site.webmanifest?v=1d619470945c" />
+  <script data-eql-pwa-navigation-loader="true">(()=>{const e=()=>{if(document.querySelector("script[data-eql-pwa-navigation-runtime]"))return;const e=document.createElement("script");e.src="/pwa-navigation.js?v=ac2f99450d05",e.dataset.eqlPwaNavigationRuntime="true",document.head.appendChild(e)};"loading"===document.readyState?document.addEventListener("DOMContentLoaded",e,{once:!0}):e()})();</script>
+  <meta property="og:title" content="Worn Great Blade - EQ Legends Tools" />
+  <meta property="og:description" content="Worn Great Blade details for EQ Legends Tools: Slot: PRIMARY. Includes tooltip data, acquisition, and ZAM resources." />
+  <meta property="og:url" content="https://eqlegendstools.com/items/worn-great-blade/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="EQ Legends Tools" />
+  <meta property="og:image" content="https://eqlegendstools.com/og-image-v4-1-7.png" />
+  <meta property="og:image:width" content="1731" />
+  <meta property="og:image:height" content="909" />
+  <meta property="og:image:alt" content="Worn Great Blade item page on EQ Legends Tools" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Worn Great Blade - EQ Legends Tools" />
+  <meta name="twitter:description" content="Worn Great Blade details for EQ Legends Tools: Slot: PRIMARY. Includes tooltip data, acquisition, and ZAM resources." />
+  <meta name="twitter:image" content="https://eqlegendstools.com/og-image-v4-1-7.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=32cdce1d32f4" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=c14d6d84db4b" />
+  <style>
+    :root {
+      --bg: #091120;
+      --panel: rgba(11, 22, 38, 0.92);
+      --border: rgba(163, 190, 255, 0.2);
+      --text: #f4f7fb;
+      --muted: #a8b6ca;
+      --gold: #f4d35e;
+      --accent: #8fb7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(43, 74, 142, 0.35), transparent 34rem),
+        linear-gradient(135deg, #07101d 0%, #102034 55%, #07101d 100%);
+    }
+    a { color: #9fc4ff; }
+    .site-header {
+      border-bottom: 1px solid var(--border);
+      background: rgba(5, 13, 27, 0.88);
+      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.28);
+    }
+    .brand-hero, main, .site-footer-inner {
+      width: min(1160px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+    .brand-hero {
+      padding: 22px 0 16px;
+      text-align: center;
+    }
+    .brand-title {
+      margin: 0 0 10px;
+      font-family: Georgia, "Palatino Linotype", "Book Antiqua", serif;
+      font-size: clamp(2.35rem, 5.7vw, 5rem);
+      font-weight: 700;
+      line-height: 1.18;
+      display: inline-block;
+      letter-spacing: -0.02em;
+      padding: 0.02em 0.08em 0.10em;
+      color: #fde68a;
+      background: linear-gradient(180deg, #fff7c2 0%, #f7c948 48%, #b7791f 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 2px 0 rgba(0, 0, 0, 0.42), 0 0 24px rgba(247, 201, 72, 0.22);
+    }
+    .brand-feature-line {
+      width: 100%;
+      margin: 0 auto 18px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      color: #d8e5ff;
+      font-size: 0.95rem;
+    }
+    .brand-feature-line span + span::before {
+      content: "\2022";
+      margin-right: 8px;
+      color: var(--gold);
+    }
+    .app-nav {
+      width: max-content;
+      max-width: none;
+      /* The full desktop nav is a few pixels wider than the 1160px content
+         rail. Auto margins then resolve asymmetrically, nudging it right.
+         Center from the rail's midpoint instead. */
+      position: relative;
+      left: 50%;
+      transform: translateX(-50%);
+      margin: 0;
+      overflow: visible;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      justify-content: center;
+      align-items: center;
+    }
+    .nav-tab {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 10px 14px;
+      border: 1px solid rgba(247, 201, 72, 0.28);
+      border-radius: 10px;
+      color: #e5e7eb;
+      text-decoration: none;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(2, 6, 23, 0.78));
+      font-weight: 850;
+      letter-spacing: 0.01em;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 22px rgba(0, 0, 0, 0.20);
+    }
+    .nav-tab, .nav-tab span { text-decoration: none !important; }
+    .nav-tab:hover,
+    .nav-tab:focus-visible {
+      color: #fff7d6;
+      border-color: rgba(247, 201, 72, 0.46);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(247, 201, 72, 0.12), transparent 55%),
+        linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(2, 6, 23, 0.86));
+    }
+    .nav-tab[href*="char-sheet"] {
+      border-color: rgba(74, 222, 128, 0.36);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 14px rgba(34, 197, 94, 0.14), 0 8px 22px rgba(0, 0, 0, 0.20);
+    }
+
+    .nav-tab[href*="char-sheet"]:hover,
+    .nav-tab[href*="char-sheet"]:focus-visible {
+      border-color: rgba(74, 222, 128, 0.52);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 18px rgba(34, 197, 94, 0.20), 0 10px 26px rgba(0, 0, 0, 0.24);
+    }
+    .item-action-row {
+      position: absolute;
+      inset: 12px 12px auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0;
+    }
+    .compare-add-button,
+    .browse-tool-link {
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 8px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 0.9rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .compare-add-button {
+      border: 1px solid rgba(244, 211, 94, 0.42);
+      background: rgba(89, 70, 21, 0.32);
+      color: #fff4b6;
+      cursor: pointer;
+    }
+    .compare-add-button.is-selected {
+      border-color: rgba(134, 239, 172, 0.56);
+      color: #bbf7d0;
+      background: rgba(20, 83, 45, 0.34);
+    }
+    .browse-tool-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(143, 183, 255, 0.35);
+      border-radius: 8px;
+      color: #cfe2ff;
+      background: rgba(35, 65, 112, 0.22);
+      text-decoration: none;
+    }
+    .browse-tool-link:hover,
+    .browse-tool-link:focus-visible {
+      border-color: rgba(143, 183, 255, 0.68);
+      color: #fff;
+      background: rgba(52, 91, 151, 0.32);
+    }
+    main { padding: 32px 0 42px; }
+    .breadcrumbs {
+      max-width: 760px;
+      margin: 0 auto 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+    .breadcrumbs a { color: #b9d3ff; font-weight: 750; }
+    .breadcrumb-separator { color: rgba(244, 211, 94, 0.72); }
+    .breadcrumb-current { color: #dce8fa; }
+    .page-title {
+      margin: 0 auto 18px;
+      max-width: 760px;
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0;
+      color: var(--gold);
+      font: 800 clamp(2rem, 5vw, 3.6rem) Georgia, "Times New Roman", serif;
+      letter-spacing: 0;
+    }
+    .tooltip-card {
+      position: relative;
+      max-width: 760px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #05070b;
+      padding: 18px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 35px rgba(0, 0, 0, 0.28);
+    }
+    .tooltip-title {
+      min-height: 36px;
+      margin: 0 180px 10px;
+      text-align: center;
+      color: #f4f4f4;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .item-title-icon {
+      width: 38px;
+      height: 38px;
+      margin-right: 10px;
+      vertical-align: middle;
+      object-fit: contain;
+      border-radius: 4px;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.58));
+    }
+    .tooltip-flags {
+      margin: 0 0 10px;
+      color: #f3f3f3;
+      font-weight: 700;
+    }
+    .tooltip-lines {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 7px;
+      color: #f0f2f6;
+      line-height: 1.35;
+    }
+    .tooltip-lines li.proc-rate-line {
+      color: #f6a447;
+      font-weight: 900;
+      text-shadow: 0 0 12px rgba(246, 164, 71, 0.25);
+    }
+    .tooltip-lines .special-damage { font-weight: 850; }
+    .tooltip-lines .special-damage-magic { color: #e2c7ff; text-shadow: 0 0 6px rgba(205, 166, 255, .64), 0 0 12px rgba(185, 141, 250, .22); }
+    .tooltip-lines .special-damage-fire { color: #ffb09c; text-shadow: 0 0 6px rgba(251, 113, 73, .62), 0 0 12px rgba(249, 115, 22, .2); }
+    .tooltip-lines .special-damage-cold { color: #bae6fd; text-shadow: 0 0 6px rgba(125, 211, 252, .66), 0 0 12px rgba(56, 189, 248, .2); }
+    .tooltip-lines .special-damage-poison { color: #acd7b3; text-shadow: 0 0 6px rgba(74, 140, 89, .68), 0 0 12px rgba(34, 104, 61, .22); }
+    .tooltip-lines .special-damage-disease { color: #d4b98a; text-shadow: 0 0 6px rgba(139, 106, 57, .66), 0 0 12px rgba(120, 81, 41, .2); }
+    .tooltip-lines .special-damage-void { color: #cbd5e1; text-shadow: 0 0 5px rgba(15, 23, 42, .96), 0 0 11px rgba(100, 116, 139, .58); }
+    .tooltip-lines .special-damage-undead { color: #fff; text-shadow: 0 0 5px rgba(255, 255, 255, .84), 0 0 11px rgba(226, 232, 240, .38); }
+    .tooltip-lines .farming-speed {
+      display: inline-block;
+      font-weight: 950;
+      letter-spacing: .01em;
+    }
+    .tooltip-lines .farming-speed-fast { color: #a7f3d0 !important; text-shadow: 0 0 8px rgba(110, 231, 183, .72); }
+    .tooltip-lines .farming-speed-fair { color: #bfdbfe !important; text-shadow: 0 0 8px rgba(147, 197, 253, .78); }
+    .tooltip-lines .farming-speed-slow { color: #fdba74 !important; text-shadow: 0 0 8px rgba(251, 146, 60, .72); }
+    .farming-speed-description { color: #aebbd0; font-weight: 700; }
+    .source-zone-link,
+    .source-quest-link {
+      color: #c7ddff;
+      font-weight: 750;
+      text-decoration: underline;
+      text-decoration-color: rgba(199, 221, 255, 0.52);
+      text-underline-offset: 2px;
+    }
+    .source-zone-link:hover,
+    .source-zone-link:focus-visible,
+    .source-quest-link:hover,
+    .source-quest-link:focus-visible { color: #fff3a9; }
+    .effect-tooltip-trigger {
+      display: inline;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-bottom: 1px dotted currentColor;
+      color: inherit;
+      background: transparent;
+      font: inherit;
+      font-weight: 800;
+      line-height: inherit;
+      cursor: help;
+    }
+    .effect-tooltip-trigger:hover,
+    .effect-tooltip-trigger:focus-visible { color: #fff0a3; outline: none; }
+    .effect-tooltip-proc { color: #ffc287; }
+    .effect-tooltip-focus { color: #9ed9ff; }
+    .effect-tooltip-clicky { color: #deb7ff; }
+    .effect-tooltip-worn { color: #9bf0cd; }
+    .effect-detail-tooltip {
+      position: fixed;
+      z-index: 1000;
+      display: none;
+      width: min(360px, calc(100vw - 24px));
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.38);
+      border-radius: 10px;
+      color: #dce8f8;
+      background: #080d18;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.56);
+    }
+    .effect-detail-tooltip.is-visible { display: block; }
+    .effect-detail-tooltip__title { color: #f8d76a; font-weight: 900; }
+    .effect-detail-tooltip__flags { margin: 3px 0 7px; color: #91d8ff; font-size: .76rem; }
+    .effect-detail-tooltip__line { font-size: .82rem; line-height: 1.4; }
+    .effect-detail-tooltip__line + .effect-detail-tooltip__line { margin-top: 3px; }
+    .weapon-ratio {
+      margin-left: 10px;
+      color: #e5a63a;
+      font-size: calc(1em - 1pt);
+      font-weight: 800;
+    }
+    .tooltip-upgrade-note {
+      margin: 12px 0 0;
+      color: rgba(183, 197, 220, 0.70);
+      font-size: 0.76rem;
+      line-height: 1.35;
+    }
+    .item-upgrade-panel {
+      max-width: 760px;
+      margin: 10px auto 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px 14px;
+      border: 1px solid rgba(244, 211, 94, 0.28);
+      border-radius: 8px;
+      background: rgba(9, 17, 32, 0.78);
+      padding: 12px 16px;
+    }
+    .item-upgrade-panel label {
+      color: #dce8fa;
+      font-size: 0.8rem;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .item-upgrade-panel output {
+      color: var(--gold);
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+    .item-upgrade-progress {
+      grid-column: 1 / -1;
+      margin: -3px 0 0;
+      color: #9dc7fb;
+      font-size: 0.72rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.03em;
+    }
+    .item-upgrade-controls {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 34px;
+      align-items: center;
+      gap: 10px;
+    }
+    .item-upgrade-step {
+      width: 34px;
+      height: 30px;
+      border: 1px solid rgba(129, 182, 255, 0.42);
+      border-radius: 7px;
+      color: #dceaff;
+      background: rgba(13, 27, 51, 0.92);
+      font: 900 1rem Arial, Helvetica, sans-serif;
+      cursor: pointer;
+    }
+    .item-upgrade-step:hover, .item-upgrade-step:focus-visible {
+      border-color: var(--gold);
+      color: var(--gold);
+      outline: none;
+    }
+    .item-upgrade-panel input[type="range"] {
+      width: 100%;
+      margin: 0;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+    .compare-conflict-modal[hidden] { display: none; }
+    .compare-conflict-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(2, 6, 18, 0.72);
+      backdrop-filter: blur(4px);
+    }
+    .compare-conflict-dialog {
+      width: min(520px, 100%);
+      border: 1px solid rgba(244, 211, 94, 0.62);
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(15, 25, 48, 0.99), rgba(5, 10, 24, 0.99));
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.58), 0 0 26px rgba(244, 211, 94, 0.12);
+      padding: 22px;
+    }
+    .compare-conflict-dialog h2 {
+      margin: 0 0 10px;
+      color: var(--gold);
+      font: 800 1.35rem Georgia, "Times New Roman", serif;
+    }
+    .compare-conflict-dialog p {
+      margin: 0;
+      color: #dce8fa;
+      line-height: 1.5;
+    }
+    .compare-conflict-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .compare-conflict-actions button {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 8px;
+      font: 900 0.88rem Arial, Helvetica, sans-serif;
+      cursor: pointer;
+    }
+    .compare-conflict-ok {
+      border: 1px solid rgba(143, 183, 255, 0.48);
+      background: rgba(13, 28, 54, 0.88);
+      color: #e4efff;
+    }
+    .compare-conflict-reset {
+      border: 1px solid rgba(244, 211, 94, 0.66);
+      background: linear-gradient(180deg, #ffe77c, #e2ad35);
+      color: #1b1606;
+    }
+
+    /* RELATED_ITEMS_STYLES_START */
+    .related-items-grid {
+      max-width: 760px;
+      margin: 18px auto 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .related-items-card {
+      min-width: 0;
+      border: 1px solid rgba(143, 183, 255, 0.24);
+      border-radius: 8px;
+      background: rgba(9, 17, 32, 0.82);
+      padding: 16px;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+    }
+    .related-items-card h2 { margin: 0 0 6px; color: var(--gold); font: 800 1rem Arial, Helvetica, sans-serif; }
+    .related-items-card h2 a { color: inherit; text-decoration: underline; text-decoration-color: rgba(244, 211, 94, 0.52); text-underline-offset: 3px; }
+    .related-items-card h2 a:hover, .related-items-card h2 a:focus-visible { color: #fff4ac; }
+    .related-items-context { min-height: 1.25em; margin: 0 0 10px; color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
+    .related-item-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+    .related-item-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .related-item-list a { min-width: 0; color: #b9d3ff; font-weight: 750; line-height: 1.3; }
+    .related-item-list span { flex: 0 0 auto; color: #8fa1b8; font-size: 0.72rem; white-space: nowrap; }
+    @media (max-width: 700px) { .related-items-grid { grid-template-columns: 1fr; } }
+    /* RELATED_ITEMS_STYLES_END */
+
+    .item-planar-gear-finder {
+      max-width: 760px;
+      margin: 18px auto 0;
+      padding: 18px;
+      border: 1px solid rgba(247, 201, 72, 0.38);
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(87, 49, 12, 0.22), rgba(10, 20, 37, 0.95) 42%);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+    }
+    .item-planar-gear-finder__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+    .item-planar-gear-finder h2 { margin: 0; color: var(--gold); font: 800 1.35rem Georgia, "Times New Roman", serif; }
+    .item-planar-gear-finder__heading p { margin: 0; color: var(--muted); font-size: 0.88rem; }
+    .item-planar-gear-finder__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 12px; }
+    .item-planar-gear-finder label { display: grid; min-width: 0; gap: 5px; color: #cbd8ea; font-size: 0.76rem; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+    .item-planar-gear-finder select { width: 100%; min-width: 0; min-height: 42px; padding: 0 12px; border: 1px solid rgba(143, 183, 255, 0.38); border-radius: 8px; color: var(--text); background: #0a1425; font: inherit; font-weight: 750; cursor: pointer; }
+    .item-planar-gear-finder select:focus-visible { border-color: var(--gold); outline: 2px solid rgba(247, 201, 72, 0.22); outline-offset: 2px; }
+    .item-planar-gear-finder__result { min-height: 58px; margin-top: 14px; padding: 13px 14px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 9px; background: rgba(2, 6, 23, 0.38); color: #e9f1fd; font-size: 0.9rem; }
+    .item-planar-gear-finder__zone { display: grid; grid-template-columns: minmax(130px, auto) 1fr; gap: 10px; align-items: start; }
+    .item-planar-gear-finder__zone + .item-planar-gear-finder__zone { margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(148, 163, 184, 0.16); }
+    .item-planar-gear-finder__zone a { color: #ffe77c; font-weight: 900; text-underline-offset: 3px; }
+    .item-planar-gear-finder__zone span { color: #d9e8fa; }
+    .item-planar-gear-finder__table-wrap { overflow-x: auto; }
+    .item-planar-gear-finder__table { width: 100%; margin-top: 10px; border-collapse: collapse; color: #e9f1fd; text-align: left; }
+    .item-planar-gear-finder__table caption { padding: 0 0 10px; color: #ffe77c; font-weight: 900; text-align: left; }
+    .item-planar-gear-finder__table th, .item-planar-gear-finder__table td { padding: 9px 10px; border: 1px solid rgba(148, 163, 184, 0.22); vertical-align: top; }
+    .item-planar-gear-finder__table th { color: #ffe77c; background: rgba(30, 41, 59, 0.78); font-size: 0.76rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .item-planar-gear-finder__table td:first-child { color: #dce8fa; font-weight: 900; white-space: nowrap; }
+    .item-planar-gear-finder__table td:not(:first-child) { min-width: 230px; line-height: 1.42; }
+    @media print { .item-planar-gear-finder { color: #000 !important; background: #fff !important; border: 1px solid #000 !important; box-shadow: none !important; } .item-planar-gear-finder__heading p, .item-planar-gear-finder__controls { display: none !important; } .item-planar-gear-finder__result { color: #000 !important; background: #fff !important; border: 0 !important; padding: 0 !important; } .item-planar-gear-finder__table th, .item-planar-gear-finder__table td { color: #000 !important; border-color: #000 !important; background: #fff !important; } }
+    @media (max-width: 620px) { .item-planar-gear-finder { padding: 15px; } .item-planar-gear-finder__controls, .item-planar-gear-finder__zone { grid-template-columns: 1fr; } .item-planar-gear-finder__zone { gap: 3px; } }
+
+    .item-note-card {
+      max-width: 760px;
+      margin: 18px auto 0;
+      border: 1px solid rgba(244, 211, 94, 0.24);
+      border-radius: 8px;
+      background: rgba(9, 17, 32, 0.78);
+      padding: 16px;
+      box-shadow: 0 18px 35px rgba(0, 0, 0, 0.18);
+    }
+    .item-note-card h2 {
+      margin: 0 0 6px;
+      color: var(--gold);
+      font: 800 1rem Arial, Helvetica, sans-serif;
+    }
+    .item-note-card p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+    .item-note-class-usage-warning {
+      border-left: 3px solid rgba(251, 191, 36, 0.72);
+      padding-left: 10px;
+      color: #fde68a;
+      font-size: 0.84rem;
+    }
+    .item-note-form {
+      display: grid;
+      gap: 10px;
+    }
+    .item-note-field {
+      display: grid;
+      gap: 5px;
+    }
+    .item-note-field label {
+      color: #c5d3ea;
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .item-note-form input,
+    .item-note-form select,
+    .item-note-form textarea {
+      width: 100%;
+      border: 1px solid rgba(163, 190, 255, 0.24);
+      border-radius: 8px;
+      background: rgba(3, 7, 18, 0.78);
+      color: var(--text);
+      font: 0.95rem Arial, Helvetica, sans-serif;
+      padding: 10px 11px;
+    }
+    .item-note-form textarea {
+      min-height: 104px;
+      resize: vertical;
+    }
+    .item-note-submit {
+      justify-self: start;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid rgba(244, 211, 94, 0.42);
+      border-radius: 8px;
+      background: rgba(89, 70, 21, 0.32);
+      color: #fff4b6;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .item-note-submit:hover,
+    .item-note-submit:focus-visible {
+      border-color: rgba(244, 211, 94, 0.68);
+      background: rgba(119, 88, 23, 0.44);
+    }
+    .site-footer {
+      border-top: 1px solid var(--border);
+      background: rgba(5, 13, 27, 0.68);
+      padding: 22px 0 34px;
+    }
+    .site-footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .footer-label {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .resource-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .resource-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(244, 211, 94, 0.42);
+      color: #fff4b6;
+      text-decoration: none;
+      background: rgba(89, 70, 21, 0.32);
+      font-weight: 900;
+    }
+    @media (max-width: 820px) {
+      .brand-feature-line { display: none; }
+      .site-footer-inner { align-items: flex-start; }
+    }
+    @media (max-width: 720px) {
+      .site-header,
+      .brand-hero {
+        max-width: 100%;
+        overflow-x: clip;
+      }
+      .app-nav {
+        width: 100%;
+        max-width: 100%;
+        left: auto;
+        transform: none;
+        padding: 0 8px 2px;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .nav-tab {
+        min-height: 34px;
+        padding: 7px 10px;
+        font-size: 0.8rem;
+      }
+      .nav-tab .nav-icon {
+        display: none;
+      }
+    }
+    @media (max-width: 620px) {
+      .item-action-row { position: static; margin: 0 0 14px; }
+      .tooltip-title { min-height: 0; margin: 0 0 10px; }
+    }
+  </style>
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Thing","name":"Worn Great Blade","description":"Worn Great Blade details for EQ Legends Tools: Slot: PRIMARY. Includes tooltip data, acquisition, and ZAM resources.","url":"https://eqlegendstools.com/items/worn-great-blade/","sameAs":["https://everquest.allakhazam.com/search.html?q=Worn%20Great%20Blade"]},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"EQ Legends Tools","item":"https://eqlegendstools.com/"},{"@type":"ListItem","position":2,"name":"BiS Weapons","item":"https://eqlegendstools.com/weapon-search/"},{"@type":"ListItem","position":3,"name":"Worn Great Blade","item":"https://eqlegendstools.com/items/worn-great-blade/"}]}]}</script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand-hero">
+      <div class="brand-title">EQ Legends Tools</div>
+      <p class="brand-feature-line"><span>Weapons</span><span>Gear</span><span>Procs</span><span>Focus Effects</span><span>Clickies</span><span>Worn Effects</span><span>Character Sheet</span><span>Plane of Sky Quests</span><span>Exaltation Planner</span><span>Zones</span></p>
+      <nav class="app-nav" aria-label="Primary">
+        <a class="nav-tab" href="/plane-of-sky-quests/">PoSky Quests</a>
+        <a class="nav-tab" href="/weapon-search/">BiS Weapons</a>
+        <a class="nav-tab" href="/bis-gear/">BiS Gear</a>
+        <a class="nav-tab" href="/weapon-procs/">Procs</a>
+        <a class="nav-tab" href="/focus-effects/">Focus Effects</a>
+        <a class="nav-tab" href="/clickies/">Clickies</a>
+        <a class="nav-tab" href="/worn-effects/">Worn Effects</a>
+        <a class="nav-tab" href="/char-sheet/">Character Sheet</a>
+        <a class="nav-tab" href="/quests/"><svg class="nav-icon" width="22" height="22" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M15 8h29l7 7v41H15z" fill="#e7d7ae" stroke="#6b4f2a" stroke-width="3"/><path d="M44 8v9h8" fill="#f6e6bd" stroke="#6b4f2a" stroke-width="3"/><path d="M22 24h21M22 33h21M22 42h15" stroke="#8b6b3d" stroke-width="3" stroke-linecap="round"/></svg><span>Quest Guides</span></a><a class="nav-tab" href="/zones/"><svg class="nav-icon" width="22" height="22" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><circle cx="32" cy="32" r="24" fill="#0f766e" stroke="#67e8f9" stroke-width="3"/><path d="M9 32h46M32 8c7 7 11 15 11 24S39 49 32 56M32 8c-7 7-11 15-11 24s4 17 11 24" fill="none" stroke="#ccfbf1" stroke-width="2.5" stroke-linecap="round"/></svg><span>Zones</span></a>
+</nav>
+    </div>
+  </header>
+  <main>
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/">EQ Legends Tools</a>
+      <span class="breadcrumb-separator" aria-hidden="true">›</span>
+      <a href="/weapon-search/">BiS Weapons</a>
+      <span class="breadcrumb-separator" aria-hidden="true">›</span>
+      <span class="breadcrumb-current" aria-current="page">Worn Great Blade</span>
+    </nav>
+    <div class="page-title">
+      <p class="eyebrow">Weapon</p>
+      <h1>Worn Great Blade</h1>
+    </div>
+    <aside class="tooltip-card" aria-label="Worn Great Blade tooltip">
+      <p class="tooltip-title"><img class="item-title-icon" src="/assets/item-icons/langseax.png?v=d223574df02f" width="38" height="38" loading="eager" decoding="async" alt="" />Worn Great Blade</p>
+      <div class="item-action-row">
+        <button id="addToCompareBtn" class="compare-add-button" type="button" data-compare-name="Worn Great Blade" data-compare-slots="PRIMARY">Add to Compare</button>
+        <a class="browse-tool-link" href="/weapon-search/">Browse BiS Weapons</a>
+      </div>
+      <p class="tooltip-flags">Lore Equipped · No Trade</p>
+      <ul class="tooltip-lines">
+        <li>Slot: PRIMARY</li><li>Skill: 2H Slashing Atk Delay: 45</li><li>DMG: 30 Dmg Bonus: 30</li><li>END: +50</li><li>STR: +10 STA: +10</li><li>WT: 4.0 Size: LARGE</li><li>Class: WAR PAL SHD BER</li><li>Drops From: <a class="source-zone-link" href="/zones/nektropos-castle/">Nektropos Castle</a>: C&#39;Rate</li><li>Farming Speed: <span class="farming-speed farming-speed-fair">Fair</span><span class="farming-speed-description"> — Can be farmed with a reasonable time investment.</span></li>
+      </ul>
+      <p id="itemUpgradeNote" class="tooltip-upgrade-note">Item stats shown at upgrade level 0.</p>
+    </aside>
+    <aside id="effectDetailTooltip" class="effect-detail-tooltip" role="tooltip" aria-live="polite"></aside>
+    <section class="item-upgrade-panel" aria-label="Item upgrade level">
+      <label for="itemUpgradeScale">Item Upgrade</label>
+      <output id="itemUpgradeValue" for="itemUpgradeScale">Level 0</output>
+      <p id="itemUpgradeProgress" class="item-upgrade-progress">0 / 1,023 XP</p>
+      <div class="item-upgrade-controls">
+        <button id="itemUpgradeDown" class="item-upgrade-step" type="button" aria-label="Decrease item upgrade">−</button>
+        <input id="itemUpgradeScale" type="range" min="0" max="10000" step="1" value="0" aria-describedby="itemUpgradeProgress" />
+        <button id="itemUpgradeUp" class="item-upgrade-step" type="button" aria-label="Increase item upgrade">+</button>
+      </div>
+    </section>
+
+    <div id="compareConflictModal" class="compare-conflict-modal" hidden aria-hidden="true">
+      <section class="compare-conflict-dialog" role="dialog" aria-modal="true" aria-labelledby="compareConflictTitle">
+        <h2 id="compareConflictTitle">Comparison Slot Conflict</h2>
+        <p id="compareConflictMessage"></p>
+        <div class="compare-conflict-actions">
+          <button id="compareConflictOk" class="compare-conflict-ok" type="button">OK</button>
+          <button id="compareConflictReset" class="compare-conflict-reset" type="button">Start New Compare</button>
+        </div>
+      </section>
+    </div>
+    <!-- RELATED_ITEMS_START -->
+    <div class="related-items-grid">
+      <section class="related-items-card" aria-labelledby="related-zone-title">
+        <h2 id="related-zone-title">Other gear from <a href="/zones/nektropos-castle/">Nektropos Castle</a></h2>
+        <p class="related-items-context" data-related-context="zone">Compatible with at least one class that can use this item.</p>
+        <div data-related-list="zone"><ul id="relatedZoneItems" class="related-item-list"><li><a href="/items/corroded-spiked-club/">Corroded Spiked Club</a> <span>Level 46+</span></li><li><a href="/items/bloodsoaked-gauntlets/">Bloodsoaked Gauntlets</a> <span>Level 46+</span></li><li><a href="/items/cloak-of-treason/">Cloak of Treason</a> <span>Level 46+</span></li><li><a href="/items/ring-of-the-eldest/">Ring of the Eldest</a> <span>Level 46+</span></li><li><a href="/items/pyroweave-band/">Pyroweave Band</a> <span>Level 46+</span></li><li><a href="/items/handmaidens-ring/">Handmaiden&#39;s Ring</a> <span>Level 46+</span></li><li><a href="/items/helical-band-of-the-unyielding/">Helical Band of the Unyielding</a> <span>Level 46+</span></li><li><a href="/items/sergeants-leather-belt/">Sergeant&#39;s Leather Belt</a> <span>Level 46+</span></li><li><a href="/items/distressed-mithril-shortbow/">Distressed Mithril Shortbow</a> <span>Level 46+</span></li><li><a href="/items/bloods-unity/">Blood&#39;s Unity</a> <span>Level 46+</span></li></ul></div>
+      </section>
+      <section class="related-items-card" aria-labelledby="related-slot-title">
+        <h2 id="related-slot-title">Other recommended weapons</h2>
+        <p class="related-items-context" data-related-context="slot">Curated progression options at a similar or higher recommended level.</p>
+        <div data-related-list="slot"><ul id="relatedSlotItems" class="related-item-list"><li><a href="/items/corroded-spiked-club/">Corroded Spiked Club</a> <span>Level 46+</span></li><li><a href="/items/razing-sword-of-skarlon/">Razing Sword of Skarlon</a> <span>Level 38+</span></li><li><a href="/items/earthshaker/">Earthshaker</a> <span>Level 38+</span></li><li><a href="/items/lamentation-blade/">Lamentation Blade</a> <span>Level 38+</span></li><li><a href="/items/soul-leech-dark-sword-of-blood/">Soul Leech, Dark Sword of Blood</a> <span>Level 46+</span></li><li><a href="/items/bloods-unity/">Blood&#39;s Unity</a> <span>Level 46+</span></li><li><a href="/items/wellworn-blade/">Wellworn Blade</a> <span>Level 46+</span></li><li><a href="/items/efreeti-long-sword/">Efreeti Long Sword</a> <span>Level 46+</span></li><li><a href="/items/worn-corpse-chopper/">Worn Corpse Chopper</a> <span>Level 46+</span></li><li><a href="/items/smoldering-brand/">Smoldering Brand</a> <span>Level 38+</span></li></ul></div>
+      </section>
+    </div>
+    <script id="relatedItemData" type="application/json">{"validClasses":["Bard","Beastlord","Berserker","Cleric","Druid","Enchanter","Magician","Monk","Necromancer","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior","Wizard"],"fallbackClasses":["Berserker","Paladin","Shadow Knight","Warrior"],"zone":[{"name":"Corroded Spiked Club","slug":"corroded-spiked-club","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Monk","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior"],"minLevel":46},{"name":"Bloodsoaked Gauntlets","slug":"bloodsoaked-gauntlets","classes":["Berserker","Paladin","Shadow Knight","Warrior"],"minLevel":46},{"name":"Cloak of Treason","slug":"cloak-of-treason","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Enchanter","Magician","Monk","Necromancer","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior","Wizard"],"minLevel":46},{"name":"Ring of the Eldest","slug":"ring-of-the-eldest","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Enchanter","Magician","Monk","Necromancer","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior","Wizard"],"minLevel":46},{"name":"Pyroweave Band","slug":"pyroweave-band","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Enchanter","Magician","Monk","Necromancer","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior","Wizard"],"minLevel":46},{"name":"Handmaiden's Ring","slug":"handmaidens-ring","classes":["Bard","Beastlord","Berserker","Monk","Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Helical Band of the Unyielding","slug":"helical-band-of-the-unyielding","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Enchanter","Magician","Monk","Necromancer","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior","Wizard"],"minLevel":46},{"name":"Sergeant's Leather Belt","slug":"sergeants-leather-belt","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Monk","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior"],"minLevel":46},{"name":"Distressed Mithril Shortbow","slug":"distressed-mithril-shortbow","classes":["Paladin","Ranger","Shadow Knight","Warrior"],"minLevel":46},{"name":"Blood's Unity","slug":"bloods-unity","classes":["Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Wellworn Blade","slug":"wellworn-blade","classes":["Bard","Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Worn Corpse Chopper","slug":"worn-corpse-chopper","classes":["Bard","Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Cryptguard","slug":"cryptguard","classes":["Paladin","Shadow Knight","Warrior"],"minLevel":46},{"name":"Layered Guards","slug":"layered-guards","classes":["Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior"],"minLevel":46},{"name":"Ancient Warsword","slug":"ancient-warsword","classes":["Paladin","Ranger","Shadow Knight"],"minLevel":46},{"name":"Unstoppable Girdle","slug":"unstoppable-girdle","classes":["Berserker","Warrior"],"minLevel":46},{"name":"Checkmate","slug":"checkmate","classes":["Berserker","Monk","Rogue","Warrior"],"minLevel":46},{"name":"Dark Ironbound Tome","slug":"dark-ironbound-tome","classes":["Necromancer","Shadow Knight"],"minLevel":46},{"name":"The Unbreakable Word","slug":"the-unbreakable-word","classes":["Cleric","Paladin"],"minLevel":46},{"name":"Torturer's Signature","slug":"torturers-signature","classes":["Bard","Ranger","Rogue","Warrior"],"minLevel":46},{"name":"Scars of the Indomable","slug":"scars-of-the-indomable","classes":["Berserker"],"minLevel":46},{"name":"Signet Ring of Lord Everling","slug":"signet-ring-of-lord-everling","classes":["Enchanter","Magician","Necromancer","Shadow Knight","Wizard"],"minLevel":46},{"name":"Idol of Forsaken Ideals","slug":"idol-of-forsaken-ideals","classes":["Beastlord","Cleric","Druid","Paladin","Shaman"],"minLevel":46},{"name":"Doll's Fang","slug":"dolls-fang","classes":["Beastlord","Monk"],"minLevel":46},{"name":"Gamblers Gambit","slug":"gamblers-gambit","classes":["Rogue"],"minLevel":46},{"name":"Burning Fighters Blade","slug":"burning-fighters-blade","classes":["Ranger"],"minLevel":46},{"name":"Warstaff of Hope's Demise","slug":"warstaff-of-hopes-demise","classes":["Enchanter","Magician","Necromancer","Rogue","Shaman","Wizard"],"minLevel":46},{"name":"Unbroken Golem Core","slug":"unbroken-golem-core","classes":["Cleric","Druid","Enchanter","Magician","Necromancer","Shaman","Wizard"],"minLevel":46},{"name":"Handmaiden's Handwrap","slug":"handmaidens-handwrap","classes":["Beastlord","Monk"],"minLevel":46},{"name":"Robe of the Betrayed","slug":"robe-of-the-betrayed","classes":["Druid","Enchanter","Magician","Necromancer","Shaman","Wizard"],"minLevel":46},{"name":"Pyrosilk Robe","slug":"pyrosilk-robe","classes":["Enchanter","Magician","Monk","Necromancer","Wizard"],"minLevel":46},{"name":"Schemer's Guise","slug":"schemers-guise","classes":["Bard","Enchanter","Rogue"],"minLevel":46},{"name":"Pyrosilk Headband","slug":"pyrosilk-headband","classes":["Enchanter","Magician","Monk","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Gloves","slug":"pyrosilk-gloves","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Lined Shoes","slug":"pyrosilk-lined-shoes","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Leggings","slug":"pyrosilk-leggings","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Sleeves","slug":"pyrosilk-sleeves","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Choker","slug":"pyrosilk-choker","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Veil","slug":"pyrosilk-veil","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Sash","slug":"pyrosilk-sash","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Cloak","slug":"pyrosilk-cloak","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Amice","slug":"pyrosilk-amice","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Pyrosilk Bracelet","slug":"pyrosilk-bracelet","classes":["Enchanter","Magician","Necromancer","Wizard"],"minLevel":46},{"name":"Handmaiden's Wristwrap","slug":"handmaidens-wristwrap","classes":["Beastlord","Druid","Monk","Shaman"],"minLevel":46},{"name":"Handmaiden's Earring","slug":"handmaidens-earring","classes":["Cleric","Druid","Enchanter","Magician","Necromancer","Shaman","Wizard"],"minLevel":46}],"slot":[{"name":"Corroded Spiked Club","slug":"corroded-spiked-club","classes":["Bard","Beastlord","Berserker","Cleric","Druid","Monk","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior"],"minLevel":46},{"name":"Razing Sword of Skarlon","slug":"razing-sword-of-skarlon","classes":["Berserker","Paladin","Shadow Knight","Warrior"],"minLevel":38},{"name":"Earthshaker","slug":"earthshaker","classes":["Berserker","Paladin","Ranger","Shadow Knight","Warrior"],"minLevel":38},{"name":"Lamentation Blade","slug":"lamentation-blade","classes":["Berserker","Paladin","Ranger","Shadow Knight","Warrior"],"minLevel":38},{"name":"Soul Leech, Dark Sword of Blood","slug":"soul-leech-dark-sword-of-blood","classes":["Berserker","Shadow Knight","Warrior"],"minLevel":46},{"name":"Blood's Unity","slug":"bloods-unity","classes":["Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Wellworn Blade","slug":"wellworn-blade","classes":["Bard","Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Efreeti Long Sword","slug":"efreeti-long-sword","classes":["Bard","Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Worn Corpse Chopper","slug":"worn-corpse-chopper","classes":["Bard","Paladin","Ranger","Rogue","Shadow Knight","Warrior"],"minLevel":46},{"name":"Smoldering Brand","slug":"smoldering-brand","classes":["Bard","Beastlord","Cleric","Druid","Enchanter","Magician","Monk","Necromancer","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior","Wizard"],"minLevel":38},{"name":"Mudman Enforcer","slug":"mudman-enforcer","classes":["Bard","Beastlord","Cleric","Druid","Monk","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior"],"minLevel":38},{"name":"Sharkbone Warhammer","slug":"sharkbone-warhammer","classes":["Bard","Beastlord","Cleric","Druid","Monk","Paladin","Ranger","Rogue","Shadow Knight","Shaman","Warrior"],"minLevel":38},{"name":"Torrid Corruptor","slug":"torrid-corruptor","classes":["Paladin","Shadow Knight"],"minLevel":46},{"name":"Ancient Warsword","slug":"ancient-warsword","classes":["Paladin","Ranger","Shadow Knight"],"minLevel":46},{"name":"Earthen Blade","slug":"earthen-blade","classes":["Berserker","Warrior"],"minLevel":38},{"name":"Serpent's Tooth","slug":"serpents-tooth","classes":["Bard","Beastlord","Enchanter","Magician","Necromancer","Ranger","Rogue","Shadow Knight","Warrior","Wizard"],"minLevel":38},{"name":"Sharkjaw Cutlass","slug":"sharkjaw-cutlass","classes":["Paladin","Shadow Knight"],"minLevel":38},{"name":"Cudgel of the Fool","slug":"cudgel-of-the-fool","classes":["Berserker"],"minLevel":46},{"name":"Skycleaver","slug":"skycleaver","classes":["Berserker"],"minLevel":46},{"name":"Khyldorn the Blood Drinker","slug":"khyldorn-the-blood-drinker","classes":["Shadow Knight"],"minLevel":46},{"name":"Fangol","slug":"fangol","classes":["Warrior"],"minLevel":46},{"name":"Truvinan","slug":"truvinan","classes":["Paladin"],"minLevel":46},{"name":"Aldryn, Blade of the Ocean","slug":"aldryn-blade-of-the-ocean","classes":["Paladin"],"minLevel":46},{"name":"Thelvorn, Blade of Light","slug":"thelvorn-blade-of-light","classes":["Paladin"],"minLevel":46},{"name":"Sunderfury","slug":"sunderfury","classes":["Warrior"],"minLevel":46},{"name":"Dark Ironbound Tome","slug":"dark-ironbound-tome","classes":["Necromancer","Shadow Knight"],"minLevel":46},{"name":"The Unbreakable Word","slug":"the-unbreakable-word","classes":["Cleric","Paladin"],"minLevel":46},{"name":"Monsoon, Sword of the Swiftwind","slug":"monsoon-sword-of-the-swiftwind","classes":["Warrior"],"minLevel":46},{"name":"Bloodmoon","slug":"bloodmoon","classes":["Shadow Knight"],"minLevel":46},{"name":"Theologian Claymore","slug":"theologian-claymore","classes":["Paladin"],"minLevel":46},{"name":"Darkmetal Holy Water Sprinkler","slug":"darkmetal-holy-water-sprinkler","classes":["Paladin"],"minLevel":46},{"name":"Dagas","slug":"dagas","classes":["Warrior"],"minLevel":46},{"name":"Blade of Abrogation","slug":"blade-of-abrogation","classes":["Shadow Knight"],"minLevel":46},{"name":"Spined Dragon Claws","slug":"spined-dragon-claws","classes":["Ranger","Warrior"],"minLevel":46},{"name":"Blood Fire","slug":"blood-fire","classes":["Warrior"],"minLevel":46},{"name":"Torturer's Signature","slug":"torturers-signature","classes":["Bard","Ranger","Rogue","Warrior"],"minLevel":46},{"name":"Spiroc Wingblade","slug":"spiroc-wingblade","classes":["Ranger","Warrior"],"minLevel":46},{"name":"Efreeti War Spear","slug":"efreeti-war-spear","classes":["Bard","Beastlord","Rogue","Shaman","Warrior"],"minLevel":46},{"name":"Fiery Avenger","slug":"fiery-avenger","classes":["Paladin"],"minLevel":38},{"name":"SoulFire","slug":"soulfire","classes":["Paladin"],"minLevel":38},{"name":"Crystalline Spear","slug":"crystalline-spear","classes":["Bard","Beastlord","Ranger","Rogue","Warrior"],"minLevel":42},{"name":"Baton of the Sky","slug":"baton-of-the-sky","classes":["Cleric"],"minLevel":46},{"name":"Rod of the Protecting Winds","slug":"rod-of-the-protecting-winds","classes":["Enchanter"],"minLevel":46},{"name":"Wu's Fist of Mastery","slug":"wus-fist-of-mastery","classes":["Monk"],"minLevel":46},{"name":"Doll's Fang","slug":"dolls-fang","classes":["Beastlord","Monk"],"minLevel":46},{"name":"Thornstinger","slug":"thornstinger","classes":["Rogue"],"minLevel":46},{"name":"Theurgist's Star","slug":"theurgists-star","classes":["Cleric"],"minLevel":46},{"name":"Garduk","slug":"garduk","classes":["Shaman"],"minLevel":46},{"name":"Arydryidriyorn","slug":"arydryidriyorn","classes":["Ranger"],"minLevel":46},{"name":"Spear of Harmony","slug":"harmonic-spear","classes":["Bard"],"minLevel":46},{"name":"Gamblers Gambit","slug":"gamblers-gambit","classes":["Rogue"],"minLevel":46},{"name":"Windhowl","slug":"windhowl","classes":["Beastlord"],"minLevel":46},{"name":"Gardash","slug":"gardash","classes":["Shaman"],"minLevel":46},{"name":"Barbarian Spiritist`s Hammer","slug":"barbarian-spiritist-s-hammer","classes":["Shaman"],"minLevel":46},{"name":"Staff of Elemental Mastery: Air","slug":"staff-of-elemental-mastery-air","classes":["Magician"],"minLevel":46},{"name":"Staff of Elemental Mastery: Earth","slug":"staff-of-elemental-mastery-earth","classes":["Magician"],"minLevel":46},{"name":"Staff of Elemental Mastery: Fire","slug":"staff-of-elemental-mastery-fire","classes":["Magician"],"minLevel":46},{"name":"Warhammer of the Wind","slug":"warhammer-of-the-wind","classes":["Shaman"],"minLevel":46},{"name":"Whitened Treant Fists","slug":"whitened-treant-fists","classes":["Monk"],"minLevel":46},{"name":"Withered Totem of Widdershins","slug":"withered-totem-of-widdershins","classes":["Shaman"],"minLevel":46}]}</script>
+    <script>(()=>{const e=document.getElementById("relatedItemData");if(!e)return;let t;try{t=JSON.parse(e.textContent||"{}")}catch{return}const n=new Set(t.validClasses||[]),r=e=>[...new Set((Array.isArray(e)?e:[]).filter(e=>n.has(e)))].slice(0,3),o=function(){try{const e=r(JSON.parse(localStorage.getItem("eqlegendstools.sharedClassSelections")||"[]"));if(e.length)return e}catch{}try{const e=JSON.parse(localStorage.getItem("eqlegendstools.charSheet.v1")||"{}"),t=r(e.classes);if(t.length)return t}catch{}return[]}();if(!o.length)return;const a=e=>(e.classes||[]).some(e=>o.includes(e));function l(e){const n=document.querySelector('[data-related-list="'+e+'"] .related-item-list'),r=document.querySelector('[data-related-context="'+e+'"]'),l=Array.isArray(t[e])?t[e]:[];if(!n||!l.length)return;const s=l.filter(a).slice(0,10);s.length?(n.replaceChildren(...s.map(e=>{const t=document.createElement("li"),n=document.createElement("a");if(n.href="/items/"+e.slug+"/",n.textContent=e.name,t.append(n),Number.isFinite(e.minLevel)){const n=document.createElement("span");n.textContent="Level "+e.minLevel+"+",t.append(n)}return t})),r&&(r.textContent="Personalized for "+o.join(" + ")+".")):r&&(r.textContent="No additional matches were found for "+o.join(" + ")+"; showing recommendations compatible with this item.")}l("zone"),l("slot")})();</script>
+    <!-- RELATED_ITEMS_END -->
+    <section class="item-note-card" aria-labelledby="item-note-title">
+      <h2 id="item-note-title">Submit item note or correction</h2>
+      <p>See outdated stats, missing source info, or a tooltip issue? Send a private note or correction.</p>
+      <p class="item-note-class-usage-warning">Before submitting a Class usability correction, double-check that your item in-game does not have any exaltations socketed that are affecting the Class usability of the item (socketed exaltations modify the usable classes on the base item).</p>
+      <form class='item-note-form' method='POST' name='item-note-correction'>
+        <input type="hidden" name="form-name" value="item-note-correction" />
+        <input type="hidden" name="item_name" value="Worn Great Blade" />
+        <input type="hidden" name="item_page" value="https://eqlegendstools.com/items/worn-great-blade/" />
+        <input type="hidden" name="item_category" value="Weapon" />
+        <p style="display: none;">
+          <label>Do not fill this out: <input name="company" tabindex="-1" autocomplete="off" /></label>
+        </p>
+        <div class="item-note-field">
+          <label for="noteType">Type</label>
+          <select id="noteType" name="note_type" required>
+            <option value="Correction">Correction</option>
+            <option value="Missing info">Missing info</option>
+            <option value="Source update">Source update</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="item-note-field">
+          <label for="noteMessage">Note</label>
+          <textarea id="noteMessage" name="message" maxlength="1200" required placeholder="What should be updated? Include source details if you have them."></textarea>
+        </div>
+        <div class="item-note-field">
+          <label for="noteContact">Contact, optional</label>
+          <input id="noteContact" name="contact" maxlength="120" autocomplete="off" placeholder="Discord name or email if you want a reply" />
+        </div>
+        <button class="item-note-submit" type="submit">Submit Note</button>
+      </form>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <p class="footer-label">Resources</p>
+      <div class="resource-links">
+        <a class="resource-link" href="https://everquest.allakhazam.com/search.html?q=Worn%20Great%20Blade" target="_blank" rel="noopener noreferrer">ZAM Search</a>
+      </div>
+    </div>
+  </footer>
+  <script>const baseTooltipLines=["Slot: PRIMARY","Skill: 2H Slashing Atk Delay: 45","DMG: 30 Dmg Bonus: 30","END: +50","STR: +10 STA: +10","WT: 4.0 Size: LARGE","Class: WAR PAL SHD BER","Drops From: Nektropos Castle: C'Rate","Farming Speed: Fair \u2014 Can be farmed with a reasonable time investment."],itemEffectTooltips={},itemSourceZoneLinks={"nektropos castle":"/zones/nektropos-castle/"},itemSourceQuestLinks={},itemUpgradeScale=document.getElementById("itemUpgradeScale"),itemUpgradeValue=document.getElementById("itemUpgradeValue"),itemUpgradeProgress=document.getElementById("itemUpgradeProgress"),itemUpgradeDown=document.getElementById("itemUpgradeDown"),itemUpgradeUp=document.getElementById("itemUpgradeUp"),itemUpgradeNote=document.getElementById("itemUpgradeNote"),itemTooltipLines=document.querySelector(".tooltip-lines"),MAX_UPGRADE_PROGRESS=1023,UPGRADE_SLIDER_MAX=1e4,UPGRADE_SLIDER_CURVE=.15,UPGRADE_SLIDER_BASE_WEIGHT=.25,primaryItemStats=new Set(["AC","HP","MP","END","STR","STA","AGI","DEX","WIS","INT","CHA","SV_MAGIC","SV_FIRE","SV_COLD","SV_POISON","SV_DISEASE"]),scalableItemStats=new Set(["AC","HP","MANA","MP","STR","STA","AGI","DEX","WIS","INT","CHA","END"]),voidQualifyingStats=new Set(["STR","STA","INT","AGI","DEX","CHA","WIS","SV_MAGIC","SV_FIRE","SV_COLD","SV_POISON","SV_DISEASE"]);function clampUpgradeProgress(e){const t=Number.parseInt(e,10);return Number.isFinite(t)?Math.max(0,Math.min(1023,t)):0}function itemUpgradeState(e){const t=clampUpgradeProgress(e);if(0===t)return{full:0,fraction:0,denominator:1,progress:0};if(1023===t)return{full:10,fraction:0,denominator:1,progress:t};const a=Math.floor(Math.log2(t+1));return{full:a,fraction:t-(Math.pow(2,a)-1),denominator:Math.pow(2,a),progress:t}}function effectiveItemLevel(e){return e.full+e.fraction/e.denominator}function formatItemLevel(e){return 0===e.full?"Level 0":10===e.full?"Level 10":"Level "+e.full+" + "+e.fraction+"/"+e.denominator}function upgradeSliderBands(){const e=[];let t=0;for(let a=0;a<10;a+=1){const o=0===a?.25:Math.pow(2,.15*a);e.push({full:a,start:t,weight:o}),t+=o}return{bands:e,total:t}}const upgradeSliderBandData=upgradeSliderBands();function stateToSliderPosition(e){if(!e||e.full<=0)return 0;if(e.full>=10)return 1e4;const t=upgradeSliderBandData.bands[e.full];return Math.round((t.start+t.weight*(e.fraction/e.denominator))/upgradeSliderBandData.total*1e4)}const upgradeSliderPositions=Array.from({length:1024},(e,t)=>stateToSliderPosition(itemUpgradeState(t)));function sliderPositionToProgress(e){const t=Math.max(0,Math.min(1e4,Number.parseInt(e,10)||0));let a=0,o=upgradeSliderPositions.length-1;if(t<=0)return 0;if(t>=1e4)return 1023;for(;a<=o;){const e=Math.floor((a+o)/2),r=upgradeSliderPositions[e];if(r===t)return e;r<t?a=e+1:o=e-1}const r=Math.max(0,o),n=Math.min(1023,a);return t-upgradeSliderPositions[r]<=upgradeSliderPositions[n]-t?r:n}function canonicalItemStat(e){const t=String(e||"").toUpperCase().replace(/s+/g," ").trim();return{DAMAGE:"DMG",MANA:"MP",MP:"MP",ENDUR:"END",END:"END","SV MAGIC":"SV_MAGIC","SV FIRE":"SV_FIRE","SV COLD":"SV_COLD","SV POISON":"SV_POISON","SV DISEASE":"SV_DISEASE",MAGIC:"SV_MAGIC",FIRE:"SV_FIRE",COLD:"SV_COLD",POISON:"SV_POISON",DISEASE:"SV_DISEASE",WEIGHT:"WT",WT:"WT"}[t]||t.replace(/s+/g,"_")}function excelRound(e){return e>=0?Math.floor(e+.5):Math.ceil(e-.5)}function scalePrimaryItemStat(e,t){const a=Number(e||0),o=effectiveItemLevel(t);return a?a>0?Math.max(Math.floor(a*(1+o/10)),a+t.full):Math.abs(a)<=10?Math.min(0,a+t.full):Math.min(0,a+excelRound(Math.abs(a)*o/10)):0}function scaleDamage(e,t){const a=Number(e||0);return a>0?a+Math.floor(a*effectiveItemLevel(t)/10):a}function scaleBackstabDamage(e,t){const a=Number(e||0);return a>0?a+Math.floor(a*effectiveItemLevel(t)/20):a}function formatWeight(e){const t=Math.max(0,Number(e||0));return Number.isFinite(t)?t.toFixed(2).replace(/\.00$/,".0").replace(/(\.\d)0$/,"$1"):"0.0"}function scaleWeight(e,t){const a=Math.max(0,Number(e||0));if(!t.full||a<=.1)return a;const o=Math.pow(2,t.full)+t.fraction;return Math.max(0,Math.ceil(a*(1-.09*Math.log2(o))*10)/10)}function scaledWeaponData(e,t){const a=e.join(" "),o=a.match(/\bDMG:\s*(-?\d+)/i),r=a.match(/\b(?:Atk )?Delay:\s*(\d+)/i),n=o?Number(o[1]):null,i=r?Number(r[1]):null,s=Number.isFinite(n)?scaleDamage(n,t):null;return{scaledDamage:s,ratio:Number.isFinite(s)&&Number.isFinite(i)&&i>0?s/i:null}}function scaleTooltipLine(e,t,a){const o=String(e||"");if(/^(Effect|Clicky Effect|Focus Effect|Worn Effect):/i.test(o))return o;let r=o.replace(/\b(AC|HP|MANA|MP|STR|STA|AGI|DEX|WIS|INT|CHA|END):\s*([+-]?\d+)/gi,(e,a,o)=>{const r=Number(o);if(!scalableItemStats.has(String(a).toUpperCase())||!Number.isFinite(r))return e;const n=scalePrimaryItemStat(r,t);return String(a).toUpperCase()+": "+(n>0?"+":"")+n});return r=r.replace(/\bSV(?:\s+(?:MAGIC|FIRE|COLD|POISON|DISEASE))?:\s*([+-]?\d+)/gi,(e,a)=>{const o=scalePrimaryItemStat(Number(a),t);return e.replace(/[+-]?\d+$/,(o>0?"+":"")+o)}),r=r.replace(/\bBackstab(?:\s+DMG)?\s*:\s*(-?\d+)/i,e=>{const a=Number(e.match(/-?\d+\s*$/)?.[0]);return Number.isFinite(a)?e.replace(/-?\d+\s*$/,String(scaleBackstabDamage(a,t))):e}),r=r.replace(/^DMG:\s*(-?\d+)/i,e=>null===a.scaledDamage?e:e.replace(/-?\d+$/,String(a.scaledDamage))),r=r.replace(/\bRatio:\s*[0-9.]+/i,e=>null===a.ratio?e:"Ratio: "+a.ratio.toFixed(3)),r=r.replace(/\bHaste:\s*\+?(\d+)%/i,(e,a)=>"Haste: +"+(Number(a)+t.full)+"%"),r=r.replace(/\b(HP|Mana|End) Regen:\s*\+?(\d+)/gi,(e,a,o)=>a+" Regen: +"+(Number(o)+t.full)),baseTooltipLines.some(e=>/^Slot:\s*.*\b(?:RANGE|AMMO)\b/i.test(String(e||"")))&&(r=r.replace(/\bRange:\s*(\d+)/i,(e,a)=>"Range: "+(Number(a)+10*t.full))),r=r.replace(/\bWT:\s*([0-9.]+)/i,(e,a)=>"WT: "+formatWeight(scaleWeight(Number(a),t))),r}function escapeUpgradeText(e){return String(e||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}function effectEntryForTooltipLine(e){const t=String(e||"").trim().match(/^(Effect|Proc Effect|Focus Effect|Clicky Effect|Worn Effect):\s*(.+)$/i);if(!t)return null;const a=t[2].trim().toLowerCase();return Object.entries(itemEffectTooltips).find(([e,t])=>a.startsWith(String(t?.name||e.split(":").slice(1).join(":")).toLowerCase()))||null}function renderSourceZoneLine(e){const t=String(e||"").trim(),a=t.match(/^(Reward from(?:\s+.+?)?\s+Quest:\s*)(.+)$/i);if(a)return escapeUpgradeText(a[1])+a[2].split(/(;\s*)/).map(e=>{if(/^;\s*$/.test(e))return escapeUpgradeText(e);const t=String(e||"").trim(),a=itemSourceQuestLinks[t.toLowerCase()];return a?'<a class="source-quest-link" href="'+escapeUpgradeText(a)+'">'+escapeUpgradeText(t)+"</a>":escapeUpgradeText(e)}).join("");const o=t.match(/^(Drops From:\s*)(.+)$/i);return o?escapeUpgradeText(o[1])+o[2].split(/(;\s*)/).map(e=>{if(/^;\s*$/.test(e))return escapeUpgradeText(e);const t=e.match(/^([^:;]+)(:.*)$/);if(!t)return escapeUpgradeText(e);const a=itemSourceZoneLinks[String(t[1]||"").trim().toLowerCase()];return a?'<a class="source-zone-link" href="'+escapeUpgradeText(a)+'">'+escapeUpgradeText(t[1].trim())+"</a>"+escapeUpgradeText(t[2]):escapeUpgradeText(e)}).join(""):escapeUpgradeText(e)}function renderSpecialDamageText(e){let t=escapeUpgradeText(e);return[["special-damage-magic",/\bMagic\s+DMG:\s*\+?\d+\b/gi],["special-damage-fire",/\bFire\s+DMG:\s*\+?\d+\b/gi],["special-damage-cold",/\b(?:Cold|Ice)\s+DMG:\s*\+?\d+\b/gi],["special-damage-poison",/\bPoison\s+DMG:\s*\+?\d+\b/gi],["special-damage-disease",/\bDisease\s+DMG:\s*\+?\d+\b/gi],["special-damage-void",/\bVoid\s+DMG:\s*\+?\d+\b/gi],["special-damage-undead",/\b(?:Undead\s+Bane\s+DMG:\s*\+?\d+|Bane\s+DMG:\s*Undead\s+\+?\d+)\b/gi]].reduce((e,t)=>e.replace(t[1],e=>'<span class="special-damage '+t[0]+'">'+e+"</span>"),t)}function renderItemTooltipLine(e,t,a){const o=scaleTooltipLine(e,t,a),r=String(o||"").match(/^Farming Speed:\s*(Fast|Fair|Slow)\s*[\u2014-]\s*(.+)$/i);if(r)return'Farming Speed: <span class="farming-speed farming-speed-'+escapeUpgradeText(r[1].toLowerCase())+'">'+escapeUpgradeText(r[1])+'</span><span class="farming-speed-description"> \u2014 '+escapeUpgradeText(r[2])+"</span>";const n=effectEntryForTooltipLine(o);if(!n){const e=renderSpecialDamageText(o);return e.includes("special-damage")?e:renderSourceZoneLine(o)}const[i,s]=n,c=String(o||"").trim().match(/^((?:Effect|Proc Effect|Focus Effect|Clicky Effect|Worn Effect):\s*)(.+)$/i),l=String(s?.name||i.split(":").slice(1).join(":")),p=c?.[2]||"";return escapeUpgradeText(c?.[1]||"")+'<button class="effect-tooltip-trigger effect-tooltip-'+escapeUpgradeText(i.split(":")[0])+'" type="button" data-effect-tooltip="'+escapeUpgradeText(i)+'" aria-label="Show '+escapeUpgradeText(l)+' effect details">'+escapeUpgradeText(p.slice(0,l.length))+"</button>"+escapeUpgradeText(p.slice(l.length))}function voidResistEligible(){const e=new Set;return baseTooltipLines.forEach(t=>String(t||"").replace(/\b(STR|STA|INT|AGI|DEX|CHA|WIS|SV\s+(?:MAGIC|FIRE|COLD|POISON|DISEASE)):\s*[+-]?\d+/gi,(t,a)=>{const o=canonicalItemStat(a);return voidQualifyingStats.has(o)&&e.add(o),t})),e.size>=1}const hasVoidResist=voidResistEligible();function renderItemUpgrade(){const e=itemUpgradeState(sliderPositionToProgress(itemUpgradeScale?.value)),t=formatItemLevel(e),a=scaledWeaponData(baseTooltipLines,e);if(itemUpgradeScale&&(itemUpgradeScale.value=String(stateToSliderPosition(e))),itemUpgradeValue&&(itemUpgradeValue.textContent=t),itemUpgradeProgress&&(itemUpgradeProgress.textContent=e.progress.toLocaleString()+" / 1,023 XP \xb7 +"+(10*effectiveItemLevel(e)).toFixed(3).replace(/\.?0+$/,"")+"%"),itemUpgradeNote&&(itemUpgradeNote.textContent="Item stats shown at upgrade "+t.toLowerCase()+"."),itemTooltipLines){const t=baseTooltipLines.map(t=>{const o=/^Proc Rate \+\d+%$/i.test(String(t||""))?' class="proc-rate-line"':"",r=null!==a.ratio&&/^\s*DMG:\s*/i.test(String(t||""))?'<span class="weapon-ratio">Ratio: '+a.ratio.toFixed(2)+"</span>":"";return"<li"+o+">"+renderItemTooltipLine(t,e,a)+r+"</li>"});e.full>0&&hasVoidResist&&t.push("<li>SV VOID: +"+e.full+"</li>"),itemTooltipLines.innerHTML=t.join("")}}itemUpgradeScale?.addEventListener("input",renderItemUpgrade),itemUpgradeDown?.addEventListener("click",()=>{const e=sliderPositionToProgress(itemUpgradeScale.value);itemUpgradeScale.value=String(stateToSliderPosition(itemUpgradeState(e-1))),renderItemUpgrade()}),itemUpgradeUp?.addEventListener("click",()=>{const e=sliderPositionToProgress(itemUpgradeScale.value);itemUpgradeScale.value=String(stateToSliderPosition(itemUpgradeState(e+1))),renderItemUpgrade()}),renderItemUpgrade();const effectDetailTooltip=document.getElementById("effectDetailTooltip");let activeEffectTooltipTrigger=null;function renderEffectDetail(e){effectDetailTooltip&&e&&(effectDetailTooltip.innerHTML='<div class="effect-detail-tooltip__title">'+escapeUpgradeText(e.name||"")+"</div>"+(e.flags?'<div class="effect-detail-tooltip__flags">'+escapeUpgradeText(e.flags)+"</div>":"")+(Array.isArray(e.lines)?e.lines.map(e=>'<div class="effect-detail-tooltip__line">'+escapeUpgradeText(e)+"</div>").join(""):""))}function showEffectDetail(e){const t=itemEffectTooltips[e?.dataset.effectTooltip];if(!t||!effectDetailTooltip)return;activeEffectTooltipTrigger=e,renderEffectDetail(t);const a=e.getBoundingClientRect(),o=Math.min(360,window.innerWidth-24);effectDetailTooltip.style.left=Math.max(12,Math.min(window.innerWidth-o-12,a.left))+"px",effectDetailTooltip.style.top=Math.min(window.innerHeight-12,a.bottom+8)+"px",effectDetailTooltip.classList.add("is-visible")}function hideEffectDetail(){activeEffectTooltipTrigger=null,effectDetailTooltip?.classList.remove("is-visible")}document.addEventListener("mouseover",e=>{if(window.matchMedia("(hover: none)").matches)return;const t=e.target.closest("[data-effect-tooltip]");t&&showEffectDetail(t)}),document.addEventListener("mouseout",e=>{if(window.matchMedia("(hover: none)").matches)return;const t=e.target.closest("[data-effect-tooltip]");t&&!t.contains(e.relatedTarget)&&hideEffectDetail()}),document.addEventListener("focusin",e=>{const t=e.target.closest("[data-effect-tooltip]");t&&showEffectDetail(t)}),document.addEventListener("focusout",e=>{e.target.closest("[data-effect-tooltip]")&&hideEffectDetail()}),document.addEventListener("click",e=>{const t=e.target.closest("[data-effect-tooltip]");window.matchMedia("(hover: none)").matches&&(t?(e.preventDefault(),activeEffectTooltipTrigger===t?hideEffectDetail():showEffectDetail(t)):e.target.closest("#effectDetailTooltip")||hideEffectDetail())});const compareStorageKey="eqlegendstools.compareItems",compareMaxItems=4,button=document.getElementById("addToCompareBtn"),compareConflictModal=document.getElementById("compareConflictModal"),compareConflictMessage=document.getElementById("compareConflictMessage"),compareConflictOk=document.getElementById("compareConflictOk"),compareConflictReset=document.getElementById("compareConflictReset");let pendingCompareConflict=null;function normalizeCompareName(e){return String(e||"").trim().replace(/\s+/g," ")}function compareKey(e){return normalizeCompareName(e).toLowerCase()}function normalizeCompareSlotToken(e){const t=String(e||"").trim().toUpperCase();return t?/^\d+$/.test(t)?"":"RANGE"===t?"RANGED":"PRIM"===t||"PRIMARY"===t?"PRIMARY":"SEC"===t||"SECONDARY"===t||"OFFHAND"===t||"OFF HAND"===t?"SECONDARY":t:""}function normalizeCompareSlots(e){const t=Array.isArray(e)?e.join(" "):String(e||"");return[...new Set(t.replace(/\bPrim\s*\+\s*Sec\b/gi,"PRIMARY SECONDARY").replace(/\bPrimary\s*\+\s*Secondary\b/gi,"PRIMARY SECONDARY").replace(/[,/]+/g," ").split(/\s+/).map(normalizeCompareSlotToken).filter(Boolean))]}function compareEntryName(e){return"string"==typeof e?e:e?.name}function compareEntrySlots(e){return"string"==typeof e?[]:normalizeCompareSlots(e?.slots||[])}function loadCompareEntries(){try{const e=JSON.parse(localStorage.getItem(compareStorageKey)||"[]");return(Array.isArray(e)?e:[]).map(e=>({name:normalizeCompareName(compareEntryName(e)),slots:compareEntrySlots(e)})).filter(e=>e.name).slice(0,4)}catch(e){return[]}}function saveCompareEntries(e){localStorage.setItem(compareStorageKey,JSON.stringify(e.map(e=>({name:normalizeCompareName(compareEntryName(e)),slots:compareEntrySlots(e)})).filter(e=>e.name).slice(0,4)))}function compareSlotIntersection(e,t=[]){const a=e.map(compareEntrySlots).filter(e=>e.length),o=normalizeCompareSlots(t);return!a.length||!o.length||a.reduce((e,t)=>e.filter(e=>t.includes(e)),o).length>0}function compareSlotLabel(e){const t=normalizeCompareSlots(e);return t.length?t.join(", "):"unknown slot"}function closeCompareConflict(){pendingCompareConflict=null,compareConflictModal&&(compareConflictModal.hidden=!0,compareConflictModal.setAttribute("aria-hidden","true"))}function showCompareConflict(e,t,a){pendingCompareConflict={name:e,slots:t};const o=a.map(e=>e.name+" ("+compareSlotLabel(e.slots)+")").join(", ");compareConflictMessage&&(compareConflictMessage.textContent="\u201c"+e+"\u201d ("+compareSlotLabel(t)+") does not share a usable slot with the current comparison: "+o+". You can keep your current comparison or start a new one with this item."),compareConflictModal&&(compareConflictModal.hidden=!1,compareConflictModal.setAttribute("aria-hidden","false"),compareConflictOk?.focus())}function syncButton(){if(!button)return;const e=loadCompareEntries().some(e=>compareKey(e.name)===compareKey(button.dataset.compareName));button.classList.toggle("is-selected",e),button.textContent=e?"Added to Compare":"Add to Compare",button.setAttribute("aria-pressed",e?"true":"false")}button?.addEventListener("click",()=>{const e=button.dataset.compareName,t=normalizeCompareSlots(button.dataset.compareSlots||""),a=loadCompareEntries(),o=a.findIndex(t=>compareKey(t.name)===compareKey(e));if(o>=0)a.splice(o,1);else{if(a.length>=4)return void alert("You can compare up to four items at a time.");a.push({name:e,slots:t})}saveCompareEntries(a),syncButton()}),compareConflictOk?.addEventListener("click",closeCompareConflict),compareConflictReset?.addEventListener("click",()=>{pendingCompareConflict&&(saveCompareEntries([{name:pendingCompareConflict.name,slots:pendingCompareConflict.slots}]),closeCompareConflict(),syncButton())}),compareConflictModal?.addEventListener("click",e=>{e.target===compareConflictModal&&closeCompareConflict()}),window.addEventListener("keydown",e=>{"Escape"!==e.key||compareConflictModal?.hidden||closeCompareConflict()}),window.addEventListener("storage",e=>{e.key===compareStorageKey&&syncButton()}),syncButton();</script>
+</body>
+</html>

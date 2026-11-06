@@ -101,13 +101,13 @@ export const CONSTANTS = Object.freeze({
   hpPoolConstant: q(5n),
   poolsCounted: q(2n),
   staCurve: curve([q(255n), q(510n)], [q(1n), q(1n, 2n), q(0n)]),
-  manaBands: curve([q(100n), q(200n), q(255n), q(510n)], [q(1n), q(5n, 2n), q(5n, 4n), q(5n, 8n), q(0n)]),
+  manaBands: curve([q(100n), q(200n), q(510n)], [q(1n), q(5n, 2n), q(5n, 4n), q(0n)]),
   endCurve: curve([q(100n), q(201n)], [q(1n), q(5n, 2n), q(5n, 4n)]),
   strToAtk: q(666667n, 1000000n),
   agiToAc: q(1111n, 5000n),
   dexPastKnee: q(1n, 10n),
   sheet: Object.freeze({ itemMult: q(4n, 3n), defenseDiv: q(3n), spellAcDiv: q(4n), agiDiv: q(20n) }),
-  weaponIndex: Object.freeze({ bonusOneHanded: q(1n, 2n), bonusTwoHanded: q(67n, 100n) }),
+  weaponIndex: Object.freeze({ bonusOneHanded: q(1n, 2n), bonusTwoHanded: q(67n, 100n), bonusTwoHandedDelayCap: q(50n) }),
 });
 
 const STAT_CAP = CONSTANTS.statCap;
@@ -356,6 +356,8 @@ function compileProfile(raw) {
   const defenseCap = nonNegative(own(raw, "defense_cap"), "profile.defense_cap");
   const iksarAc = nonNegative(own(raw, "iksar_ac"), "profile.iksar_ac");
   const dwFactor = nonNegative(own(raw, "dw_factor"), "profile.dw_factor");
+  // the flat haste of Unbound Alacrity (10 with a Monk in the trio); a profile written without it has none
+  const hasteBonus = own(raw, "haste_bonus") === undefined ? ZERO : nonNegative(own(raw, "haste_bonus"), "profile.haste_bonus");
 
   const monkRaw = own(raw, "monk");
   let monk = null;
@@ -401,6 +403,7 @@ function compileProfile(raw) {
     pools,
     buff: Object.freeze(buff),
     hasteCap,
+    hasteBonus,
     rate,
     otherRate: ONE.sub(rate),
     softcapFloor: q((softcap.mul(HUNDRED.add(csPct).add(pePct)).div(HUNDRED)).floor()), // floor(cap x (100 + cs + pe) / 100)
@@ -682,6 +685,15 @@ function topPools(pools, values) {
   return { sum, counted: counted.map((index) => pools[index].cls) };
 }
 
+/**
+ * The damage bonus of a weapon whose page lists none (`weapons._bonus`): half the delay for a one-hander, 0.67 x the delay for a two-hander, the delay counting
+ * at most 50 for a two-hander. `delay` is a Rational.
+ */
+export function fallbackBonus(twoHanded, delay) {
+  const { bonusOneHanded, bonusTwoHanded, bonusTwoHandedDelayCap } = CONSTANTS.weaponIndex;
+  return twoHanded ? bonusTwoHanded.mul(smaller(delay, bonusTwoHandedDelayCap)) : bonusOneHanded.mul(delay);
+}
+
 function weaponIndex(weapon, hand, setup, haste, dwFactor) {
   if (setup === null || setup === "stick" || !(weapon.dmg > 0) || !(weapon.delay > 0)) return ZERO;
   let allowed;
@@ -691,8 +703,7 @@ function weaponIndex(weapon, hand, setup, haste, dwFactor) {
   if (!allowed) return ZERO;
   const speed = ONE.add(haste.div(HUNDRED));
   if (hand === SECONDARY) return new Rational(BigInt(weapon.dmg), BigInt(weapon.delay)).mul(speed).mul(dwFactor);
-  const pattern = weapon.two_handed ? CONSTANTS.weaponIndex.bonusTwoHanded : CONSTANTS.weaponIndex.bonusOneHanded;
-  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : pattern.mul(weapon.delay);
+  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : fallbackBonus(weapon.two_handed, whole(weapon.delay));
   return whole(weapon.dmg).add(bonus).div(weapon.delay).mul(speed);
 }
 
@@ -825,7 +836,7 @@ export function evaluate(profile, kit, buffsChosen, options) {
 
   // the other terms
   const attack = CONSTANTS.strToAtk.mul(pwl(total[STR], CAPPED)).add(gear[ATK]).add(buff[ATK]);
-  const spell = buff[HASTE];
+  const spell = buff[HASTE].add(p.hasteBonus); // the spell haste and the flat haste of Unbound Alacrity
   const wornCounted = smaller(whole(bestHaste), larger(ZERO, p.hasteCap.sub(spell)));
   const hasteCounted = smaller(spell, p.hasteCap).add(wornCounted);
 
@@ -898,5 +909,24 @@ export function evaluate(profile, kit, buffsChosen, options) {
     atk: attack,
   };
   const breakdown = Object.freeze({ F, parts: Object.freeze(parts), totals: Object.freeze(totals) });
+  return Object.freeze({ F, breakdown });
+}
+
+/**
+ * `evaluate` with the weapon index taken at the haste the kit itself counts (`evaluate_truthful` in formulas.py), not at one the caller assumes: the value of a kit as it is.
+ * `options.hasteAssumed` is not read here (the kit's own is). A kit that counts no haste, or that scores no weapon, is valued once.
+ */
+export function evaluateTruthful(profile, kit, buffsChosen, options) {
+  const { hasteAssumed, ...rest } = isRecord(options) ? options : {};
+  if (hasteAssumed !== undefined) throw new EvaluateError("evaluateTruthful takes no hasteAssumed: the kit's own haste is used");
+  const first = evaluate(profile, kit, buffsChosen, rest);
+  const counted = first.breakdown.totals.haste.counted;
+  if (counted.sign() === 0 || first.breakdown.parts.WEAPON.sign() === 0) return first; // (the index is its value at 0 haste times 1 + haste / 100)
+  // nothing but the weapon part depends on the assumed haste, and each weapon's index is its value at 0 haste times 1 + haste / 100 (the same rationals as a second
+  // evaluation at the counted haste, which the tests compare), so the kit is not evaluated twice
+  const weapon = first.breakdown.parts.WEAPON;
+  const scaled = weapon.mul(ONE.add(counted.div(HUNDRED)));
+  const F = first.F.sub(weapon).add(scaled);
+  const breakdown = Object.freeze({ F, parts: Object.freeze({ ...first.breakdown.parts, WEAPON: scaled }), totals: first.breakdown.totals });
   return Object.freeze({ F, breakdown });
 }

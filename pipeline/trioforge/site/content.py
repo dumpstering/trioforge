@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -24,6 +24,7 @@ __all__ = [
     "RuleBook",
     "RuleView",
     "SEALS",
+    "eqlt_item_url",
     "load_changelog",
     "load_manifest",
     "load_rulebook",
@@ -209,6 +210,7 @@ class Manifest:
     license: str
     inputs: tuple[tuple[str, str], ...]  # (file or address, date)
     items: dict[str, tuple[str, int]]  # key -> (page title, revision id)
+    eqlt: dict[str, tuple[str, str]] = field(default_factory=dict)  # key -> (item name, slug of its page at EQ Legends Tools); empty when the catalog was built without that source
 
 
 def load_manifest(path: str | Path) -> Manifest:
@@ -227,9 +229,26 @@ def load_manifest(path: str | Path) -> Manifest:
             if not isinstance(title, str) or not title or type(revid) is not int or revid < 0:
                 raise TypeError
         inputs = tuple((record["file"], record["date"]) for record in document["provenance"]["inputs"])
-        return Manifest(document["attribution"], document["license"], inputs, items)
+        eqlt = {key: (entry["title"], entry["slug"]) for key, entry in document.get("eqlegendstools", {}).items()}
+        for key, (name, slug) in eqlt.items():
+            if not isinstance(name, str) or not name or not isinstance(slug, str) or not EQLT_SLUG.fullmatch(slug):
+                raise TypeError
+        return Manifest(document["attribution"], document["license"], inputs, items, eqlt)
     except (KeyError, TypeError, AttributeError):
         raise ContentError(f"{path.name}: not a sources manifest (items with a title and a revision, provenance, attribution)") from None
+
+
+#: the slug of a page of an item at EQ Legends Tools (small letters, digits and hyphens)
+EQLT_SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,95}")
+EQLT_NAME = "EQ Legends Tools"
+EQLT_SITE = "https://eqlegendstools.com/"
+
+
+def eqlt_item_url(slug: str) -> str:
+    """The address of the page of an item at EQ Legends Tools."""
+    if not EQLT_SLUG.fullmatch(slug):
+        raise ValueError("not the slug of a page at EQ Legends Tools")
+    return f"{EQLT_SITE}items/{slug}/"
 
 
 def wiki_url(title: str, revid: int) -> str:

@@ -84,12 +84,12 @@
 
 <section class="answer" aria-labelledby="wear-h">
 <h2 id="wear-h" tabindex="-1">Wear this</h2>
-<table class="kit" id="kit" role="table">
+<button type="button" id="kit-stats-all" class="btn-quiet kit-toggle-all" aria-expanded="false" aria-controls="kit" disabled>All stats</button><table class="kit" id="kit" role="table">
 <caption id="kit-caption">For <span data-f="v-race">Ogre</span> &middot; <span data-f="v-role">Balanced</span> &middot; <span data-f="v-tier" data-rules="tier.stat_rule">+4</span> &middot; <span data-f="v-setup">Dual wield</span></caption>
 <thead role="rowgroup">
 <tr role="row">
 <th scope="col" role="columnheader">Slot</th>
-<th scope="col" role="columnheader">Item</th>
+<th scope="col" role="columnheader" data-rules="tier.stat_rule haste.worn_per_tier regen.per_tier tier.weight_pct tier.weapon_damage_pct roles.templates">Item</th>
 <th scope="col" role="columnheader" data-rules="tier.stat_rule">Tier</th>
 <th scope="col" role="columnheader" data-rules="tier.arrival tier.exp_needed">Arrives at</th>
 <th scope="col" role="columnheader">Source</th>
@@ -98,154 +98,154 @@
 <tbody id="kit-body" role="rowgroup">
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-helm" aria-hidden="true"></span>Head</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90001/">Helm of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90001/">Helm of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +42, STA +16, HP +84, Weight 2.6</p><p class="kit-why" data-f="why">Lost without it: STA +16: 176; HP +84: 97; AC +42: 62. Next best: Steel Cap of Valor, 12 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-face" aria-hidden="true"></span>Face</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80816/">Mummer&#39;s Half-Face</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80816/">Mummer&#39;s Half-Face</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +16, STA +15, ATK +14, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: STA +15: 163; ATK +14: 35; AC +16: 20. Next best: Mask of the Weary, 15 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-ear" aria-hidden="true"></span>Ear 1</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90007/">Rune-etched Earring</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90007/">Rune-etched Earring</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">INT +10, HP +35, Mana +42, Weight 0.1</p><p class="kit-why" data-f="why">Lost without it: HP +35: 40; Mana +42: 21. Worth nothing here: INT +10 (not valued in this view). Next best: Gold Hoop of Haste, 19 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Fear</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-ear" aria-hidden="true"></span>Ear 2</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90009/">Stud of the Fallen</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90009/">Stud of the Fallen</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STA +13, HP +49, Weight 0.1</p><p class="kit-why" data-f="why">Lost without it: STA +13: 138; HP +49: 56. No close alternative.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Lower Guk</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-neck" aria-hidden="true"></span>Neck</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90011/">Choker of the Deep</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90011/">Choker of the Deep</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STA +14, HP +77, MR +16, Weight 0.4</p><p class="kit-why" data-f="why">Lost without it: STA +14: 150; HP +77: 89; MR +16: 5. Next best: Choker of Seven Pebbles, 26 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Nagafen&#39;s Lair</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-shoulders" aria-hidden="true"></span>Shoulders</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w8091/">Larkspur Pauldrons</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w8091/">Larkspur Pauldrons</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +22, STA +13, HP +63, Weight 2.0</p><p class="kit-why" data-f="why">Lost without it: STA +13: 138; HP +63: 72; AC +22: 27. Next best: Pauldrons of the Vanguard, 12 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Fear</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-arms" aria-hidden="true"></span>Arms</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90016/">Vambraces of the Unyielding Stonewarden of the Frozen Deepwatch Citadel Expedition</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90016/">Vambraces of the Unyielding Stonewarden of the Frozen Deepwatch Citadel Expedition</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +23, HP +91, Weight 1.6</p><p class="kit-why" data-f="why">Lost without it: HP +91: 105; AC +23: 28. Next best: Vambraces of Might, 15 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Hate</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-back" aria-hidden="true"></span>Back</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80712/">Weaver&#39;s Evening Drape</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80712/">Weaver&#39;s Evening Drape</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +10, DEX +12, FR +19, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: DEX +12: 32; AC +10: 12; FR +19: 6. No close alternative.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Sky</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-wrist" aria-hidden="true"></span>Wrist 1</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90020/">Bracer of the Iron Oath</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90020/">Bracer of the Iron Oath</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +13, DEX +11, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: DEX +11: 29; AC +13: 16. Next best: Wristguard of Warding, 22 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Hate</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-wrist" aria-hidden="true"></span>Wrist 2</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90021/">Wristguard of Warding</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90021/">Wristguard of Warding</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +14, HP +56, DR +12, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: HP +56: 64; AC +14: 17; DR +12: 4. Next best: Bracer of the Iron Oath, 26 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Hands</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90023/">Gauntlets of Endless Wrath</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90023/">Gauntlets of Endless Wrath</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +18, STR +12, ATK +21, Weight 1.3</p><p class="kit-why" data-f="why">Lost without it: ATK +21: 53; STR +12: 46; AC +18: 22. Next best: Gloves of the Mountain, 12 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane of Fear</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-ring" aria-hidden="true"></span>Finger 1</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80631/">Band of Quiet Lanterns</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80631/">Band of Quiet Lanterns</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STR +13, HP +84, ATK +16, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: HP +84: 97; STR +13: 50; ATK +16: 40. No close alternative.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-ring" aria-hidden="true"></span>Finger 2</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90026/">Band of the Stalwart</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90026/">Band of the Stalwart</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STA +14, HP +70, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: STA +14: 150; HP +70: 81. Next best: Band of Quiet Lanterns, 19 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Befallen</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-chest" aria-hidden="true"></span>Chest</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80469/">Saltmarsh Jerkin</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80469/">Saltmarsh Jerkin</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +53, STA +19, End +35, Weight 5.8</p><p class="kit-why" data-f="why">Lost without it: STA +19: 213; AC +53: 103; End +35: 14. Next best: Breastplate of Warding, 22 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Nagafen&#39;s Lair</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-legs" aria-hidden="true"></span>Legs</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90030/">Greaves of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90030/">Greaves of the Stoneward</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +33, STA +14, Weight 3.2</p><p class="kit-why" data-f="why">Lost without it: STA +14: 150; AC +33: 41. Next best: Legplates_of_Valor_Forged_Without_Any_Spaces_In_Their_Unbroken_Name_0123456789, 26 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-feet" aria-hidden="true"></span>Feet</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90032/">Boots of the Wayfarer</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90032/">Boots of the Wayfarer</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +19, AGI +12, Weight 1.3</p><p class="kit-why" data-f="why">Lost without it: AGI +12: 37; AC +19: 24. No close alternative.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Befallen</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-waist" aria-hidden="true"></span>Waist</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80677/">Riverstone Buckle Strap</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80677/">Riverstone Buckle Strap</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">AC +13, AGI +13, Weight 1.0</p><p class="kit-why" data-f="why">Lost without it: AGI +13: 40; AC +13: 16. Next best: Copperleaf Sash, 15 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-bow" aria-hidden="true"></span>Range</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90037/">&lt;b&gt;x&lt;/b&gt;</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90037/">&lt;b&gt;x&lt;/b&gt;</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">ATK +10</p><p class="kit-why" data-f="why">Lost without it: ATK +10: 25. Next best: Short Bow of the Fallen, 19 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Plane &lt;i&gt;of&lt;/i&gt; Hate &amp; &#34;Fear&#34;</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Any slot 1</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w90027/">Signet of the Forgotten Court</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w90027/">Signet of the Forgotten Court</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STR +11, ATK +13, Weight 0.7</p><p class="kit-why" data-f="why">Lost without it: STR +11: 42; ATK +13: 33. No close alternative.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">Lower Guk</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Any slot 2</th>
-<td role="cell"><span class="name" data-f="name">Leave empty</span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name">Leave empty</span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more" hidden><summary>Stats</summary><p class="kit-stats" data-f="stats"></p><p class="kit-why" data-f="why"></p></details></td>
 <td role="cell"><span data-f="tier">—</span></td>
 <td role="cell"><span data-f="arrival">—</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">—</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader"><span class="art art-icon-sword" aria-hidden="true"></span>Main hand</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80988/">Ferryman&#39;s Pike</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80988/">Ferryman&#39;s Pike</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STR +14, ATK +19, FR +14, Damage 22/24, Weight 2.3</p><p class="kit-why" data-f="why">Lost without it: Damage 22/24: 2,869; STR +14: 54; ATK +19: 48. Next best: Tinker&#39;s Awl, 12 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+4</span> <span class="reach" data-f="reach"></span></td>
 <td role="cell"><span data-f="source">The Hole</span></td>
 </tr>
 <tr role="row">
 <th scope="row" role="rowheader">Off hand</th>
-<td role="cell"><span class="name" data-f="name"><a href="/item/w80113/">Pellbrook Mallet</a></span> <span class="deity" data-f="deity" hidden></span></td>
+<td role="cell"><span class="name" data-f="name"><a href="/item/w80113/">Pellbrook Mallet</a></span> <span class="deity" data-f="deity" hidden></span><details class="kit-more" data-f="more"><summary>Stats</summary><p class="kit-stats" data-f="stats">STR +12, ATK +14, Damage 18/20 (damage bonus 10), Weight 2.0</p><p class="kit-why" data-f="why">Lost without it: Damage 18/20: 1,513; STR +12: 46; ATK +14: 35. Next best: Orchard Warden&#39;s Targe, 15 less.</p></details></td>
 <td role="cell"><span data-f="tier">+4</span></td>
 <td role="cell"><span data-f="arrival">+0</span> <span class="reach" data-f="reach">16 copies to reach +4</span></td>
 <td role="cell"><span data-f="source">Quest in Lake Rathetear</span></td>
@@ -253,7 +253,8 @@
 </tbody>
 </table>
 <p id="kit-rules" class="rules">Tiers: <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.arrival">Tier at which items arrive, by source</a> <span class="seal seal-developer"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-developer"></use></svg><span>Developer</span></span> &middot; <a href="/rules/#tier.exp_needed">Experience needed for tier N</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
-</section>
+<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown. &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing. <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#regen.per_tier">Regen per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.weight_pct">Weight reduction per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.weapon_damage_pct">Weapon damage per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="why-note" class="note" hidden>The &ldquo;lost without it&rdquo; lines and the next best items are worked out for the default view only: the best race at the default role, tier, buffs and weapons. The stats are those of the view shown.</p></section>
 
 <section class="why" id="why" aria-labelledby="why-h">
 <h2 id="why-h">Why this kit</h2>

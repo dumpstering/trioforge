@@ -3,8 +3,8 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { LABEL_NO_INCUMBENT, LABEL_TIME_LIMIT } from "../pipeline/trioforge/site/static/engine/protocol.js";
 import { compare } from "../pipeline/trioforge/site/static/engine/milpjson.js";
 import { PathError, bestSets, classify, equipNow, everySlot, farmPath, sessionHaste } from "../pipeline/trioforge/site/static/engine/path.js";
-import { closeSession, createSession } from "../pipeline/trioforge/site/static/engine/solve.js";
-import { SLOT_INSTANCES, evaluate } from "../pipeline/trioforge/site/static/engine/evaluate.js";
+import { closeSession, createSession, programsOf } from "../pipeline/trioforge/site/static/engine/solve.js";
+import { SLOT_INSTANCES, evaluate, evaluateTruthful } from "../pipeline/trioforge/site/static/engine/evaluate.js";
 import { caseOf, deepFreeze, exact, identOf, kitPairs, sharedOf, shuffled, solverIs } from "./engine-cases.mjs";
 import { SAMPLE, describeFull } from "./engine-fixtures.mjs";
 import { buffOf, buffsetOf, gear, oneHand, profileWith, q, twoHand } from "./engine-hand.mjs";
@@ -13,7 +13,7 @@ import { expectWithin, stopwatch } from "./timing.mjs";
 
 // The Upgrade tab's functions in the browser (static/engine/path.js) held to the Python reference (pipeline/trioforge/upgrade.py):
 //
-//   * Parity. For every Upgrade case of the fixtures (`upgrade/`): the assumed haste of the session, Equip now, every step of the farm path (the item
+//   * Parity. For every Upgrade case of the fixtures (`upgrade/`): the session's haste (none unless fixed: every kit is valued at the haste it counts), Equip now, every step of the farm path (the item
 //     acquired, its kind, the tier it is made from, the exact value after it, the exact gain, the owned set after it), why the path stopped, and Every
 //     slot (the three best swaps of each of the 22 places) are those Python computed.
 //   * The best sets. For every Upgrade case, the best 2 and the best 3 additions made at once: what to acquire, the exact value and gain, the assumed haste,
@@ -56,30 +56,38 @@ function parityTests(set) {
     const doc = set.read(path);
     const { expected } = doc;
 
-    it(`${doc.id} (${doc.label}): the assumed haste of the session is Python's`, () => {
+    it(`${doc.id} (${doc.label}): the session has no haste of its own unless the caller fixes one, as in Python`, () => {
       const c = caseOf(shared, doc);
       const fixed = { any_rule: doc.solves[0].options.any_rule };
-      expect(sessionHaste(c.profile, c.owned(), c.candidates(), c.setup, c.buffset, fixed)).toBe(expected.session_haste);
-      // the owned items alone, as Equip now assumes it when nothing fixes it
-      expect(sessionHaste(c.profile, c.owned(), [], c.setup, c.buffset, fixed)).toBeLessThanOrEqual(expected.session_haste);
+      expect(sessionHaste(c.profile, c.owned(), c.candidates(), c.setup, c.buffset, fixed)).toBeNull();
+      expect(sessionHaste(c.profile, c.owned(), [], c.setup, c.buffset, fixed)).toBeNull();
       expect(sessionHaste(c.profile, c.owned(), c.candidates(), c.setup, c.buffset, { ...fixed, haste_assumed: 7 })).toBe(7);
     });
 
     it(`${doc.id} (${doc.label}): Equip now is Python's, with the exact value`, () => {
       const c = caseOf(shared, doc);
-      const session = sessionFor(c, { options: optionsOf(doc, expected.session_haste) });
+      const session = sessionFor(c, { options: optionsOf(doc) });
       try {
         const got = equipNow(session, c.owned(), { budgetMs: BUDGET_MS, canonical: true });
         const want = doc.solves[expected.equip_now].result;
         expect(got.status).toBe("optimal");
         expect(got.F.toString()).toBe(exact(want.F).toString());
-        expect(got.hasteAssumed).toBe(expected.session_haste);
+        expect(got.hasteAssumed, "the haste its kit counts").toBe(want.haste_assumed);
         expect(kitPairs(got.kit), `${doc.id}: the kit, place for place`).toEqual(want.kit);
         expect(got.buffs).toEqual(want.buffs);
-        // without the haste fixed, it is the haste of the owned items alone
-        const alone = equipNow(sessionFor(c, { options: optionsOf(doc) }), c.owned(), { budgetMs: BUDGET_MS });
-        expect(alone.status).toBe("optimal");
-        expect(alone.hasteAssumed).toBe(sessionHaste(c.profile, c.owned(), [], c.setup, c.buffset, optionsOf(doc)));
+        // the program of the winning level is the recorded one
+        expect(compare(session.scenarios.get(got.program).model, doc.solves[expected.equip_now].model).slice(0, 5), `${doc.id}: the model`).toEqual([]);
+        expect(got.levels, `${doc.id}: the hastes a kit can count`).toEqual(doc.solves[expected.equip_now].haste.levels);
+        // a haste the options fix is the one every kit is valued at, as it always was
+        const fixedSession = sessionFor(c, { options: optionsOf(doc, 7) });
+        try {
+          const fixed = equipNow(fixedSession, c.owned(), { budgetMs: BUDGET_MS });
+          expect(fixed.status).toBe("optimal");
+          expect(fixed.hasteAssumed).toBe(7);
+          expect(fixed.levels).toEqual([7]);
+        } finally {
+          closeSession(fixedSession);
+        }
       } finally {
         closeSession(session);
       }
@@ -91,7 +99,7 @@ function parityTests(set) {
       const streamed = [];
       try {
         const got = farmPath(session, c.owned(), c.candidates(), { steps: doc.inputs.steps, budgetMs: BUDGET_MS, canonical: true, onStep: (step) => streamed.push(step) });
-        expect(got.hasteAssumed).toBe(expected.session_haste);
+        expect(got.hasteAssumed, "Equip now's haste").toBe(doc.solves[expected.equip_now].result.haste_assumed);
         expect(got.baseline.status).toBe("optimal");
         expect(got.baseline.F.toString()).toBe(exact(doc.solves[expected.equip_now].result.F).toString());
         expect(got.steps.every((step) => step.found)).toBe(true);
@@ -144,8 +152,9 @@ function parityTests(set) {
           const recorded = doc.solves.find((solve) => solve.label === `best-${want.k}`);
           expect(recorded, `${label}: the program Python built`).toBeDefined();
           // the program: the model the session built for the scenario is the recorded one, from the pool that the pruning left
-          const scenario = session.scenarios.get(`best-${want.k}`);
+          const scenario = session.scenarios.get(got.solution.program);
           expect(compare(scenario.model, recorded.model).slice(0, 5), `${label}: the model`).toEqual([]);
+          expect(got.solution.levels, `${label}: the hastes a kit can count`).toEqual(recorded.haste.levels);
           expect([...scenario.items.keys()].sort(), `${label}: the pool`).toEqual([...recorded.pool].sort());
           if (want.acquired.length > 0) {
             expect(kitPairs(got.kit), `${label}: the kit, place for place`).toEqual(recorded.result.kit);
@@ -168,7 +177,7 @@ function parityTests(set) {
 
     it(`${doc.id} (${doc.label}): Every slot is Python's`, () => {
       const c = caseOf(shared, doc);
-      const session = sessionFor(c, { options: optionsOf(doc, expected.session_haste) });
+      const session = sessionFor(c, { options: optionsOf(doc) });
       try {
         // from Python's own Equip now kit over the candidates and the owned items, as the fixture was made: an owned item that is not a candidate counts its copies
         const equip = doc.solves[expected.equip_now].result;
@@ -260,9 +269,9 @@ describe("the Best-1 model of the farm path", () => {
     try {
       const first = farmPath(session, c.owned(), c.candidates(), { steps: doc.inputs.steps, budgetMs: BUDGET_MS });
       expect(first.steps.length).toBeGreaterThan(0);
-      expect(session.scenarios.has("best-1")).toBe(true);
-      expect(session.scenarios.has("equip-now")).toBe(true);
-      const solver = session.scenarios.get("best-1").solver;
+      expect(programsOf(session, "best-1").length, "the programs of the Best-1 scenario are in the session").toBeGreaterThan(0);
+      expect(programsOf(session, "equip-now").length).toBeGreaterThan(0);
+      const solver = session.scenarios.get(first.steps[first.steps.length - 1].solution.program).solver;
       expect(solver).not.toBeNull();
       expect(first.steps.every((step) => step.status === "optimal")).toBe(true);
       // a step reports how its model came about: made anew, or the same columns with changed bounds and rows
@@ -294,7 +303,7 @@ describe("the Best-1 model of the farm path", () => {
           steps += 1;
           if (step.reused) reused += 1;
         }
-        for (const name of ["equip-now", "best-1"]) solverIs(expect, highs, session, name);
+        for (const name of [...programsOf(session, "equip-now"), ...programsOf(session, "best-1")]) solverIs(expect, highs, session, name);
       } finally {
         closeSession(session);
       }
@@ -320,7 +329,10 @@ describe("the Best-1 model of the farm path", () => {
 
 describe("the budget", () => {
   const shared = sharedOf(SAMPLE);
-  const doc = SAMPLE.read(SAMPLE.paths("case", "upgrade/")[0]);
+  // the first case of the sample whose programs are each solved at one haste level (Python: every solve of the case has one level in solves[].haste.levels), so that the path is
+  // Equip now and its three steps, one solve each, as the tests below count them; a case of a haste ladder (several levels a solve) is solved once for each level
+  const doc = SAMPLE.paths("case", "upgrade/").map((path) => SAMPLE.read(path)).find((one) => one.solves.length > 0 && one.solves.every((solve) => solve.haste.levels.length === 1));
+  expect(doc, "the sample has a case whose programs have one haste level each").toBeDefined();
   const c = caseOf(shared, doc);
   const TICK = 4;
   const types = () => highs.constants.modelStatus;
@@ -498,7 +510,7 @@ describe("the budget", () => {
       expect(got.steps).toEqual([]);
       expect(got.baseline.status).toBe("time_limit");
       expect(log.created).toBe(1); // the model of Equip now, and no other
-      expect(session.scenarios.has("best-1")).toBe(false);
+      expect(programsOf(session, "best-1")).toEqual([]);
     } finally {
       closeSession(session);
     }
@@ -610,7 +622,7 @@ describe("the budget", () => {
       expect(step.gain.sign()).toBe(1);
       expect(step.F.toString()).toBe(exact(doc.expected.steps[0].F).toString());
       expect(streamed).toEqual([step]);
-      expect(session.scenarios.get("best-1").last, "the kit of an unproven step is still the start of the next solve").not.toBeNull();
+      expect(session.scenarios.get(step.solution.program).last, "the kit of an unproven step is still the start of the next solve").not.toBeNull();
     } finally {
       closeSession(session);
     }
@@ -624,7 +636,7 @@ describe("the budget", () => {
       expect(one.baseline.start).toBeNull(); // Equip now has nothing to begin from
       expect(one.steps[0].solution.start).toBe("kit");
       expect(log.starts).toHaveLength(1);
-      const model = session.scenarios.get("best-1").model;
+      const model = session.scenarios.get(one.steps[0].solution.program).model;
       const wears = new Map();
       one.baseline.kit.forEach((item, at) => {
         if (item === null) return;
@@ -780,17 +792,37 @@ describe("the kinds of an addition", () => {
     }
   });
 
-  it("assumes the haste of the owned items and the candidates together, once for the whole path", () => {
+  it("values every kit at the haste it counts: Equip now at its own, each step at its own, so a step's gain is a difference of the values of two kits", () => {
     const boots = gear("boots", ["FEET"], { stats: { HP: 1 }, haste: 30 });
     const sword = gear("sword", ["PRIMARY"], { weapon: oneHand(40, 40) });
     const dagger = gear("dagger", ["PRIMARY"], { weapon: oneHand(30, 20) });
     const weapons = profileWith({ weights: { DMG: 100, HP: 1 } });
-    const session = createSession({ highs, profile: weapons, setup: "dw", options: { any_rule: "explicit" } }); // no haste fixed: the session assumes it
+    const session = createSession({ highs, profile: weapons, setup: "dw", options: { any_rule: "explicit" } }); // no haste fixed: every kit is valued at the haste it counts
     try {
       const got = farmPath(session, [[sword, 1]], [boots, dagger], { steps: 3, budgetMs: 60_000 });
-      expect(got.hasteAssumed).toBe(30);
-      expect(got.baseline.hasteAssumed).toBe(30);
-      expect(got.steps.every((step) => step.hasteAssumed === 30 && step.solution.hasteAssumed === 30)).toBe(true);
+      expect(got.hasteAssumed, "the result says Equip now's haste").toBe(0);
+      expect(got.baseline.hasteAssumed).toBe(0);
+      // the dagger swings faster than the sword at any haste; the boots then give its 30
+      expect(got.steps.map((step) => identOf(step.item))).toEqual(["dagger@0", "boots@0"]);
+      expect(got.steps.map((step) => step.hasteAssumed)).toEqual([0, 30]);
+      expect(got.steps.every((step) => step.solution.hasteAssumed === step.hasteAssumed)).toBe(true);
+      let before = got.baseline.F;
+      for (const step of got.steps) {
+        const kit = step.solution.kit;
+        expect(step.F.toString()).toBe(evaluate(weapons, kit, null, { setup: "dw", hasteAssumed: step.hasteAssumed }).F.toString());
+        expect(step.F.toString()).toBe(evaluateTruthful(weapons, kit, null, { setup: "dw" }).F.toString());
+        expect(step.gain.toString()).toBe(step.F.sub(before).toString());
+        before = step.F;
+      }
+      // a haste the session fixes is the one every kit is valued at
+      const fixed = createSession({ highs, profile: weapons, setup: "dw", options: { any_rule: "explicit", haste_assumed: 12 } });
+      try {
+        const same = farmPath(fixed, [[sword, 1]], [boots, dagger], { steps: 3, budgetMs: 60_000 });
+        expect(same.hasteAssumed).toBe(12);
+        expect(same.steps.every((step) => step.hasteAssumed === 12)).toBe(true);
+      } finally {
+        closeSession(fixed);
+      }
     } finally {
       closeSession(session);
     }
@@ -1075,37 +1107,26 @@ describe("sessionHaste", () => {
   const weapons = (changes = {}) => profileWith({ weights: { DMG: 100 }, ...changes });
   const boots = gear("boots", ["FEET"], { haste: 20 });
   const quick = gear("quick", ["HEAD"], { haste: 45 });
-  const lost = gear("lost", ["HEAD"], { haste: 60, classes: ["MNK"] }); // no class of the trio can wear it
-  const aimless = gear("aimless", ["AMMO"], { haste: 70 }); // fits no place
-  const locked = gear("locked", ["NECK"], { haste: 50, deity: ["Brell"] });
   const options = { any_rule: "explicit" };
 
   it("is the options' own value when they give one", () => {
     expect(sessionHaste(weapons(), [[boots, 1]], [quick], "2h", null, { haste_assumed: 12 })).toBe(12);
   });
 
-  it("is the spell haste on offer plus the best worn haste of the owned items and the candidates together, up to the cap", () => {
-    expect(sessionHaste(weapons(), [[boots, 1]], [], "2h", null, options)).toBe(20);
-    expect(sessionHaste(weapons(), [[boots, 1]], [quick], "2h", null, options)).toBe(45);
-    expect(sessionHaste(weapons(), [[boots, 1]], [quick], "2h", null, options)).toBe(sessionHaste(weapons(), [[quick, 1]], [boots], "2h", null, options));
-    expect(sessionHaste(weapons({ spell_haste: 40 }), [[boots, 1]], [quick], "2h", null, options)).toBe(75); // 40 + 45, up to the cap of 75
+  it("is null when they give none: every kit is valued at the haste it counts, whatever the items, the profile's spell haste and the buffs", () => {
+    expect(sessionHaste(weapons(), [[boots, 1]], [], "2h", null, options)).toBeNull();
+    expect(sessionHaste(weapons(), [[boots, 1]], [quick], "2h", null, options)).toBeNull();
+    expect(sessionHaste(weapons({ spell_haste: 40 }), [[boots, 1]], [quick], "2h", null, options)).toBeNull();
     const buffset = buffsetOf({ optional: [buffOf(1, { HASTE: 25 }), buffOf(2, { HASTE: 10 })], conflicts: [[1, 2]] });
-    expect(sessionHaste(weapons(), [[boots, 1]], [], "2h", buffset, options)).toBe(45);
-    expect(sessionHaste(weapons({ spell_haste: 5 }), [[boots, 1]], [], "2h", buffset, options)).toBe(25); // the profile's own spell haste, not the buffs'
+    expect(sessionHaste(weapons(), [[boots, 1]], [], "2h", buffset, options)).toBeNull();
+    expect(sessionHaste(weapons({ haste_cap: 85 }), [], [quick], "2h", null, options)).toBeNull();
   });
 
-  it("counts only the items the profile can use and that fit a place, and an owned count of 0 is not owned", () => {
-    expect(sessionHaste(weapons(), [[lost, 1], [aimless, 1], [locked, 1], [boots, 1]], [], "2h", null, options)).toBe(20);
-    expect(sessionHaste(weapons({ deity: "Brell" }), [[locked, 1]], [], "2h", null, options)).toBe(50);
-    expect(sessionHaste(weapons(), [[quick, 0]], [boots], "2h", null, options)).toBe(20);
-    // the cap of a Monk is higher
-    expect(sessionHaste(weapons({ haste_cap: 85 }), [], [quick, gear("fast", ["FEET"], { haste: 80 })], "2h", null, options)).toBe(80);
-  });
-
-  it("refuses the owned-item options and an owned set that is not one", () => {
+  it("checks the owned set, the candidates and the options, and an owned count of 0 is not owned", () => {
     expect(() => sessionHaste(weapons(), [[boots, 1]], [], "2h", null, { owned_caps: { "boots@0": 1 } })).not.toThrow(); // the options are the builder's; they are read
-    expect(() => sessionHaste(weapons(), [[boots, 1]], [], "bow", null, options)).toThrow();
+    expect(() => sessionHaste(weapons(), [[boots, 1]], [], "2h", null, { not_an_option: 1 })).toThrow();
     expect(() => sessionHaste(weapons(), [[boots, -1]], [], "2h", null, options)).toThrow(PathError);
+    expect(() => sessionHaste(weapons(), [[quick, 0]], [boots], "2h", null, options)).not.toThrow();
   });
 });
 
@@ -1283,7 +1304,7 @@ describe("Every slot", () => {
       });
     });
 
-    it("assumes the haste of the session when none is fixed: the kit, the owned items and the candidates together, so an owned item counts though none is offered", () => {
+    it("values a swap at the haste the swapped kit counts when none is fixed: a haste item swapped in changes what the weapons are worth, and an owned item that is not worn counts for nothing", () => {
       const weapons = profileWith({ weights: { DMG: 100 } });
       const sword = gear("sword", ["PRIMARY", "SECONDARY"], { stats: { HP: 3 }, weapon: oneHand(10, 20) });
       const boots = gear("boots", ["FEET"], { haste: 20 });
@@ -1295,8 +1316,13 @@ describe("Every slot", () => {
         const trial = wearing([20, sword], [21, sword]);
         const gainAt = (hasteAssumed) => evaluate(weapons, trial, null, { setup: "dw", hasteAssumed }).F.sub(evaluate(weapons, kit, null, { setup: "dw", hasteAssumed }).F);
         expect(gainAt(20).toString()).not.toBe(gainAt(0).toString()); // the weapon index depends on the haste
-        expect(rows[21].swaps[0].delta.toString()).toBe(gainAt(20).toString()); // the boots are owned: the session assumes their 20
-        expect(rows[21].swaps[0].delta.toString()).toBe(gainAt(sessionHaste(weapons, [[sword, 2], [boots, 1]], [], "dw", null, { any_rule: "explicit" })).toString());
+        expect(rows[21].swaps[0].delta.toString()).toBe(gainAt(0).toString()); // neither kit wears the boots: both count no haste
+        // the boots swapped in for the feet raise the haste of the kit: the swap is worth the weapon index at 20 percent and not at 0
+        const feet = rows[SLOT_INSTANCES.indexOf("FEET")];
+        expect(feet.swaps.map((swap) => swap.item.key)).toEqual(["boots"]);
+        const shod = wearing([20, sword], [SLOT_INSTANCES.indexOf("FEET"), boots]);
+        expect(feet.swaps[0].delta.toString()).toBe(evaluateTruthful(weapons, shod, null, { setup: "dw" }).F.sub(evaluateTruthful(weapons, kit, null, { setup: "dw" }).F).toString());
+        expect(feet.swaps[0].delta.toString()).toBe(evaluate(weapons, shod, null, { setup: "dw", hasteAssumed: 20 }).F.sub(evaluate(weapons, kit, null, { setup: "dw", hasteAssumed: 0 }).F).toString());
       } finally {
         closeSession(session);
       }
@@ -1367,7 +1393,7 @@ describe("malformed input", () => {
       const kit = emptyKit();
       kit[20] = gear("sword", ["PRIMARY"], { stats: { HP: 3 } }); // weapon, deity and races null
       expect(everySlot(session, kit, [gear("dagger", ["PRIMARY"], { stats: { HP: 2 } })], {})).toHaveLength(22);
-      expect(sessionHaste(profile, [[ring("a", 1), 1]], [ring("b", 1)], "stick", null, {})).toBe(0);
+      expect(sessionHaste(profile, [[ring("a", 1), 1]], [ring("b", 1)], "stick", null, {})).toBeNull();
       expect(equipNow(session, [[ring("a", 1), 1]], { budgetMs: 60_000 }).status).toBe("optimal");
       for (const field of ["weapon", "deity", "races"]) {
         const bad = without(ring("a", 1), field);

@@ -28,10 +28,11 @@
 // The weights are the role's own, as the bundle has them (the very object), unless the request asks for others: then `weightsOverride` (weights.js) composes the sliders, the custom
 // weights and the regen window on the role's own, with the mana of the trio (a trio with no mana pool has no weight on mana: that is the worker's to say, never the page's), and the
 // profile is the bundle's with those weights. `weights` that are the role's own (`weightsAreOwn`) change nothing, but they are still held to the bundle's rules: a slider group there
-// is not is a BestKitError at x1 as at x2. The assumed haste is the model's rule (the best spell haste on offer and the best worn haste of the pool, up to the cap), as the
-// precompute computes it, unless `options.haste_assumed` says another (the parity test passes the options a shard records); the weights do not move it.
+// is not is a BestKitError at x1 as at x2. The weapons are paid the haste the kit counts, as the precompute pays them (the truthful solve of
+// solve.js: one program for each haste a kit can count, the best value over them), unless `options.haste_assumed` fixes one (the parity test passes the options a shard records);
+// the weights do not move the levels.
 //
-// The weapon tier rate. `weaponTierRate` is the percent of damage a weapon grows a tier, 5 or 10: the rule `tier.weapon_damage_pct` (5) is the default, and `at_tier(weapon_pct=)` is
+// The weapon tier rate. `weaponTierRate` is the percent of damage a weapon grows a tier, 5 or 10: the rule `tier.weapon_damage_pct` (10) is the default, and `at_tier(weapon_pct=)` is
 // Python's reference. The items of the pool are made with it (`atTier` with `weaponPct`), so the pruning, which compares the damage the items carry, and the evaluator, which values the
 // kit's items, use it without being told: nothing else reads the rate. A rate that is not 5 or 10 is a BestKitError.
 //
@@ -51,7 +52,7 @@ import { usableBy } from "./path.js";
 import { ChoiceError, assembleProfile } from "./profile.js";
 import { WEAPON_TIER_RATES } from "./protocol.js";
 import { prune } from "./prune.js";
-import { closeSession, createSession, setScenario, solve } from "./solve.js";
+import { closeSession, createSession, solveScenario } from "./solve.js";
 import { MAX_TIER } from "./tiers.js";
 import { WeightsError, weightsOverride } from "./weights.js";
 
@@ -148,7 +149,7 @@ export function viewProfile(bundle, scenario, weights) {
   return weightsAreOwn(weights) ? profile : Object.freeze({ ...profile, weights: composed });
 }
 
-/** The options `atTier` takes for a weapon tier rate (`WEAPON_TIER_RATES` of protocol.js: 5, the rule's own, and 10): none for none, else the rate; a BestKitError for any other. */
+/** The options `atTier` takes for a weapon tier rate (`WEAPON_TIER_RATES` of protocol.js: 5 and 10, the rule's own): none for none, else the rate; a BestKitError for any other. */
 function weaponOptions(rate) {
   if (rate === undefined) return undefined;
   if (!WEAPON_TIER_RATES.includes(rate)) throw new BestKitError(`The weapon tier rate is ${WEAPON_TIER_RATES.join(" or ")} percent a tier.`);
@@ -200,11 +201,11 @@ export function bestKit({ highs, records, bundle, scenario, tier, weights, weapo
   const { profile, buffset, monkBins, pool, pruned, pooledAt, prunedAt } = viewPool({ records, bundle, scenario, tier, weights, weaponTierRate, options, now });
   const session = createSession({ highs, profile, setup: scenario.setup, buffset, monkBins, options, now });
   try {
-    setScenario(session, SCENARIO, pruned, options);
-    const builtAt = now();
-    const answer = solve(session, { scenario: SCENARIO, budgetMs: Math.max(0, began + budgetMs - builtAt), canonical });
+    // the truthful solve: the weapons are paid the haste the kit counts (one program for each haste a kit can count, solve.js), unless the options fix one
+    const answer = solveScenario(session, { name: SCENARIO, items: pruned, options, budgetMs: Math.max(0, began + budgetMs - prunedAt), canonical });
     const done = now();
-    return { answer, profile, pool, pruned, timings: { poolMs: pooledAt - began, pruneMs: prunedAt - pooledAt, buildMs: builtAt - prunedAt, solveMs: done - builtAt } };
+    const buildMs = answer.build.buildMs + answer.build.syncMs;
+    return { answer, profile, pool, pruned, timings: { poolMs: pooledAt - began, pruneMs: prunedAt - pooledAt, buildMs, solveMs: done - prunedAt - buildMs } };
   } finally {
     closeSession(session);
   }

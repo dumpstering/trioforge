@@ -2,7 +2,7 @@
  "v": 2,
  "release": "data-2026-10-14",
  "license": "CC BY-SA 4.0",
- "attribution": "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, graded by evidence, tier-scaled",
+ "attribution": "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, tier-scaled",
  "role": "balanced",
  "tiers": [0,4,10],
  "items": [

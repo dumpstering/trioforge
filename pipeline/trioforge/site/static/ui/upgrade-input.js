@@ -683,7 +683,7 @@ class Updated extends Error {}
  */
 export function initUpgrade(
   root,
-  { doc = root.ownerDocument, win = doc.defaultView, fetch: fetchImpl = (...args) => win.fetch(...args), release = null, files = [], onUpdated, reload, announce, track, view, onView, words, loadEngine, kit = null, remember = null, valueView, loadShared, onKitFailed, stallMs = STARTUP_STALL_MS, bodyMs = STARTUP_COMPILE_MS } = {},
+  { doc = root.ownerDocument, win = doc.defaultView, fetch: fetchImpl = (...args) => win.fetch(...args), release = null, files = [], onUpdated, reload, announce, track, view, onView, words, loadEngine, kit = null, remember = null, valueView, loadShared, onKitFailed, onEquipKit, stallMs = STARTUP_STALL_MS, bodyMs = STARTUP_COMPILE_MS } = {},
 ) {
   const trio = String(root.dataset.trio ?? "").split("-").map((part) => part.toUpperCase());
   const loadNode = root.querySelector("#upgrade-load");
@@ -892,6 +892,8 @@ export function initUpgrade(
           answer = createUpgradeAnswer(root, {
             gear,
             records: table.records,
+            itemDefaults: table.defaults,
+            onEquipKit,
             trio: String(root.dataset.trio ?? ""),
             level: Number(root.dataset.level),
             view,

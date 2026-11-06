@@ -17,23 +17,31 @@ evidence, aa   the two inputs that are not model rows (below)
 naked          race base plus the three class modifiers, uncapped (:func:`~trioforge.model.formulas.naked`)
 buff_totals    the totals of the buffs that are **always on**, in the evaluator's shape (:func:`eval_buffs`); the
                buffs the solver chooses among (``BuffSet.optional``) are not in it
-spell_haste    the best spell haste **on offer**, always-on or optional: the haste the weapon term assumes
-               (:func:`~trioforge.model.weapons.haste_assumed`). It is at least ``buff_totals["HASTE"]``
+spell_haste    the best spell haste **on offer**, always-on or optional, plus ``haste_bonus``: the haste the weapon
+               term assumes (:func:`~trioforge.model.weapons.haste_assumed`). It is at least ``buff_totals["HASTE"]``
+haste_bonus    the flat haste of Unbound Alacrity: 10 for a trio with a Monk, else 0 (``haste.unbound_alacrity``). The
+               evaluator adds it to the buff haste, so it stacks with the spell haste and the best worn haste and is
+               cut by ``haste_cap``; the field comes last, after ``deity``, with a default of 0
 haste_cap      75, or 85 with a Monk in the trio (``haste.cap_pct``, ``haste.cap_pct_with_monk``)
 softcap        ``(cap, rate past it)`` of the trio's best class at the level (the larger cap; the larger rate on a tie):
                the rate is that class's own, read from the client table (``ac.softcap.past_cap_rate`` says so)
 cs_pct,        percent added to the softcap by Combat Stability and Physical Enhancement; the softcap the sheet uses is
 pe_pct         :attr:`Profile.effective_softcap`, ``floor(cap x (100 + cs + pe) / 100)``
+nd_pct         percent that Natural Durability adds to the HP that comes from STA (``hp.natural_durability_pct``); it is already in
+               the ``fac`` of every HP pool of ``pools`` (below) and is recorded so that the window (which floors) and a reader can
+               see it; the field comes last, after ``haste_bonus``, with a default of 0
 defense_cap    the best Defense skill cap of the trio at the level
 monk           the Monk worn-weight curve (``monk.weight_curve``) when the trio has a Monk, else None
 iksar_ac       the racial armor class: ``race.iksar_ac_bonus`` for an Iksar, else 0
 placement      ``{"monk": ..., "iksar": ...}``, each ``"top"`` (on top of the capped sheet armor class) or ``"inside"``
                (added into X before the cap), read from ``monk.bonus_placement`` and ``race.iksar_ac_placement``
 pools          ``{"HP": ..., "MANA": ..., "END": ...}``, each a tuple of :class:`~trioforge.model.formulas.PoolSpec`
-               (class, base, factor and, for mana, the stat), one for each class that has such a pool, in trio order
+               (class, base, factor and, for mana, the stat), one for each class that has such a pool, in trio order. The factor
+               of an HP pool is the client's ``hp_fac`` times ``1 + nd_pct / 100`` (the base and the constant 5 are not scaled)
 caps           ``{"regen": {"HP", "MANA", "END"}, "resist": n}`` (``regen.gear_caps``, ``resist.cap``)
 bands          the WIS/INT conversion bands (``mana.wis_bands``)
-dw_factor      the share of the off hand that counts under dual wield (``weapons.dual_wield_factor``)
+dw_factor      the share of the off hand that counts under dual wield (``weapons.dual_wield_factor``: its value for a
+               trio with a Monk or for a trio without one)
 weights        the role's weights (:func:`~trioforge.model.roles.weights_for`)
 setups         the weapon setups of the role (:func:`~trioforge.model.weapons.setups_for`); the ``1h-shield`` setup is
                there when the pool given to :func:`make_profile` holds a shield some class of the trio can wear (with no
@@ -47,14 +55,17 @@ read-only and sorted, so two profiles that are equal have one JSON text and one 
 Inputs that are not MILP rows
 =============================
 
-Two choices of the scenario change no row of the model; both are recorded in the profile and in
-:meth:`Profile.to_json`, so a solve can be reproduced from its profile alone.
+Two choices of the scenario are recorded in the profile and in :meth:`Profile.to_json`, so a solve can be
+reproduced from its profile alone.
 
-* **The AA defaults** change only the constants ``cs_pct`` and ``pe_pct``. ``aa`` is ``None`` (the defaults:
-  Combat Stability 3 of 3, and Physical Enhancement when the trio has a melee class or the rule
-  ``ac.softcap.pe_for_caster_only_trios`` is true, which it is not until test B10) or a mapping with either of
-  ``combat_stability`` (a rank from 0 to the top rank of the rule) and ``physical_enhancement`` (a bool). The
-  profile's ``aa`` lists both choices as made.
+* **The AA defaults** change the constants ``cs_pct`` and ``pe_pct`` and the factor of the HP pools. ``aa`` is ``None`` (the
+  defaults: Combat Stability 3 of 3, Natural Durability 4 of 4, and Physical Enhancement when the trio has a melee class or the rule
+  ``ac.softcap.pe_for_caster_only_trios`` is true, which it is not until test B10) or a mapping with any of
+  ``combat_stability`` (a rank from 0 to the top rank of the rule), ``natural_durability`` (the same, rule
+  ``hp.natural_durability_pct``) and ``physical_enhancement`` (a bool). The profile's ``aa`` lists the three choices as made.
+  Natural Durability is the one AA that reaches the HP pools: the percent of the rank goes on the ``fac`` of each HP pool,
+  ``fac x (100 + nd_pct) / 100``, so that the evaluator, the builder and the browser's engine read the AA without a rule of
+  their own (they all read ``pools``); ``nd_pct`` only records it.
 * **The evidence level** (``"strict"``, the default, or ``"wiki"``) changes only the item pool given to the builder.
   The profile carries it as a label.
 
@@ -119,8 +130,12 @@ __all__ = [
 
 FORMAT = 1  # the version of the JSON shape
 EVIDENCE_LEVELS = ("strict", "wiki")
-AA_CHOICES = ("combat_stability", "physical_enhancement")
+AA_CHOICES = ("combat_stability", "natural_durability", "physical_enhancement")
 FAMILIES = ("HP", "MANA", "END")
+#: what ``haste.unbound_alacrity`` must say for this model: the haste it adds to a trio with a Monk (its cap is
+#: ``haste.cap_pct_with_monk``, which already holds the other 10)
+UNBOUND_ALACRITY_TEXT = "adds 10 haste and raises the cap by 10"
+UNBOUND_ALACRITY_HASTE = 10
 _PLACEMENT_TEXT = {"on top of the capped sheet AC": "top", "inside X before the cap": "inside"}
 _INPUTS = ("HP", "END", "WIS", "INT")  # the names of the pool inputs a range can be given for
 
@@ -344,6 +359,8 @@ class Profile:
     weights: Mapping[str, Any]
     setups: tuple[str, ...]
     deity: str | None = None
+    haste_bonus: Any = 0
+    nd_pct: Any = 0
 
     def __post_init__(self) -> None:
         def put(name: str, value: Any) -> None:
@@ -359,12 +376,13 @@ class Profile:
         if self.evidence not in EVIDENCE_LEVELS:
             raise ValueError(f"evidence must be one of {', '.join(EVIDENCE_LEVELS)}, not {self.evidence!r}")
         aa = _mapping("aa", self.aa, AA_CHOICES)
-        rank, enhancement = aa["combat_stability"], aa["physical_enhancement"]
-        if type(rank) is not int or rank < 0 or type(enhancement) is not bool:
+        rank, durability, enhancement = aa["combat_stability"], aa["natural_durability"], aa["physical_enhancement"]
+        if type(rank) is not int or rank < 0 or type(durability) is not int or durability < 0 or type(enhancement) is not bool:
             raise ValueError(
-                f"aa is a rank from 0 for combat_stability and true or false for physical_enhancement: {dict(aa)!r}"
+                "aa is a rank from 0 for combat_stability and for natural_durability and true or false for "
+                f"physical_enhancement: {dict(aa)!r}"
             )
-        put("aa", MappingProxyType({"combat_stability": rank, "physical_enhancement": enhancement}))
+        put("aa", MappingProxyType({"combat_stability": rank, "natural_durability": durability, "physical_enhancement": enhancement}))
         _mapping("naked", self.naked, ATTRIBUTES)
         put("naked", _canon(self.naked, "naked"))
         put("buff_totals", _canon(eval_buffs(self.buff_totals), "buff_totals"))
@@ -373,8 +391,12 @@ class Profile:
             raise ValueError(
                 f"spell_haste must be at least 0 and at least the haste of the always-on buffs, not {self.spell_haste!r}"
             )
-        for name in ("haste_cap", "cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor"):
+        for name in ("haste_cap", "cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor", "haste_bonus", "nd_pct"):
             put(name, _num(getattr(self, name), name))
+        if self.haste_bonus < 0:
+            raise ValueError(f"haste_bonus must be at least 0, not {self.haste_bonus!r}")
+        if self.nd_pct < 0:
+            raise ValueError(f"nd_pct must be at least 0, not {self.nd_pct!r}")
         if not isinstance(self.softcap, (list, tuple)) or len(self.softcap) != 2:
             raise ValueError(f"softcap is (cap, rate past it), not {self.softcap!r}")
         put("softcap", (_num(self.softcap[0], "softcap"), _num(self.softcap[1], "softcap")))
@@ -501,10 +523,29 @@ def _placement(rules: Any, rule_id: str, level: int) -> str:
     raise ValueError(f"{rule_id} is {text!r}, but this model implements only {' and '.join(map(repr, _PLACEMENT_TEXT))}")
 
 
-def _aa(aa: Any, melee: bool, rules: Any, level: int) -> tuple[dict[str, Any], int | float, int | float]:
-    """The AA state, ``cs_pct`` and ``pe_pct`` of the choices ``aa`` (None: the defaults)."""
-    steps = rules.get("ac.softcap.combat_stability_pct", level)  # rank -> the percent at that rank
+def _unbound_alacrity(rules: Any, level: int, codes: Sequence[str]) -> int:
+    """The flat haste of Unbound Alacrity for a trio: 10 with a Monk, else 0. Refuses a rule that says anything else."""
+    text = rules.get("haste.unbound_alacrity", level)
+    if text != UNBOUND_ALACRITY_TEXT:
+        raise ValueError(
+            f"haste.unbound_alacrity is {text!r}, but this model implements only {UNBOUND_ALACRITY_TEXT!r}"
+        )
+    return UNBOUND_ALACRITY_HASTE if "MNK" in codes else 0
+
+
+def _rank(given: Mapping[str, Any], name: str, steps: Mapping[str, Any]) -> int:
+    """The rank of the AA ``name`` in ``given`` (the top rank of ``steps``, the rule's ranks, when it is not given)."""
     top = max(int(rank) for rank in steps)
+    rank = given.get(name, top)
+    if type(rank) is not int or not 0 <= rank <= top:
+        raise ValueError(f"aa: {name} is a whole number from 0 to {top}, not {rank!r}")
+    return rank
+
+
+def _aa(aa: Any, melee: bool, rules: Any, level: int) -> tuple[dict[str, Any], int | float, int | float, int | float]:
+    """The AA state, ``cs_pct``, ``pe_pct`` and ``nd_pct`` of the choices ``aa`` (None: the defaults)."""
+    steps = rules.get("ac.softcap.combat_stability_pct", level)  # rank -> the percent at that rank
+    durability = rules.get("hp.natural_durability_pct", level)  # rank -> the percent of the HP from STA at that rank
     if aa is None:
         given: Mapping[str, Any] = {}
     elif isinstance(aa, Mapping):
@@ -514,15 +555,15 @@ def _aa(aa: Any, melee: bool, rules: Any, level: int) -> tuple[dict[str, Any], i
     unknown = sorted(set(given) - set(AA_CHOICES))
     if unknown:
         raise ValueError(f"aa has no choice {unknown[0]!r} (use {' and '.join(AA_CHOICES)})")
-    rank = given.get("combat_stability", top)
-    if type(rank) is not int or not 0 <= rank <= top:
-        raise ValueError(f"aa: combat_stability is a whole number from 0 to {top}, not {rank!r}")
+    rank = _rank(given, "combat_stability", steps)
+    nd_rank = _rank(given, "natural_durability", durability)
     enhancement = given.get("physical_enhancement", melee or bool(rules.get("ac.softcap.pe_for_caster_only_trios", level)))
     if type(enhancement) is not bool:
         raise ValueError(f"aa: physical_enhancement is true or false, not {enhancement!r}")
     cs_pct = steps[str(rank)] if rank else 0
+    nd_pct = durability[str(nd_rank)] if nd_rank else 0
     pe_pct = rules.get("ac.softcap.physical_enhancement_pct", level) if enhancement else 0
-    return {"combat_stability": rank, "physical_enhancement": enhancement}, cs_pct, pe_pct
+    return {"combat_stability": rank, "natural_durability": nd_rank, "physical_enhancement": enhancement}, cs_pct, pe_pct, nd_pct
 
 
 def make_profile(
@@ -565,7 +606,9 @@ def make_profile(
         raise ValueError(f"role {role!r} is not offered to {' '.join(codes)}; its roles are {', '.join(roles_for(codes))}")
 
     pools = pools_for(codes, level, tables)
-    aa_state, cs_pct, pe_pct = _aa(aa, bool(MELEE_CLASSES & set(codes)), rules, level)
+    aa_state, cs_pct, pe_pct, nd_pct = _aa(aa, bool(MELEE_CLASSES & set(codes)), rules, level)
+    if nd_pct:  # Natural Durability: its percent goes on the factor of the HP that comes from STA, in every HP pool (the base and the 5 are not scaled)
+        pools["HP"] = tuple(PoolSpec(spec.cls, spec.base, spec.fac * (100 + fr(nd_pct)) / 100) for spec in pools["HP"])
     softcap = max((tables.softcap[(code, level)] for code in codes), key=lambda cap_rate: (cap_rate[0], cap_rate[1]))
     defense = [tables.skillcap[(code, "Defense", level)] for code in codes if (code, "Defense", level) in tables.skillcap]
     if not defense:
@@ -578,6 +621,8 @@ def make_profile(
         spell_haste = max((buff.haste for buff in (*buffset.always_on, *buffset.optional)), default=0)
     else:
         raise ValueError(f"buffset is a BuffSet or None, not {type(buffset).__name__}")
+    haste_bonus = _unbound_alacrity(rules, level, codes)
+    spell_haste += haste_bonus  # the weapon term assumes it too
 
     # only a shield the race can wear makes the shield setup: an item whose races exclude this one is not eligible
     wearable = None if items is None else [i for i in items if getattr(i, "races", None) is None or race in i.races]
@@ -605,8 +650,10 @@ def make_profile(
         pools=pools,
         caps={"regen": rules.get("regen.gear_caps", level), "resist": rules.get("resist.cap", level)},
         bands=rules.get("mana.wis_bands", level),
-        dw_factor=rules.get("weapons.dual_wield_factor", level),
+        dw_factor=weapons.dual_wield_factor_for(codes, rules, level),
         weights=weights_for(codes, role, rules, mana_reachable=bool(pools["MANA"])),
         setups=tuple(weapons.setups_for(codes, role, tables, level=level, items=wearable)),
         deity=deity,
+        haste_bonus=haste_bonus,
+        nd_pct=nd_pct,
     )

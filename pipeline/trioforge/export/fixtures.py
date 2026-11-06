@@ -68,12 +68,15 @@ A **case** (``kind`` ``case``) holds, in this order:
 ``records``     the item-table records of every item the case uses; ``weapon_pct`` says which weapon rate reads them
 ``solves``      one or more programs: the options, the pool as idents ``key@tier`` (an item read from its record at its
                 tier), the pruning that made the pool (the whole input, the options and the idents kept) when the case
-                records it, the model JSON v1 the Python builder made, and the result of the canonical solve: the exact value
+                records it, ``haste`` (null for a program at one fixed haste; for a truthful solve, the ``levels`` a kit of
+                the scenario can count, rising, and the ``level`` whose program won: the options of the program set
+                ``haste_assumed`` and ``haste_floor`` to it, and the kit counts exactly that haste), the model JSON v1 the
+                Python builder made, and the result of the canonical solve: the exact value
                 ``F``, the value the model reported, the canonical kit (``[key, tier]`` or null for each of 22 places), the
                 chosen buffs and the breakdown. The kit is canonical (the tie stage decided it) when ``tie_stage`` is
                 ``applied``
 ``expected``    what only some families have. ``brute``: ``brute_F`` (the exact maximum by enumeration), ``kits`` and
-                ``buff_sets`` counted. ``upgrade``: ``session_haste`` (the haste every program assumes), ``steps`` (``item``,
+                ``buff_sets`` counted. ``upgrade``: ``steps`` (``item``,
                 ``kind`` new, copy or upgrade, ``source_tier``, ``F``, ``gain``, the ``owned`` set after the step, the merge
                 ``cost`` or null, and the ``solve`` that made it: ``solves[0]`` is Equip now and ``solves[k]`` step ``k``), why
                 the path ``stopped``, ``best_sets`` and ``every_slot``. ``best_sets`` has two entries, for the best 2 and the best 3
@@ -88,7 +91,7 @@ A **case** (``kind`` ``case``) holds, in this order:
                 candidates offer no addition (each is a Lore copy of an owned item, say): ``best_sets`` then builds Equip now
                 and nothing else, and neither set has a ``best-k`` solve. ``every_slot``: for each of the 22 places the current
                 item and the three best swaps with the rest of the kit held fixed, from Equip now's kit over the candidates and
-                the owned items under the options of ``solves[0]`` and ``session_haste``. A candidate has no count (the swap
+                the owned items under the options of ``solves[0]``, each swapped kit valued at the haste it counts. A candidate has no count (the swap
                 gets another copy); an owned item that is not a candidate is a swap for a place only while its owned count
                 (``inputs.owned``) is greater than the copies the kit wears in the other places, so none of these gains
 
@@ -708,7 +711,7 @@ def _case_problems(case: Mapping[str, Any], name: str) -> list[str]:
 
 def _best_set_problems(case: Mapping[str, Any], name: str) -> list[str]:
     """The best sets of an Upgrade case: the best 2 and the best 3, in that order, with an exact value that is Equip now's plus the
-    gain, the session's assumed haste, idents that have records, and the program of each set (labelled ``best-k``, with
+    gain, the haste its program assumed, idents that have records, and the program of each set (labelled ``best-k``, with
     ``max_new`` ``k``): a set that acquires something has one, whose result is the set's; a set that acquires nothing has one
     only if the candidates offered something to acquire, and that program found no value above Equip now's."""
     expected = case["expected"]
@@ -731,8 +734,9 @@ def _best_set_problems(case: Mapping[str, Any], name: str) -> list[str]:
         ]
         if len(entry["acquired"]) > entry["k"]:
             out.append(f"{where}: acquires {len(entry['acquired'])} items, more than k")
-        if entry["haste_assumed"] != expected["session_haste"]:
-            out.append(f"{where}: haste_assumed {entry['haste_assumed']} is not the session's {expected['session_haste']}")
+        wanted_haste = (programs.get(f"best-{entry['k']}") or case["solves"][0])["result"]["haste_assumed"]
+        if entry["haste_assumed"] != wanted_haste:
+            out.append(f"{where}: haste_assumed {entry['haste_assumed']} is not the {wanted_haste} of its program")
         try:
             value, gain, start = browser.unrat(entry["F"]), browser.unrat(entry["gain"]), browser.unrat(equip)
         except ValueError:

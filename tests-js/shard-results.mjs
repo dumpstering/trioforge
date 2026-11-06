@@ -6,6 +6,8 @@
 //   checkResults(results, {highs, ...})   -> {views, chunks, failures, ties, defaults, timing, ...}: every view solved by the engine and compared with its shard
 //   pythonRound2(number)                  -> Python's round(number, 2), which is how a shard keeps F
 //   parseSample("3/20")                   -> {index: 3, count: 20}
+//   parsePart("3/12")                     -> {index: 3, count: 12}: the part of the work (TRIOFORGE_SHARD_PART), so that K processes can share one check
+//   workOf(results, {...})                -> the units of work of a check (the plan of each defaults.json, the sampled chunks), and the part of them that is asked for
 //
 // What a view is. A shard row is [race, role, tier, setup, kit, F, gain, totals, buffs, haste]: one race in one view of the grid. The precompute
 // (pipeline/trioforge/precompute/grid.py, `solve_chunk`) solved it like this, and so the engine is asked the same question, built from the very files the
@@ -248,6 +250,18 @@ export function parseSample(text) {
   return { index, count };
 }
 
+/**
+ * The part of the work a text asks for, "k/K" (TRIOFORGE_SHARD_PART): the units of work (`workOf`) whose place is k more than a multiple of K (0 <= k < K). Written
+ * as strictly as `parseSample`, which it resembles: K parts, k = 0 to K-1, run side by side, check every unit once.
+ */
+export function parsePart(text) {
+  const found = /^([0-9]{1,6})\/([1-9][0-9]{0,5})$/.exec(String(text).trim());
+  if (found === null) throw new ResultsError(`the part is "k/K", the units k, k+K, k+2K ... of the work: not ${JSON.stringify(String(text).slice(0, 40))}`);
+  const [index, count] = [Number(found[1]), Number(found[2])];
+  if (index >= count) throw new ResultsError(`the part "${index}/${count}" has no units: k is from 0 to K-1`);
+  return { index, count };
+}
+
 // ---- Python's round -----------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -453,26 +467,52 @@ function checkDefaults({ level, shard, document, chunks }, seen) {
 // ---- the check ----------------------------------------------------------------------------------------------------------------------------
 
 /**
- * Solve every view of the folder (or of a sample of its chunks) with the engine and compare each with its shard. `highs` is the loaded solver; `sample` is
+ * The work of a check, in a fixed order, as units that no part divides: the plan of each `defaults.json` (the chunks of its default view, which are solved and then
+ * held to the file together) and then each other chunk that the sample takes (a chunk of a plan belongs to that plan, once). A unit is `{id, plan, units}`: `id` its place in
+ * the order, `plan` the plan of `defaultsPlans` or null, `units` the chunks of `chunksOf` it is made of. `part` is `{index, count}` (`parsePart`); with it, only the units
+ * whose id is `index` more than a multiple of `count` are kept, so that the `count` parts hold every unit exactly once. Returns `{items, plans, wanted, total}`: the
+ * units kept, their plans, their chunks in the order of `chunksOf`, and the views those hold. A part whose `index` is at least the number of units (more parts than units) holds none, checks
+ * nothing and passes: K need not be known to be small enough. The arguments are those of `checkResults`.
+ */
+export function workOf(results, { directory = null, sample = null, select = null, part = null } = {}) {
+  const all = chunksOf(results);
+  const plans = directory !== null && select === null ? defaultsPlans(results, directory) : []; // (every run: a sample must not leave the defaults out)
+  const byChunk = new Map(all.map((unit) => [unit.chunk, unit]));
+  const taken = new Set();
+  const items = [];
+  for (const plan of plans) {
+    const mine = plan.chunks.map((chunk) => byChunk.get(chunk)).filter((unit) => unit !== undefined);
+    for (const unit of mine) taken.add(unit);
+    items.push({ id: items.length, plan, units: mine });
+  }
+  for (const unit of all) {
+    if (taken.has(unit) || !((sample === null || unit.index % sample.count === sample.index) && (select === null || select(unit)))) continue;
+    items.push({ id: items.length, plan: null, units: [unit] });
+  }
+  const kept = part === null ? items : items.filter((item) => item.id % part.count === part.index);
+  const wanted = kept.flatMap((item) => item.units).sort((a, b) => a.index - b.index);
+  const total = wanted.reduce((sum, unit) => sum + unit.chunk.rows.length, 0);
+  return { items: kept, plans: kept.filter((item) => item.plan !== null).map((item) => item.plan), wanted, total };
+}
+
+/**
+ * Solve every view of the folder (or of a sample of its chunks, or of a part of the work: `part`, see `workOf`) with the engine and compare each with its shard. `highs` is the loaded solver; `sample` is
  * `{index, count}` (`parseSample`); `select(unit)` keeps the chunks it says yes to (a test of the check itself; no sample, no `defaults.json`); `progress(text)` is
  * told how far the check is every few seconds. `directory` is the folder, for `defaults.json`: it is checked in every run, of the whole folder or of any sample (the
- * few chunks of the default view are solved besides the sample's own, so no sample leaves the defaults out; n samples run side by side check them n times).
+ * few chunks of the default view are solved besides the sample's own, so no sample leaves the defaults out; n samples run side by side check them n times, and K parts
+ * check each of them once: a plan is in one part).
  *
  * Returns `{views, planned, chunks, failures, ties, defaults, defaultsChecked, timing}`: `views` the number of views checked (`planned` the number the chunks asked for hold),
  * `failures` are `{name, first, all, ...}` in the order the views were checked (`first` is the first difference), `ties` are the `{name, first}` of the views that passed
  * as ties (`isBuffTie`: only the optional buffs differ), `defaults` the differences of `defaults.json`, `defaultsChecked` how many trios and levels it was checked for.
  */
-export function checkResults(results, { highs, directory = null, sample = null, select = null, progress = null } = {}) {
+export function checkResults(results, { highs, directory = null, sample = null, select = null, part = null, progress = null } = {}) {
   const began = performance.now();
   const tally = { views: 0, pruneMs: 0, buildMs: 0, solveMs: 0, slowest: { ms: 0, name: null }, ties: [] };
   const failures = [];
   const seen = new Map();
   let last = began;
-  const all = chunksOf(results);
-  const plans = directory !== null && select === null ? defaultsPlans(results, directory) : []; // (every run: a sample must not leave the defaults out)
-  const needed = new Set(plans.flatMap((plan) => plan.chunks));
-  const wanted = all.filter((unit) => needed.has(unit.chunk) || ((sample === null || unit.index % sample.count === sample.index) && (select === null || select(unit))));
-  const total = wanted.reduce((sum, unit) => sum + unit.chunk.rows.length, 0);
+  const { plans, wanted, total } = workOf(results, { directory, sample, select, part });
   for (const unit of wanted) {
     failures.push(...checkChunk({ highs, table: results.table, level: unit.level, shard: unit.shard, chunk: unit.chunk }, tally, seen));
     const now = performance.now();

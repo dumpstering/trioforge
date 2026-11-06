@@ -236,6 +236,7 @@ NOT_HASHED = {
     "trioforge.precompute.shards": "writes and reads the chunk and result files: their format is CODE_VERSION, and the "
     "order of a totals row is in the fingerprint",
     "trioforge.precompute.seals": "the seals and flip notes of the result files; not computed in a chunk",
+    "trioforge.precompute.kitwhy": "the why of the default kit, made from the finished chunks' kits for defaults.json; not computed in a chunk",
     "trioforge.precompute.engine": "the browser engine's two files (bundle and item table), made from the inputs the fingerprint holds; "
     "not computed in a chunk",
     "trioforge.precompute.__main__": "the command line",

@@ -514,6 +514,74 @@ def test_a_release_is_not_built_from_a_catalog_with_a_strict_item_and_the_refusa
     nothing_left(copy.root)
 
 
+# ---- the source of the items of a hand-listed zone (p7nekfix) -----------------------------------------------------------------------------------
+
+ZONE_PAGE = "https://eqlegendstools.com/zones/nektropos-castle/"
+
+
+def hand_lists_file(rules: Path, source: str | None = ZONE_PAGE) -> None:
+    """Write a ``rules/hand-lists.json`` whose exists-unflagged zones are one the developers' notes settle and one that rests on ``source``."""
+    rules.mkdir(parents=True, exist_ok=True)
+    zones = [{"names": ["The Arena"], "ids": [77], "seal": "developer", "source": [{"kind": "url", "ref": "https://eqlwiki.com/index.php?title=Patch_Notes"}], "date": "2026-06-23"}]
+    if source:
+        zones.append({"names": ["Nektropos Castle"], "ids": [28], "seal": "player", "source": [{"kind": "url", "ref": source}], "date": "2026-10-25"})
+    (rules / "hand-lists.json").write_text(json.dumps({"version": "2026-10-14", "exists_unflagged_zones": zones}), encoding="utf-8")
+
+
+def provenance_of(*files: str) -> dict:
+    return {"version": "2030-01-02", "provenance": {"inputs": [{"file": name, "sha256": "00" * 32, "date": "2026-10-27"} for name in files]}}
+
+
+def test_a_hand_listed_zone_of_eql_legends_tools_needs_that_source_in_the_catalog(tmp_path):
+    rules = tmp_path / "rules"
+    hand_lists_file(rules)
+    release.check_eqlegendstools_source(rules, provenance_of("derived/client/zones.json", ZONE_PAGE))  # built with the source: passes
+    for document in (provenance_of("derived/client/zones.json"), provenance_of(), {"version": "x"}):  # built without it: stops, and says why
+        with pytest.raises(ReleaseRefused, match=r"Nektropos Castle.*eqlegendstools.*--eqlegendstools.*build the catalog again"):
+            release.check_eqlegendstools_source(rules, document)
+
+
+def test_the_source_of_a_hand_listed_zone_is_compared_in_one_form_on_both_sides(tmp_path):
+    rules = tmp_path / "rules"
+    no_slash = ZONE_PAGE.rstrip("/")
+    for written, recorded in (
+        (ZONE_PAGE, no_slash),  # (a trailing slash on one side only)
+        (no_slash, ZONE_PAGE),
+        ("https://EQLegendsTools.com/zones/nektropos-castle/", ZONE_PAGE),  # (host case)
+        ("HTTPS://eqlegendstools.com/zones/nektropos-castle/", ZONE_PAGE),  # (scheme case)
+        ("http://eqlegendstools.com/zones/nektropos-castle/", ZONE_PAGE),  # (scheme)
+        ("https://www.eqlegendstools.com/zones/nektropos-castle/", ZONE_PAGE),  # (www)
+        (ZONE_PAGE, "https://EQLEGENDSTOOLS.com/zones/nektropos-castle"),
+    ):
+        hand_lists_file(rules, source=written)
+        release.check_eqlegendstools_source(rules, provenance_of("derived/client/zones.json", recorded))
+    for written in ("http://eqlegendstools.com/zones/nektropos-castle", "https://www.EQLegendsTools.com/zones/nektropos-castle/",
+                    "https://eqlegendstools.com:8443/zones/nektropos-castle", "https://eqlegendstools.com./zones/nektropos-castle"):
+        hand_lists_file(rules, source=written)  # (an equivalent form of the site's address still asks for the site's page in the catalog)
+        with pytest.raises(ReleaseRefused, match=r"Nektropos Castle.*--eqlegendstools"):
+            release.check_eqlegendstools_source(rules, provenance_of("derived/client/zones.json"))
+    hand_lists_file(rules)
+    for other in ("https://eqlegendstools.com.example.invalid/zones/nektropos-castle/", "https://eqlegendstools.com/zones/other-zone/", "https://eqlwiki.com/zones/nektropos-castle/"):
+        with pytest.raises(ReleaseRefused, match=r"Nektropos Castle.*--eqlegendstools"):
+            release.check_eqlegendstools_source(rules, provenance_of(other))
+
+
+def test_no_hand_listed_zone_of_that_source_asks_nothing_of_the_catalog(tmp_path):
+    release.check_eqlegendstools_source(tmp_path / "rules", provenance_of())  # no hand-lists file at all
+    hand_lists_file(tmp_path / "rules", source=None)  # only a zone of the developers' notes
+    release.check_eqlegendstools_source(tmp_path / "rules", provenance_of())
+
+
+def test_a_catalog_built_without_the_eql_legends_tools_source_is_refused_before_any_hour_is_spent(world, tmp_path):
+    copy = clone(world, tmp_path)
+    hand_lists_file(copy.root / "rules")
+    calls: list[str] = []
+    with pytest.raises(ReleaseRefused, match=r"Nektropos Castle.*eqlegendstools"):
+        build(world, tmp_path, runner=lambda spec: calls.append(spec.slug))
+    assert calls == []
+    nothing_left(copy.root)
+
+
 # ---- the pruning spot check -----------------------------------------------------------------------------------------------------------------------
 
 
@@ -589,6 +657,15 @@ def test_a_release_is_built_packed_and_written_up(world, tmp_path):
     assert result.trios == 2 and result.trial is False and result.pointer == copy.root / "releases" / f"{TAG}.json"
     text = "\n".join(lines)
     assert "privacy scan" in text and "0 findings" in text and TAG in text
+
+
+def test_the_build_refuses_effects_files_that_the_files_check_passes_and_the_sites_reader_refuses(world, tmp_path, monkeypatch):
+    copy = clone(world, tmp_path)
+    (copy.results / "effects.json").write_text(json.dumps({"version": 1, "data_release": "data-1999-01-01", "effects": []}), encoding="utf-8")
+    monkeypatch.setattr(release, "write_effects", lambda *args, **kwargs: True)  # (the world has no spell file to make the files from: the shared file above stands in for them)
+    with pytest.raises(ReleaseRefused, match=r"site's reader.*effects\.json.*not from one run"):
+        build(world, tmp_path)
+    nothing_left(copy.root)
 
 
 # ---- the community entries of the release --------------------------------------------------------------------------------------------------------
@@ -1348,6 +1425,26 @@ def test_a_build_whose_code_did_not_change_is_not_refused_for_it(world, tmp_path
     assert result.pointer is not None and result.asset.is_file()
 
 
+def test_the_parity_suite_runs_in_the_number_of_processes_asked_for_and_the_build_says_so(world, tmp_path):
+    parts = []
+
+    def recording(folder, sample, files, part=None):
+        parts.append(part)
+        return 0, "ok\n"
+
+    _, _, lines = build(world, tmp_path, parity_runner=recording, parity_processes=3)
+    assert sorted(part for part in parts if part) == ["0/3", "1/3", "2/3"] and parts.count(None) == 1
+    assert [line for line in lines if "parity" in line and "3 processes" in line]
+
+
+def test_a_number_of_parity_processes_that_is_wrong_is_refused_before_the_first_hour_is_spent(world, tmp_path):
+    calls = []
+    for bad in (0, -2, 1.5, True):
+        with pytest.raises(ReleaseRefused, match="parity processes"):
+            build(world, tmp_path, parity_processes=bad, runner=lambda spec: calls.append(spec.slug))
+    assert calls == []
+
+
 # ---- the chunks of a trio, as the parity suite numbers them ---------------------------------------------------------------------------------------
 
 
@@ -1790,18 +1887,21 @@ def test_the_temporary_files_of_a_write_that_was_cut_short_are_cleared_from_the_
 
 def test_a_release_in_which_an_item_has_two_rows_is_refused_by_the_build_before_anything_is_packed(world, tmp_path):
     """The check is part of the build, between the check of the grid and the invariants: one shard shows another source for an item than the rest."""
+    changed = []  # (the key of the item whose row is changed: the first the shard shows; which items the kits wear moves with the solver)
+
     def two_rows(spec):
         outcome = release.run_trio(spec)
         if spec.slug == TRIOS[0]:
             def change(document):
-                for row in document["items"]:
-                    if row[0] == "w9001":
-                        row[5] = "Quest in Another Zone"
+                row = document["items"][0]
+                changed.append(row[0])
+                row[5] = "Quest in Another Zone"
 
             edit(Path(spec.results) / spec.slug / "wiki-group.json", change)
         return outcome
 
-    with pytest.raises(ReleaseRefused, match=r"row in one shard.*w9001") as raised:
+    with pytest.raises(ReleaseRefused, match=r"row in one shard") as raised:
         build(world, tmp_path, runner=two_rows)
+    assert changed and changed[0] in str(raised.value)
     assert "Another Zone" not in str(raised.value)
     nothing_left(tmp_path / "w")

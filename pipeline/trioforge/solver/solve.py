@@ -81,6 +81,7 @@ __all__ = [
     "Solution",
     "canonical_kit",
     "place_canonically",
+    "revalue",
     "solve",
     "solve_canonical",
     "tie_ranks",
@@ -224,6 +225,18 @@ def _evaluator(milp: Milp, buffs: Sequence[int]) -> Any:
         return fm.evaluate(milp.profile, list(kit), totals, setup=milp.setup, haste_assumed=milp.haste_assumed, **legacy)
 
     return value
+
+
+def revalue(milp: Milp, solution: Solution, haste: int) -> Solution:
+    """``solution`` with its kit valued again by the exact evaluator at the assumed haste ``haste`` (the weapon index at
+    that haste) in place of the one ``milp`` assumed: the kit, the buffs and the places stay. ``F`` and ``breakdown`` are the
+    new value; ``model_F`` stays what the model said. A solution with no kit is returned as it is."""
+    if solution.kit is None:
+        return solution
+    totals = eval_buff_totals(milp.buffset.totals(solution.buffs)) if milp.buffset is not None else None
+    legacy = {} if milp.options.legacy is None else {"legacy": milp.options.legacy}
+    breakdown = fm.evaluate(milp.profile, list(solution.kit), totals, setup=milp.setup, haste_assumed=haste, **legacy)
+    return dataclasses.replace(solution, F=float(breakdown.F), breakdown=breakdown)
 
 
 def _kit_of(rest: Sequence[ItemVec], main: ItemVec | None, off: ItemVec | None) -> list[ItemVec | None]:
@@ -373,28 +386,43 @@ def _check_exactness(model_value: float, value: float) -> None:
         )
 
 
-def solve(milp: Milp, time_limit: float | None = None, highs_options: Mapping[str, Any] | None = None) -> Solution:
+def _first_stage(milp: Milp, highs_options: Mapping[str, Any] | None, cutoff: float | None) -> Mapping[str, Any] | None:
+    """The HiGHS options of the first stage: ``highs_options``, and with a ``cutoff`` (a value of the model, the constant included, that a
+    kit must reach: HiGHS stops a search that cannot) its ``objective_bound``. The program is maximized and HiGHS minimizes the
+    negative, so the bound is the negative of what the objective without the constant must reach."""
+    if cutoff is None:
+        return highs_options
+    return {**(highs_options or {}), "objective_bound": -(cutoff - milp.const)}
+
+
+def solve(
+    milp: Milp, time_limit: float | None = None, highs_options: Mapping[str, Any] | None = None, *, cutoff: float | None = None
+) -> Solution:
     """Solve ``milp`` and value the answer exactly (see the module docstring). Raises :class:`ExactnessError`.
 
     ``highs_options`` replaces single HiGHS options for this call (the presolve gate sets ``presolve``); the project's
     determinism options (:data:`trioforge.solver._highs.OPTIONS`) hold when it is None."""
-    return _solution(milp, solve_milp(milp, time_limit=time_limit, highs_options=highs_options))
+    return _solution(milp, solve_milp(milp, time_limit=time_limit, highs_options=_first_stage(milp, highs_options, cutoff)))
 
 
 def solve_canonical(
-    milp: Milp, time_limit: float | None = None, highs_options: Mapping[str, Any] | None = None
+    milp: Milp, time_limit: float | None = None, highs_options: Mapping[str, Any] | None = None, *, cutoff: float | None = None
 ) -> Solution:
     """:func:`solve`, then the tie stage: the least total rank among the kits as good as the best.
 
     ``time_limit`` is given to each of the two solves. If the first does not end optimal it is returned as it is. If
     the second does not end optimal, or its kit is not exactly as good as the first stage's by the oracle, the first
     answer is returned (``canonical`` false, ``tie_stage`` ``"kept-first"``) because its value is proven.
-    ``highs_options`` is passed to both solves, as in :func:`solve`.
+    ``highs_options`` is passed to both solves, as in :func:`solve`. ``cutoff`` is given to the first stage only: a kit worth less
+    than it is not looked for. A search that finds none ends ``infeasible`` or ``optimal`` with some kit that is worth less than the
+    cutoff (the solver may report one it came across): the answer is then "no kit of the cutoff", and the tie stage is not run.
     """
-    found = solve_milp(milp, time_limit=time_limit, highs_options=highs_options)
+    found = solve_milp(milp, time_limit=time_limit, highs_options=_first_stage(milp, highs_options, cutoff))
     first = _solution(milp, found)
     if first.status != "optimal":
         return first
+    if cutoff is not None and first.model_F is not None and first.model_F < cutoff:
+        return first  # the search ended with no kit worth the cutoff (what it reports is not the level's best): nothing to separate
     best = first.model_F
     tolerance = TIE_TOLERANCE * max(1.0, abs(best))
     cost = np.zeros(milp.num_cols)

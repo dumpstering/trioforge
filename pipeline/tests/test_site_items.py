@@ -207,7 +207,8 @@ def test_a_stat_is_worked_out_by_the_tier_rule_and_not_between_two_tiers(world):
     assert [number(c) for c in rows["AC"].cells] == [30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60]
     assert [number(c) for c in rows["STA"].cells] == [12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 24]  # +1 a tier up to +4, then 12 * n // 10
     assert [number(c) for c in rows["HP"].cells] == [60, 66, 72, 78, 84, 90, 96, 102, 108, 114, 120]
-    assert rows["WEIGHT"].cells == ("4.0", "3.6", "3.2", "2.8", "2.4", "2.0", "1.6", "1.2", "0.8", "0.4", "0.1")  # (a tenth of a stone is the least an item weighs)
+    # 9 percent of the base a tier, rounded down, with no minimum step: 40 tenths lose 40 * 9 * n // 100 (a tenth of a stone is the least an item weighs)
+    assert rows["WEIGHT"].cells == ("4.0", "3.7", "3.3", "3.0", "2.6", "2.2", "1.9", "1.5", "1.2", "0.8", "0.4")
 
 
 def test_the_rows_are_the_stats_the_item_has_in_the_order_of_the_model_then_haste_resists_and_weight(world):
@@ -263,9 +264,9 @@ def test_an_item_with_no_stat_and_no_weight_has_no_rows_at_all():
 
 def test_the_rules_the_rows_follow_are_named_with_their_seals(world):
     page = page_of(world, "w90008")  # stats, haste and weight
-    assert [ref.id for ref in page.rules] == ["tier.stat_rule", "haste.worn_per_tier", "tier.weight_floor"]
+    assert [ref.id for ref in page.rules] == ["tier.stat_rule", "haste.worn_per_tier", "tier.weight_pct", "tier.weight_floor"]
     assert all(ref.seal in content.SEALS and ref.seal_icon == f"i-{ref.seal}" for ref in page.rules)
-    assert [ref.id for ref in page_of(world, "w80158").rules] == ["tier.stat_rule", "tier.weight_floor"]
+    assert [ref.id for ref in page_of(world, "w80158").rules] == ["tier.stat_rule", "tier.weight_pct", "tier.weight_floor"]
 
 
 # ---- weapons -----------------------------------------------------------------------------------------------------------------------------------
@@ -282,13 +283,13 @@ def test_a_weapon_shows_its_damage_and_delay_at_every_tier_with_the_seal_of_the_
         rows = {row.key: [number(c) for c in row.cells] for row in page.weapon.rows}
         assert rows == {"DAMAGE": [vec.weapon.dmg for vec in vecs], "DELAY": [vecs[0].weapon.delay] * 11}, key
         assert page.weapon.skill == original["weapon"]["skill"] and page.weapon.two_handed == vecs[0].weapon.two_handed
-        assert page.weapon.rule.id == "tier.weapon_damage_pct" and page.weapon.rule.seal == "player" and page.weapon.rule.open_test is not None
+        assert page.weapon.rule.id == "tier.weapon_damage_pct" and page.weapon.rule.seal == "player" and page.weapon.rule.open_test is None  # (settled: the rule is active)
 
 
-def test_damage_grows_by_five_percent_a_tier_and_at_least_one_and_the_delay_does_not_change(world):
+def test_damage_grows_by_ten_percent_of_the_base_a_tier_with_no_minimum_and_the_delay_does_not_change(world):
     page = page_of(world, "w80524")  # a two-hander of 36 damage and a delay of 38
     rows = {row.key: row for row in page.weapon.rows}
-    assert [number(c) for c in rows["DAMAGE"].cells] == [36, 37, 39, 41, 43, 45, 46, 48, 50, 52, 54]  # dmg + max(n, dmg * n * 5 // 100)
+    assert [number(c) for c in rows["DAMAGE"].cells] == [36, 39, 43, 46, 50, 54, 57, 61, 64, 68, 72]  # dmg + dmg * n * 10 // 100
     assert rows["DELAY"].cells == ("38",) * 11 and page.weapon.two_handed is True and page.weapon.skill == "2H Slashing"
     assert page.weapon.bonus == "22"  # the damage bonus the page lists does not change either
 
@@ -396,7 +397,7 @@ def ladder_codes() -> set[str]:
     return set(re.findall(r'\b(?:reasons|strict)\["([a-z]+(?:-[a-z]+)*)"\]\s*=\s*_reason\(', text))
 
 
-NOTES = {"not-for-bis", "not-for-default-kits", "wiki-marked-revamped"}  # (the ladder's own list of the notes about an item: evidence.NOTE_CODES)
+NOTES = {"not-for-bis", "not-for-default-kits", "source-eql-tools", "wiki-marked-revamped"}  # (the ladder's own list of the notes about an item: evidence.NOTE_CODES)
 NOT_FOR_BIS = "Kept in the catalog and not used for best-in-slot"  # how the words of that note begin
 
 
@@ -607,7 +608,7 @@ def test_the_tier_table_of_twenty_real_items_is_at_tier_figure_for_figure_weapon
     for key in keys:
         original = real.originals[key]
         record = real.records[key]
-        page = view.item_page(record, defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=("A wiki page", 1))
+        page = view.item_page(record, defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=("A wiki page", 1) if view.has_wiki_page(record) else None)
         assert shown_rows(page) == expected_rows(original, real.rules), key
         vecs = [at_tier(original, tier, real.rules) for tier in TIERS]
         if vecs[0].weapon is not None:
@@ -617,6 +618,12 @@ def test_the_tier_table_of_twenty_real_items_is_at_tier_figure_for_figure_weapon
         else:
             assert page.weapon is None, key
     assert weapons >= 6
+    unpaged = sorted(key for key, record in real.records.items() if not view.has_wiki_page(record))
+    assert unpaged  # the case stays covered: an item with no wiki page has a page whose tier table is the rule's, and no wiki credit
+    for key in unpaged:
+        page = view.item_page(real.records[key], defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=None)
+        assert shown_rows(page) == expected_rows(real.originals[key], real.rules), key
+        assert (page.wiki_title, page.wiki_revid, page.wiki_href) == (None, None, None), key
 
 
 @pytest.mark.parametrize("after", [False, True], ids=["the committed catalog", "the catalog after an accepted report"])
@@ -626,7 +633,11 @@ def test_every_wearable_of_the_wiki_catalog_has_a_page_model_that_needs_nothing_
     assert len(keys) > 1500  # (these are the wiki level, and the strict items that a report made, which are public)
     assert strict_without_a_report(real.table) == []  # (a flag is the maintainer's alone: a public catalog has no strict item that rests on one)
     strict = [key for key in keys if real.records[key]["evidence"]["level"] == "strict"]
-    for key in [*keys[:: max(1, len(keys) // 300)], *strict]:
-        page = view.item_page(real.records[key], defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=("A wiki page", 1))
+    unpaged = [key for key in keys if not view.has_wiki_page(real.records[key])]
+    assert unpaged  # the case stays covered: an item with no wiki page is wearable and gets a page, with no wiki credit
+    for key in [*keys[:: max(1, len(keys) // 300)], *strict, *unpaged]:
+        record = real.records[key]
+        page = view.item_page(record, defaults=real.table["defaults"], rules=real.rules, book=real.book, wiki=("A wiki page", 1) if view.has_wiki_page(record) else None)
         assert page.key == key and len(page.description) <= 240
+        assert (page.wiki_title is None) == (key in unpaged)
     assert strict or not after  # (the catalog after an accepted report has a strict page: the setup holds; the committed one may or may not have one, the day it has)

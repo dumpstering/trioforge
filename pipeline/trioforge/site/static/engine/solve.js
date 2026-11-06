@@ -65,7 +65,7 @@
 // stage need not sit at its best continuous values.
 
 import { CONSTANTS, evaluate, profileOf } from "./evaluate.js";
-import { buildMilpWithItems, compareText, ident, readOptions } from "./model.js";
+import { buildMilpWithItems, compareText, ident, LevelPrograms, readOptions } from "./model.js";
 import { LABEL_NO_INCUMBENT, LABEL_TIME_LIMIT } from "./protocol.js";
 import { SOLVER_OPTIONS, toModelData } from "./highs-data.js";
 
@@ -137,12 +137,15 @@ const COPIES_FOR_BOTH_HANDS = 2;
 const SETUP_SET = new Set(CONSTANTS.setups);
 const SESSION_KEYS = new Set(["highs", "profile", "setup", "buffset", "monkBins", "options", "now"]);
 const SESSION_OPTION_KEYS = new Set(["any_rule", "haste_assumed"]);
-const SOLVE_KEYS = new Set(["scenario", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start"]);
+const SOLVE_KEYS = new Set(["scenario", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "cutoff"]);
+const TRUTHFUL_KEYS = new Set(["name", "items", "options", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "bound", "needTime"]);
 /** The two stages of a solve, as the progress events name them. */
 const STAGE_SOLVE = "solve";
 const STAGE_TIE = "tie";
 /** The options of HiGHS that a call may not set: the budget is the time limit, and the build has one thread. */
 const REFUSED_HIGHS_OPTIONS = new Set(["time_limit", "threads"]);
+/** The largest number the solver takes for an option that is infinite by default (its options take no infinity), and treats as none: the value an option is put back to. */
+const LARGEST_OPTION = 1e300;
 
 // ---- small helpers -----------------------------------------------------------------------------------------------------------------------
 
@@ -574,6 +577,11 @@ export function setScenario(session, name, items, options = {}) {
   const built = session.now();
   const withBins = session.monkBins !== undefined && !Object.prototype.hasOwnProperty.call(options, "monk_bins") ? { ...options, monk_bins: session.monkBins } : options;
   const { model, eligible } = buildMilpWithItems(session.profile, items, session.setup, session.buffset, withBins);
+  return installScenario(session, name, items, { model, eligible }, built);
+}
+
+/** `setScenario` from a model that was built already (`built` is when its build began): the scenario's solver is brought to it. */
+function installScenario(session, name, items, { model, eligible }, built) {
   const byIdent = new Map(items.map((item) => [ident(item.key, item.tier), item]));
   const synced = session.now();
 
@@ -646,11 +654,13 @@ function applyHighsOptions(solver, given) {
       solver.options.set(name, value);
     }
   } catch (error) {
-    for (const [name, value] of before.reverse()) solver.options.set(name, value);
+    for (const [name, value] of before.reverse()) solver.options.set(name, typeof value === "number" && !Number.isFinite(value) ? Math.sign(value) * LARGEST_OPTION : value);
     throw fail(`the solver would not take the option: ${String(error.message).slice(0, MESSAGE_CHARS)}`);
   }
+  // (an option that was infinite, as objective_bound is, is put back as the largest number the solver takes: it takes no infinity and treats this as none)
+  const restored = (value) => (typeof value === "number" && !Number.isFinite(value) ? Math.sign(value) * LARGEST_OPTION : value);
   return () => {
-    for (const [name, value] of before.reverse()) solver.options.set(name, value);
+    for (const [name, value] of before.reverse()) solver.options.set(name, restored(value));
   };
 }
 
@@ -931,7 +941,8 @@ function tieStage(session, scenario, first, { deadline, highsOptions, onProgress
 
 /**
  * Solve a scenario of the session and value the answer exactly (see the head of this file). `request` is
- * `{scenario, budgetMs, deadline, canonical, start, highsOptions, onProgress}`: `scenario` the name given to `setScenario` (the last one set when omitted),
+ * `{scenario, budgetMs, deadline, canonical, start, highsOptions, onProgress, cutoff}`: `cutoff` (optional) a value of the model, the constant included, that a kit must reach:
+ * the first stage looks for none worth less and ends "infeasible" if there is none; `scenario` the name given to `setScenario` (the last one set when omitted),
  * `budgetMs` the whole time of the call (required: a number from 0), `deadline` a moment on the clock of the session by which the first stage must end
  * if that is earlier than the end of the budget, `start` a kit to begin from (`{kit, buffs}`, say an answer), `canonical` whether to run the tie stage
  * (default false), `highsOptions` single options of the solver for this call (a test hook: `mip_max_nodes`, say; never `threads` or `time_limit`),
@@ -945,7 +956,8 @@ export function solve(session, request) {
   for (const key of Object.keys(request)) {
     if (!SOLVE_KEYS.has(key)) throw fail(`the request has an option (${show(key)}) that solve does not read (it reads ${[...SOLVE_KEYS].join(", ")})`);
   }
-  const { budgetMs, deadline, canonical = false, highsOptions, onProgress, start: given } = request;
+  const { budgetMs, deadline, canonical = false, highsOptions, onProgress, start: given, cutoff } = request;
+  if (cutoff !== undefined && (typeof cutoff !== "number" || !Number.isFinite(cutoff))) throw fail("cutoff is a value of the model (the constant included) that a kit must reach, a number");
   if (typeof budgetMs !== "number" || !Number.isFinite(budgetMs) || budgetMs < 0) throw fail("budgetMs is the time of the call in milliseconds, a number from 0");
   if (deadline !== undefined && (typeof deadline !== "number" || !Number.isFinite(deadline))) throw fail("deadline is a moment on the clock of the session, in milliseconds");
   if (typeof canonical !== "boolean") throw fail("canonical is true or false");
@@ -972,7 +984,7 @@ export function solve(session, request) {
       : run(session, scenario.solver, scenario.model, {
           deadline: deadline === undefined ? startedAt + budgetMs : Math.min(startedAt + budgetMs, deadline),
           start: chosen.start,
-          highsOptions,
+          highsOptions: cutoff === undefined ? highsOptions : { ...highsOptions, objective_bound: -(cutoff - scenario.model.const) }, // (the first stage only; the program is a maximum and the solver minimizes the negative)
           onProgress,
           startedAt,
           stage: STAGE_SOLVE,
@@ -989,7 +1001,8 @@ export function solve(session, request) {
   if (canonical && found.status === "optimal" && scenario.solver === null) {
     answer.canonical = true;
     answer.tieStage = "applied";
-  } else if (canonical && found.status === "optimal") {
+  } else if (canonical && found.status === "optimal" && !(cutoff !== undefined && found.value !== undefined && found.value.modelF < cutoff)) {
+    // (with a cutoff, a kit worth less than it is what the solver came across, not the best there is: there is nothing to separate)
     const tied = session.now();
     const second = tieStage(session, scenario, found, { deadline: tied + budgetMs, highsOptions, onProgress, startedAt });
     const tieMs = session.now() - tied;
@@ -1012,4 +1025,290 @@ export function solve(session, request) {
   if (used.x !== null && used.value !== undefined) scenario.last = { epoch: scenario.epoch, x: Float64Array.from(used.x), wears: used.value.wears };
   answer.elapsedMs = session.now() - startedAt;
   return answer;
+}
+
+// ---- the truthful solve ---------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * The weapon term is paid the haste the kit really counts (`solve_scenario` in haste.py has the whole account). A program assumes one haste for the weapon index; the kit
+ * counts one of a few hastes (an active spell haste plus the best worn piece, or none, cut at the cap: `hasteLevels` of model.js lists them). For each level `H` the
+ * program is built with `haste_assumed` and `haste_floor` both `H` (the kit counts at least `H`), solved, and its kit valued again at the haste it counts; the best truthful
+ * value is the optimum. A kit whose assumed haste is the haste it counts goes before one that counts more, and among equals the lower level wins. The levels are solved
+ * best first (the level whose linear relaxation allows the most), and a level whose linear relaxation cannot reach the best value found is not solved, nor any after it. The program of a level is the scenario `<name>#<level>` of the
+ * session, and stays there between calls (the scenario of a path keeps its models). An option `haste_assumed` fixes one haste, as it always did: one program, no levels; a
+ * scenario that scores no weapon (no damage weight, or a setup that scores none) has one program too.
+ *
+ * `request` is `{name, items, options, budgetMs, deadline, canonical, start, highsOptions, onProgress, bound, needTime}`: the builder's pool and options as `setScenario`
+ * takes them, and what `solve` takes; `budgetMs` is the time of the whole call (with a `deadline`, the call ends by it, and the budget is what was left of it), `bound: false` solves every level, and `needTime: true` begins no solve when the time is gone by
+ * the moment the first model is made (the call then returns null, with the model made: a path that has spent its budget starts nothing). It returns the answer of `solve` for the winning level with
+ * `F`, `kit`, `buffs` and `breakdown` those of the winner at the haste it counts, `hasteAssumed` that haste, `level` the level whose program the kit came from, `levels`
+ * every level of the scenario, `program` the name of the scenario of the session that holds the program of the winner, `runs` what became of each (`{level, outcome: "solved" | "bound" | "infeasible" | "time", status, F, counted, bound}`), `nodes` the nodes of every
+ * solve added up, `timings` the milliseconds of the solves added up, `build` what `setScenario` said, added up (`{buildMs, syncMs, reused, columns, rows}`), and
+ * `status`/`label`/`proven` those of the whole: `optimal` when every level that was solved ended optimal and none was left for want of time.
+ */
+export function solveScenario(session, request) {
+  openSession(session);
+  if (!isRecord(request)) throw fail("solveScenario takes a request: {name, items, options, budgetMs, canonical}");
+  for (const key of Object.keys(request)) {
+    if (!TRUTHFUL_KEYS.has(key)) throw fail(`the request has an option (${show(key)}) that solveScenario does not read (it reads ${[...TRUTHFUL_KEYS].join(", ")})`);
+  }
+  const { name, items, budgetMs, deadline, canonical = false, start, highsOptions, onProgress, bound = true, needTime = false } = request;
+  const options = request.options === undefined || request.options === null ? {} : request.options;
+  if (typeof budgetMs !== "number" || !Number.isFinite(budgetMs) || budgetMs < 0) throw fail("budgetMs is the time of the call in milliseconds, a number from 0");
+  if (typeof bound !== "boolean") throw fail("bound is true or false");
+  if (typeof needTime !== "boolean") throw fail("needTime is true or false");
+  if (!isRecord(options)) throw fail("the options are an object, the builder's");
+  const opts = readOptions(options);
+  if (opts.hasteFloor !== null && opts.hasteAssumed === null) throw fail("haste_floor without haste_assumed: the levels set both");
+  // the call ends by its deadline if it has one (the budget is then what was left of it when the call was made), else `budgetMs` from now: one look at the clock, and none if there is a deadline
+  const callEnd = deadline !== undefined ? deadline : session.now() + budgetMs;
+  const left = () => Math.max(0, callEnd - session.now());
+  const call = { deadline, canonical, highsOptions, onProgress };
+  const finish = (answer, more) => Object.assign(answer, more);
+  const profile = profileOf(session.profile);
+  const scoresWeapons = session.setup !== null && session.setup !== "stick" && profile.weights.DMG.sign() !== 0;
+
+  // one program: a fixed haste, or no weapon to score
+  if (opts.hasteAssumed !== null || !scoresWeapons) {
+    const fixed = opts.hasteAssumed !== null;
+    const program = solveProgram(session, name, items, fixed ? options : { ...options, haste_assumed: 0 }, null, { left, call, start, needTime });
+    if (program === null) return null;
+    const { build, answer } = program;
+    if (!fixed && answer.kit !== null) {
+      // no weapon is scored, so the value is the same at any haste: the answer says the haste the kit counts
+      const counted = Number(answer.breakdown.totals.haste.counted.floor());
+      const again = evaluateAt(session, answer.kit, answer.buffs, counted);
+      answer.F = again.F;
+      answer.breakdown = again.breakdown;
+      answer.hasteAssumed = counted;
+    }
+    const level = answer.hasteAssumed;
+    return finish(answer, { build, level, levels: [level], program: name, runs: [{ level, outcome: "solved", status: answer.status, F: answer.F, counted: null, bound: null }] });
+  }
+
+  const withBins = session.monkBins !== undefined && !Object.prototype.hasOwnProperty.call(options, "monk_bins") ? { ...options, monk_bins: session.monkBins } : options;
+  const build = { buildMs: 0, syncMs: 0, reused: true, columns: 0, rows: 0 };
+  // (the build is timed on the real clock: the session's clock is looked at for the budget, and a look is a look)
+  const sharedAt = performance.now();
+  const shared = new LevelPrograms(session.profile, items, session.setup, session.buffset, withBins); // the programs of the levels share one build
+  const levels = shared.levels;
+  build.buildMs += performance.now() - sharedAt;
+  const runs = [];
+  const timings = { solveMs: 0, tieMs: 0 };
+  let won = null;
+  let nodes = 0;
+  let stopped = false;
+  let last = null;
+  let begun = false; // a program of the call has been solved
+  // the program of each level, with the best value its relaxation allows; with the bound they are solved best first (and the levels below the best value found are left
+  // out), else from the highest level down
+  const programs = [];
+  const bounds = bound && levels.length > 1 ? levelBounds(session, shared, callEnd) : null;
+  try {
+    for (const level of [...levels].reverse()) {
+      const scenarioName = programName(name, level);
+      let ceiling;
+      if (bounds !== null) {
+        ceiling = bounds.of(level);
+        if (ceiling === null) {
+          runs.push({ level, outcome: "infeasible", status: null, F: null, counted: null, bound: null });
+          continue;
+        }
+      }
+      programs.push({ level, scenarioName, ceiling });
+    }
+  } finally {
+    if (bounds !== null) bounds.close();
+  }
+  if (bound && levels.length > 1) programs.sort((a, b) => (b.ceiling ?? Infinity) - (a.ceiling ?? Infinity) || b.level - a.level);
+  for (const { level, scenarioName, ceiling } of programs) {
+    if (won !== null && ceiling !== undefined) {
+      const best = won.answer.F.toNumber();
+      if (ceiling < best - EXACTNESS_TOLERANCE * Math.max(1, Math.abs(best))) {
+        runs.push({ level, outcome: "bound", status: null, F: null, counted: null, bound: ceiling });
+        continue; // (a level the bound rules out is finished, whatever the time)
+      }
+    }
+    const modelAt = performance.now();
+    const model = shared.programFor(level);
+    build.buildMs += performance.now() - modelAt;
+    const made = installScenario(session, scenarioName, items, { model, eligible: shared.eligible }, session.now()); // (only a level the bound does not rule out has a scenario)
+    if (won !== null && left() <= 0) {
+      // the time is gone: the levels that could still win are not looked at
+      runs.push({ level, outcome: "time", status: null, F: null, counted: null, bound: ceiling ?? null });
+      stopped = true;
+      continue;
+    }
+    const started = won !== null ? { kit: won.answer.kit, buffs: won.answer.buffs } : start;
+    // a level is only worth looking for a kit of at least the best value found: the search is told so (a level that has none ends "infeasible", and is "bound")
+    let cutoff;
+    if (bound && won !== null && !stopped) {
+      const best = won.answer.F.toNumber();
+      cutoff = best - EXACTNESS_TOLERANCE * Math.max(1, Math.abs(best));
+    }
+    const solved = solveProgram(session, scenarioName, items, null, made, { left, call, start: started, needTime: needTime && !begun, cutoff });
+    if (solved === null) return null;
+    begun = true;
+    addBuild(build, solved.build);
+    const answer = solved.answer;
+    timings.solveMs += answer.timings.solveMs;
+    timings.tieMs += answer.timings.tieMs;
+    if (answer.status === "infeasible" || (cutoff !== undefined && answer.status === "optimal" && (answer.kit === null || answer.modelF < cutoff))) {
+      // (with a cutoff, a kit worth less than it is what the solver came across, not the level's best: the level cannot win)
+      runs.push({ level, outcome: cutoff === undefined ? "infeasible" : "bound", status: answer.status, F: null, counted: null, bound: ceiling ?? null });
+      continue;
+    }
+    last = { answer, level };
+    nodes += answer.nodes ?? 0;
+    if (answer.status !== "optimal") stopped = true;
+    if (answer.kit === null) {
+      runs.push({ level, outcome: "solved", status: answer.status, F: null, counted: null, bound: ceiling ?? null });
+      continue;
+    }
+    const counted = Number(answer.breakdown.totals.haste.counted.floor());
+    const consistent = counted === level;
+    let candidate = answer;
+    if (!consistent) {
+      const again = evaluateAt(session, answer.kit, answer.buffs, counted);
+      candidate = { ...answer, F: again.F, breakdown: again.breakdown, hasteAssumed: counted };
+    }
+    runs.push({ level, outcome: "solved", status: answer.status, F: candidate.F, counted, bound: ceiling ?? null });
+    // the larger value wins, then the kit that counts what its program assumed, then the lower level
+    const order = won === null ? 1 : candidate.F.compare(won.answer.F) || Number(consistent) - Number(won.consistent) || won.level - level;
+    if (order > 0) won = { answer: candidate, level, consistent };
+  }
+  if (won === null) {
+    if (last === null) {
+      // no level has a kit: the answer is that there is none, at the highest level (its program is the first the call made)
+      const top = levels[levels.length - 1];
+      return finish(infeasibleAnswer(top), { build, level: top, levels, program: programName(name, top), runs, nodes, timings });
+    }
+    // one level stopped on its time with no kit and the others had none: the answer says the time ran out (and which level it is of)
+    const status = stopped ? "time_limit" : last.answer.status;
+    const label = status !== "time_limit" ? null : last.answer.kit === null ? LABEL_NO_INCUMBENT : LABEL_TIME_LIMIT;
+    return finish(last.answer, { status, label, proven: status !== "time_limit", build, level: last.level, levels, program: programName(name, last.level), runs, nodes, timings });
+  }
+  const winner = won.answer;
+  const status = stopped ? "time_limit" : winner.status;
+  const label = status !== "time_limit" ? null : winner.kit === null ? LABEL_NO_INCUMBENT : LABEL_TIME_LIMIT;
+  return finish(winner, { status, label, proven: status !== "time_limit", nodes, timings, build, level: won.level, levels, program: programName(name, won.level), runs });
+}
+
+/** The name of the scenario that holds the program of a haste level of the scenario `name` (`solveScenario`). */
+export const programName = (name, level) => `${name}#${level}`;
+
+/** The names of the scenarios of the session that `solveScenario` made for `name`: the program of each level it looked at (a call with one program, fixed or alone, made `name` itself). */
+export function programsOf(session, name) {
+  openSession(session);
+  return [...session.scenarios.keys()].filter((key) => key === name || key.startsWith(`${name}#`));
+}
+
+/** The answer of a call with no kit at all: nothing satisfies the rows of any level. */
+function infeasibleAnswer(level) {
+  return {
+    status: "infeasible", label: null, proven: true, F: null, kit: null, buffs: [], breakdown: null, modelF: null, gap: null, nodes: 0, bound: null,
+    canonical: false, tieStage: null, hasteAssumed: level, highsStatus: "none", limitMs: 0, start: null, timings: { solveMs: 0, tieMs: 0 },
+  };
+}
+
+/** The kit valued exactly at an assumed haste, under the session's profile, setup and buff set. */
+function evaluateAt(session, kit, buffs, haste) {
+  return evaluate(session.profile, kit, session.buffset === null ? null : buffs, {
+    setup: session.setup,
+    hasteAssumed: haste,
+    monkBins: session.monkBins,
+    buffset: session.buffset ?? undefined,
+  });
+}
+
+/** Add what `setScenario` said about a program to the account of the call. */
+function addBuild(total, made) {
+  total.buildMs += made.buildMs;
+  total.syncMs += made.syncMs;
+  total.reused = total.reused && made.reused;
+  total.columns = made.columns;
+  total.rows = made.rows;
+}
+
+/** `setScenario` (unless the program was just made, for its relaxation) and `solve` of one program, as `{build, answer}`; null when `needTime` and the time was gone once the model was made. */
+function solveProgram(session, scenarioName, items, options, made, { left, call, start, needTime, cutoff }) {
+  const build = made ?? setScenario(session, scenarioName, items, options);
+  const remaining = left(); // one look at the clock: what is found to be left is what is handed over
+  if (needTime && remaining <= 0) return null;
+  const answer = solve(session, {
+    scenario: scenarioName,
+    budgetMs: remaining,
+    deadline: call.deadline,
+    canonical: call.canonical,
+    highsOptions: call.highsOptions,
+    onProgress: call.onProgress,
+    start,
+    ...(cutoff === undefined ? {} : { cutoff }),
+  });
+  return { build, answer };
+}
+
+/**
+ * The best value of the program of a level with its integer columns relaxed (an upper bound of its optimum, the constant included), for the levels of one call, from one solver that is
+ * changed from level to level (the objective and the rows of the level) so that the basis of a level starts the next. `of(level)` is a number; null when no point satisfies the rows;
+ * undefined when there is no bound (the solver did not get to the end by `callEnd`, or went wrong, or the program has no column). `close()` disposes of the solver.
+ */
+function levelBounds(session, shared, callEnd) {
+  const { base } = shared;
+  const columns = base.c.length;
+  const baseRows = base.row_lb.length;
+  const { highs } = session;
+  const orInfinite = (value, sign) => (value === null ? sign * highs.infinity : value);
+  let solver = null;
+  let appended = 0; // the rows of the last level, after the rows of the level-free model
+  let broken = columns === 0; // a solve that did not end: no more bounds from this solver (the levels are solved, never left out)
+  return {
+    /** The bound of `level`: a number, null for a proof that no point satisfies the rows, undefined for no bound. */
+    of(level) {
+      if (broken) return undefined;
+      const { c, rows } = shared.parts(level);
+      try {
+        if (solver === null) solver = createSolver(session, { ...base, integrality: base.integrality.map(() => 0) });
+        if (appended > 0) solver.deleteRows({ kind: "range", from: baseRows, to: baseRows + appended - 1 });
+        appended = 0;
+        if (rows.count > 0) {
+          solver.addRows({
+            lower: Float64Array.from(rows.lb, (value) => orInfinite(value, -1)),
+            upper: Float64Array.from(rows.ub, (value) => orInfinite(value, 1)),
+            matrix: { format: "csr", numRows: rows.count, numCols: columns, starts: Int32Array.from(rows.start), indices: Int32Array.from(rows.index), values: Float64Array.from(rows.value) },
+          });
+          appended = rows.count;
+        }
+        solver.changeColsCost({ kind: "range", from: 0, to: columns - 1 }, Float64Array.from(c));
+        // (the solver is not cleared between levels: the basis of one level starts the next)
+        solver.options.set("time_limit", Math.max(0, callEnd - session.now()) / MS_PER_SECOND);
+        solver.zeroAllClocks();
+        const code = solver.run().modelStatus;
+        const states = highs.constants.modelStatus;
+        if (code === states.infeasible) return null; // (only a proof of infeasibility drops a level)
+        const sol = code === states.optimal ? solver.getSolution().colValue : null;
+        if (sol === null) {
+          broken = true;
+          return undefined;
+        }
+        let value = base.const;
+        for (let column = 0; column < columns; column += 1) {
+          if (!Number.isFinite(sol[column])) {
+            broken = true;
+            return undefined;
+          }
+          value += c[column] * sol[column];
+        }
+        return value;
+      } catch (error) {
+        broken = true; // unbounded, numeric trouble: no bound, and the level is solved
+        if (error instanceof SolverFault || error instanceof SolveError || (isRecord(highs.errors) && typeof highs.errors.HighsError === "function" && error instanceof highs.errors.HighsError)) return undefined;
+        throw error;
+      }
+    },
+    close() {
+      if (solver !== null) solver.dispose();
+      solver = null;
+    },
+  };
 }

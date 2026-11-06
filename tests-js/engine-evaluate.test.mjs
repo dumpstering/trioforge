@@ -260,10 +260,52 @@ describe("one test per term", () => {
     for (const total of texts(200, 201, 202)) expect(totalsOf(cases, "STR").has(total), total).toBe(true);
   });
 
-  it("knee 255: the stat knee (STA for HP, DEX past a tenth of a point) and the third band of WIS and INT", () => {
+  it("knee 255: the stat knee (STA for HP, DEX past a tenth of a point); the WIS and INT curve does not bend there", () => {
     const cases = exactly("knee-255");
     for (const total of texts(254, 255, 256)) {
       for (const name of ["STA", "DEX", "WIS", "INT"]) expect(totalsOf(cases, name).has(total), `${name} ${total}`).toBe(true);
+    }
+  });
+
+  it("two WIS pools: the mana curve runs at one slope from 200 to 510, 10 more WIS at 270 is 12.5 converted points in each pool", () => {
+    const cases = exactly("mana-wis-curve");
+    const pools = new Map(cases.map((stored) => [stored.breakdown.totals.attributes.WIS, Rational.parse(stored.breakdown.totals.pools.MANA)]));
+    // 2 pools x factor 4.5 x 12.5 converted points; the game's window floors each pool (437 and 450), which Python's stat_window pins at 118
+    expect(pools.get("280/1").sub(pools.get("270/1")).toString()).toBe("225/2");
+    expect(pools.get("255/1").sub(pools.get("200/1")).toString()).toBe("2475/4");
+    expect(pools.get("510/1").sub(pools.get("255/1")).toString()).toBe("11475/4");
+  });
+
+  it("Natural Durability: the percent of the rank is in the factor of the HP pools, STA past the knee and the cap, and the flat HP is not scaled", () => {
+    const cases = exactly("natural-durability");
+    const ranks = BUNDLE.constants.aa.natural_durability_pct; // rank -> "p/1", from rules.json hp.natural_durability_pct
+    expect(Object.keys(ranks)).toEqual(["1", "2", "3", "4"]);
+    expect(Object.values(ranks)).toEqual(texts(2, 5, 10, 12));
+    const percents = new Set(cases.map((stored) => termProfiles[stored.profile].nd_pct));
+    expect([...percents].sort((a, b) => a - b)).toEqual([0, 2, 5, 10, 12]);
+    const rankOf = (profile) => String(profile.aa.natural_durability);
+    for (const stored of cases) {
+      const profile = termProfiles[stored.profile];
+      expect(profile.nd_pct, stored.id).toBe(profile.aa.natural_durability === 0 ? 0 : Number(ranks[rankOf(profile)].split("/")[0]));
+    }
+    // the pools of rank 4 are the pools of rank 0 with the factor of each HP pool times 112/100 (the base and the constant 5 are not scaled)
+    const melee = (rank) => TERMS.profiles.find((profile) => profile.aa.natural_durability === rank && profile.trio.join() === "WAR,ROG,BER" && profile.pools.HP.length === 3);
+    const [plain, scaled] = [melee(0), melee(4)];
+    plain.pools.HP.forEach((pool, index) => {
+      expect(scaled.pools.HP[index].base).toBe(pool.base);
+      expect(Rational.fromNumber(scaled.pools.HP[index].fac).equals(Rational.fromNumber(pool.fac).mul(new Rational(112n, 100n)))).toBe(true);
+    });
+    expect(scaled.pools.MANA).toEqual(plain.pools.MANA);
+    expect(scaled.pools.END).toEqual(plain.pools.END);
+    // the flat HP of an item is not scaled: the case's kit with and without its flat-HP item differs by exactly that HP, at every rank
+    for (const stored of cases.filter((c) => c.kit.length === 2)) {
+      const flat = stored.kit.find(([, item]) => item.key === "itnd-hp")[1].stats.HP;
+      const bare = stored.kit.filter(([, item]) => item.key !== "itnd-hp");
+      const kit = new Array(PLACES).fill(null);
+      for (const [index, item] of bare) kit[index] = frozen(item);
+      const without = termValue(stored, { kit });
+      const withFlat = termValue(stored);
+      expect(withFlat.breakdown.totals.pools.HP.sub(without.breakdown.totals.pools.HP).equals(new Rational(BigInt(flat))), stored.id).toBe(true);
     }
   });
 
@@ -528,7 +570,7 @@ function constantsTests(bundles) {
       for (const name of NAMES) {
         expect(exported.has(name), `${label}: ${name}`).toBe(true);
         let want = exported.get(name);
-        if (name === "weaponIndex") want = { bonusOneHanded: want.bonus_one_handed, bonusTwoHanded: want.bonus_two_handed };
+        if (name === "weaponIndex") want = { bonusOneHanded: want.bonus_one_handed, bonusTwoHanded: want.bonus_two_handed, bonusTwoHandedDelayCap: want.bonus_two_handed_delay_cap };
         if (name === "sheet") want = { itemMult: want.item_mult, defenseDiv: want.defense_div, spellAcDiv: want.spell_ac_div, agiDiv: want.agi_div };
         expect(JSON.stringify(CONSTANTS[name]), `${label}: ${name}`).toBe(JSON.stringify(want));
       }
@@ -899,7 +941,7 @@ describe("malformed input", () => {
       ["the breaks of the bands", (p) => { p.bands.breaks = withHole(p.bands.breaks, 1); }, /bands\.breaks\[1\].*hole/],
       ["the breaks of the bands, the first", (p) => { p.bands.breaks = withHole(p.bands.breaks, 0); }, /bands\.breaks\[0\].*hole/],
       ["the slopes of the bands", (p) => { p.bands.slopes = withHole(p.bands.slopes, 2); }, /bands\.slopes\[2\].*hole/],
-      ["the slopes of the bands, the last", (p) => { p.bands.slopes = withHole(p.bands.slopes, 4); }, /bands\.slopes\[4\].*hole/],
+      ["the slopes of the bands, the last", (p) => { p.bands.slopes = withHole(p.bands.slopes, 3); }, /bands\.slopes\[3\].*hole/],
       ["the HP pools", (p) => { p.pools.HP = withHole(p.pools.HP, 0); }, /pools\.HP\[0\].*hole/],
       ["the HP pools, the last", (p) => { p.pools.HP = withHole(p.pools.HP, p.pools.HP.length - 1); }, /pools\.HP\[\d\].*hole/],
       ["the mana pools", (p) => { p.pools.MANA = withHole(p.pools.MANA, 1); }, /pools\.MANA\[1\].*hole/],
@@ -1137,6 +1179,7 @@ describe("input broken at random", () => {
         for (const key of target.slice(0, -1)) parent = parent[key];
         const key = target[target.length - 1];
         const junk = pick(JUNK);
+        if (Object.isFrozen(parent)) continue; // (an earlier change of the round put a frozen object, a Rational, in the input: there is nothing to write into)
         if (junk === undefined && !Array.isArray(parent)) delete parent[key];
         else parent[key] = junk;
         where.push(`${target.join(".")} = ${typeof junk === "symbol" ? "a symbol" : typeof junk === "function" ? "a function" : String(junk)}`);

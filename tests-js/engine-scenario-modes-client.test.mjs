@@ -608,11 +608,10 @@ describe("the watchdog and the checks, with a scripted worker", () => {
     });
   }
 
-  it("drops a worker whose step breaks the path: a gain that is not the difference of the values, a kit with what nobody acquired, a haste that changed, a step after the last", async () => {
+  it("drops a worker whose step breaks the path: a gain that is not the difference of the values, a kit with what nobody acquired, a step after the last", async () => {
     const breaks = [
       (id) => stepOne(id, { gain: "29/1", gainValue: 29 }),
       (id) => stepOne(id, { kit: wear([0, "w90001@4"], [1, "w90009@4"], [2, "w90007@4"], [3, "w90007@4"], [4, "w55555@4"], [21, "w80113@0"]) }),
-      (id) => stepOne(id, { hasteAssumed: 41 }),
       (id) => stepOne(id, { ident: "w90003@4" }),
       (id) => stepOne(id, { kind: "upgrade", sourceTier: 0, cost: { exp: 15, copiesAtArrival: 1, potentials: 4 } }),
     ];

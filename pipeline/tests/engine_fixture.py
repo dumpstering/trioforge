@@ -12,7 +12,7 @@ catalog file).
   writes them beside the shards (``trioforge.precompute.shards`` has the format);
 * ``fixtures/site/equip-now.json``: three Equip now scenarios (a race, a role, a buff set, an evidence level, a weapon setup, a deity
   or none, and an owned set), each with the answer that Python's reference gives (:func:`trioforge.upgrade.equip_now`, with the tie
-  stage): the exact value as a reduced ``p/q``, the kit place for place, the chosen buffs and the assumed haste. The browser tests
+  stage): the exact value as a reduced ``p/q``, the kit place for place, the chosen buffs and the haste the kit counts (the weapon index is taken at it). The browser tests
   (``tests-js/engine-scenario.test.mjs``, ``tests-e2e/engine.spec.mjs``) hold the engine to them. The owned sets are chosen so that the
   best kit is the same with and without the tie stage, which the browser's answer does not have.
 * ``fixtures/site/best-kit.json``: views of the whole pool (the best-kit mode of the worker), each with a tier and weights as the request
@@ -22,17 +22,16 @@ catalog file).
   weights, so that a test can see that the weights moved the kit or its value. The best kit is the same with and without the tie stage.
 * ``fixtures/site/kit-values.json``: the value of each of those kits under every role and buff set of the bundle in which the kit is still the best arrangement of its own
   items (:func:`kit_values`), as Python's reference works it out: the kit's own items are the whole pool (``upgrade.equip_now`` with the kit as the owned set), so the answer is the
-  best value of that kit with the best buffs, the weapon setup is the one the kit was made for, and the haste the weapon index assumes is the reference's own rule for that pool
-  (``upgrade.session_haste``). The browser tests hold the page's evaluator for a shared kit (``static/engine/kitvalue.js``) to these numbers exactly.
+  best value of that kit with the best buffs, the weapon setup is the one the kit was made for, and the weapon index is taken at the haste the kit counts under the buffs
+  chosen (the truthful solve of ``trioforge.solver.haste``). The browser tests hold the page's evaluator for a shared kit (``static/engine/kitvalue.js``) to these numbers exactly.
 * ``fixtures/site/weighted.json``: the four Upgrade modes under weights. Each Equip now scenario above is given weights drawn from a fixed seed
   (:func:`draw_weights`: ``"trioforge-weights:<scenario>:<draw>"``, a function of its text alone; a draw whose answers depend on the tie stage is skipped, and
   the one after it is looked at), and a tier mode (ready4, arrives, fixed), and carries what Python's reference gives for a profile whose weights are
-  :func:`trioforge.model.roles.weights_override`'s: Equip now (``upgrade.equip_now``), a farm path of three steps (``upgrade.farm_path``, with its start: Equip now
-  at the haste of the session), the best 2 and 3 sets (``upgrade.best_sets``) and Every slot (``upgrade.every_slot``) from the kit of Equip now. The candidates are those of
+  :func:`trioforge.model.roles.weights_override`'s: Equip now (``upgrade.equip_now``), a farm path of three steps (``upgrade.farm_path``, with its start: Equip now), the best 2 and 3 sets (``upgrade.best_sets``) and Every slot (``upgrade.every_slot``) from the kit of Equip now. The candidates are those of
   the worker: the items of the evidence level that the precompute offers (:func:`trioforge.precompute.grid.select_items`, deity-locked ones too), each at the tier of the tier mode.
-  The haste assumed is the model's rule (``upgrade.session_haste``), whatever the weights. The browser tests hold the worker to every number of it.
+  Every value is that of the kit at the haste it counts, whatever the weights; each answer says it. The browser tests hold the worker to every number of it.
 * ``fixtures/site/weapon-rate.json``: best kits of whole-pool views at the weapon tier rate 5 and 10 percent (``at_tier(weapon_pct=)``), and with no rate (``rules``: the rule
-  ``tier.weapon_damage_pct``, 5), as the best-kit answers are made. At +0 no weapon has grown and the two rates give one answer.
+  ``tier.weapon_damage_pct``, 10), as the best-kit answers are made. At +0 no weapon has grown and the two rates give one answer.
 
 ``test_site_engine_fixture.py`` makes them again and fails when a committed file differs. After a change to the exporter, the rules or
 the invented items, write them again with::
@@ -85,7 +84,7 @@ ITEMS: dict[str, dict[str, Any]] = {
     "w8091": {"stats": {"AC": 16, "STA": 9, "HP": 45}, "weight": 3.0},
     "w80923": {"stats": {"WIS": 10, "MANA": 40}, "weight": 2.0, "weapon": ("1H Piercing", 15, 22, None)},
     "w80974": {"stats": {"WIS": 8, "MANA": 30, "HP": 20}, "weight": 0.5},
-    "w80988": {"stats": {"STR": 10, "ATK": 14}, "sv": {"FIRE": 10}, "weight": 3.5, "weapon": ("1H Slashing", 18, 26, None)},
+    "w80988": {"stats": {"STR": 10, "ATK": 14}, "sv": {"FIRE": 10}, "weight": 3.5, "weapon": ("1H Slashing", 16, 24, None)},
     "w90001": {"stats": {"AC": 30, "STA": 12, "HP": 60}, "weight": 4.0},
     "w90002": {"stats": {"AC": 22, "STR": 8}, "weight": 3.0},
     "w90003": {"stats": {"AC": 34, "STA": 16, "HP": 70}, "weight": 4.5},
@@ -324,6 +323,11 @@ def _owned(world: Any, idents: Any) -> dict[Any, int]:
     return owned
 
 
+def _counted_haste(solution: Any) -> int:
+    """The haste percent the kit of a solution counts, which is the haste its value assumes (the truthful solve)."""
+    return int(solution.breakdown.totals["haste"]["counted"])
+
+
 def answers() -> dict[str, Any]:
     """The Equip now scenarios with Python's answers: the reference run on the owned set, with the tie stage."""
     from trioforge import upgrade
@@ -350,7 +354,7 @@ def answers() -> dict[str, Any]:
                 "value": float(value),
                 "kit": [None if item is None else f"{item.key}@{item.tier}" for item in solution.kit],
                 "buffs": list(solution.buffs),
-                "hasteAssumed": upgrade.session_haste(profile, owned, (), scenario["setup"], world.buffsets[scenario["buffs"]]),
+                "hasteAssumed": _counted_haste(solution),
             }
         )
     return {"trio": SLUG, "level": LEVEL, "cases": out}
@@ -376,7 +380,7 @@ def kit_values() -> dict[str, Any]:
     """The value of each Equip now kit under each role and buff set of the bundle in which it is still the best arrangement of its own items (see the header).
 
     A view is kept when Python's best kit from the kit's own items, with the tie stage, wears the same items in the same groups of places: then the value of the best kit is the
-    value of the kit, with the best buffs of the view. The setup is the one the kit was made for (it is the kit's hands), and the assumed haste is the reference's own for that pool.
+    value of the kit, with the best buffs of the view. The setup is the one the kit was made for (it is the kit's hands), and the weapon index is taken at the haste the kit counts.
     """
     from collections import Counter
 
@@ -415,7 +419,7 @@ def kit_values() -> dict[str, Any]:
                         "buffs": buffs,
                         "F": f"{value.numerator}/{value.denominator}",
                         "value": float(value),
-                        "hasteAssumed": upgrade.session_haste(profile, owned, (), scenario["setup"], world.buffsets[buffs]),
+                        "hasteAssumed": _counted_haste(solution),
                     }
                 )
     for index, kit in enumerate(kits):
@@ -523,7 +527,8 @@ def _best_kit_row(
     from trioforge.model import formulas as fm
     from trioforge.model import items as item_module
     from trioforge.solver import solve as solver_solve
-    from trioforge.solver.model import BuildOptions, build_milp, eval_buff_totals
+    from trioforge.solver.haste import solve_scenario
+    from trioforge.solver.model import BuildOptions, eval_buff_totals
     from trioforge.solver.prune import prune
 
     options = BuildOptions()
@@ -537,10 +542,10 @@ def _best_kit_row(
     profile = _composed(_profile(world, scenario), weights)  # (the profile is checked against what the browser's bundle assembles)
     pool = [item_module.at_tier(item, tier, world.rules, weapon_pct=weapon_pct) for item in chosen]
     pruned = prune(pool, profile, tier, scenario["setup"], buffset, options)
-    milp = build_milp(profile, pruned, scenario["setup"], buffset, options)
-    solution = solver_solve.solve_canonical(milp)
+    found = solve_scenario(profile, pruned, scenario["setup"], buffset, options)
+    milp, solution = found.milp, found.solution
     assert solution.status == "optimal" and solution.kit is not None
-    plain = solver_solve.solve(milp)
+    plain = solve_scenario(profile, pruned, scenario["setup"], buffset, options, solver=solver_solve.solve).solution
     assert [i and (i.key, i.tier) for i in plain.kit] == [i and (i.key, i.tier) for i in solution.kit] and plain.buffs == solution.buffs, (
         "the best kit depends on the tie stage"
     )  # fmt: skip
@@ -680,7 +685,6 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
     """The answers of Python's reference for one scenario of ``CASES`` under ``weights`` and a tier mode (see the head of this file): every solve is made with the tie
     stage and again without it, and an answer that differs is an :class:`_Unsteady` (the browser has no tie stage)."""
     from trioforge import upgrade
-    from trioforge.solver.model import BuildOptions
 
     scenario = base["scenario"]
     setup, buffset = scenario["setup"], world.buffsets[scenario["buffs"]]
@@ -698,8 +702,7 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
     equip = both(lambda canonical: upgrade.equip_now(profile, owned, setup, buffset, canonical=canonical))
     if equip.breakdown.F == upgrade.equip_now(own_profile, owned, setup, buffset, canonical=False).breakdown.F:
         raise _Unsteady
-    haste = upgrade.session_haste(profile, owned, offered, setup, buffset)
-    start = both(lambda canonical: upgrade.equip_now(profile, owned, setup, buffset, BuildOptions(haste_assumed=haste), canonical=canonical))
+    start = equip  # (the path starts from Equip now)
     path = upgrade.farm_path(profile, owned, offered, setup, buffset, PATH_STEPS, canonical=True)
     plain = upgrade.farm_path(profile, owned, offered, setup, buffset, PATH_STEPS, canonical=False)
     if [(s.item, s.kind, s.source_tier, s.F, _kit_idents(s.solution.kit), s.solution.buffs) for s in path] != [
@@ -740,11 +743,10 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
             "value": float(equip.breakdown.F),
             "kit": _kit_idents(equip.kit),
             "buffs": list(equip.buffs),
-            "hasteAssumed": upgrade.session_haste(profile, owned, (), setup, buffset),
+            "hasteAssumed": _counted_haste(equip),
         },
         "farmPath": {
             "steps": PATH_STEPS,
-            "hasteAssumed": haste,
             "start": {"F": _exact_text(start.breakdown.F), "value": float(start.breakdown.F), "kit": _kit_idents(start.kit), "buffs": list(start.buffs)},
             "path": [
                 {
@@ -757,6 +759,7 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
                     "gainValue": float(step.gain),
                     "kit": _kit_idents(step.solution.kit),
                     "buffs": list(step.solution.buffs),
+                    "hasteAssumed": step.haste_assumed,
                 }
                 for step in path
             ],

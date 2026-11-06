@@ -48,10 +48,13 @@ The functions
   while the visitor owns more of it than the kit wears in its other places (see :func:`every_slot`). A swap that cannot be made
   without moving another item (a two-hander over a worn off hand) is not offered.
 
-**The assumed haste is fixed for the session.** The weapon index is taken at an assumed haste, a constant of the scenario.
-:func:`session_haste` computes it once from the owned items and all the candidates together, and every function uses that
-one number, so the value of a kit never changes between Equip now and a step: a step's gain is never a revaluation of the
-kit it started from. Pass the caller's ``options`` with ``haste_assumed`` set to fix it from outside.
+**The weapon index is taken at the haste the kit counts.** Every solve is the truthful one of
+:func:`trioforge.solver.haste.solve_scenario`: the kit is valued at the spell haste it takes and the worn haste it wears, and
+the optimum is the best of those values, so the value of a kit is a function of the kit alone and never changes between Equip
+now and a step: a step's gain is never a revaluation of the kit it started from. Every slot values each swap the same way, at
+the haste the swapped kit counts (a haste item swapped in or out changes what the weapons are worth). Pass the caller's
+``options`` with ``haste_assumed`` set to fix one haste for the whole session instead (:func:`session_haste` then returns
+it, and every function values every kit at it, as before).
 
 **Pruning** (:func:`trioforge.solver.prune.prune`, owned-aware): each step prunes its own pool, because what is owned and
 which candidates are upgrades changes from step to step. Owned items are never pruned. It changes no value (``prune_pool=False``
@@ -72,8 +75,9 @@ from trioforge.model import weapons as wp
 from trioforge.model.buffs import BuffSet
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, ItemVec, at_tier
 from trioforge.model.tiers import arrival_tier, cost_to_reach, tier_for_mode
-from trioforge.solver.model import BuildOptions, build_milp, eval_buff_totals, ident
-from trioforge.solver.prune import fit_groups, prune
+from trioforge.solver.haste import solve_scenario
+from trioforge.solver.model import BuildOptions, eval_buff_totals, ident
+from trioforge.solver.prune import prune
 from trioforge.solver.solve import Solution, solve, solve_canonical
 
 __all__ = [
@@ -122,7 +126,8 @@ class Step:
 
     ``F`` is the exact value of ``solution.kit`` and ``gain`` is ``F`` minus the value before the step (an exact fraction, so
     the gains add up to the difference of the values). ``owned`` is the owned set after the step as sorted
-    ``(ident, count)`` pairs and ``haste_assumed`` the session's assumed haste."""
+    ``(ident, count)`` pairs and ``haste_assumed`` the haste the value of the step assumes (the haste its kit counts, or
+    the one haste the options fix)."""
 
     index: int
     item: ItemVec
@@ -251,32 +256,29 @@ class _Usable:
 def session_haste(
     profile: Any, owned: Mapping[ItemVec, int], candidates: Iterable[ItemVec], setup: str | None,
     buffset: BuffSet | None = None, options: BuildOptions | None = None,
-) -> int:
-    """The haste percent the weapon index assumes for a whole session: ``options.haste_assumed`` when the caller gave one,
-    else the best spell haste on offer plus the best worn haste of the owned items and the candidates together (those the
-    profile can use and that fit a place), up to the cap: the number the builder would assume for that whole pool."""
-    opts = BuildOptions() if options is None else options
-    if opts.haste_assumed is not None:
-        return opts.haste_assumed
-    p = fm.compile_profile(profile)
-    usable = _Usable(profile)
-    pool = [*(item for item, count in owned.items() if count), *candidates]
-    worn = max(
-        (fm.fr(item.haste) for item in pool if item.haste > 0 and usable(item) and fit_groups(item, setup, opts.any_rule)),
-        default=Fraction(0),
-    )
-    spell = getattr(profile, "spell_haste", None)
-    if spell is None:
-        offered = [fm.fr(buff.haste) for buff in (buffset.optional if buffset else ())]
-        spell = max([Fraction(p.buff_totals.get("HASTE", 0)), *offered])
-    return int(min(Fraction(p.haste_cap), max(fm.fr(spell), Fraction(0)) + worn))
+) -> int | None:
+    """The one haste percent the session values every kit at: ``options.haste_assumed`` when the caller gave one, else None,
+    which means that every kit is valued at the haste it counts itself (see the module docstring). The other arguments are
+    those of the functions of this module and decide nothing; they stay so that a caller need not change."""
+    return (BuildOptions() if options is None else options).haste_assumed
+
+
+def _haste_of(solution: Solution, options: BuildOptions) -> int:
+    """The haste percent the value of a solution assumes: the one the options fix, else the haste its kit counts."""
+    if options.haste_assumed is not None:
+        return options.haste_assumed
+    return int(solution.breakdown.totals["haste"]["counted"])
 
 
 # ---- one model, one solve ------------------------------------------------------------------------------------------------
 
 
-def _solve(milp: Any, canonical: bool) -> Solution:
-    solution = (solve_canonical if canonical else solve)(milp)
+def _solve(
+    profile: Any, pool: Sequence[ItemVec], setup: str | None, buffset: BuffSet | None, options: BuildOptions, canonical: bool
+) -> Solution:
+    """The truthful solve of one pool (see the module docstring): the best kit valued at the haste it counts, or at the fixed
+    haste of ``options.haste_assumed``."""
+    solution = solve_scenario(profile, pool, setup, buffset, options, solver=solve_canonical if canonical else solve).solution
     if solution.status != "optimal":
         raise RuntimeError(f"the solver ended with status {solution.status!r}, not optimal (no time limit is set)")
     return solution
@@ -287,15 +289,10 @@ def equip_now(
     options: BuildOptions | None = None, *, canonical: bool = True,
 ) -> Solution:
     """The best kit from the owned items at their tiers, each worn at most as often as it is owned (the value is exact:
-    ``solution.breakdown.F``). Without ``options.haste_assumed`` the assumed haste is that of the owned items alone; a session
-    passes :func:`session_haste` through the options. ``canonical=False`` skips the tie stage."""
+    ``solution.breakdown.F``). Without ``options.haste_assumed`` the kit is valued at the haste it counts. ``canonical=False`` skips the tie stage."""
     ledger = _Owned(owned)
-    opts = _base_options(options)
-    if opts.haste_assumed is None:
-        opts = replace(opts, haste_assumed=session_haste(profile, owned, (), setup, buffset, opts))
-    opts = replace(opts, owned_caps=dict(ledger.counts) or None)
-    milp = build_milp(profile, list(ledger.items.values()), setup, buffset, opts)
-    return _solve(milp, canonical)
+    opts = replace(_base_options(options), owned_caps=dict(ledger.counts) or None)
+    return _solve(profile, list(ledger.items.values()), setup, buffset, opts, canonical)
 
 
 class _Plan:
@@ -357,8 +354,7 @@ def _best_additions(
         pool = prune(
             pool, profile, None, setup, buffset, plan.options(session, pool, max_new), owned=frozenset(plan.caps)
         )
-    milp = build_milp(profile, pool, setup, buffset, plan.options(session, pool, max_new))
-    return _solve(milp, canonical), plan
+    return _solve(profile, pool, setup, buffset, plan.options(session, pool, max_new), canonical), plan
 
 
 def _acquired(solution: Solution, plan: _Plan, ledger: _Owned) -> list[Acquisition]:
@@ -408,8 +404,7 @@ def farm_path(
     base = _base_options(options)
     if steps == 0 or not offered:
         return []
-    haste = session_haste(profile, owned, offered, setup, buffset, base)
-    session = replace(base, haste_assumed=haste)
+    session = base
     before = equip_now(profile, owned, setup, buffset, session, canonical=canonical).breakdown.F
     path: list[Step] = []
     for number in range(1, steps + 1):
@@ -426,8 +421,8 @@ def farm_path(
         _join(ledger, acquired[0])
         before = solution.breakdown.F
         path.append(Step(
-            number, acquired[0].item, acquired[0].kind, acquired[0].source_tier, before, gain, haste, ledger.snapshot(),
-            solution,
+            number, acquired[0].item, acquired[0].kind, acquired[0].source_tier, before, gain, _haste_of(solution, base),
+            ledger.snapshot(), solution,
         ))
     return path
 
@@ -446,8 +441,7 @@ def best_sets(
     ledger = _Owned(owned)
     offered = _candidates(candidates)
     base = _base_options(options)
-    haste = session_haste(profile, owned, offered, setup, buffset, base)
-    session = replace(base, haste_assumed=haste)
+    session = base
     start = equip_now(profile, owned, setup, buffset, session, canonical=canonical)
     found = _best_additions(profile, ledger, offered, setup, buffset, session, k, canonical, prune_pool)
     if found is not None:
@@ -455,8 +449,8 @@ def best_sets(
         acquired = _acquired(solution, plan, ledger)
         if acquired and solution.breakdown.F > start.breakdown.F:
             gain = solution.breakdown.F - start.breakdown.F
-            return BestSet(k, tuple(acquired), solution.breakdown.F, gain, haste, solution)
-    return BestSet(k, (), start.breakdown.F, Fraction(0), haste, start)
+            return BestSet(k, tuple(acquired), solution.breakdown.F, gain, _haste_of(solution, base), solution)
+    return BestSet(k, (), start.breakdown.F, Fraction(0), _haste_of(start, base), start)
 
 
 # ---- every slot -----------------------------------------------------------------------------------------------------------
@@ -477,7 +471,7 @@ def every_slot(
     limit: int = 3, owned: Mapping[ItemVec, int] | None = None,
 ) -> list[SlotRow]:
     """For each of the 22 places, the ``limit`` best swaps: the exact change of the value when one item stands in that place
-    and the rest of the kit stays as it is (the buffs and the assumed haste too). ``kit`` is the :class:`Solution` of
+    and the rest of the kit stays as it is (the buffs too; the swapped kit is valued at the haste it counts). ``kit`` is the :class:`Solution` of
     :func:`equip_now` (its buffs are used) or a sequence of 22 items; ``buffs`` the ids of the chosen optional buffs for a
     sequence.
 
@@ -509,15 +503,15 @@ def every_slot(
     named = {ident(c.key, c.tier) for c in offered}
     # the owned items that are not candidates: they are held to the counts
     counted = {name: item for name, item in ledger.items.items() if name not in named}
-    # the assumed haste is the session's: that of the kit, the owned items and the candidates together
-    held = {item: 1 for item in slots if item is not None}
-    held.update({item: ledger.counts[name] for name, item in ledger.items.items()})
-    haste = session_haste(profile, held, offered, setup, buffset, opts)
+    # a swap is valued at the haste the swapped kit counts (the one haste of the options when they fix one)
+    haste = opts.haste_assumed
     totals = eval_buff_totals(buffset.totals(chosen)) if buffset is not None else None
     p = fm.compile_profile(profile)
     usable = _Usable(profile)
 
     def value(trial: list[ItemVec | None]) -> Fraction:
+        if haste is None:
+            return fm.evaluate_truthful(p, trial, totals, setup=setup).F
         return fm.evaluate(p, trial, totals, setup=setup, haste_assumed=haste).F
 
     base = value(slots)

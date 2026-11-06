@@ -39,10 +39,11 @@ One JSON object per trio and level, with everything the engine needs to rebuild 
                       (``own`` or ``preset``) and ``illusion`` when it is a form
 ``constants``         every constant the builder and the evaluator read (see below)
 ``monk_bins``         the Monk bonus for each whole stone of worn weight (``null`` without a Monk in the trio)
-``tier_rules``        what ``at_tier`` reads: the stat rule, the haste and regen growth, the weight floor, the
-                      arrival rules
+``tier_rules``        what ``at_tier`` reads: the stat rule, the haste and regen growth, the weight rule (a percent of the
+                      base a tier, ``weight_pct``) and its floor, the arrival rules
 ``weapon_rules``      the labelled weapon damage switch (the default rate and both choices), the damage weight, the
-                      dual-wield factor and the hand bonuses
+                      dual-wield factor (a value for a trio with a Monk and one for a trio without; the
+                      profile holds the trio's own) and the hand bonuses
 ``weight_groups``     the slider groups of :data:`trioforge.model.roles.WEIGHT_GROUPS` with the three positions,
                       the settable weights, the derived ones (what each follows) and the bounds of
                       :func:`trioforge.model.roles.weights_override`
@@ -398,7 +399,7 @@ def _constants(codes: tuple[str, ...], level: int, tables: Any, rules: Any) -> d
         "weapon_index": {
             "bonus_one_handed": weapons.BONUS_ONE_HANDED,
             "bonus_two_handed": weapons.BONUS_TWO_HANDED,
-            "dual_wield_factor_default": weapons.DUAL_WIELD_FACTOR,
+            "bonus_two_handed_delay_cap": weapons.BONUS_TWO_HANDED_DELAY_CAP,
         },
         "regen_caps": rules.get("regen.gear_caps", level),
         "resist_cap": rules.get("resist.cap", level),
@@ -409,6 +410,7 @@ def _constants(codes: tuple[str, ...], level: int, tables: Any, rules: Any) -> d
         },
         "aa": {
             "combat_stability_pct": rules.get("ac.softcap.combat_stability_pct", level),
+            "natural_durability_pct": rules.get("hp.natural_durability_pct", level),
             "physical_enhancement_pct": rules.get("ac.softcap.physical_enhancement_pct", level),
             "pe_for_caster_only_trios": bool(rules.get("ac.softcap.pe_for_caster_only_trios", level)),
         },
@@ -460,6 +462,8 @@ def _tier_rules(level: int, rules: Any) -> dict[str, Any]:
             "stat_divisor": 10,  # the 10 of the rule text: base + max(n, floor(base * n / 10))
             "negatives_scale": rules.get("tier.negatives_scale"),
             "weight_floor10": int(floor),
+            "weight_pct": rules.get("tier.weight_pct"),
+            "weight_rule": item_model.WEIGHT_RULE_TEXT,
             "unknown_weight10": item_model.UNKNOWN_WEIGHT10,
             "haste_per_tier": rules.get("haste.worn_per_tier", level),
             "regen_per_tier": rules.get("regen.per_tier", level),
@@ -479,12 +483,12 @@ def _weapon_rules(level: int, rules: Any) -> dict[str, Any]:
             "label": "Weapon damage per tier",
             "damage_pct": rules.get("tier.weapon_damage_pct", level),
             "damage_pct_choices": list(item_model.WEAPON_PCTS),
-            "damage_rule": "dmg + max(n, dmg * n * pct // 100)",
+            "damage_rule": item_model.DAMAGE_RULE_TEXT,
             "delay_changes": False,
             "seal": rules.seal("tier.weapon_damage_pct"),
             "test": rules.settled_by("tier.weapon_damage_pct"),
             "damage_weight": rules.get("weapons.damage_weight", level),
-            "dual_wield_factor": rules.get("weapons.dual_wield_factor", level),
+            "dual_wield_factor": rules.get("weapons.dual_wield_factor", level),  # {with_monk, without_monk}: the same in every bundle
             "bonus_one_handed": weapons.BONUS_ONE_HANDED,
             "bonus_two_handed": weapons.BONUS_TWO_HANDED,
             "setups": list(weapons.SETUPS),

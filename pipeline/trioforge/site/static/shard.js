@@ -10,11 +10,25 @@ function fail(message) {
 
 const EVIDENCE = ["strict", "wiki"];
 
-function itemOf(entry) {
+/**
+ * An item of the file. A shard that carries the stats (`stat_tiers`, the tiers of the shard) ends each item with the text of its stats at each of them, as a row of Wear this says
+ * them; the item then has `stats`, a text for each tier. The text is the generator's own: the page only shows it.
+ */
+function itemOf(entry, statTiers = null) {
   if (!Array.isArray(entry)) fail("bad item");
-  const [key, name, rule, arrival, source, evidence, deity] = entry;
+  const [key, name, rule, arrival, source, evidence, deity, lines] = entry;
   if (typeof name !== "string" || !(arrival === null || Number.isInteger(arrival)) || !EVIDENCE.includes(evidence) || !Array.isArray(deity)) fail("bad item");
-  return { key, name, rule, arrival, source, evidence, deity };
+  if (statTiers === null) return { key, name, rule, arrival, source, evidence, deity };
+  if (!Array.isArray(lines) || lines.length !== statTiers.length || !lines.every((line) => typeof line === "string")) fail("bad item");
+  return { key, name, rule, arrival, source, evidence, deity, stats: Object.fromEntries(statTiers.map((tier, index) => [tier, lines[index]])) };
+}
+
+/** The tiers a shard carries the stats of, or null where it carries none. */
+function statTiersOf(document) {
+  const tiers = document.stat_tiers;
+  if (tiers === undefined) return null;
+  if (!Array.isArray(tiers) || !tiers.every((tier) => Number.isInteger(tier) && tier >= 0) || new Set(tiers).size !== tiers.length) fail("bad stat tiers");
+  return tiers;
 }
 
 /** The data release a file says it was made from (the page compares it with its own), or null where it names none. */
@@ -37,7 +51,8 @@ export class Shard {
     this.release = releaseOf(document);
     this.evidence = document.ev;
     this.buffs = document.buffs;
-    this.items = items.map(itemOf);
+    const statTiers = statTiersOf(document);
+    this.items = items.map((entry) => itemOf(entry, statTiers));
     // Whatever the page draws from the file is checked here, before it draws, so that a file that is not what the generator writes is
     // refused as a whole (the page says it could not load the view) and never fails half way through a draw. Every kit and every row of
     // totals is checked, whether a row names it or not.
@@ -128,7 +143,7 @@ export function parseRunnerups(document) {
     if (!Number.isInteger(tier) || tier < 0 || tiers.has(tier)) fail("bad runner-up tiers");
     tiers.add(tier);
   }
-  const items = document.items.map(itemOf);
+  const items = document.items.map((entry) => itemOf(entry));
   const views = new Map();
   for (const view of document.views) {
     if (!Array.isArray(view) || view.length !== 4) fail("bad runner-up view");

@@ -93,10 +93,9 @@ def test_the_kit_values_are_those_of_the_equip_now_kits_under_the_views_that_kee
     for index in range(len(equip_now["cases"])):
         assert len({buffs for kit, _, buffs in seen if kit == index}) >= 3  # the buff sets the engine tests vary: at least three of the four
     assert {kit for kit, _, _ in seen} == set(range(len(document["kits"])))  # and every kit has a view
-    # the reference's own rule for a pool of the kit's items alone is not that of the owned set the kit was made from: an unworn item of the owned set (a haste item the kit leaves in
-    # the bag) raises the haste the first one assumes, so the first kit is worth less as a shared kit than as the answer it came from
+    # a shared kit is worth what it is as the answer it came from: valued at the haste it counts, the same kit under the same view is worth the same
     first = next(row for row in document["values"] if (row["kit"], row["role"], row["buffs"]) == (0, "balanced", "own"))
-    assert first["hasteAssumed"] == 25 and equip_now["cases"][0]["hasteAssumed"] == 40 and first["value"] < equip_now["cases"][0]["value"]
+    assert first["hasteAssumed"] == equip_now["cases"][0]["hasteAssumed"] and first["value"] == equip_now["cases"][0]["value"]
 
 
 def test_the_fixture_is_read_by_the_sites_reader_and_within_the_budgets_of_the_build(made):
@@ -261,14 +260,16 @@ def test_each_weighted_answer_wears_only_what_is_owned_or_acquired_and_its_value
             assert step["kind"] in ("new", "copy", "upgrade") and (step["sourceTier"] is not None) == (step["kind"] == "upgrade"), name
             assert _exact(step["F"]) - before == _exact(step["gain"]) > 0, f"{name}: a step gains exactly its value less the value before"
             before = _exact(step["F"])
-        assert path["start"]["kit"] is not None and path["hasteAssumed"] >= 0, name
+        assert path["start"]["kit"] is not None and equip["hasteAssumed"] >= 0 and all(step["hasteAssumed"] >= 0 for step in path["path"]), name
 
         sets = case["bestSets"]
         assert [entry["k"] for entry in sets] == [2, 3], name
         for entry in sets:
-            assert _exact(entry["baseline"]["F"]) == _exact(path["start"]["F"]), f"{name}: the baseline of a set is Equip now at the session's haste"
+            assert _exact(entry["baseline"]["F"]) == _exact(path["start"]["F"]), f"{name}: the baseline of a set is Equip now"
             assert _exact(entry["F"]) - _exact(entry["baseline"]["F"]) == _exact(entry["gain"]), name
-            assert entry["hasteAssumed"] == path["hasteAssumed"] and len(entry["acquired"]) <= entry["k"], name
+            assert entry["hasteAssumed"] >= 0 and len(entry["acquired"]) <= entry["k"], name
+            if not entry["acquired"]:
+                assert entry["hasteAssumed"] == equip["hasteAssumed"], name  # nothing to add: Equip now's kit stands
             assert bool(entry["acquired"]) == (_exact(entry["gain"]) > 0), name
             if len(path["path"]) >= entry["k"]:  # the best k sets are never worth less than the first k steps (one candidate for a key)
                 assert _exact(entry["F"]) >= _exact(path["path"][entry["k"] - 1]["F"]), name
@@ -295,12 +296,12 @@ def test_the_committed_weapon_rate_answers_are_what_the_reference_gives(weapon_r
     assert WEAPON_RATE.read_bytes().endswith(b"}\n") and b"\r" not in WEAPON_RATE.read_bytes()
 
 
-def test_the_rules_own_weapon_rate_is_5_and_the_answer_without_a_rate_is_the_answer_at_5(weapon_rate):
+def test_the_rules_own_weapon_rate_is_10_and_the_answer_without_a_rate_is_the_answer_at_10(weapon_rate):
     from trioforge.model.tables import load
 
-    assert load().rules.get("tier.weapon_damage_pct") == 5
+    assert load().rules.get("tier.weapon_damage_pct") == 10
     for row in weapon_rate["cases"]:
-        assert set(row["rates"]) == {"5", "10"} and row["rules"] == row["rates"]["5"], row["name"]
+        assert set(row["rates"]) == {"5", "10"} and row["rules"] == row["rates"]["10"], row["name"]
 
 
 def test_the_weapon_rate_moves_the_answer_where_a_weapon_has_grown_and_nowhere_else(weapon_rate):

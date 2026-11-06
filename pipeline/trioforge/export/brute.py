@@ -21,6 +21,7 @@ placeholder AA choices: the instance gives the percents the choices would have m
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 from dataclasses import dataclass, field
@@ -45,6 +46,7 @@ __all__ = [
     "item_record",
     "kit_from_groups",
     "random_instance",
+    "truthful_instance",
 ]
 
 GROUP_SIZE = dict(SLOT_GROUPS)
@@ -212,6 +214,10 @@ def group_options(cands, size):
 class Instance:
     """One small instance: a profile, the pool, the setup, the buff set and the assumed haste.
 
+    ``haste_assumed`` None is a **truthful** instance: the weapon term is paid the haste each kit counts (the solver is
+    :func:`trioforge.solver.haste.solve_scenario`), and the brute force values every kit and buff set that way. A number is one
+    haste for every kit, as the builder takes it as an option.
+
     ``trio``, ``race`` and ``level`` repeat what the profile says, for the caller's convenience."""
 
     label: str
@@ -219,7 +225,7 @@ class Instance:
     items: list
     setup: str | None
     buffset: BuffSet | None
-    haste_assumed: int
+    haste_assumed: int | None
     any_rule: str = "all"
     trio: tuple[str, ...] = ()
     race: str = ""
@@ -250,7 +256,7 @@ def make_profile(trio, race, weights, *, level=50, buff_totals=None, spell_haste
     caps = {"regen": dict(fm.STANDARD_CAPS["regen"]), "resist": fm.STANDARD_CAPS["resist"]}
     return Profile(
         race=race, trio=tuple(trio), level=base.pop("level"), role="balanced", evidence="wiki",
-        aa={"combat_stability": 0, "physical_enhancement": False},  # a placeholder: the percents are given below
+        aa={"combat_stability": 0, "natural_durability": 0, "physical_enhancement": False},  # a placeholder: the percents are given below (the pools are the client's own)
         spell_haste=totals.get("HASTE", 0) if spell_haste is None else spell_haste, caps=caps,
         setups=() if setup is None else (setup,), deity=None, **base,
     )
@@ -464,6 +470,21 @@ def random_instance(rng, *, trio_index=None, with_buffs=None, any_rule=None, mon
     )
 
 
+def truthful_instance(rng, *, trio_index=None):
+    """A random instance for the truthful solve: weapons in the pool, worn haste items, optional haste buffs that exclude each
+    other, a setup that scores damage and a damage weight that makes a weapon matter, the flat haste of Unbound Alacrity for a
+    Monk trio, and ``haste_assumed`` None. Drawn again (the same stream) until the pool has a weapon and a haste item."""
+    for _ in range(400):
+        inst = random_instance(rng, trio_index=trio_index, haste_buffs=True, setup=rng.choice(("dw", "dw", "1h-shield", "2h")))
+        has_weapon = any(item.weapon is not None and item.weapon.dmg > 0 for item in inst.items)
+        if has_weapon and any(item.haste > 0 for item in inst.items):
+            weights = {**dict(inst.profile.weights), "DMG": 200.0}
+            bonus = 10 if "MNK" in inst.trio else 0
+            profile = dataclasses.replace(inst.profile, weights=weights, haste_bonus=bonus)
+            return dataclasses.replace(inst, profile=profile, haste_assumed=None, label=f"{inst.label} truthful")
+    raise ValueError("no instance with a weapon and a haste item")
+
+
 # ---- the space of kits ----------------------------------------------------------------------------------------
 
 
@@ -540,7 +561,7 @@ class Space:
                     table["HASTE"][oi] = max(table["HASTE"][oi], item.haste)
                     if g in HANDS and item.weapon is not None:
                         table["WEAPON"][oi] += float(
-                            fm.weapon_index(item.weapon, g, inst.setup, inst.haste_assumed, p.dw_factor)
+                            fm.weapon_index(item.weapon, g, inst.setup, inst.haste_assumed or 0, p.dw_factor)
                         )
             idx = self.kits[:, gi]
             for n in names:
@@ -610,8 +631,8 @@ class Space:
         total += W("ATK") * (0.666667 * np.clip(T["STR"], 0, 510) + f["ATK"] + float(b.get("ATK", 0)))
         total += W("DEX") * pwl(T["DEX"], (255, 510), (1, 0.1, 0))
         total += W("CHA") * np.clip(T["CHA"], 0, 510)
-        # HASTE
-        spell, hc = float(b.get("HASTE", 0)), float(p.haste_cap)
+        # HASTE (the spell haste is the buffs' and the flat haste of Unbound Alacrity)
+        spell, hc = float(b.get("HASTE", 0)) + float(p.haste_bonus), float(p.haste_cap)
         worn = np.minimum(f["HASTE"], max(0.0, hc - spell))
         total += W("HASTE") * (min(spell, hc) + worn)
         # REGEN
@@ -621,15 +642,18 @@ class Space:
         for school in SCHOOLS:
             weight = w[f"SV_{school}"] if f"SV_{school}" in w else W("SV")
             total += weight * np.minimum(f[f"SV_{school}"] + float(b["SV"].get(school, 0)), float(p.caps["resist"]))
+        if self.inst.haste_assumed is None:  # a truthful instance: the weapon index (built at 0) takes the haste the kit counts
+            total += W("DMG") * f["WEAPON"] * (min(spell, hc) + worn) / 100
         total += W("DMG") * f["WEAPON"]
         return total
 
     # -- the exact maximum
     def exact(self, combo, chosen):
-        return evaluate(
-            self.inst.profile, self.kit_of(combo), eval_totals(self.inst.buffset, chosen) if self.inst.buffset else None,
-            setup=self.inst.setup, haste_assumed=self.inst.haste_assumed,
-        ).F
+        kit = self.kit_of(combo)
+        totals = eval_totals(self.inst.buffset, chosen) if self.inst.buffset else None
+        if self.inst.haste_assumed is None:
+            return fm.evaluate_truthful(self.inst.profile, kit, totals, setup=self.inst.setup).F
+        return evaluate(self.inst.profile, kit, totals, setup=self.inst.setup, haste_assumed=self.inst.haste_assumed).F
 
     def best(self):
         """(exact maximum F as a Fraction, the (kit, buff set) pairs that reach it within 1e-9 relative)."""

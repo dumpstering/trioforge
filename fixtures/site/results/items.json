@@ -2,7 +2,7 @@
  "version": 1,
  "data_release": "data-2026-10-14",
  "rules_version": "2026-10-13",
- "inputs": "30f62dac607c35f449c983d3d6b80086a6766829faaefe6cd7a3cb7d2051541f",
+ "inputs": "d324c2b2e855a540fed5cb9810e5bcd1016c71391d347f72dac2ed31cd8e82d7",
  "count": 48,
  "defaults": {"key":null,"match_name":null,"classes":["ALL"],"races":["ALL"],"deity":null,"lore":false,"stats":{},"sv":{},"weapon":null,"item_type":null,"item_type_source":null,"aliases":[],"owned_only":false},
  "items": [
@@ -23,7 +23,7 @@
   {"id":80869,"name":"Millrace Pavise","slots":["SECONDARY"],"stats":{"AC":19,"STR":6},"weight10":40,"item_type":"Shield","item_type_source":"statsblock","tier_rule":"fixed0","evidence":{"level":"strict"},"source":{"crafted":1}},
   {"id":80923,"name":"Tinker's Awl","slots":["PRIMARY"],"stats":{"WIS":10,"MANA":40},"weight10":20,"weapon":{"skill":"1H Piercing","dmg":15,"delay":22,"bonus":null},"tier_rule":"drop","evidence":{"level":"strict"},"source":{"drops":["Plane of Hate"]}},
   {"id":80974,"name":"Choker of Seven Pebbles","slots":["NECK"],"stats":{"WIS":8,"MANA":30,"HP":20},"weight10":5,"tier_rule":"fixed0","evidence":{"level":"strict"},"source":{"quests":["Lake Rathetear quest"]}},
-  {"id":80988,"name":"Ferryman's Pike","slots":["PRIMARY"],"stats":{"STR":10,"ATK":14},"sv":{"FIRE":10},"weight10":35,"weapon":{"skill":"1H Slashing","dmg":18,"delay":26,"bonus":null},"tier_rule":"drop","evidence":{"level":"strict"},"source":{"drops":["The Hole"]}},
+  {"id":80988,"name":"Ferryman's Pike","slots":["PRIMARY"],"stats":{"STR":10,"ATK":14},"sv":{"FIRE":10},"weight10":35,"weapon":{"skill":"1H Slashing","dmg":16,"delay":24,"bonus":null},"tier_rule":"drop","evidence":{"level":"strict"},"source":{"drops":["The Hole"]}},
   {"id":90001,"name":"Helm of the Stoneward","slots":["HEAD"],"stats":{"AC":30,"STA":12,"HP":60},"weight10":40,"tier_rule":"drop","evidence":{"level":"strict"},"source":{"drops":["The Hole"]}},
   {"id":90002,"name":"Steel Cap of Valor","slots":["HEAD"],"stats":{"AC":22,"STR":8},"weight10":30,"tier_rule":"fixed0","evidence":{"level":"strict"},"source":{"crafted":1}},
   {"id":90003,"name":"Crown of the Vanguard","slots":["HEAD"],"stats":{"AC":34,"STA":16,"HP":70},"weight10":45,"tier_rule":"drop","evidence":{"level":"wiki"},"source":{"drops":["Plane of Fear"]}},

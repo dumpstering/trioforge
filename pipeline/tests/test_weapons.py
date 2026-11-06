@@ -244,16 +244,16 @@ def test_a_two_hander_uses_the_listed_bonus_when_there_is_one():
 
 
 @pytest.mark.parametrize("listed", [None, 0])
-def test_without_a_listed_bonus_a_two_hander_gets_067_delay_and_a_one_hander_half_the_delay(listed):
+def test_without_a_listed_bonus_a_two_hander_gets_067_delay_capped_at_50_and_a_one_hander_half_the_delay(listed):
     big = item("maul", weapon=weapon(37, 70, skill="2H Blunt", bonus=listed, two_handed=True))
-    assert wp.damage_index_exact(big, "primary", "2h", 0, RULES) == (37 + Fraction(67, 100) * 70) / 70
+    assert wp.damage_index_exact(big, "primary", "2h", 0, RULES) == (37 + Fraction(67, 100) * 50) / 70
     small = item("dirk", weapon=weapon(10, 24, bonus=listed))
     assert wp.damage_index_exact(small, "primary", "dw", 0, RULES) == (10 + 12) / Fraction(24)
 
 
 def test_the_off_hand_gets_the_dual_wield_factor_and_no_bonus_and_only_in_dw():
     w = item("sword", weapon=weapon(20, 30), slots=("PRIMARY", "SECONDARY"))
-    assert wp.damage_index_exact(w, "secondary", "dw", 50, RULES) == Fraction(20, 30) * Fraction(3, 2) * Fraction(4, 5)
+    assert wp.damage_index_exact(w, "secondary", "dw", 50, RULES, dw_factor=Fraction(4, 5)) == Fraction(20, 30) * Fraction(3, 2) * Fraction(4, 5)
     for setup in ("1h-shield", "2h", "stick"):
         assert wp.damage_index_exact(w, "secondary", setup, 50, RULES) == 0
     assert wp.damage_index_exact(w, "primary", "dw", 50, RULES) == Fraction(7, 4)  # the main hand has no factor
@@ -266,7 +266,10 @@ def test_the_dual_wield_factor_can_be_given_or_comes_from_a_rule_when_the_rules_
     assert wp.damage_index_exact(w, "secondary", "dw", 0, RULES, dw_factor=Fraction(1, 4)) == third / 4
     with_rule = SimpleNamespace(get=lambda rule_id, level=50: {"weapons.dual_wield_factor": 0.75}[rule_id])
     assert wp.damage_index_exact(w, "secondary", "dw", 0, with_rule) == third * Fraction(3, 4)
-    assert wp.damage_index_exact(w, "secondary", "dw", 0, RULES) == third * Fraction(4, 5)  # no such rule: the default
+    with pytest.raises(ValueError, match="dual_wield_factor"):  # the real rule has a value for each kind of trio
+        wp.damage_index_exact(w, "secondary", "dw", 0, RULES)
+    no_rule = SimpleNamespace(get=lambda rule_id, level=50: {}[rule_id])
+    assert wp.damage_index_exact(w, "secondary", "dw", 0, no_rule) == third * Fraction(4, 5)  # no such rule: the default
     assert wp.damage_index_exact(w, "secondary", "dw", 0) == third * Fraction(4, 5)  # no rules at all
 
 

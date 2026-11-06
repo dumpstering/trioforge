@@ -1,12 +1,12 @@
 // The Upgrade tab's functions: Equip now, the farm path, the best sets and Every slot, on the owned set of a visitor and the candidates they could acquire.
 // A port of pipeline/trioforge/upgrade.py (which defines what an addition is, and is the truth), held to the sessions Python recorded by
-// tests-js/engine-path.test.mjs: the assumed haste of the session, Equip now, each step of the path, why it stopped, the best 2 and 3 sets, and Every slot.
+// tests-js/engine-path.test.mjs: Equip now, each step of the path, why it stopped, the best 2 and 3 sets, and Every slot.
 //
-//   sessionHaste(profile, owned, candidates, setup, buffset, options)  -> the haste percent every program of a session assumes
+//   sessionHaste(profile, owned, candidates, setup, buffset, options)  -> the one haste percent a session values every kit at (the caller's `haste_assumed`), else null
 //   classify(item, owned)                                -> ["copy" | "upgrade" | "new", the tier of the owned copy an upgrade is made from]
 //   usableBy(profile)                                    -> a function of an item: can the profile use it (a class of the trio, a deity it admits, a race it allows)?
 //   equipNow(session, owned, {budgetMs, canonical})      -> the answer of solve.js: the best kit from the owned items alone
-//   farmPath(session, owned, candidates, {steps, budgetMs, canonical, onStep}) -> {steps, stopped, hasteAssumed, baseline, elapsedMs}
+//   farmPath(session, owned, candidates, {steps, budgetMs, canonical, onStep}) -> {steps, stopped, hasteAssumed, baseline, elapsedMs}: `hasteAssumed` is Equip now's
 //   createFarmPath(session, owned, candidates, {steps, budgetMs, canonical, onBegin}) -> {start, next, stop, result}: the same path, one call at a time
 //   bestSets(session, owned, candidates, k, {budgetMs, canonical}) -> {k, acquired, F, gain, hasteAssumed, kit, buffs, status, label, solution, baseline, elapsedMs}
 //   everySlot(session, kit, candidates, {buffs, limit, owned}) -> for each of the 22 places the best swaps, the rest of the kit held fixed; the copies of the owned items are counted
@@ -22,8 +22,8 @@
 // copy, or as an upgraded copy) and the counts it changes are bounds and rows of the solver's model, changed in place where the columns are the same
 // (solve.js), and the solve starts from the last kit (the first step from the kit of Equip now, which wears only what is owned: HiGHS completes the
 // rest). Each step prunes its own pool with the owned-aware pruning (prune.js), because what is owned and which candidates are upgrades changes from
-// step to step. The assumed haste is fixed for the whole session (`sessionHaste`), so that a step's gain is never a revaluation of the kit it started
-// from.
+// step to step. Every solve is the truthful one of solve.js (`solveScenario`): the weapons are paid the haste the kit counts, so the value of a kit is the
+// same wherever it stands and a step's gain is never a revaluation of the kit it started from; the options of the session may fix one haste for every kit instead.
 //
 // The stepper. `createFarmPath` makes the path and does nothing else (the deadline is fixed there: the time between the calls that follow counts against the
 // budget); `start()` solves Equip now and gives its answer (`baseline` of farmPath), once, first; `next()` makes the next step and gives exactly the object that
@@ -60,12 +60,12 @@
 // The scenarios "equip-now", "best-1" and "best-<k>" of the session belong to these functions (they keep their models there between calls); a caller's own
 // scenarios take other names.
 
-import { SLOT_INSTANCES, CONSTANTS, evaluate, profileOf } from "./evaluate.js";
+import { SLOT_INSTANCES, CONSTANTS, evaluate, evaluateTruthful, profileOf } from "./evaluate.js";
 import { CLASS_CODES } from "./items.js";
-import { ModelError, compareText, ident, readBuffset, readItem, readOptions } from "./model.js";
-import { fitGroups, hastePercent, prune } from "./prune.js";
+import { ModelError, compareText, ident, readItem, readOptions } from "./model.js";
+import { fitGroups, prune } from "./prune.js";
 import { LABEL_NO_INCUMBENT } from "./protocol.js";
-import { setScenario, solve } from "./solve.js";
+import { solveScenario } from "./solve.js";
 
 /** An input that is not what the Upgrade functions read: the message says which. */
 export class PathError extends Error {
@@ -283,42 +283,36 @@ export function usableBy(profile) {
 }
 
 /**
- * The haste percent the weapon index assumes for a whole session (`session_haste` in upgrade.py): `options.haste_assumed` when the caller gave one, else
- * the best spell haste on offer plus the best worn haste of the owned items and the candidates together (those the profile can use and that fit a
- * place), up to the cap: the number the builder would assume for that whole pool. `options` are the builder's (`any_rule`, `haste_assumed`).
+ * The one haste percent a session values every kit at (`session_haste` in upgrade.py): `options.haste_assumed` when the caller gave one, else null, which means that
+ * every kit is valued at the haste it counts itself. The other arguments are checked and decide nothing. `options` are the builder's (`any_rule`, `haste_assumed`).
  */
 export function sessionHaste(profile, owned, candidates, setup, buffset = null, options = null) {
   const opts = readOptions(options);
-  const ledger = new Owned(ownedEntries(owned));
-  const offered = itemList(candidates, "the candidates");
-  if (opts.hasteAssumed !== null) return opts.hasteAssumed;
-  const usable = usableBy(profile);
-  const worn = [];
-  for (const item of [...ledger.items.values(), ...offered]) {
-    if (item.haste > 0 && usable(item) && fitGroups(item, setup, opts.anyRule).size > 0) worn.push(item.haste);
-  }
-  return hastePercent(profile, worn, readBuffset(buffset));
+  new Owned(ownedEntries(owned)); // (a count that is not a whole number of at least 0 is refused)
+  itemList(candidates, "the candidates");
+  return opts.hasteAssumed;
 }
 
 // ---- Equip now --------------------------------------------------------------------------------------------------------------------------------
 
 /**
- * Equip now on the Equip-now scenario of the session: the owned items alone, each worn at most as often as it is owned, at the assumed haste
- * `haste` (`equip_now` in upgrade.py). The solve ends by `deadline` (a moment on the clock of the session), the building of the model included. Returns
- * the answer of `solve`, with `build` (what `setScenario` said about the model) added.
+ * Equip now on the Equip-now scenario of the session: the owned items alone, each worn at most as often as it is owned, valued at the haste the kit counts (or the
+ * session's one haste, if its options fix one; `equip_now` in upgrade.py). The solve ends by `deadline` (a moment on the clock of the session), the building of the
+ * models included. Returns the answer of `solveScenario` (solve.js), with `build` (what `setScenario` said about the models).
  */
-function solveEquipNow(session, ledger, haste, { deadline, canonical }) {
-  const options = { any_rule: session.options.any_rule, haste_assumed: haste, owned_caps: Object.fromEntries(ledger.counts) };
-  const build = setScenario(session, EQUIP_NOW, [...ledger.items.values()], options);
-  const answer = solve(session, { scenario: EQUIP_NOW, budgetMs: Math.max(0, deadline - session.now()), deadline, canonical });
-  answer.build = build;
-  return answer;
+function solveEquipNow(session, ledger, { deadline, canonical }) {
+  const options = { ...sessionBuilderOptions(session), owned_caps: Object.fromEntries(ledger.counts) };
+  return solveScenario(session, { name: EQUIP_NOW, items: [...ledger.items.values()], options, budgetMs: Math.max(0, deadline - session.now()), deadline, canonical });
+}
+
+/** The builder's options of a session: its Any rule, and the one haste it fixes if it does. */
+function sessionBuilderOptions(session) {
+  return session.options.haste_assumed === null ? { any_rule: session.options.any_rule } : { any_rule: session.options.any_rule, haste_assumed: session.options.haste_assumed };
 }
 
 /**
- * The best kit from the owned items alone at their tiers, each worn at most as often as it is owned: the answer of `solve` (solve.js), the exact value
- * included. Without `haste_assumed` in the options of the session the assumed haste is that of the owned items alone; a session that runs the farm path
- * fixes it with `sessionHaste`. `request` is `{budgetMs, canonical}`.
+ * The best kit from the owned items alone at their tiers, each worn at most as often as it is owned: the answer of `solveScenario` (solve.js), the exact value
+ * included, valued at the haste the kit counts unless the options of the session fix one. `request` is `{budgetMs, canonical}`.
  */
 export function equipNow(session, owned, request) {
   checkSession(session);
@@ -326,10 +320,8 @@ export function equipNow(session, owned, request) {
   const budgetMs = budgetOf(request);
   const canonical = canonicalOf(request);
   const began = session.now();
-  const entries = ownedEntries(owned);
-  const ledger = new Owned(entries);
-  const haste = session.options.haste_assumed ?? sessionHaste(session.profile, entries, [], session.setup, session.buffset, session.options);
-  return solveEquipNow(session, ledger, haste, { deadline: began + budgetMs, canonical });
+  const ledger = new Owned(ownedEntries(owned));
+  return solveEquipNow(session, ledger, { deadline: began + budgetMs, canonical });
 }
 
 // ---- the plan of a Best-1 solve --------------------------------------------------------------------------------------------------------------
@@ -496,14 +488,13 @@ function makePath(session, owned, candidates, { budgetMs, canonical, wanted, onB
   const deadline = started + budgetMs;
   const left = () => deadline - session.now();
   const result = { steps: [], stopped: STOP_LIMIT, hasteAssumed: null, baseline: null, elapsedMs: 0 };
-  const base = session.options;
+  const sessionOptions = sessionBuilderOptions(session);
   const withBins = (options) => (session.monkBins === undefined ? options : { ...options, monk_bins: session.monkBins });
   let phase = "new"; // new -> started (by start()) -> ended
   let ending = null; // why the path ends at the next call, when the step just made was the last (it was not found, or not proven the best)
   let stopping = false;
   let number = 0; // the step the last call began
   let before = null; // the exact value before the step: Equip now's, then the last step's
-  let sessionOptions = null;
 
   /** The path ends for `why`: the one look at the clock for the time it took. Returns null (what `next` gives). */
   const end = (why) => {
@@ -518,12 +509,10 @@ function makePath(session, owned, candidates, { budgetMs, canonical, wanted, onB
     phase = "started";
     if (wanted === 0) return end(STOP_LIMIT);
     if (offered.length === 0) return end(STOP_NO_GAIN);
-    const haste = base.haste_assumed ?? sessionHaste(session.profile, entries, offered, session.setup, session.buffset, base);
-    result.hasteAssumed = haste;
-    sessionOptions = { any_rule: base.any_rule, haste_assumed: haste };
     // Equip now: the value that the first step's gain is counted from. It has all the time there is.
-    const baseline = solveEquipNow(session, ledger, haste, { deadline, canonical });
+    const baseline = solveEquipNow(session, ledger, { deadline, canonical });
     result.baseline = baseline;
+    result.hasteAssumed = baseline.hasteAssumed;
     if (baseline.status !== STATUS_OPTIMAL) {
       end(STOP_TIME);
       return baseline;
@@ -550,14 +539,15 @@ function makePath(session, owned, candidates, { budgetMs, canonical, wanted, onB
     const kept = prune(pool, session.profile, null, session.setup, session.buffset, withBins(plan.options(sessionOptions, pool, MAX_NEW)), [...plan.caps.keys()]);
     const pruneMs = session.now() - pruning;
     if (left() <= 0) return end(STOP_TIME);
-    const build = setScenario(session, BEST_1, kept, plan.options(sessionOptions, kept, MAX_NEW));
     const remaining = left(); // one look at the clock: what is found to be left is what is handed over (a second look could find it gone)
     if (remaining <= 0) return end(STOP_TIME);
     // the first step begins from the kit of Equip now (it wears nothing that is not owned, so it is feasible here, and HiGHS completes the rest); the
     // later ones from the last kit of the Best-1 model, which the session keeps
-    const answer = solve(session, { scenario: BEST_1, budgetMs: remaining, deadline, canonical, start: number === 1 ? result.baseline : undefined });
+    const answer = solveScenario(session, { name: BEST_1, items: kept, options: plan.options(sessionOptions, kept, MAX_NEW), budgetMs: remaining, deadline, canonical, start: number === 1 ? result.baseline : undefined, needTime: true });
+    if (answer === null) return end(STOP_TIME); // the model spent the budget: no solve is started
+    const build = answer.build;
     const timings = { pruneMs, buildMs: build.buildMs, syncMs: build.syncMs, solveMs: answer.timings.solveMs, tieMs: answer.timings.tieMs, totalMs: session.now() - began };
-    const step = { index: number, found: false, item: null, kind: null, sourceTier: null, F: null, gain: null, hasteAssumed: sessionOptions.haste_assumed, owned: ledger.snapshot(), status: answer.status, label: answer.label, solution: answer, poolSize: kept.length, reused: build.reused, timings };
+    const step = { index: number, found: false, item: null, kind: null, sourceTier: null, F: null, gain: null, hasteAssumed: answer.hasteAssumed, owned: ledger.snapshot(), status: answer.status, label: answer.label, solution: answer, poolSize: kept.length, reused: build.reused, timings };
     const notFound = () => {
       // no kit in the time it had, or a kit that adds nothing and a solve that cannot say that nothing does: the step is reported as not found
       step.label = LABEL_NO_INCUMBENT;
@@ -636,24 +626,21 @@ export function bestSets(session, owned, candidates, k, request) {
   if (!Number.isInteger(k) || k < 1) throw fail(`k is a whole number of at least 1, not ${show(k)}`);
   const budgetMs = budgetOf(request);
   const canonical = canonicalOf(request);
-  const entries = ownedEntries(owned);
-  const ledger = new Owned(entries);
+  const ledger = new Owned(ownedEntries(owned));
   const offered = checkedCandidates(candidates);
   const started = session.now();
   const deadline = started + budgetMs;
   const left = () => deadline - session.now();
 
-  const base = session.options;
-  const haste = base.haste_assumed ?? sessionHaste(session.profile, entries, offered, session.setup, session.buffset, base);
-  const sessionOptions = { any_rule: base.any_rule, haste_assumed: haste };
+  const sessionOptions = sessionBuilderOptions(session);
   const withBins = (options) => (session.monkBins === undefined ? options : { ...options, monk_bins: session.monkBins });
-  const baseline = solveEquipNow(session, ledger, haste, { deadline, canonical });
+  const baseline = solveEquipNow(session, ledger, { deadline, canonical });
   const result = (more) => ({
     k,
     acquired: [],
     F: null,
     gain: null,
-    hasteAssumed: haste,
+    hasteAssumed: baseline.hasteAssumed,
     kit: null,
     buffs: [],
     status: STATUS_OPTIMAL,
@@ -678,23 +665,23 @@ export function bestSets(session, owned, candidates, k, request) {
   const pool = [...plan.pool.values()];
   const kept = prune(pool, session.profile, null, session.setup, session.buffset, withBins(plan.options(sessionOptions, pool, k)), [...plan.caps.keys()]);
   if (left() <= 0) return notFound(null);
-  setScenario(session, bestScenario(k), kept, plan.options(sessionOptions, kept, k));
   const remaining = left(); // one look at the clock: what is found to be left is what is handed over
   if (remaining <= 0) return notFound(null);
   // it begins from the kit of Equip now: it wears nothing that is not owned, so it is feasible here, and HiGHS completes the rest
-  const answer = solve(session, { scenario: bestScenario(k), budgetMs: remaining, deadline, canonical, start: baseline });
+  const answer = solveScenario(session, { name: bestScenario(k), items: kept, options: plan.options(sessionOptions, kept, k), budgetMs: remaining, deadline, canonical, start: baseline, needTime: true });
+  if (answer === null) return notFound(null); // the model spent the budget: no solve is started
   if (answer.kit === null) return notFound(answer);
   const acquired = acquiredBy(answer.kit, plan, ledger).map((found) => ({ ident: ident(found.item.key, found.item.tier), ...found }));
   const gain = answer.F.sub(baseline.F);
   if (acquired.length === 0 || gain.sign() <= 0) return answer.status === STATUS_OPTIMAL ? nothing(answer) : notFound(answer);
-  return result({ acquired, F: answer.F, gain, kit: answer.kit, buffs: answer.buffs, status: answer.status, label: answer.label, solution: answer });
+  return result({ acquired, F: answer.F, gain, kit: answer.kit, buffs: answer.buffs, status: answer.status, label: answer.label, solution: answer, hasteAssumed: answer.hasteAssumed });
 }
 
 // ---- Every slot --------------------------------------------------------------------------------------------------------------------------------
 
 /**
  * For each of the 22 places, the `limit` best swaps (default 3): the exact change of the value when one item stands in that place and the rest of the
- * kit stays as it is, the buffs and the assumed haste too (`every_slot` in upgrade.py). `kit` is the answer of `equipNow` (or any object with a `kit` and
+ * kit stays as it is, the buffs too, and the swapped kit valued at the haste it counts (`every_slot` in upgrade.py). `kit` is the answer of `equipNow` (or any object with a `kit` and
  * its `buffs`) or a list of the 22 places; `buffs` (in the request) the ids of the chosen optional buffs for a list.
  *
  * The items on offer, and their copies. They are the `candidates` of the tier mode and the items the visitor owns (`owned` in the request, `[item, count]` pairs
@@ -729,13 +716,13 @@ export function everySlot(session, kit, candidates, request = {}) {
 
   const { profile, setup, buffset, monkBins } = session;
   const base = session.options;
-  // the assumed haste is the session's: that of the kit, the owned items and the candidates together
-  const held = new Map();
-  for (const item of slots) if (item !== null) held.set(ident(item.key, item.tier), [item, 1]);
-  for (const [name, item] of ledger.items) held.set(name, [item, ledger.counts.get(name)]);
-  const haste = base.haste_assumed ?? sessionHaste(profile, [...held.values()], offered, setup, buffset, base);
+  // a swap is valued at the haste the swapped kit counts (the one haste of the session's options when they fix one)
   const usable = usableBy(profile);
-  const value = (trial) => evaluate(profile, trial, buffset === null ? null : chosen, { setup, hasteAssumed: haste, monkBins, buffset: buffset ?? undefined }).F;
+  const evaluated = { setup, monkBins, buffset: buffset ?? undefined };
+  const value = (trial) =>
+    base.haste_assumed === null
+      ? evaluateTruthful(profile, trial, buffset === null ? null : chosen, evaluated).F
+      : evaluate(profile, trial, buffset === null ? null : chosen, { ...evaluated, hasteAssumed: base.haste_assumed }).F;
   const start = value(slots);
 
   const named = new Set(offered.map((item) => ident(item.key, item.tier)));

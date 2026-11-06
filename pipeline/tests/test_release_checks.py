@@ -13,7 +13,9 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -499,6 +501,177 @@ def test_a_parity_suite_that_cannot_be_started_refuses_the_release(tmp_path):
         release.check_parity(tmp_path, sample="0/1", runner=runner)
 
 
+SHARD_FILE = "tests-js/shard-parity.test.mjs"
+OTHER_FILES = {"tests-js/parity-fixtures.test.mjs", "tests-js/engine-solve-parity.test.mjs"}
+
+
+def recording_runner(calls, *, fail=()):
+    """A runner that notes how it was called; a part in ``fail`` (a "k/N", or "others" for the run without a part) ends with status 1 and a line that names it."""
+    import threading
+
+    guard = threading.Lock()
+
+    def runner(folder, sample, files, part=None):
+        with guard:
+            calls.append({"folder": folder, "sample": sample, "files": tuple(files), "part": part})
+        failing = (part if part is not None else "others") in fail
+        return (1, f"FAIL {part or 'others'}\n") if failing else (0, "ok\n")
+
+    return runner
+
+
+def test_n_processes_run_the_shard_parity_in_n_parts_and_the_other_files_once(tmp_path):
+    calls = []
+    release.check_parity(tmp_path, sample="3/50", runner=recording_runner(calls), processes=4)
+    parts = sorted(call["part"] for call in calls if call["part"] is not None)
+    assert parts == ["0/4", "1/4", "2/4", "3/4"]  # (distinct, and k from 0 to N-1)
+    for call in calls:
+        assert call["folder"] == tmp_path and call["sample"] == "3/50"
+        if call["part"] is not None:
+            assert call["files"] == (SHARD_FILE,)
+    others = [call for call in calls if call["part"] is None]
+    assert len(others) == 1 and set(others[0]["files"]) == OTHER_FILES  # (the other two files are run once, and the shard parity only in parts)
+    assert len(calls) == 5
+
+
+def test_the_parts_run_side_by_side_not_one_after_the_other(tmp_path):
+    import threading
+
+    gate = threading.Barrier(5, timeout=20)  # (4 parts and the other files: none ends before all have begun)
+
+    def runner(folder, sample, files, part=None):
+        gate.wait()
+        return 0, "ok\n"
+
+    release.check_parity(tmp_path, sample="0/1", runner=runner, processes=4)
+
+
+def test_one_failing_part_refuses_the_release_and_names_it_and_shows_the_end_of_its_output(tmp_path):
+    calls = []
+    lines = [f"line {n}" for n in range(100)] + ["3 of 40 views differ from their shard"]
+
+    def runner(folder, sample, files, part=None):
+        calls.append(part)
+        return (1, "\n".join(lines) + "\n") if part == "2/4" else (0, "ok\n")
+
+    with pytest.raises(ReleaseRefused, match="parity suite") as raised:
+        release.check_parity(tmp_path, sample="0/1", runner=runner, processes=4)
+    text = str(raised.value)
+    assert "part 2/4" in text and "3 of 40 views differ" in text and "line 5\n" not in text + "\n"
+    assert "part 0/4" not in text and "part 1/4" not in text and "part 3/4" not in text
+    assert sorted(part for part in calls if part) == ["0/4", "1/4", "2/4", "3/4"]  # (the others were not cut short)
+
+
+def test_every_failing_process_is_named_and_the_other_files_too(tmp_path):
+    calls = []
+    with pytest.raises(ReleaseRefused, match="parity suite") as raised:
+        release.check_parity(tmp_path, sample="0/1", runner=recording_runner(calls, fail=("0/3", "others")), processes=3)
+    text = str(raised.value)
+    assert "part 0/3" in text and "FAIL 0/3" in text and "FAIL others" in text and "part 1/3" not in text
+
+
+def test_a_part_that_cannot_be_started_refuses_the_release(tmp_path):
+    def runner(folder, sample, files, part=None):
+        if part == "1/2":
+            raise OSError("node is not here")
+        return 0, "ok\n"
+
+    with pytest.raises(ReleaseRefused, match="parity suite.*could not"):
+        release.check_parity(tmp_path, sample="0/1", runner=runner, processes=2)
+
+
+def test_one_process_is_one_run_of_all_the_files_with_no_part_as_before(tmp_path):
+    calls = []
+
+    def runner(folder, sample, files):  # (the three arguments of the runner as it was: no part)
+        calls.append((folder, sample, tuple(files)))
+        return 0, "ok\n"
+
+    release.check_parity(tmp_path, sample="3/50", runner=runner)
+    release.check_parity(tmp_path, sample="3/50", runner=runner, processes=1)
+    assert [call[0] for call in calls] == [tmp_path] * 2 and [call[1] for call in calls] == ["3/50"] * 2
+    assert all(set(call[2]) == OTHER_FILES | {SHARD_FILE} for call in calls)
+
+
+def test_a_suite_without_the_shard_parity_is_run_once_however_many_processes_there_are(tmp_path):
+    calls = []
+    release.check_parity(tmp_path, sample="0/1", files=tuple(OTHER_FILES), runner=recording_runner(calls), processes=6)
+    assert len(calls) == 1 and calls[0]["part"] is None and set(calls[0]["files"]) == OTHER_FILES
+
+
+@pytest.mark.parametrize("processes", [0, -1, 1.5, "4", None, True])
+def test_a_number_of_processes_that_is_not_a_whole_number_of_at_least_one_is_refused_before_anything_runs(tmp_path, processes):
+    calls = []
+    with pytest.raises(ReleaseRefused, match="processes"):
+        release.check_parity(tmp_path, sample="0/1", runner=recording_runner(calls), processes=processes)
+    assert calls == []
+
+
+def test_the_parity_check_says_how_many_processes_it_starts(tmp_path):
+    said = []
+    release.check_parity(tmp_path, sample="0/1", runner=recording_runner([]), processes=3, say=said.append)
+    assert "3 processes" in said[0] and "parity" in said[0]
+    said.clear()
+    release.check_parity(tmp_path, sample="0/1", runner=lambda folder, sample, files: (0, ""), say=said.append)
+    assert len(said) == 1 and "1 process" in said[0] and "1 processes" not in said[0]
+
+
+def test_each_part_that_ends_is_told_with_its_seconds(tmp_path):
+    said = []
+    with pytest.raises(ReleaseRefused):  # (a failure is told too, and the others are waited for)
+        release.check_parity(tmp_path, sample="0/1", runner=recording_runner([], fail=("1/3",)), processes=3, say=said.append)
+    ended = [line for line in said[1:] if re.fullmatch(r"check: parity (part [0-2]/3|of the other files) (done|failed \(exit status 1\)), [0-9]+(\.[0-9])? s", line)]
+    assert len(said) == 5 and len(ended) == 4
+    assert {line.split(",")[0] for line in ended} == {
+        "check: parity part 0/3 done", "check: parity part 1/3 failed (exit status 1)", "check: parity part 2/3 done", "check: parity of the other files done",
+    }
+
+
+def test_a_closed_pipe_for_the_progress_lines_is_no_failure_of_the_parity_check(tmp_path):
+    def closed(text):
+        raise BrokenPipeError(text)
+
+    release.check_parity(tmp_path, sample="0/1", runner=recording_runner([]), processes=3, say=closed)
+
+
+def test_vitest_gets_its_part_in_the_environment_and_none_when_it_has_none(tmp_path, monkeypatch):
+    (tmp_path / "node_modules" / "vitest").mkdir(parents=True)
+    (tmp_path / "node_modules" / "vitest" / "vitest.mjs").write_text("", encoding="utf-8")
+    monkeypatch.setattr(release, "CODE_ROOT", tmp_path)
+    monkeypatch.setattr(release.shutil, "which", lambda name: "node")
+    monkeypatch.setenv("TRIOFORGE_SHARD_PART", "9/9")  # (a part left in the environment of the maintainer must not reach a run that has none)
+    seen = []
+
+    def fake_run(command, **kwargs):
+        seen.append((command, kwargs["env"]))
+        return SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(release.subprocess, "run", fake_run)
+    assert release._vitest(tmp_path / "r", "0/5", (SHARD_FILE,), "2/7") == (0, "ok\n")
+    assert release._vitest(tmp_path / "r", "0/5", (SHARD_FILE,)) == (0, "ok\n")
+    (_, with_part), (command, without) = seen
+    assert with_part["TRIOFORGE_SHARD_PART"] == "2/7" and with_part["TRIOFORGE_SHARD_SAMPLE"] == "0/5"
+    assert "TRIOFORGE_SHARD_PART" not in without and without["NODE_OPTIONS"] == "--max-old-space-size=16384" and SHARD_FILE in command
+
+
+def test_the_real_shard_parity_in_more_parts_than_it_has_units_passes_the_parts_with_no_unit(tmp_path):
+    need_node()
+    release.check_parity(SOLVED, sample="0/40", files=(SHARD_FILE,), processes=7)  # (a sample of a chunk or two and the defaults: two units, and five parts with none)
+
+
+def test_the_real_shard_parity_in_two_parts_passes_on_the_solved_fixture_and_refuses_a_broken_one(tmp_path):
+    need_node()
+    release.check_parity(SOLVED, sample="0/1", files=(SHARD_FILE,), processes=2)
+    broken = tmp_path / "solved"
+    shutil.copytree(SOLVED, broken)
+    shard = broken / SLUG / "wiki-own.json"
+    document = load(shard)
+    document["scenarios"][0][5] += 7.0  # a value the engine will not find
+    save(shard, document)
+    with pytest.raises(ReleaseRefused, match="parity suite"):
+        release.check_parity(broken, sample="0/1", files=(SHARD_FILE,), processes=2)
+
+
 @pytest.mark.parametrize("sample", ["", "1", "a/b", "5/3", "0/0", "-1/4", "1/2/3", "0/ 1"])
 def test_a_sample_that_is_not_i_over_n_is_refused_before_anything_runs(tmp_path, sample):
     with pytest.raises(ReleaseRefused, match="sample"):
@@ -682,6 +855,296 @@ def test_a_share_written_with_forward_slashes_is_refused(text):
 )
 def test_a_web_address_and_an_ordinary_double_slash_are_no_share_and_no_file_url(text):
     release.check_no_local_paths(None, {"reports/x.md": text.encode("utf-8") + b"\n"})
+
+
+# ---- compressed picture bytes and the vendor's file URL literal are no path -----------------------------------------------------------------------
+
+
+def png_chunk(kind: bytes, body: bytes) -> bytes:
+    return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+
+
+def png_file(*extra: tuple[bytes, bytes], idat: bytes = b"\x08\xd7c`\x00\x00\x00\x02\x00\x01", trailer: bytes = b"") -> bytes:
+    header = png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))
+    chunks = b"".join(png_chunk(kind, body) for kind, body in extra)
+    return b"\x89PNG\r\n\x1a\n" + header + chunks + png_chunk(b"IDAT", idat) + png_chunk(b"IEND", b"") + trailer
+
+
+def test_a_png_whose_compressed_picture_bytes_read_like_a_path_passes():
+    for lump in (b"C:/", b"xb:/y", b"file://", b"\\\\nas\\x\\", b"/home/<user>/"):
+        data = png_file(idat=b"\x00\x01" + lump + b"\x02")
+        assert lump in data
+        release.check_no_local_paths(None, {"assets/art/tile-stone.png": data})
+
+
+def test_a_png_is_known_by_its_signature_and_not_by_its_name(tmp_path):
+    data = png_file(idat=b"zzC:/zz")
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "picture.bin").write_bytes(data)  # (no .png in the name)
+    release.check_no_local_paths(tmp_path, {})
+    (tmp_path / "assets" / "other.png").write_bytes(b"not a png, C:/Users/<user>\n")  # (.png in the name, no signature: read whole)
+    with pytest.raises(ReleaseRefused, match="absolute path") as raised:
+        release.check_no_local_paths(tmp_path, {})
+    assert "assets/other.png:1" in str(raised.value) and "picture.bin" not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        (b"tEXt", b"Comment\x00C:\\Users\\<user>\\art\\x.png"),
+        (b"tEXt", b"Source\x00see /home/<user>/art"),
+        (b"zTXt", b"Comment\x00\x00" + zlib.compress(b"made at D:/work/art/x.psd")),
+        (b"iTXt", b"Comment\x00\x00\x00\x00\x00" + b"made at E:\\art"),
+        (b"iTXt", b"Comment\x00\x01\x00en\x00\x00" + zlib.compress(b"made at //nas/art/x")),
+        (b"iTXt", b"C:\\Users\\<user>\x00\x00\x00\x00\x00fine"),  # (the keyword)
+        (b"eXIf", b"Exif\x00\x00ImageDescription /Users/<user>/x"),
+    ],
+    ids=["tEXt-drive", "tEXt-home", "zTXt", "iTXt-plain", "iTXt-compressed", "iTXt-keyword", "eXIf"],
+)
+def test_a_png_with_a_path_in_a_text_chunk_or_the_exif_chunk_is_refused(extra):
+    with pytest.raises(ReleaseRefused, match="absolute path") as raised:
+        release.check_no_local_paths(None, {"assets/art/x.png": png_file(extra)})
+    assert "assets/art/x.png:1" in str(raised.value) and "<user>" not in str(raised.value)
+
+
+def test_a_png_text_chunk_without_a_path_passes_and_the_line_is_the_line_of_the_chunk_text():
+    release.check_no_local_paths(None, {"x.png": png_file((b"tEXt", b"Comment\x00made by hand"), (b"zTXt", b"Title\x00\x00" + zlib.compress(b"a tile")))})
+    with pytest.raises(ReleaseRefused) as raised:
+        release.check_no_local_paths(None, {"x.png": png_file((b"tEXt", b"Comment\x00line one\nline two C:/x"))})
+    assert "x.png:2" in str(raised.value)
+
+
+MALFORMED = "malformed PNG"
+
+
+def malformed_png_refused(data: bytes, label: str = "assets/art/x.png") -> None:
+    with pytest.raises(ReleaseRefused, match=MALFORMED) as raised:
+        release.check_no_local_paths(None, {label: data})
+    assert label in str(raised.value) and "absolute path" not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        lambda data: data[:-5],  # cut short
+        lambda data: data + b"trailing C:/Users/<user>",  # bytes after IEND
+        lambda data: data.replace(b"IEND", b"IENX"),  # no end chunk (and a wrong CRC)
+        lambda data: data[:8] + b"\xff\xff\xff\xff" + data[12:],  # a length that runs past the file
+        lambda data: data[:8] + b"\x00\x00\x00\x0dIHDX" + data[16:],  # the first chunk is not IHDR
+        lambda data: data[:8],  # the signature alone
+        lambda data: data[:-1] + bytes([data[-1] ^ 1]),  # a wrong CRC on the last chunk
+    ],
+    ids=["cut", "trailer", "no-iend", "long-length", "no-ihdr", "signature-only", "bad-crc"],
+)
+def test_a_file_with_the_png_signature_that_does_not_parse_refuses_the_release(broken):
+    base = png_file((b"tEXt", b"Comment\x00fine"), idat=b"\x00 C:/Users/<user>/x \x00")  # (the path-like run is in the picture bytes, which are never read)
+    release.check_no_local_paths(None, {"assets/art/x.png": base})
+    malformed_png_refused(broken(base))
+
+
+def test_a_compressed_path_before_a_chunk_with_a_bad_crc_is_not_missed():
+    """The break comes after the compressed text: a whole-file read could not see inside it, so the file refuses as malformed."""
+    zipped = (b"zTXt", b"Comment\x00\x00" + zlib.compress(b"made at D:/work/art/x.psd"))
+    good = png_file(zipped, (b"tEXt", b"Comment\x00fine"))
+    with pytest.raises(ReleaseRefused, match="absolute path"):
+        release.check_no_local_paths(None, {"x.png": png_file(zipped)})  # (found when the file parses)
+    broken = bytearray(good)
+    at = good.index(b"tEXt")
+    broken[at + 4] ^= 1  # a byte of the tEXt body: its CRC no longer fits
+    malformed_png_refused(bytes(broken))
+
+
+def test_a_non_empty_iend_chunk_is_malformed_and_cannot_carry_a_path():
+    clean = png_file()
+    assert clean.endswith(struct.pack(">I", 0) + b"IEND" + struct.pack(">I", zlib.crc32(b"IEND")))
+    with_body = clean[: -12] + png_chunk(b"IEND", b" C:/Users/<user>")
+    malformed_png_refused(with_body)
+    malformed_png_refused(clean[: -12] + png_chunk(b"IEND", b"harmless"))
+
+
+UNREADABLE = "cannot be read"
+BOMB = zlib.compress(b"a" * (release.PNG_INFLATE_LIMIT + 10))
+
+
+@pytest.mark.parametrize(
+    "chunk",
+    [
+        (b"zTXt", b"Comment\x00\x00" + b"not a zlib stream"),
+        (b"zTXt", b"Comment\x00\x00" + zlib.compress(b"made at C:/Users/<user>")[:-6]),  # cut short
+        (b"zTXt", b"Comment\x00\x07" + zlib.compress(b"x")),  # unknown method
+        (b"zTXt", b"no keyword end"),
+        (b"iTXt", b"Comment\x00\x01\x00\x00\x00" + b"not a zlib stream"),
+        (b"iTXt", b"Comment\x00\x02\x00\x00\x00x"),  # a flag that is neither 0 nor 1
+        (b"iTXt", b"Comment\x00\x01\x07\x00\x00" + zlib.compress(b"x")),  # unknown method
+        (b"iTXt", b"Comment\x00"),
+        (b"iCCP", b"Profile\x00\x00" + b"not a zlib stream"),
+        (b"iCCP", b"Profile\x00\x09" + zlib.compress(b"x")),
+        (b"iCCP", b"no name end"),
+        (b"zTXt", b"Comment\x00\x00" + BOMB),
+        (b"iTXt", b"Comment\x00\x01\x00\x00\x00" + BOMB),
+        (b"iCCP", b"Profile\x00\x00" + BOMB),
+    ],
+    ids=[
+        "zTXt-corrupt", "zTXt-cut", "zTXt-method", "zTXt-no-keyword", "iTXt-corrupt", "iTXt-flag", "iTXt-method", "iTXt-short",
+        "iCCP-corrupt", "iCCP-method", "iCCP-no-name", "zTXt-bomb", "iTXt-bomb", "iCCP-bomb",
+    ],
+)  # fmt: skip
+def test_a_compressed_chunk_that_cannot_be_inflated_refuses_the_release_and_names_the_file(chunk):
+    """Text that is compressed cannot be seen in the raw bytes, so a whole-file read would prove nothing: the release is refused."""
+    with pytest.raises(ReleaseRefused, match=UNREADABLE) as raised:
+        release.check_no_local_paths(None, {"assets/art/x.png": png_file(chunk)})
+    assert "assets/art/x.png" in str(raised.value) and "absolute path" not in str(raised.value)
+
+
+def test_a_chunk_that_cannot_be_inflated_refuses_even_when_a_path_is_found_elsewhere_in_the_folder(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "bad.png").write_bytes(png_file((b"zTXt", b"Comment\x00\x00" + b"not a zlib stream")))
+    with pytest.raises(ReleaseRefused, match=UNREADABLE) as raised:
+        release.check_no_local_paths(tmp_path, {})
+    assert "a/bad.png" in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        (b"prVt", b"made at C:/Users/<user>/art"),  # a private ancillary chunk
+        (b"caBX", b"c2pa //nas/art/x"),  # a content-credentials box
+        (b"iCCP", b"/home/<user>/profile.icc" + b"\x00\x00" + zlib.compress(b"profile")),  # the profile name
+        (b"iCCP", b"Profile\x00\x00" + zlib.compress(b"made at D:/work/art/x.icc")),  # the inflated profile
+        (b"PLTE", b"\x00\x00\x00C:/Users/<user>\x00"),
+        (b"tIME", b"E:/art"),
+        (b"sBIT", b"file:///data/x"),
+        (b"zzzz", b"/tmp/x"),  # (lower case first letter: an ancillary chunk of no known kind)
+    ],
+    ids=["prVt", "caBX", "iCCP-name", "iCCP-inflated", "PLTE", "tIME", "sBIT", "unknown-ancillary"],
+)
+def test_a_path_in_any_chunk_but_the_picture_is_refused(extra):
+    with pytest.raises(ReleaseRefused, match="absolute path") as raised:
+        release.check_no_local_paths(None, {"assets/art/x.png": png_file(extra)})
+    assert "assets/art/x.png:1" in str(raised.value)
+
+
+def test_a_clean_iccp_profile_and_private_chunk_pass():
+    release.check_no_local_paths(None, {"x.png": png_file((b"iCCP", b"sRGB\x00\x00" + zlib.compress(b"profile bytes")), (b"prVt", b"nothing here"))})
+
+
+def test_the_picture_chunks_of_an_animated_png_are_never_read():
+    animated = png_file((b"acTL", b"\x00\x00\x00\x02\x00\x00\x00\x00"), (b"fdAT", b"\x00\x00\x00\x01xC:/xx"), idat=b"\x00b:/\x00")
+    release.check_no_local_paths(None, {"x.png": animated})
+
+
+def test_an_unknown_critical_chunk_makes_the_file_malformed():
+    malformed_png_refused(png_file((b"XyZq", b" C:/Users/<user>")))
+    malformed_png_refused(png_file((b"XyZq", b"harmless")))
+    release.check_no_local_paths(None, {"x.png": png_file((b"xyzq", b"harmless"))})  # (the same name with a lower-case first letter is ancillary)
+
+
+def test_the_pictures_of_the_site_pass():
+    pictures = sorted((REPO / "pipeline" / "trioforge" / "site" / "static").rglob("*.png"))
+    assert len(pictures) >= 40
+    for picture in pictures:
+        assert picture.read_bytes().startswith(release.PNG_SIGNATURE)
+        release.check_no_local_paths(None, {picture.name: picture.read_bytes()})  # (every one parses: none is refused as malformed)
+
+
+def test_a_png_in_a_folder_is_read_by_its_text_chunks(tmp_path):
+    (tmp_path / "assets" / "art").mkdir(parents=True)
+    (tmp_path / "assets" / "art" / "tile-stone.png").write_bytes(png_file(idat=b"\x00b:/\x00"))
+    release.check_no_local_paths(tmp_path, {})
+    (tmp_path / "assets" / "art" / "hyenamen.png").write_bytes(png_file((b"tEXt", b"Comment\x00C:\\Users\\<user>\\a")))
+    with pytest.raises(ReleaseRefused, match="absolute path") as raised:
+        release.check_no_local_paths(tmp_path, {})
+    assert "assets/art/hyenamen.png:1" in str(raised.value) and "tile-stone" not in str(raised.value)
+
+
+VENDOR_FILE = "assets/engine/worker-ABCD1234.js"
+HOME = b"/hom" + b"e/web_user"  # (in two pieces: the repository's own privacy scan reads a folder under the home folder as a person's)
+#: what the solver's glue says, as the real worker has it (only the parts that read like a path)
+VENDOR_CODE = (
+    b'var EXITSTATUS;var isFileURI=filename=>filename.startsWith("file://");class EmscriptenEH{}\n'
+    b'function f(){p.mkdir("/tmp"),p.mkdir("/home"),p.mkdir("' + HOME + b'")}var env={HOME:"' + HOME + b'",LANG:s};\n'
+    b'function Jr(_){return"/tmp/highs-js-"+ne+++"."+_}\n'
+)
+
+
+def test_the_vendor_worker_with_only_the_allowed_literals_passes(tmp_path):
+    release.check_no_local_paths(None, {VENDOR_FILE: VENDOR_CODE})
+    (tmp_path / "assets" / "engine").mkdir(parents=True)
+    (tmp_path / VENDOR_FILE).write_bytes(VENDOR_CODE)
+    release.check_no_local_paths(tmp_path, {})
+
+
+@pytest.mark.parametrize(
+    "more",
+    [
+        b'var u="file:///C:/Users/<user>";',  # another file URL, with its own path
+        b'var u="file:///data/x";',
+        b'var u="file://host/share";',  # the literal as the start of an address
+        b'var u="file://";',  # the literal a second time: the entry allows one
+        b"var u=`file://`;",  # (not framed by the quotes of the entry)
+        b'var u="file://"+x;var v="file://";',
+        b'var p="C:/Users/<user>";',
+        b'var p="/home/<user>/y";',
+        b'var p="' + HOME + b'/.cache";',  # more than the literal
+        b'var p="' + HOME + b'";',  # a third of the home folder: the entry allows two
+        b'var p="/tmp/highs-js-";',  # a second of the temporary name: the entry allows one
+        b'var p="/tmp/highs-js-x/y";',
+        b'var p="/tmp/other";',
+        b'var p="/Users/x/";',
+        b"var u=file://;",
+    ],
+)
+def test_the_vendor_worker_with_the_literals_and_anything_else_is_refused(more):
+    with pytest.raises(ReleaseRefused, match="absolute path") as raised:
+        release.check_no_local_paths(None, {VENDOR_FILE: VENDOR_CODE + more + b"\n"})
+    assert f"{VENDOR_FILE}:4" in str(raised.value)
+
+
+def test_the_vendor_worker_without_the_literals_it_may_have_is_clean_too():
+    release.check_no_local_paths(None, {VENDOR_FILE: b"var a=1;\n"})
+    release.check_no_local_paths(None, {VENDOR_FILE: b'var u="file://";\n'})
+
+
+def test_the_vendor_literals_are_allowed_in_that_file_only():
+    for name in (
+        "assets/engine/worker-ABCD1234.js.map",
+        "assets/engine/worker-abcd1234.js",
+        "assets/engine/client-ABCD1234.js",
+        "assets/app-ABCD1234.js",
+        "worker-ABCD1234.js",
+        "assets/engine/worker-ABCD1234.mjs",
+        "x/assets/engine/worker-ABCD1234.js",
+        "reports/x.md",
+    ):
+        with pytest.raises(ReleaseRefused, match="absolute path"):
+            release.check_no_local_paths(None, {name: VENDOR_CODE})
+
+
+def test_a_plain_javascript_file_with_a_file_url_literal_is_refused(tmp_path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "app-ABCD1234.js").write_bytes(b'var isFileURI=filename=>filename.startsWith("file://");\n')
+    with pytest.raises(ReleaseRefused, match="absolute path") as raised:
+        release.check_no_local_paths(tmp_path, {})
+    assert "assets/app-ABCD1234.js:1" in str(raised.value)
+
+
+def test_the_count_of_a_vendor_literal_holds_for_a_file_of_segments_too():
+    """A file named like the worker that is a PNG is read in segments, and the literal in three text chunks is three uses, not one."""
+    three = png_file(*[(b"tEXt", b'Comment\x00startsWith("file://")') for _ in range(3)])
+    with pytest.raises(ReleaseRefused, match="absolute path"):
+        release.check_no_local_paths(None, {VENDOR_FILE: three})
+    one = png_file((b"tEXt", b'Comment\x00startsWith("file://")'))
+    with pytest.raises(ReleaseRefused, match="absolute path"):  # (a PNG is no worker: the allowance is for a file that is read whole)
+        release.check_no_local_paths(None, {VENDOR_FILE: one})
+    release.check_no_local_paths(None, {VENDOR_FILE: VENDOR_CODE})
+
+
+def test_every_vendor_allowance_is_a_file_pattern_one_quoted_literal_and_a_small_count():
+    assert release.VENDOR_LITERALS
+    for entry in release.VENDOR_LITERALS:
+        assert hasattr(entry.file, "fullmatch") and 1 <= entry.max_count <= 2
+        assert len(entry.literal) > 2 and entry.literal[:1] == entry.literal[-1:] == b'"'  # (a whole string, quotes and all)
+        assert release._LOCAL_PATH.search(entry.literal) is not None  # (it is there because the check would find it)
 
 
 def test_the_real_catalog_with_the_urls_of_its_wiki_has_no_path_in_it():

@@ -670,7 +670,7 @@ test("the real worker answers Equip now, the farm path, the best sets and Every 
   const bundle = trioManifest.bundles[WEIGHTED.level];
   await installEngine(page, manifest);
   const ANSWER = ["F", "value", "kit", "buffs", "hasteAssumed"];
-  const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs"];
+  const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs", "hasteAssumed"];
   // one case in each tier mode: ready4, arrives and fixed
   const cases = [0, 1, 3].map((at) => WEIGHTED.cases[at]);
   expect(new Set(cases.map((c) => c.tierMode.mode))).toEqual(new Set(["ready4", "arrives", "fixed"]));
@@ -684,9 +684,9 @@ test("the real worker answers Equip now, the farm path, the best sets and Every 
 
     const path = await stepsInPage(page, upgradeRequest(c, "farm-path", { tierMode: c.tierMode, steps: c.farmPath.steps }));
     expect(path.ok, `${c.name}: ${JSON.stringify(path)}`).toBe(true);
-    expect(pickOf(path.steps[0], ["F", "value", "kit", "buffs"]), `${c.name}: Equip now at the session's haste`).toEqual(c.farmPath.start);
+    expect(pickOf(path.steps[0], ["F", "value", "kit", "buffs"]), `${c.name}: Equip now`).toEqual(c.farmPath.start);
     expect(path.steps.slice(1).map((step) => pickOf(step, STEP)), `${c.name}: the steps`).toEqual(c.farmPath.path);
-    expect(path.result).toMatchObject({ mode: "farm-path", stopped: c.farmPath.stopped, steps: c.farmPath.path.length, hasteAssumed: c.farmPath.hasteAssumed });
+    expect(path.result).toMatchObject({ mode: "farm-path", stopped: c.farmPath.stopped, steps: c.farmPath.path.length, hasteAssumed: c.equipNow.hasteAssumed });
 
     for (const want of c.bestSets) {
       const set = await scenarioInPage(page, upgradeRequest(c, "best-sets", { tierMode: c.tierMode, k: want.k }));

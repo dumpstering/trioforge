@@ -93,5 +93,11 @@ in view), so the page itself is never wider than the window; the region is named
 <p id="credit">Adapted from the eqlwiki.com page <a href="{{ page.wiki_href }}" rel="noopener noreferrer">{{ page.wiki_title }}</a>, revision {{ page.wiki_revid }}, by the eqlwiki contributors, under <a href="{{ licence_url }}" rel="noopener noreferrer">{{ licence_name }}</a>. The footer lists the changes made.</p>
 </section>
 {% endif %}
+{% if page.origin_href %}
+<section aria-labelledby="origin-h">
+<h2 id="origin-h">Source credit</h2>
+<p id="origin">The stats and drop sources of this item are read from its page at <a href="{{ page.origin_href }}" rel="noopener noreferrer">{{ page.origin_name }}</a> (eqlegendstools.com), which is the source of truth for it.</p>
+</section>
+{% endif %}
 </main>
 {% endblock %}

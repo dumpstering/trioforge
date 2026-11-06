@@ -322,7 +322,7 @@ describe("the best kit of a view (bestKit)", () => {
 
   it("gives the builder's options to the pruning, the model and the solve: an assumed haste of the request's own is the haste of the answer", () => {
     expect(solveView({ options: { haste_assumed: 30 } }).answer.hasteAssumed).toBe(30);
-    expect(solveView().answer.hasteAssumed).toBe(44); // and the model's rule, when there are none
+    expect(solveView().answer.hasteAssumed).toBe(54); // and the model's rule, when there are none (44 and the 10 of the Monk's Unbound Alacrity)
     expect(() => solveView({ options: { depth: 3 } })).toThrow();
   });
 });

@@ -141,10 +141,12 @@ RULE_SCOPES: dict[str, Callable[[Scope], bool]] = {
     "monk.bonus_placement": lambda s: "MNK" in s.classes,
     "haste.cap_pct_with_monk": lambda s: "MNK" in s.classes,
     "haste.cap_pct": lambda s: "MNK" not in s.classes,
+    "haste.unbound_alacrity": lambda s: "MNK" in s.classes,
     "weapons.dual_wield_factor": lambda s: s.setup in (None, "dw"),
     "tier.weapon_damage_pct": _tiered,
     "tier.stat_rule": _tiered,
     "tier.weight_floor": _tiered,
+    "tier.weight_pct": _tiered,
     "tier.negatives_scale": _tiered,
 }
 
@@ -155,8 +157,13 @@ UNREAD = frozenset(
     {
         "naked.cap", "naked.rule", "hp.pools_counted", "hp.sta_curve", "mana.pools_counted", "mana.base_l50", "mana.per_stat_l50", "end.formula",
         "ac.sheet.item_mult", "ac.sheet.defense_div", "ac.sheet.spell_ac_div", "ac.sheet.agi_div", "ac.softcap.past_cap_rate", "stats.knee", "stats.hard_cap",
-        "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "haste.unbound_alacrity", "packrat.pct_per_rank", "tier.accuracy_pct",
+        "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "packrat.pct_per_rank", "tier.accuracy_pct",
         "tier.socket_open", "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "roles.balanced",
+        # the effects layer reads these after the solve (the exalt plan and its lists); the solver never does
+        "effects.focus_value", "effects.spell_weight", "effects.cast_categories", "effects.cast_mass_full", "effects.late_level", "effects.click_relevance",
+        "effects.dispel_relevance", "effects.gap_categories", "effects.own_compare", "effects.instant_categories", "effects.instant_bonus", "effects.proc_value",
+        "effects.score_shape", "effects.haste_buff", "effects.near_best", "effects.access_cost", "effects.raid_zones", "effects.one_off_spas",
+        "effects.restricted_targets", "effects.unverified_names", "effects.rows_kept",
     }
 )  # fmt: skip
 

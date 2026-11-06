@@ -38,14 +38,14 @@
 //                for each place the swaps that gain the most
 //   best-kit     tier (a whole number from 0 to 10), options (optional): the best kit of the view over its whole pool, which the worker makes (engine/bestkit.js). No owned
 //                set and no tier mode. `options` is `{weaponTierRate?}`, and only the best kit has it: the percent of damage a weapon grows a tier, 5 or 10 (the rule
-//                `tier.weapon_damage_pct`, 5, is the default); any other key or value is a bad request.
+//                `tier.weapon_damage_pct`, 10, is the default); any other key or value is a bad request.
 //
 // `weights` is `{multipliers?, custom?, regenT?}`: the slider positions by group (numbers), the custom weights by name (numbers) and the regen window in minutes (a number, or
 // null for the role's own). The protocol checks their shape (an allowlist of the three options, short names, at most 32 entries a table) and their numbers: each is finite and
 // zero, or at least 0.000001 in size with at most 6 significant digits (WEIGHT_FLOOR, WEIGHT_DIGITS: the exact value of the answer is a text of at most 200 characters, and
 // the digits of the weights set its size). Which groups there are, which positions, which weights may be set and the bounds are the bundle's (weight_groups, regen_ratios), and
 // the worker holds the request to them with weightsOverride, for every mode alike (engine/bestkit.js, `viewProfile`: weights that are the role's own change nothing). The
-// assumed haste is the model's rule, whatever the weights. Whether the trio has a mana pool is the worker's to say, never a field of a request.
+// weapons are paid the haste the kit counts, whatever the weights. Whether the trio has a mana pool is the worker's to say, never a field of a request.
 //
 // where tierMode is `{mode: "ready4"}`, `{mode: "arrives", D}` (D 0 to 4) or `{mode: "fixed", N}` (N 0 to 10), exactly those fields.
 //
@@ -1192,7 +1192,7 @@ function wornOf(kit) {
 
 /**
  * The page's watch over a farm path: the steps arrive in order (Equip now, then 1, 2, ...), none after the path ended and none beyond the steps asked for, the
- * assumed haste is one for the path, each step gains exactly its value less the value before it, and the kit wears only what was owned and what the steps
+ * result says the haste of Equip now (each step says the haste its own kit counts), each step gains exactly its value less the value before it, and the kit wears only what was owned and what the steps
  * acquired (an upgrade turns an owned copy into the item). `request` is the farm path request that was made. `validateFromWorker` calls `accept` for each step and
  * `finish` for the result when the expectation holds the watch; a step that is refused leaves the watch where it was.
  */
@@ -1214,7 +1214,6 @@ export function createPathWatch(request) {
         before = step.F === null ? null : Rational.parseLong(step.F);
         over = step.status !== "optimal";
       } else {
-        if (step.hasteAssumed !== haste) throw badReply("the assumed haste changed in the course of the path");
         if (step.found) {
           const value = Rational.parseLong(step.F);
           if (before === null || !value.sub(before).equals(Rational.parseLong(step.gain))) throw badReply("the gain of a step is not its value less the value before it");
@@ -1234,7 +1233,7 @@ export function createPathWatch(request) {
     finish(result) {
       if (next === 0) throw badReply("the path ended before Equip now was sent");
       if (result.steps !== made) throw badReply("the result counts other steps than were sent");
-      if (haste !== null && result.hasteAssumed !== haste) throw badReply("the result assumes another haste than the steps did");
+      if (haste !== null && result.hasteAssumed !== haste) throw badReply("the result assumes another haste than Equip now did");
       if (over && result.stopped !== "time") throw badReply("a path that ran out of time says so");
       if (result.stopped === "limit" && made !== wanted) throw badReply("a path that made fewer steps than were asked for did not reach its limit");
       if (result.stopped === "no-gain" && made >= wanted) throw badReply("a path that made all its steps did not run out of gain");

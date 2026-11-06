@@ -2065,7 +2065,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": "45595/8",
+    "MANA": 5705,
     "END": "2107/2",
     "hp_pools": [
      "CLR",
@@ -2113,7 +2113,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": "91145/16",
+    "MANA": "45595/8",
     "END": "2107/2",
     "hp_pools": [
      "CLR",
@@ -2161,7 +2161,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": "47575/8",
+    "MANA": 6200,
     "END": "2107/2",
     "hp_pools": [
      "CLR",
@@ -2209,7 +2209,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": "57025/8",
+    "MANA": "17125/2",
     "END": "2107/2",
     "hp_pools": [
      "CLR",
@@ -2257,7 +2257,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": "57025/8",
+    "MANA": "17125/2",
     "END": "2107/2",
     "hp_pools": [
      "CLR",

@@ -4,7 +4,7 @@
 // (pipeline/tests/test_site_fixture_items.py fails when a real item's key or name is in this file); the sample cases of the optimizer (fixtures/parity/upgrade/) are read as data,
 // and each of their items is given an invented name.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, vi } from "vitest";
 import { Rational } from "../pipeline/trioforge/site/static/engine/rational.js";
@@ -138,6 +138,20 @@ export const sampleName = (ident) => {
   return `${sampleNameOf(key)} +${tier}`;
 };
 
+/** The ids of the Upgrade cases of the committed sample (fixtures/parity/upgrade/upgrade-NNN.json; the invented upgrade-slots-* cases are not sessions), in order. */
+export const sampleCaseIds = () =>
+  readdirSync(resolve(ROOT, "fixtures", "parity", "upgrade"))
+    .filter((name) => /^upgrade-\d+\.json$/.test(name))
+    .map((name) => name.slice(0, -".json".length))
+    .sort();
+
+/** What a sample case says before the page is given anything: its tier mode, the owned counts (a Map from ident), the kit Every slot starts from, and the Every slot rows. */
+export function rawCase(id) {
+  const { inputs, expected } = JSON.parse(readFileSync(resolve(ROOT, "fixtures", "parity", "upgrade", `${id}.json`), "utf8"));
+  const rows = expected.every_slot;
+  return { id, mode: inputs.tier_mode, owned: new Map(inputs.owned), kit: rows.map((place) => place.current), rows };
+}
+
 /**
  * One of the cases of the optimizer's own fixtures (fixtures/parity/upgrade/<id>.json, the committed sample) in the section. The gear is the case's owned items, each under an invented
  * name; the tier mode is the case's, chosen before the gear is given; Equip now is the kit the case's Every slot starts from; and Every slot is opened and answered with the rows the
@@ -151,7 +165,8 @@ export async function sampleCase(id) {
   const owned = new Map(inputs.owned);
   const keys = new Set();
   for (const ident of [...owned.keys(), ...kit, ...rows.flatMap((place) => place.swaps.map((swap) => swap.item))]) if (ident !== null) keys.add(ident.split("@")[0]);
-  const items = tableOf([...keys].sort().map((key) => record(Number(key.slice(1)), sampleNameOf(key))));
+  // an item with a wiki page has the key w<page id>; one with none (rlt-..., read from EQ Legends Tools alone) has a key of its own and no page id
+  const items = tableOf([...keys].sort().map((key) => (/^w[1-9][0-9]*$/.test(key) ? record(Number(key.slice(1)), sampleNameOf(key)) : record(null, sampleNameOf(key), { key }))));
   const t = mountAnswer({ pauseMs: 0, items });
   const mode = inputs.tier_mode;
   if (mode.mode === "arrives") {

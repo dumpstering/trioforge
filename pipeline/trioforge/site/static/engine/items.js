@@ -11,11 +11,11 @@
 //     grow is not defined anywhere).
 //   * Worn haste and the three regens: a flat `haste_per_tier` / `regen_per_tier` a tier when the base is above zero. Haste is a field of its
 //     own, not one of the stats.
-//   * Weight, in tenths of a stone: `max(floor, w - max(n, w * n // 10))` for a weight w above zero (the floor is a tenth of a stone); a
-//     weightless item stays weightless; an item with no weight on its page counts as `unknown_weight10` (1.0 stone) at every tier and keeps
-//     `weight_known` false.
-//   * Weapon damage: `dmg + max(n, dmg * n * pct // 100)`; delay and the listed bonus never change. An item has a weapon only when the page gives
-//     both a damage and a delay, and a shield has none.
+//   * Weight, in tenths of a stone: `max(floor, w - w * pct * n // 100)` for a weight w above zero, `pct` the rule `tier.weight_pct` (9, a percent of the
+//     base a tier, no minimum step) and the floor a tenth of a stone; a weightless item stays weightless; an item with no weight on its page counts as
+//     `unknown_weight10` (1.0 stone) at every tier and keeps `weight_known` false.
+//   * Weapon damage: `dmg + dmg * n * pct // 100`, with no minimum of a point a tier; delay and the listed bonus never change. An item has a weapon only
+//     when the page gives both a damage and a delay, and a shield has none.
 //   * A shield is an item that fits the off hand (the SECONDARY slot) and whose `item_type` is Shield in any case. Nothing else makes one.
 //   * Races: null for any race (ALL in any case, or no field), else the sorted codes; an empty list is a page that says Race: NONE.
 //
@@ -62,7 +62,8 @@ export const ITEM_DEFAULTS = Object.freeze({
 
 const MAX_TIER = 10;
 const STAT_RULE_TEXT = "base + max(n, floor(base*n/10))";
-const DAMAGE_RULE_TEXT = "dmg + max(n, dmg * n * pct // 100)";
+const DAMAGE_RULE_TEXT = "dmg + dmg * n * pct // 100";
+const WEIGHT_RULE_TEXT = "max(floor, w - w * pct * n // 100)";
 const WEAPON_PCTS = [5, 10];
 const PERCENT = 100;
 /** The largest number a stat, a weight or a damage may be: a product of three of them and a tier stays a safe integer. */
@@ -99,6 +100,7 @@ function compile(bundle) {
   if (wholeRule(tier.max_tier, "bundle.tier_rules.max_tier") !== MAX_TIER) throw new BundleError(`bundle.tier_rules.max_tier must be ${MAX_TIER}`);
   const divisor = wholeRule(tier.stat_divisor, "bundle.tier_rules.stat_divisor", { min: 1 });
   if (divisor !== 10) throw new BundleError("bundle.tier_rules.stat_divisor must be 10, the 10 of the stat rule");
+  if (tier.weight_rule !== WEIGHT_RULE_TEXT) throw new BundleError(`bundle.tier_rules.weight_rule is not the rule that atTier implements (${WEIGHT_RULE_TEXT})`);
   if (weapon.damage_rule !== DAMAGE_RULE_TEXT) throw new BundleError(`bundle.weapon_rules.damage_rule is not the rule that atTier implements (${DAMAGE_RULE_TEXT})`);
   if (!Array.isArray(weapon.damage_pct_choices)) throw new BundleError("bundle.weapon_rules.damage_pct_choices must be a list");
   const choices = weapon.damage_pct_choices.map((text) => wholeRule(text, "bundle.weapon_rules.damage_pct_choices", { min: 1 }));
@@ -110,6 +112,7 @@ function compile(bundle) {
   return Object.freeze({
     divisor,
     floor10: wholeRule(tier.weight_floor10, "bundle.tier_rules.weight_floor10", { min: 1 }),
+    weightPct: wholeRule(tier.weight_pct, "bundle.tier_rules.weight_pct"),
     unknownWeight10: wholeRule(tier.unknown_weight10, "bundle.tier_rules.unknown_weight10"),
     hastePerTier: wholeRule(tier.haste_per_tier, "bundle.tier_rules.haste_per_tier"),
     regenPerTier: wholeRule(tier.regen_per_tier, "bundle.tier_rules.regen_per_tier"),
@@ -284,7 +287,7 @@ export function atTier(item, tier, rules, options) {
       if (value !== null) amount(value, `weapon ${field}`, label);
     }
     if (!isShield && dmg !== null && delay !== null) {
-      outWeapon = Object.freeze({ skill, dmg: dmg > 0 ? dmg + Math.max(n, quotient(dmg * n * pct, PERCENT)) : dmg, delay, bonus, two_handed: twoHanded(skill) });
+      outWeapon = Object.freeze({ skill, dmg: dmg > 0 ? dmg + quotient(dmg * n * pct, PERCENT) : dmg, delay, bonus, two_handed: twoHanded(skill) });
     }
   }
 
@@ -296,7 +299,7 @@ export function atTier(item, tier, rules, options) {
     known = false;
   } else {
     const tenths = amount(weight10, "weight10", label);
-    weight = tenths <= 0 ? 0 : Math.max(rule.floor10, tenths - Math.max(n, quotient(tenths * n, rule.divisor)));
+    weight = tenths <= 0 ? 0 : Math.max(rule.floor10, tenths - quotient(tenths * n * rule.weightPct, PERCENT));
   }
 
   return Object.freeze({

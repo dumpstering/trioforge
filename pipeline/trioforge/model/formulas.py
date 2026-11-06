@@ -42,12 +42,17 @@ WEAPON     ``DMG`` x the sum of the weapon index of the PRIMARY and the SECONDAR
   :func:`monk_bonus`) and the Iksar racial armor class sit either **on top** (``placement`` ``"top"``: added
   after the cap, valued at the sheet-point weight) or **inside** (``"inside"``: added to X before the cap).
 * **Haste.** Only the best worn haste counts. ``counted = min(cap, spell + best worn)`` with
-  ``worn counted = min(best worn, max(0, cap - spell))``, so a spell haste at or above the cap leaves no room.
+  ``worn counted = min(best worn, max(0, cap - spell))``, so a spell haste at or above the cap leaves no room. The
+  ``spell`` here is the best buff haste plus ``haste_bonus``, the flat haste of Unbound Alacrity (10 for a trio with a
+  Monk, else 0), which stacks with both and is cut by the same cap.
 * **Regen.** Gear regen counts up to the cap (``caps["regen"]``); buff regen sits outside it.
 * **Resists.** Gear plus buffs count up to ``caps["resist"]``. Racial resists are not modelled.
 * **Pools.** HP pools exist for every class, mana pools for the classes with a mana stat (WIS or INT), END
-  pools for every class; the ``POOLS_COUNTED`` (2) largest count, ties in trio order. Natural Durability is not
-  modelled.
+  pools for every class; the ``POOLS_COUNTED`` (2) largest count, ties in trio order. Natural Durability (AA 107,
+  ``hp.natural_durability_pct``) adds its percent to the HP that comes from STA, the ``hp_fac x STA'`` of an HP pool, and to nothing
+  else: not the 5, not the class base, not the flat HP of items and buffs. A profile has it in the ``fac`` of its HP pools
+  (``Profile.nd_pct`` says how much), so the evaluator, the builder and the browser read it without a rule of their own; the
+  functions that read the client's pools themselves (:func:`hp_total`, :func:`counted_pools`, :func:`stat_window`) take ``nd_pct``.
 
 The profile
 ===========
@@ -129,6 +134,7 @@ __all__ = [
     "effective_sta",
     "end_total",
     "evaluate",
+    "evaluate_truthful",
     "fr",
     "hp_total",
     "mana_total",
@@ -155,7 +161,7 @@ HP_POOL_CONSTANT = 5  # the 5 in 5 + base_hp + hp_fac x STA'; the client's formu
 POOLS_COUNTED = 2  # hp.pools_counted, mana.pools_counted
 STA_CURVE = ((255, 510), (Fraction(1), Fraction(1, 2), Fraction(0)))  # hp.sta_curve
 # mana.wis_bands
-MANA_BANDS = ((100, 200, 255, 510), (Fraction(1), Fraction(5, 2), Fraction(5, 4), Fraction(5, 8), Fraction(0)))
+MANA_BANDS = ((100, 200, 510), (Fraction(1), Fraction(5, 2), Fraction(5, 4), Fraction(0)))
 END_BREAKS = (100, 201)  # the END conversion: x to 100, 2.5 a point to 201, 1.25 a point after
 END_SLOPES = (Fraction(1), Fraction(5, 2), Fraction(5, 4))
 STR_TO_ATK = Fraction("0.666667")  # stats.str_to_atk
@@ -300,9 +306,11 @@ def _best(values: Sequence[Fraction], n: int = POOLS_COUNTED) -> list[int]:
     return sorted(range(len(values)), key=lambda i: -values[i])[:n]
 
 
-def _hp(pools: Sequence[PoolSpec], sta: Any, item_hp: Any, buff_hp: Any) -> _Pool:
+def _hp(pools: Sequence[PoolSpec], sta: Any, item_hp: Any, buff_hp: Any, nd_pct: Any = 0) -> _Pool:
+    """The HP pools: ``5 + base + fac x STA'`` with the percent of Natural Durability on the ``fac x STA'`` part, and the flat points after."""
     effective = effective_sta(sta)
-    values = [HP_POOL_CONSTANT + p.base + p.fac * effective for p in pools]
+    scale = 1 + fr(nd_pct) / 100
+    values = [HP_POOL_CONSTANT + p.base + p.fac * effective * scale for p in pools]
     top = _best(values)
     return _Pool(sum((values[i] for i in top), _ZERO) + fr(item_hp) + fr(buff_hp), tuple(pools[i].cls for i in top))
 
@@ -325,9 +333,15 @@ def _end(pools: Sequence[PoolSpec], stats: Sequence[Any], item_end: Any, buff_en
     return _Pool(total, tuple(pools[i].cls for i in top), average)
 
 
-def hp_total(trio: Sequence[str], level: int, sta_total: Any, item_hp: Any, buff_hp: Any, tables: Tables) -> Fraction:
-    """Max HP: the two largest of ``5 + base_hp + hp_fac x STA'``, plus item and buff HP. No Natural Durability."""
-    return _hp(pools_for(trio, level, tables)["HP"], sta_total, item_hp, buff_hp).total
+def hp_total(
+    trio: Sequence[str], level: int, sta_total: Any, item_hp: Any, buff_hp: Any, tables: Tables, *, nd_pct: Any = 0
+) -> Fraction:
+    """Max HP: the two largest of ``5 + base_hp + hp_fac x STA'``, plus item and buff HP.
+
+    ``nd_pct`` is the percent of Natural Durability (0 for none): it multiplies the ``hp_fac x STA'`` part of each pool and not the
+    constant, the base or the flat points.
+    """
+    return _hp(pools_for(trio, level, tables)["HP"], sta_total, item_hp, buff_hp, nd_pct).total
 
 
 def mana_total(
@@ -351,7 +365,7 @@ def end_total(
 
 
 def counted_pools(
-    trio: Sequence[str], level: int, attrs: Mapping[str, Any], tables: Tables, bands: Any = None
+    trio: Sequence[str], level: int, attrs: Mapping[str, Any], tables: Tables, bands: Any = None, *, nd_pct: Any = 0
 ) -> dict[str, tuple[str, ...]]:
     """Which classes' pools count: ``{"HP": ..., "MANA": ..., "END": ...}``.
 
@@ -360,7 +374,7 @@ def counted_pools(
     """
     pools = pools_for(trio, level, tables)
     return {
-        "HP": _hp(pools["HP"], attrs["STA"], 0, 0).counted,
+        "HP": _hp(pools["HP"], attrs["STA"], 0, 0, nd_pct).counted,
         "MANA": _mana(pools["MANA"], attrs["WIS"], attrs["INT"], 0, 0, bands).counted,
         "END": _end(pools["END"], (attrs["STR"], attrs["STA"], attrs["DEX"], attrs["AGI"]), 0, 0).counted,
     }
@@ -368,7 +382,7 @@ def counted_pools(
 
 def stat_window(
     trio: Sequence[str], level: int, attrs: Mapping[str, Any], item: Mapping[str, Any], buff: Mapping[str, Any],
-    tables: Tables, bands: Any = None,
+    tables: Tables, bands: Any = None, *, nd_pct: Any = 0,
 ) -> dict[str, Any]:
     """What the game's stat window prints: the pools of :func:`hp_total` and the others with the integer floors.
 
@@ -376,7 +390,11 @@ def stat_window(
     ``MANA`` and ``END`` points (missing means 0). Each piece is floored the way the client does: STA' (and the
     converted WIS, INT and END average) to a whole number, then each ``factor x that`` to a whole number; the two
     largest pools by those whole numbers count (ties in trio order) and the flat points are added whole. A trio
-    without a mana class prints 0 mana. A negative converted value counts as 0. Natural Durability is not modelled.
+    without a mana class prints 0 mana. A negative converted value counts as 0.
+
+    ``nd_pct`` is the percent of Natural Durability (0 for none). It applies to the HP that comes from STA: the whole number
+    ``floor(hp_fac x STA')`` of each HP pool is multiplied by ``(100 + nd_pct) / 100`` and floored again (245 becomes 274 at 12
+    percent), and the 5, the class base and the flat item and buff points are left as they are.
 
     Returns ``HP``, ``MANA`` and ``END`` (ints), ``hp_pools``, ``mana_pools``, ``end_pools`` (the classes that count)
     and ``hp_pool_values``, ``mana_pool_values``, ``end_pool_values`` (every pool's whole value, by class).
@@ -384,17 +402,19 @@ def stat_window(
     pools = pools_for(trio, level, tables)
     flat = {k: fr(item.get(k, 0)) + fr(buff.get(k, 0)) for k in ("HP", "MANA", "END")}
 
-    def family(specs: Sequence[PoolSpec], converted: Sequence[int], constant: int, points: Fraction):
+    def family(specs: Sequence[PoolSpec], converted: Sequence[int], constant: int, points: Fraction, aa_pct: Any = 0):
         rows = []
         for spec, c in zip(specs, converted):
             part = math.floor(spec.fac * c)
+            if aa_pct:
+                part = math.floor(part * (100 + fr(aa_pct)) / 100)
             rows.append((spec.cls, constant + math.floor(spec.base) + part, constant + spec.base + part))
         top = _best([row[1] for row in rows])
         total = math.floor(sum((rows[i][2] for i in top), _ZERO) + points) if rows else 0
         return total, tuple(rows[i][0] for i in top), {row[0]: row[1] for row in rows}
 
     sta_floor = math.floor(effective_sta(attrs["STA"]))
-    hp = family(pools["HP"], [sta_floor] * len(pools["HP"]), HP_POOL_CONSTANT, flat["HP"])
+    hp = family(pools["HP"], [sta_floor] * len(pools["HP"]), HP_POOL_CONSTANT, flat["HP"], nd_pct)
     stat_floor = {"WIS": math.floor(conv_mana(attrs["WIS"], bands)), "INT": math.floor(conv_mana(attrs["INT"], bands))}
     mana = family(pools["MANA"], [stat_floor[p.stat] for p in pools["MANA"]], 0, flat["MANA"])
     average = sum((min(fr(attrs[k]), STAT_CAP) for k in ("STR", "STA", "DEX", "AGI")), _ZERO) / 4
@@ -517,8 +537,8 @@ def weapon_index(weapon: WeaponVec, hand: str, setup: str | None, haste_assumed:
     """One hand's damage index under a setup, the definition of :mod:`trioforge.model.weapons` written out again.
 
     * The **primary** hand scores ``(dmg + bonus) / delay x (1 + haste/100)``: the bonus is the one the page lists,
-      else half the delay for a one-hander and 0.67 x the delay for a two-hander (a listed bonus of 0 counts as not
-      listed). The bonus belongs to the primary hand alone.
+      else half the delay for a one-hander and 0.67 x the delay (at most 50) for a two-hander (a listed bonus of 0
+      counts as not listed). The bonus belongs to the primary hand alone.
     * The **secondary** hand scores ``dmg / delay x (1 + haste/100) x dw_factor``: no bonus, and only dual wield
       puts a weapon there.
     * A hand the setup does not allow scores **0**: ``2h`` takes a two-hander in the primary hand and nothing in the
@@ -541,8 +561,12 @@ def weapon_index(weapon: WeaponVec, hand: str, setup: str | None, haste_assumed:
     haste = 1 + fr(haste_assumed) / 100
     if hand == "SECONDARY":
         return fr(weapon.dmg) / weapon.delay * haste * fr(dw_factor)
-    pattern = Fraction(67, 100) if weapon.two_handed else Fraction(1, 2)
-    bonus = fr(weapon.bonus) if weapon.bonus else pattern * weapon.delay
+    if weapon.bonus:
+        bonus = fr(weapon.bonus)
+    elif weapon.two_handed:
+        bonus = Fraction(67, 100) * min(weapon.delay, 50)
+    else:
+        bonus = Fraction(1, 2) * weapon.delay
     return (fr(weapon.dmg) + bonus) / weapon.delay * haste
 
 
@@ -587,7 +611,8 @@ class EvalProfile:
     ``cs_pct`` and ``pe_pct`` (percent added to the softcap), ``defense_cap``, ``monk`` (a curve for
     :func:`monk_bonus`, or None), ``iksar_ac``, ``placement`` (``"top"`` or ``"inside"`` for ``monk`` and
     ``iksar``), ``caps`` (``{"regen": {"HP", "MANA", "END"}, "resist": n}``), ``bands`` (the mana band curve,
-    None for the rule default) and ``dw_factor`` (the multiplier of the second hand under dual wield).
+    None for the rule default), ``dw_factor`` (the multiplier of the second hand under dual wield) and
+    ``haste_bonus`` (the flat haste of Unbound Alacrity, added to the buff haste; 0 by default).
     """
 
     level: int
@@ -608,6 +633,7 @@ class EvalProfile:
     )
     bands: Any = None
     dw_factor: Any = 1
+    haste_bonus: Any = 0
 
     def __post_init__(self) -> None:
         def put(name: str, value: Any) -> None:
@@ -635,7 +661,7 @@ class EvalProfile:
         put("softcap", (_non_negative("softcap", cap), fr(rate)))
         if not 0 <= self.softcap[1] <= 1:
             raise ValueError(f"the rate past the softcap must be from 0 to 1, not {rate!r}")
-        for name in ("cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor"):
+        for name in ("cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor", "haste_bonus"):
             put(name, _non_negative(name, getattr(self, name)))
         if self.monk is not None and not {"softcap_stones", "hardcap_stones"} <= set(self.monk):
             raise ValueError("a monk curve names softcap_stones and hardcap_stones")
@@ -886,7 +912,7 @@ def evaluate(
         parts["CURVES"] = sum((c.factor * pwl(total[c.attr], c.breaks, c.slopes) for c in legacy.curves), _ZERO)
     parts["ATK"] = w.get("ATK", 0) * atk
 
-    spell = b.get("HASTE", 0)
+    spell = b.get("HASTE", 0) + p.haste_bonus
     worn_counted = min(best_haste, max(_ZERO, p.haste_cap - spell))
     haste_counted = min(spell, p.haste_cap) + worn_counted
     parts["HASTE"] = w.get("HASTE", 0) * haste_counted
@@ -923,3 +949,23 @@ def evaluate(
         "atk": atk,
     }
     return Breakdown(F=sum(parts.values(), _ZERO), parts=parts, totals=totals)
+
+
+def evaluate_truthful(
+    profile: Any, kit: Sequence[ItemVec | None], buffs: Mapping[str, Any] | None = None, *, setup: str | None = None,
+    legacy: LegacyTerms | None = None,
+) -> Breakdown:
+    """:func:`evaluate` with the weapon index taken at the haste the kit itself counts (``totals["haste"]["counted"]``) and
+    not at a haste the caller assumes: the value of a kit as it is, the one the solver's truthful optimum (see
+    :mod:`trioforge.solver.haste`) is the maximum of. A kit that counts no haste, or that scores no weapon, is valued once."""
+    first = evaluate(profile, kit, buffs, setup=setup, haste_assumed=0, legacy=legacy)
+    counted = first.totals["haste"]["counted"]
+    if counted == 0 or first.parts["WEAPON"] == 0:  # (the index is its value at 0 haste times 1 + haste / 100)
+        return first
+    if legacy is not None:
+        return evaluate(profile, kit, buffs, setup=setup, haste_assumed=counted, legacy=legacy)
+    # nothing but the weapon part depends on the assumed haste, and each weapon's index is its value at 0 haste times 1 + haste / 100
+    # (the same rational numbers as a second evaluation at the counted haste, to the last bit: tests hold that), so the kit is not evaluated twice
+    weapon = first.parts["WEAPON"]
+    scaled = weapon * (1 + fr(counted) / 100)
+    return Breakdown(F=first.F - weapon + scaled, parts={**first.parts, "WEAPON": scaled}, totals=first.totals)

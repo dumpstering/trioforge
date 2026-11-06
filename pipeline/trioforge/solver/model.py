@@ -23,7 +23,8 @@ The model
   needs both hands, whatever its page lists), and the pruning agrees because it asks the same function. Whether the
   trio can dual wield is decided by
   ``weapons.setups_for``; the builder only applies the hand rules. A hand column adds ``DMG`` times the weapons
-  module's damage index at the scenario's assumed haste (a constant, see ``BuildOptions.haste_assumed``): the bonus
+  module's damage index at the program's assumed haste (a constant, see ``BuildOptions.haste_assumed``; the truthful solve of
+  :mod:`trioforge.solver.haste` builds a program for each haste a kit can count, with the row ``haste.floor``): the bonus
   is the primary hand's, the off hand of ``dw`` takes the dual-wield factor, and the ``stick`` setup scores none.
 * **Absolute objective.** The constants hold the naked character and the always-on buffs, and every curve is laid
   out from a total of 0, over the **reachable** range of its input (multi-copy stacking included: a non-Lore ring
@@ -77,7 +78,7 @@ at two tiers is two items.
 ``Milp.row_names`` names every row, in the order of the rows: ``group.<GROUP>``, ``lore.<key>``, ``two_hander``,
 ``buff.clique[..]``, ``buff.conflict[a,b]``, ``buff.limit``, ``<curve label>.total|deficit|flat|ord<i>.full|empty<j>``,
 ``cap.<ATTR>.max``, ``pool.<family>.kept.<cls>.le_pool|le_chosen``, ``pool.<family>.picks|twin<i>``,
-``monk.one|upper|lower``, ``sheet.below|past``, ``haste.y<value>.worn|one|best|room``, ``regen.<NAME>.max``,
+``monk.one|upper|lower``, ``sheet.below|past``, ``haste.y<value>.worn|one|best|room``, ``haste.floor``, ``haste.ceil[<spell>]``, ``haste.over[<spell>]``, ``regen.<NAME>.max``,
 ``sv.<SCHOOL>.max``, ``made.<ident>`` (each before the ``own.`` row of its source), ``own.<ident>`` and ``new.limit``. A name that would repeat (a hand-made buff set can list a clique
 twice) gets ``#2``, ``#3`` and so on: the names are unique, and the same on every build.
 
@@ -95,6 +96,8 @@ two rows. A profile with a Monk or Iksar bonus is refused.
 
 from __future__ import annotations
 
+import copy
+import dataclasses
 import itertools
 import math
 import re
@@ -116,10 +119,12 @@ __all__ = [
     "BuildOptions",
     "Csr",
     "Decoded",
+    "LevelPrograms",
     "Milp",
     "MUTATIONS",
     "build_milp",
     "eval_buff_totals",
+    "haste_levels",
     "ident",
     "plan_top_pools",
 ]
@@ -172,8 +177,15 @@ def _parse_ident(name: Any, what: str) -> tuple[str, int]:
 @dataclass(frozen=True)
 class BuildOptions:
     """``any_rule``: which items fit the Any group (``"all"`` or ``"explicit"``). ``haste_assumed``: the haste
-    percent the weapon index assumes (a constant of the scenario); ``None`` takes the spell haste the scenario can
-    reach plus the best worn haste of the pool, up to the cap. ``mutation``: a test hook, see the module docstring.
+    percent the weapon index assumes (a constant of the program); ``None`` takes the spell haste the scenario can
+    reach plus the best worn haste of the pool, up to the cap, which is a constant the kit need not reach (the truthful
+    solve of :mod:`trioforge.solver.haste` sets the assumed haste itself, one program for each level the kit can reach).
+    ``haste_floor``: the program has a row ``haste.floor`` that the kit's own counted haste (the active spell haste plus the
+    worn haste that counts, up to the cap) is at least this many percent; ``None`` (the default) has no such row. It makes the
+    weapon term true when ``haste_assumed`` is the same number. ``haste_exact`` (needs ``haste_floor``) adds the rows ``haste.ceil[<spell>]``
+    and ``haste.over[<spell>]`` that make the kit count *exactly* ``haste_floor`` (no worn haste piece above what the active spell
+    haste leaves of it, no haste buff that alone counts more): the truthful solve uses it so that the model's value of the kit is the
+    kit's own at every point of the search, and a level's relaxation is a bound on the kits that count that haste. ``mutation``: a test hook, see the module docstring.
     ``legacy``: the legacy objective's terms (``formulas.LegacyTerms``) or None, see the module docstring.
 
     ``owned_caps``, ``new_keys``, ``max_new`` and ``upgrades`` are the owned-item options (see the module docstring);
@@ -184,6 +196,8 @@ class BuildOptions:
 
     any_rule: str = "all"
     haste_assumed: int | None = None
+    haste_floor: int | None = None
+    haste_exact: bool = False
     mutation: str | None = None
     legacy: fm.LegacyTerms | None = None
     owned_caps: Mapping[str, int] | None = None
@@ -200,6 +214,14 @@ class BuildOptions:
             raise ValueError(f"unknown mutation {self.mutation!r}")
         if self.haste_assumed is not None and (type(self.haste_assumed) is not int or self.haste_assumed < 0):
             raise ValueError(f"haste_assumed is a whole number of at least 0, not {self.haste_assumed!r}")
+        if self.haste_floor is not None and (type(self.haste_floor) is not int or self.haste_floor < 0):
+            raise ValueError(f"haste_floor is None or a whole number of at least 0, not {self.haste_floor!r}")
+        if self.haste_floor is not None and self.haste_assumed is None:
+            raise ValueError("haste_floor needs haste_assumed: a level program pays the weapon term at its own level")
+        if type(self.haste_exact) is not bool:
+            raise ValueError(f"haste_exact is true or false, not {self.haste_exact!r}")
+        if self.haste_exact and self.haste_floor is None:
+            raise ValueError("haste_exact needs haste_floor: it makes the kit count exactly that haste")
         caps: dict[str, int] = {}
         if self.owned_caps is not None:
             if not isinstance(self.owned_caps, Mapping):
@@ -401,6 +423,105 @@ def build_milp(
     return _Builder(profile, items, setup, buffset, options or BuildOptions()).build()
 
 
+def haste_levels(
+    profile: Any, items: Iterable[ItemVec], setup: str | None, buffset: BuffSet | None = None,
+    options: BuildOptions | None = None,
+) -> tuple[int, ...]:
+    """The hastes a kit of this scenario can count, in percent, rising: every spell haste the scenario offers (the always-on
+    buffs' with Unbound Alacrity, or the best of those and one optional haste buff's, plus Unbound Alacrity) with 0 and with each
+    distinct worn haste of the pool added, each cut at the profile's haste cap. A kit's counted haste is always one of them,
+    because only the best worn piece counts and only the best spell haste. ``items`` and ``options`` are the ones given to
+    :func:`build_milp` (the options decide the Any rule and so which items have a place). Raises ``ValueError`` for a haste
+    that is not a whole number (the program assumes whole percents)."""
+    builder = _Builder(profile, items, setup, buffset, options or BuildOptions())
+    builder._item_columns()
+    builder._buff_columns()
+    return builder.haste_levels()
+
+
+def _csr(rows: Sequence[tuple[dict[int, Fraction], Fraction | None, Fraction | None]]) -> tuple[np.ndarray, ...]:
+    """The CSR arrays of rows ``(terms, lb, ub)``: start, index, value, row_lb, row_ub (each row's columns rise)."""
+    start, index, value = [0], [], []
+    row_lb, row_ub = [], []
+    for terms, lb, ub in rows:
+        for col in sorted(terms):
+            index.append(col)
+            value.append(float(terms[col]))
+        start.append(len(index))
+        row_lb.append(-INF if lb is None else float(lb))
+        row_ub.append(INF if ub is None else float(ub))
+    return (
+        np.array(start, dtype=np.int32), np.array(index, dtype=np.int32), np.array(value, dtype=np.float64),
+        np.array(row_lb, dtype=np.float64), np.array(row_ub, dtype=np.float64),
+    )
+
+
+class LevelPrograms:
+    """The programs of the haste levels of one scenario (what :func:`build_milp` gives for ``haste_assumed=L``, ``haste_floor=L`` and
+    ``haste_exact`` for each level ``L``), made from one build: the columns and the rows that do not depend on the level are
+    built once, and ``program_for(level)`` adds the weapon coefficients of the level and the rows that make the kit count it (the arrays are
+    those of ``build_milp`` with the same options, to the last bit). ``levels`` are the hastes a kit can count
+    (:func:`haste_levels`); ``options`` is what ``build_milp`` takes, and ``haste_assumed``, ``haste_floor`` and ``haste_exact`` are set by the
+    level."""
+
+    def __init__(
+        self, profile: Any, items: Iterable[ItemVec], setup: str | None, buffset: BuffSet | None = None,
+        options: BuildOptions | None = None,
+    ):
+        self.options = options or BuildOptions()
+        template = dataclasses.replace(self.options, haste_assumed=0, haste_floor=0, haste_exact=True)
+        builder = _Builder(profile, items, setup, buffset, template)
+        builder._capture = True
+        self._builder = builder
+        builder._item_columns()
+        builder._buff_columns()
+        self.levels = builder.haste_levels()
+        self._base = builder._build_terms()
+        self._made: dict[int, Milp] = {}
+
+    def program_for(self, level: int) -> Milp:
+        """The program of ``level`` (made once)."""
+        made = self._made.get(level)
+        if made is not None:
+            return made
+        builder, base = self._builder, self._base
+        opts = dataclasses.replace(self.options, haste_assumed=level, haste_floor=level, haste_exact=True)
+        builder.opts = opts
+        saved = builder.rows, builder.row_names, builder._row_uses
+        builder.rows, builder.row_names, builder._row_uses = [], [], dict(saved[2])
+        try:
+            builder._haste_level_rows(level)
+            rows, names = builder.rows, builder.row_names
+        finally:
+            builder.rows, builder.row_names, builder._row_uses = saved
+        l_start, l_index, l_value, l_lb, l_ub = _csr(rows)
+        slot, cut = builder._haste_slot, int(base.A.start[builder._haste_slot])
+        start = np.concatenate([base.A.start[: slot + 1], l_start[1:] + cut, base.A.start[slot + 1 :] + len(l_index)]).astype(np.int32)
+        index = np.concatenate([base.A.index[:cut], l_index, base.A.index[cut:]]).astype(np.int32)
+        value = np.concatenate([base.A.value[:cut], l_value, base.A.value[cut:]])
+        row_lb = np.concatenate([base.row_lb[:slot], l_lb, base.row_lb[slot:]])
+        row_ub = np.concatenate([base.row_ub[:slot], l_ub, base.row_ub[slot:]])
+        row_names = [*base.row_names[:slot], *names, *base.row_names[slot:]]
+        c = base.c.copy()
+        w = builder._weight("DMG")
+        if w != 0:
+            for col, hand, item in builder._weapon_cols:
+                index_of = wp.damage_index_exact(item, hand, builder.setup or "stick", level, dw_factor=builder.p.dw_factor)
+                if index_of:
+                    c[col] = float(builder.obj.get(col, ZERO) + w * index_of)
+        info = copy.deepcopy(base.info)
+        info.update(rows=len(row_names), haste_assumed=level)
+        info["haste_floor"] = level
+        info["haste_exact"] = True
+        made = dataclasses.replace(
+            base, c=c, A=Csr(start, index, value, (len(row_names), base.A.shape[1])), row_lb=row_lb, row_ub=row_ub,
+            col_lb=base.col_lb.copy(), col_ub=base.col_ub.copy(), integrality=base.integrality.copy(), haste_assumed=level, options=opts,
+            info=info, row_names=row_names, names=list(base.names),
+        )
+        self._made[level] = made
+        return made
+
+
 class _Builder:
     def __init__(
         self, profile: Any, items: Iterable[ItemVec], setup: str | None, buffset: BuffSet | None, options: BuildOptions
@@ -443,6 +564,12 @@ class _Builder:
         self._keys = itertools.count()
         self._cache: dict[Any, Lin] = {}
         self._dropped_ordering = False
+        # the programs of the haste levels (LevelPrograms) build once and leave out what depends on the level: the rows after the worn-haste
+        # columns (``haste.floor`` and the ceilings) and the weapon part of the objective
+        self._capture = False
+        self._haste_ctx: tuple[Fraction, Fraction, list[tuple[int, Fraction]], int | None] | None = None
+        self._haste_slot = 0
+        self._weapon_cols: list[tuple[int, str, ItemVec]] = []
         self.items = self._collect(items)
 
     # -- small helpers ------------------------------------------------------------------------------------------
@@ -515,6 +642,9 @@ class _Builder:
     def build(self) -> Milp:
         self._item_columns()
         self._buff_columns()
+        return self._build_terms()
+
+    def _build_terms(self) -> Milp:
         self.haste_assumed = self._assumed_haste()
         if self.legacy is not None:
             self.info["pools"] = dict.fromkeys(("HP", "MANA", "END"), "legacy")
@@ -1035,9 +1165,27 @@ class _Builder:
         spell = getattr(self.profile_in, "spell_haste", None)
         if spell is None:
             offered = [fm.fr(b.haste) for b in (self.buffset.optional if self.buffset else ())]
-            spell = max([self._bconst("HASTE")] + offered)
+            spell = max([self._bconst("HASTE")] + offered) + self.p.haste_bonus  # Unbound Alacrity stacks
         worn = max([fm.fr(i.haste) for n, i in enumerate(self.items) if i.haste > 0 and n in self.cols_of_item] + [ZERO])
         return int(min(Fraction(self.p.haste_cap), max(fm.fr(spell), ZERO) + worn))
+
+    def haste_levels(self) -> tuple[int, ...]:
+        """:func:`haste_levels` of the item columns and the buff columns that were made."""
+        cap = Fraction(self.p.haste_cap)
+        base = max(self._bconst("HASTE") + fm.fr(self.p.haste_bonus), ZERO)
+        spells = {base}
+        for buff in self.buff_of_col.values():
+            if buff.haste > 0:
+                spells.add(max(base, fm.fr(buff.haste) + fm.fr(self.p.haste_bonus)))
+        worn = {ZERO}
+        for position, item in enumerate(self.items):
+            if item.haste > 0 and position in self.cols_of_item:
+                worn.add(fm.fr(item.haste))
+        levels = sorted({min(cap, spell + piece) for spell in spells for piece in worn})
+        for level in levels:
+            if level.denominator != 1:
+                raise ValueError(f"a haste of {level} is not a whole number of percent: the weapon term assumes whole percents")
+        return tuple(int(level) for level in levels)
 
     def _haste_binaries(self, value_of) -> list[tuple[int, Fraction]]:
         """One binary per distinct effective haste value; it may be 1 only if some item of that value is worn."""
@@ -1059,14 +1207,21 @@ class _Builder:
 
     def _term_haste(self) -> None:
         w = self._weight("HASTE")
-        if w == 0:
+        floor = self.opts.haste_floor
+        if w == 0 and floor is None:
             return
         cap = Fraction(self.p.haste_cap)
-        base = self._bconst("HASTE")  # the haste of the always-on buffs
+        if floor is not None and floor > cap:
+            raise ValueError(f"haste_floor {floor} is above the haste cap {cap}")
+        # The spell haste is the buff haste plus the flat haste of Unbound Alacrity (a trio with a Monk): adding it to the
+        # always-on haste and to each buff's own haste shifts every spell haste by the same amount, so "the best one counts"
+        # still picks the same buff.
+        bonus = fm.fr(self.p.haste_bonus)
+        base = self._bconst("HASTE") + bonus  # the haste of the always-on buffs, with Unbound Alacrity
         clamp = (lambda v: v) if self.opts.mutation == "skip_haste_clamp" else (lambda v: max(ZERO, v))
         # Only the best spell haste counts and the haste buffs exclude each other, so the spell haste is one of a few
         # constants: the base while no haste buff is active, max(base, h) while the buff of haste h is.
-        choices = [(col, fm.fr(buff.haste)) for col, buff in self.buff_of_col.items() if buff.haste > 0]
+        choices = [(col, fm.fr(buff.haste) + bonus) for col, buff in self.buff_of_col.items() if buff.haste > 0]
         self.const += w * min(base, cap)
         for col, h in choices:
             self._add_obj(col, w * (min(max(base, h), cap) - min(base, cap)))
@@ -1075,12 +1230,70 @@ class _Builder:
         rooms = [(col, clamp(cap - max(base, h))) for col, h in choices]
         top = max([room0] + [room for _, room in rooms])
         flags = self._haste_binaries(lambda h: min(h, top)) if top > 0 else []
-        if not flags and self.opts.mutation != "skip_haste_clamp":
-            return
-        q = self._new("haste.q", 0, None)
-        self._row("haste.best", {q: ONE, **{y: -v for y, v in flags}}, None, 0)  # no more than the best worn piece
-        self._row("haste.room", {q: ONE, **{col: -(room - room0) for col, room in rooms}}, None, room0)  # nor than the room left
-        self._add_obj(q, w)
+        q = None
+        if flags or self.opts.mutation == "skip_haste_clamp":
+            q = self._new("haste.q", 0, None)
+            self._row("haste.best", {q: ONE, **{y: -v for y, v in flags}}, None, 0)  # no more than the best worn piece
+            self._row("haste.room", {q: ONE, **{col: -(room - room0) for col, room in rooms}}, None, room0)  # nor than the room left
+            if w != 0:
+                self._add_obj(q, w)
+        self._haste_ctx = (base, cap, choices, q)
+        self._haste_slot = len(self.rows)
+        if floor is not None and not self._capture:
+            self._haste_level_rows(floor)
+
+    def _haste_level_rows(self, floor: int) -> None:
+        """The rows that make the kit count the haste ``floor`` (the only rows of the haste term that depend on it)."""
+        assert self._haste_ctx is not None
+        base, cap, choices, q = self._haste_ctx
+        if floor > cap:
+            raise ValueError(f"haste_floor {floor} is above the haste cap {cap}")
+        if floor > min(base, cap):
+            # the haste the kit counts is the spell haste of its buffs plus the worn haste q: at least `floor`, so that the
+            # weapon term, which assumed `floor`, is true of the kit (the weapon index rises with the haste)
+            terms = {col: min(max(base, h), cap) - min(base, cap) for col, h in choices}
+            if q is not None:
+                terms[q] = ONE
+            self._row("haste.floor", terms, floor - min(base, cap), None)
+        if self.opts.haste_exact and floor < cap:
+            self._haste_ceiling(Fraction(floor), base, choices)
+
+    def _haste_ceiling(self, floor: Fraction, base: Fraction, choices: list[tuple[int, Fraction]]) -> None:
+        """The kit counts no more than ``floor`` (below the cap): under each spell haste ``s`` that a choice of buffs can make
+        active, no worn piece has more than ``floor - s`` haste, and a haste buff whose own spell haste is above ``floor`` is
+        not taken. With ``haste.floor`` the kit counts exactly ``floor``. The spell hastes are the base (no buff, or a buff
+        that is no stronger) and the distinct ``max(base, h)`` of the haste buffs; the haste buffs exclude each other, so the
+        active one is the sum of its class' buff columns."""
+        if floor < base:
+            raise ValueError(f"haste_floor {floor} is below the haste {base} that the always-on buffs and Unbound Alacrity give")
+        classes: dict[Fraction, list[int]] = {}
+        for col, h in choices:
+            if max(base, h) > base:
+                classes.setdefault(max(base, h), []).append(col)
+        stronger = [col for cols in classes.values() for col in cols]
+
+        def over(allowed: Fraction) -> list[int]:
+            return [
+                col for position, item in enumerate(self.items) if item.haste > allowed and item.haste > 0 and position in self.cols_of_item
+                for col in self.cols_of_item[position]
+            ]
+
+        def big(cols: list[int]) -> Fraction:
+            return sum((self.ub[c] for c in cols), ZERO)
+
+        pieces = over(floor - base)
+        if pieces:  # no buff stronger than the base is active: the worn piece may not be above what the base leaves
+            m = big(pieces)
+            self._row(f"haste.ceil[{base}]", {**dict.fromkeys(pieces, ONE), **dict.fromkeys(stronger, -m)}, None, 0)
+        for spell in sorted(classes):
+            cols = classes[spell]
+            if spell > floor:
+                self._row(f"haste.over[{spell}]", dict.fromkeys(cols, ONE), None, 0)
+                continue
+            pieces = over(floor - spell)
+            if pieces:
+                m = big(pieces)
+                self._row(f"haste.ceil[{spell}]", {**dict.fromkeys(pieces, ONE), **dict.fromkeys(cols, m)}, None, m)
 
     def _term_regen(self) -> None:
         for name, cap_key in (("HPREG", "HP"), ("MANAREG", "MANA"), ("ENDREG", "END")):
@@ -1124,6 +1337,9 @@ class _Builder:
         if w == 0:
             return
         setup = self.setup or "stick"
+        if self._capture:  # (the coefficients are those of a level: LevelPrograms.program_for adds them)
+            self._weapon_cols = [(col, group.lower(), item) for col, group, item in self.item_cols if group in HANDS]
+            return
         for col, group, item in self.item_cols:
             if group in HANDS:
                 hand = group.lower()
@@ -1152,22 +1368,15 @@ class _Builder:
             c[col] = float(coef)
         col_lb = np.array([-INF if v is None else float(v) for v in self.lb])
         col_ub = np.array([INF if v is None else float(v) for v in self.ub])
-        start, index, value = [0], [], []
-        row_lb, row_ub = [], []
-        for terms, lb, ub in self.rows:
-            for col in sorted(terms):
-                index.append(col)
-                value.append(float(terms[col]))
-            start.append(len(index))
-            row_lb.append(-INF if lb is None else float(lb))
-            row_ub.append(INF if ub is None else float(ub))
-        a = Csr(
-            np.array(start, dtype=np.int32), np.array(index, dtype=np.int32), np.array(value, dtype=np.float64),
-            (len(self.rows), n),
-        )
+        start, index, value, row_lb, row_ub = _csr(self.rows)
+        a = Csr(start, index, value, (len(self.rows), n))
         self.info.update(rows=len(self.rows), cols=n, haste_assumed=self.haste_assumed)
+        if self.opts.haste_floor is not None:
+            self.info["haste_floor"] = self.opts.haste_floor
+        if self.opts.haste_exact:
+            self.info["haste_exact"] = True
         return Milp(
-            c=c, A=a, row_lb=np.array(row_lb), row_ub=np.array(row_ub), col_lb=col_lb, col_ub=col_ub,
+            c=c, A=a, row_lb=row_lb, row_ub=row_ub, col_lb=col_lb, col_ub=col_ub,
             integrality=np.array(self.integer, dtype=np.int8), const=float(self.const),
             colmap={col: (group, item.key) for col, group, item in self.item_cols}, index=dict(self.index),
             names=list(self.names), item_cols=tuple(self.item_cols), buff_cols=dict(self.buff_cols), profile=self.p,

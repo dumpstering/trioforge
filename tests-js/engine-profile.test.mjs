@@ -135,11 +135,11 @@ describe("the profile", () => {
   const raw = SAMPLE.read(BUNDLE);
   const bundle = readBundle(raw);
 
-  it("is in the field order of Profile.to_dict(), 25 fields", () => {
+  it("is in the field order of Profile.to_dict(), 27 fields", () => {
     const profile = assembleProfile(bundle, GOOD);
     expect(Object.keys(profile)).toEqual([
       "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap", "cs_pct",
-      "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity",
+      "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity", "haste_bonus", "nd_pct",
     ]);
     expect(profile.race).toBe("HUM");
     expect(profile.role).toBe("balanced");
@@ -833,7 +833,7 @@ describe("the cost of reading a bundle", () => {
   // digits). A bundle of 400 texts of 4,096 digits (3.3 MB) used to stall the reader for 24 s; now a text is held to 64 digits, a bundle to
   // 2,500 texts, and the answer, a bundle or a refusal, comes in well under a second whatever a document within the limits holds.
   const SECOND = 1000;
-  const SAMPLE_TEXTS = 385; // the p/q texts of the bundle of the sample, of which 137 are the bins of the Monk curve
+  const SAMPLE_TEXTS = 389; // the p/q texts of the bundle of the sample (387 before the four ranks of Natural Durability joined the constants, 391 before the mana bands lost their break at 255), of which 137 are the bins of the Monk curve
 
   /** Consecutive Fibonacci numbers are the worst case for Euclid's algorithm: a text of that many digits that is in lowest terms. */
   function fibonacciText(digits) {

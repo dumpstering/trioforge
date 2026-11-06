@@ -5,7 +5,7 @@
     python scripts/release-build.py --tag data-YYYY-MM-DD[-N] --privacy-key <private key file> --processes 20
 
 It builds from the public catalog (``derived/catalog.json``), which must have no strict item: wiki is the one evidence level, and a catalog with a strict item (a
-community report in ``rules/community-seen.json`` made it strict) is refused before the first hour is spent. It precomputes every trio of the grid at its default scope
+community report in ``rules/community-seen.json`` made it strict) is refused before the first hour is spent. So is a catalog built without ``--eqlegendstools`` when ``rules/hand-lists.json`` takes the items of a zone from that site (its provenance must name the zone page). It precomputes every trio of the grid at its default scope
 (a pool of worker processes; chunk files and fingerprints stay in ``build/results/``), checks the release (every trio present, none partial, each at its scope; the
 parity suite; a pruning spot check of one random scenario of each trio against the unpruned optimum; the invariants; every bundle against the catalog and through the
 browser's own reader; the exact number of the files of the site), runs the **keyed** privacy scan over everything that ships, packs one ``tar.gz`` into
@@ -138,6 +138,10 @@ def _parser() -> argparse.ArgumentParser:
         help="the stride n of the sample of the shard parity: one chunk in n is solved again by the browser engine, from an offset drawn from the snapshot id of the "
         "release (default and largest allowed: the smallest trio's number of chunks, so that every trio has chunks in the sample; a smaller n is a bigger sample)",
     )  # fmt: skip
+    parser.add_argument(
+        "--parity-processes", type=_positive, default=max(1, min(12, (os.cpu_count() or 2) // 2)),
+        help="Node processes the shard parity is divided between, each doing its part of all the work, side by side (default: half the cores, at most 12; 1 is one process)",
+    )  # fmt: skip
     parser.add_argument("--build-dir", type=Path, help="the build folder (default: build/); it must be git-ignored, or outside every repository")
     return parser
 
@@ -153,7 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = release.build_release(
             tag=args.tag, root=REPO, privacy_key=args.privacy_key.resolve(), processes=args.processes, trios=args.trios,
             trial=args.trios is not None, catalog=args.catalog.resolve() if args.catalog else None, build_dir=args.build_dir.resolve() if args.build_dir else None,
-            previous=args.previous, parity_stride=args.parity_stride, say=lines.say,
+            previous=args.previous, parity_stride=args.parity_stride, parity_processes=args.parity_processes, say=lines.say,
         )  # fmt: skip
     except ReleaseRefused as error:
         print(f"refused: {error}", file=sys.stderr)

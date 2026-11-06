@@ -8,8 +8,9 @@ definition of "one addition" written out again).
 * ``farm_path``: step 1 is the exact best single addition, and every later step is the exact best single addition after
   the steps before it. An addition is one more copy of a candidate; a candidate whose key the visitor owns at a lower tier is
   an **upgrade** of one copy (the highest tier below it), which becomes the candidate; a candidate owned at its tier is
-  another copy; a Lore copy adds nothing. The step's item joins the owned set the same way. The assumed haste of the weapon
-  index is fixed for the whole session, so a step's gain is never a revaluation of the kit it started from.
+  another copy; a Lore copy adds nothing. The step's item joins the owned set the same way. The weapon index is taken at the
+  haste the kit counts, so the value of a kit is the same wherever it stands, and a step's gain is never a revaluation of the
+  kit it started from.
 * ``best_sets(k)``: the best kit when up to ``k`` additions may be made at once: sets, not a path. The k steps of the path are k
   additions, so a set of k is never worse than the first k steps; an upgraded copy can be copied inside a set too.
 * ``every_slot``: for each of the 22 places, the exact gain of swapping one candidate in with the rest of the kit held fixed.
@@ -246,7 +247,7 @@ def test_a_tie_between_candidates_goes_to_the_smaller_ident_whatever_the_order_a
         assert (first.kind, first.item.tier, first.gain) == ("upgrade", 2, 10)
 
 
-# ---- the assumed haste is fixed for the session ------------------------------------------------------------------------------
+# ---- the weapon index is taken at the haste the kit counts -------------------------------------------------------------------
 
 
 def haste_scenario():
@@ -259,46 +260,51 @@ def haste_scenario():
     return profile, {sword: 1, cloak: 1}, [swift]
 
 
-def test_the_session_haste_comes_from_the_owned_items_and_the_candidates_together():
+def test_the_session_has_no_haste_of_its_own_unless_the_caller_fixes_one():
     profile, owned, candidates = haste_scenario()
-    assert UP.session_haste(profile, owned, [], "dw", None, opts(haste_assumed=None)) == 10
-    assert UP.session_haste(profile, owned, candidates, "dw", None, opts(haste_assumed=None)) == 30
+    assert UP.session_haste(profile, owned, [], "dw", None, opts(haste_assumed=None)) is None  # every kit is valued at the haste it counts
+    assert UP.session_haste(profile, owned, candidates, "dw", None, opts(haste_assumed=None)) is None
     assert UP.session_haste(profile, owned, candidates, "dw", None, opts(haste_assumed=12)) == 12  # the caller's value stands
 
 
 def test_no_step_gain_is_a_revaluation_of_the_kit_it_started_from():
     profile, owned, candidates = haste_scenario()
-    session = UP.session_haste(profile, owned, candidates, "dw", None, opts(haste_assumed=None))
-    assert session == 30 and session != UP.session_haste(profile, owned, [], "dw", None, opts(haste_assumed=None))
-    before = UP.equip_now(profile, owned, "dw", None, opts(haste_assumed=session))
+    before = UP.equip_now(profile, owned, "dw", None, opts(haste_assumed=None))
     steps = UP.farm_path(profile, owned, candidates, "dw", None, 3, opts(haste_assumed=None))
-    assert len(steps) == 1 and steps[0].item.key == "swift-helm" and steps[0].haste_assumed == session
-    again = fm.evaluate(profile, list(steps[0].solution.kit), None, setup="dw", haste_assumed=session).F
-    held = fm.evaluate(profile, list(before.kit), None, setup="dw", haste_assumed=session).F
+    assert len(steps) == 1 and steps[0].item.key == "swift-helm"
+    # Equip now's kit counts the 10 of the cloak, the step's kit the 30 of the helm: each is valued at its own haste
+    assert before.breakdown.totals["haste"]["counted"] == 10 and steps[0].haste_assumed == 30
+    again = fm.evaluate(profile, list(steps[0].solution.kit), None, setup="dw", haste_assumed=30).F
+    held = fm.evaluate(profile, list(before.kit), None, setup="dw", haste_assumed=10).F
+    assert held == before.breakdown.F  # the value the step starts from is the value of the kit, wherever the kit stands
     assert steps[0].F == again and steps[0].gain == again - held == steps[0].F - before.breakdown.F
+    assert held == fm.evaluate_truthful(profile, list(before.kit), None, setup="dw").F
     weapon_term = lambda haste: fm.evaluate(profile, list(before.kit), None, setup="dw", haste_assumed=haste).F  # noqa: E731
     assert weapon_term(10) != weapon_term(30)  # a gain measured against a kit valued at another haste would differ
 
 
-def test_the_haste_is_the_same_in_equip_now_and_in_every_step_of_a_random_session():
+def test_every_step_of_a_random_session_is_valued_at_the_haste_its_own_kit_counts():
     for seed in range(20):
         inst, owned, candidates = U.farm_case(seed)
         free = BuildOptions(any_rule=inst.any_rule)
-        session = UP.session_haste(inst.profile, owned, candidates, inst.setup, inst.buffset, free)
         steps = UP.farm_path(inst.profile, owned, candidates, inst.setup, inst.buffset, 3, free)
-        assert {s.haste_assumed for s in steps} <= {session}, seed
         for step in steps:
             totals = H.eval_totals(inst.buffset, step.solution.buffs) if inst.buffset else None
-            assert step.F == fm.evaluate(inst.profile, list(step.solution.kit), totals, setup=inst.setup, haste_assumed=session).F
+            counted = fm.evaluate(inst.profile, list(step.solution.kit), totals, setup=inst.setup, haste_assumed=0).totals["haste"]["counted"]
+            assert step.haste_assumed == counted, seed
+            assert step.F == fm.evaluate(inst.profile, list(step.solution.kit), totals, setup=inst.setup, haste_assumed=counted).F
 
 
-def test_the_session_haste_is_the_one_the_builder_assumes_for_the_whole_pool_on_random_pools():
+def test_a_haste_the_caller_fixes_is_the_one_every_step_assumes_as_before():
     for seed in range(40):
         inst, owned, candidates = U.farm_case(seed)
         pool = {U.ident(i): i for i in [*owned, *candidates]}.values()
         free = BuildOptions(any_rule=inst.any_rule)
-        want = build_milp(inst.profile, list(pool), inst.setup, inst.buffset, free).haste_assumed
-        assert UP.session_haste(inst.profile, owned, candidates, inst.setup, inst.buffset, free) == want, seed
+        want = build_milp(inst.profile, list(pool), inst.setup, inst.buffset, free).haste_assumed  # the builder's constant for the whole pool
+        fixed = BuildOptions(any_rule=inst.any_rule, haste_assumed=want)
+        assert UP.session_haste(inst.profile, owned, candidates, inst.setup, inst.buffset, fixed) == want, seed
+        steps = UP.farm_path(inst.profile, owned, candidates, inst.setup, inst.buffset, 2, fixed)
+        assert {s.haste_assumed for s in steps} <= {want}, seed
 
 
 # ---- exactness against the brute force --------------------------------------------------------------------------------------
@@ -635,7 +641,7 @@ def test_an_owned_item_the_profile_cannot_use_is_not_offered_and_a_bad_owned_cou
     assert fingers(UP.every_slot(PROFILE, [None] * 22, [], "stick", None, opts(), owned={ring: 0}))[0].swaps == ()  # none owned
 
 
-def test_without_a_fixed_haste_every_slot_assumes_the_haste_of_the_session_and_the_owned_items_count_in_it():
+def test_without_a_fixed_haste_every_slot_values_a_swap_at_the_haste_the_swapped_kit_counts():
     profile, held, _ = haste_scenario()  # the sword and a cloak of haste 10 are owned (the helm of haste 30 is a candidate there)
     sword, cloak = held
     owned = {sword: 2, cloak: 1}
@@ -650,7 +656,11 @@ def test_without_a_fixed_haste_every_slot_assumes_the_haste_of_the_session_and_t
         worn = fm.evaluate(profile, kit, None, setup="dw", haste_assumed=haste).F
         return fm.evaluate(profile, trial, None, setup="dw", haste_assumed=haste).F - worn
 
-    assert swap.delta == gain(10) != gain(0)  # the cloak is owned, so the weapon index is taken at its 10 percent
+    assert swap.delta == gain(0) != gain(10)  # the kit wears no cloak, so the weapon index is taken at the 0 percent it counts
+    (cloak_swap,) = [s for s in rows[SLOT_INSTANCES.index("BACK")].swaps if s.item.key == "cloak"]
+    cloaked = kit_of(primary=[sword], back=[cloak])  # a haste item swapped in changes what the weapons are worth
+    assert cloak_swap.delta == fm.evaluate_truthful(profile, cloaked, None, setup="dw").F - fm.evaluate_truthful(profile, kit, None, setup="dw").F
+    assert fm.evaluate_truthful(profile, cloaked, None, setup="dw").totals["haste"]["counted"] == 10
 
 
 def test_with_the_kit_of_equip_now_the_owned_items_offered_are_those_within_the_counts_and_none_of_them_gains():
@@ -802,7 +812,6 @@ def test_the_real_pal_mnk_ber_ogre_farm_path_is_the_same_with_and_without_prunin
 
     profile, buffset, owned, candidates, _ = U.real_session()
     session = BuildOptions()
-    haste = UP.session_haste(profile, owned, candidates, "dw", buffset, session)
     timings = {}
     for name, prune_pool in (("pruned", True), ("whole pool", False)):
         started = time.perf_counter()
@@ -811,9 +820,9 @@ def test_the_real_pal_mnk_ber_ogre_farm_path_is_the_same_with_and_without_prunin
     pruned, whole = timings["pruned"][1], timings["whole pool"][1]
     assert len(pruned) == 3 and [s.F for s in pruned] == [s.F for s in whole]
     assert [(s.item.key, s.item.tier, s.kind) for s in pruned] == [(s.item.key, s.item.tier, s.kind) for s in whole]
-    assert {s.haste_assumed for s in pruned} == {haste}
+    assert [s.haste_assumed for s in pruned] == [s.haste_assumed for s in whole]  # (each is the haste its own kit counts)
     kinds = [s.kind for s in pruned]
     with capsys.disabled():
-        print(f"\n{len(owned)} owned items ({sum(owned.values())} copies), {len(candidates)} candidates, haste {haste}%")
+        print(f"\n{len(owned)} owned items ({sum(owned.values())} copies), {len(candidates)} candidates, hastes {[s.haste_assumed for s in pruned]}")
         print(f"farm path of 3 steps: pruned {timings['pruned'][0]:.1f}s, whole pool {timings['whole pool'][0]:.1f}s; kinds {kinds}")
         print("gains", [round(float(s.gain), 3) for s in pruned])

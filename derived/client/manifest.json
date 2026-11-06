@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-14",
+ "generated": "2026-10-24",
  "inputs": [
   {"file":"Resources/ACMitigation.txt","sha256":"faa532429452014e7ebf796a3568eb4fd3f9429d0c1506a602435ca0841bc93a","date":"2026-05-11"},
   {"file":"Resources/ZoneNames.txt","sha256":"44f6870b28571538019f1a2c58112fc60ee5d6149dbec9e1cfca9a262447fb5c","date":"2026-09-22"},
@@ -10,6 +10,7 @@
  "outputs": [
   {"file":"acmitigation.json","inputs":["Resources/ACMitigation.txt"],"generated":"2026-10-13"},
   {"file":"basedata.json","inputs":["Resources/basedata.txt"],"generated":"2026-10-13"},
+  {"file":"effect-spells.json","inputs":["spells_us.txt"],"generated":"2026-10-24"},
   {"file":"skillcaps.json","inputs":["Resources/skillcaps.txt"],"generated":"2026-10-13"},
   {"file":"spells-l50.json","inputs":["spells_us.txt"],"generated":"2026-10-14"},
   {"file":"spells-l55.json","inputs":["spells_us.txt"],"generated":"2026-10-14"},

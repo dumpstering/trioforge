@@ -1,4 +1,4 @@
-"""A polite HTTP client for the eqlwiki API.
+"""A polite HTTP client for the eqlwiki API (and, through :meth:`PoliteClient.get_text`, for the pages another site allows).
 
 The wiki is a volunteer-run site, so the client is built to be a good guest:
 
@@ -28,7 +28,9 @@ without waiting::
     client = PoliteClient("TrioForge-extractor/0.1 (...)")
     data = client.get_json({"action": "query", "titles": "Zorblax Ring"})
 
-Only ``https://eqlwiki.com/api.php`` is ever requested.
+:meth:`PoliteClient.get_json` only ever requests ``https://eqlwiki.com/api.php``. :meth:`PoliteClient.get_text` asks one page of
+text, and only an address that the caller's ``allow`` function accepts (``trioforge.sources.eqlegendstools`` allows its zone and
+item pages and nothing else); it is paced, retried and refused exactly as ``get_json`` is.
 """
 
 from __future__ import annotations
@@ -199,6 +201,15 @@ def _decode(body: bytes) -> Any:
     return json.loads(body.decode("utf-8"))
 
 
+def _decode_text(body: bytes) -> str:
+    """The text in a response body, gunzipped first when it is gzip (by its magic bytes)."""
+    if len(body) > MAX_BODY_BYTES:
+        raise _TooLarge
+    if body[:2] == _GZIP_MAGIC:
+        body = _gunzip(body)
+    return body.decode("utf-8")
+
+
 class PoliteClient:
     """GET requests to the eqlwiki API: serial, spaced, and patient. See the module docstring.
 
@@ -242,15 +253,32 @@ class PoliteClient:
         query = {**params, **FIXED_PARAMS}
         url = f"{API_URL}?{urllib.parse.urlencode(query)}"
         headers = {"User-Agent": self.user_agent, "Accept-Encoding": "gzip"}
+        return self._request(url, headers, self._try)
+
+    def get_text(self, url: str, allow: Callable[[str], bool]) -> str:
+        """GET one page of text (HTML) with the same pacing, retries and refusals as :meth:`get_json`.
+
+        ``allow(url)`` must say yes for the address, or nothing is sent and a :class:`FetchError` is raised: the
+        caller owns the list of hosts and paths it may ask (there is no default, so the client cannot be pointed
+        anywhere by accident). The reply is gunzipped when it is gzip and read as UTF-8; a body that cannot be read
+        is retried like a damaged JSON body.
+        """
+        if not allow(url):
+            raise FetchError(url, None, "address not allowed")
+        headers = {"User-Agent": self.user_agent, "Accept-Encoding": "gzip", "Accept": "text/html"}
+        return self._request(url, headers, self._try_text)
+
+    def _request(self, url: str, headers: Mapping[str, str], attempt: Callable[[str, Mapping[str, str]], Any]) -> Any:
+        """Try ``attempt(url, headers)`` until it gives a value (not a :class:`_Retry`), waiting between tries as the module says."""
         last: _Retry | None = None
-        for attempt in range(self.max_retries + 1):
+        for number in range(self.max_retries + 1):
             self._wait_for_turn()
-            outcome = self._try(url, headers)
+            outcome = attempt(url, headers)
             if not isinstance(outcome, _Retry):
                 return outcome
             last = outcome
-            if attempt < self.max_retries:  # no point waiting after the last failure
-                wait = outcome.wait if outcome.wait is not None else BACKOFF_BASE * 2**attempt
+            if number < self.max_retries:  # no point waiting after the last failure
+                wait = outcome.wait if outcome.wait is not None else BACKOFF_BASE * 2**number
                 if wait > 0:
                     self._sleep(wait)
         assert last is not None
@@ -263,8 +291,8 @@ class PoliteClient:
                 self._sleep(remaining)
         self._last_start = self._clock()
 
-    def _try(self, url: str, headers: Mapping[str, str]) -> dict | _Retry:
-        """One request: the decoded object, or a _Retry, or FetchError if it can never work."""
+    def _answer(self, url: str, headers: Mapping[str, str]) -> tuple[int, dict[str, Any], bytes] | _Retry:
+        """One request, up to the checks every reply gets: ``(status, lowered headers, body)`` of a 200, or a _Retry, or FetchError if it can never work."""
         try:
             status, reply_headers, body = self._transport(url, headers)
         except _NETWORK_ERRORS as error:
@@ -278,6 +306,14 @@ class PoliteClient:
             raise FetchError(url, status, "redirect refused")
         if status != 200:
             raise FetchError(url, status, "unexpected status")
+        return status, lowered, body
+
+    def _try(self, url: str, headers: Mapping[str, str]) -> dict | _Retry:
+        """One request: the decoded object, or a _Retry, or FetchError if it can never work."""
+        answer = self._answer(url, headers)
+        if isinstance(answer, _Retry):
+            return answer
+        status, lowered, body = answer
         try:
             data = _decode(body)
         except _TooLarge:
@@ -293,3 +329,16 @@ class PoliteClient:
                 return _Retry(status, "maxlag", _wait_asked(lowered.get("retry-after"), url, status))
             raise FetchError(url, status, f"api error {code}" if isinstance(code, str) else "api error")
         return data
+
+    def _try_text(self, url: str, headers: Mapping[str, str]) -> str | _Retry:
+        """One request for a page of text: the text, or a _Retry, or FetchError if it can never work."""
+        answer = self._answer(url, headers)
+        if isinstance(answer, _Retry):
+            return answer
+        status, _lowered, body = answer
+        try:
+            return _decode_text(body)
+        except _TooLarge:
+            raise FetchError(url, status, "response too large") from None
+        except (ValueError, zlib.error):  # not UTF-8, not gzip
+            return _Retry(status, "unreadable body")

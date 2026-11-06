@@ -5,7 +5,8 @@ folder beside them) plus a ``release.json``, packed into one ``tar.gz`` that the
 light on purpose: it does no solving, so the report of a release (:mod:`trioforge.reports.results_diff`) and the checks can use it.
 
 **What ships.** :func:`stage` puts exactly the files of a release into a new folder, by an allowlist of names: the item table, and for each trio the
-four shards, ``defaults.json``, ``robust.json``, the bundle ``engine-l<level>.json``, the runner-up files of the roles and their index. The ``chunks/``
+four shards, ``defaults.json``, ``robust.json``, the bundle ``engine-l<level>.json``, the runner-up files of the roles and their index, and ``exalt.json`` (the effects layer: with
+``effects.json`` of the folder beside the item table, when the build wrote them). The ``chunks/``
 folder of a trio (its chunk files carry the fingerprint of the inputs, the seen flags among them) is never staged, and any other file in a trio's
 folder is refused where it is found. Files are linked, not copied, where the volume allows it (a release is hundreds of megabytes), and a copy is
 checked against its source. :func:`check_clean` then reads every staged file for the two things that must never be in a release: the reason the
@@ -98,6 +99,9 @@ TAG_PATTERN = r"^data-\d{4}-\d{2}-\d{2}(-\d+)?$"
 _TAG = re.compile(TAG_PATTERN, re.ASCII)  # (ASCII: a text pattern's \d matches the digits of every script, and a tag has none of those)
 RELEASE_FILE = "release.json"
 ITEMS_FILE = shards.ITEMS_NAME
+#: the effects layer's files (:mod:`trioforge.effects.files`): the shared one beside the item table, and one for each trio. A release made before the layer has neither.
+EFFECTS_FILE = "effects.json"
+EXALT_FILE = "exalt.json"
 LEVELS = ("strict", "wiki", "disputed", "hidden")  # the evidence levels of the catalog
 #: the fields of ``release.json``, in order
 RELEASE_KEYS = (
@@ -169,14 +173,14 @@ def is_trio_slug(slug: Any) -> bool:
 def is_release_file(name: str) -> bool:
     """Whether ``name`` (a path relative to a release folder, with ``/``) is a file a release has: the item table, ``release.json``, or a file of a
     trio's folder (the shards, the defaults, the seals, a bundle, a runner-up file or the index of them)."""
-    if name in (ITEMS_FILE, RELEASE_FILE):
+    if name in (ITEMS_FILE, RELEASE_FILE, EFFECTS_FILE):
         return True
     slug, _, rest = name.partition("/")
     return is_trio_slug(slug) and _is_trio_file(rest)
 
 
 def _is_trio_file(rest: str) -> bool:
-    if rest in shards.OUTPUT_NAMES or _ENGINE_FILE.fullmatch(rest) is not None:
+    if rest in shards.OUTPUT_NAMES or rest == EXALT_FILE or _ENGINE_FILE.fullmatch(rest) is not None:
         return True
     folder, _, leaf = rest.partition("/")
     if folder != shards.RUNNERUP_DIR or "/" in leaf:
@@ -241,6 +245,9 @@ def stage(results: str | os.PathLike[str], trios: Sequence[str], staging: str | 
     if not table.is_file() or _is_link(table):
         raise ReleaseRefused(f"{ITEMS_FILE}, the item table of the results, is not in {root.name}")
     plan: list[tuple[str, Path]] = [(ITEMS_FILE, table)]
+    shared = root / EFFECTS_FILE
+    if shared.is_file() and not _is_link(shared):
+        plan.append((EFFECTS_FILE, shared))  # (the effects layer's shared file, when the build wrote it)
     present: list[str] = []
     missing: list[str] = []
     for slug in dict.fromkeys(trios):
@@ -359,7 +366,8 @@ def new_snapshot_id() -> str:
 #: tiers a trio has. (The chunks are made under the other code hash, :func:`trioforge.precompute.grid._code_hash`: a change here writes the files of a finished
 #: trio again from its chunks and solves nothing.) A test follows what these files import and fails for a module that is neither hashed nor explained.
 WRITER_FILES = (
-    "data/jsonio.py", "export/browser.py", "precompute/__init__.py", "precompute/engine.py", "precompute/seals.py", "precompute/shards.py", "scope.py",
+    "data/jsonio.py", "effects/__init__.py", "effects/derive.py", "effects/donors.py", "effects/files.py", "effects/judgment.py", "effects/layer.py", "effects/plan.py",
+    "effects/spells.py", "export/browser.py", "precompute/__init__.py", "precompute/engine.py", "precompute/kitwhy.py", "precompute/seals.py", "precompute/shards.py", "scope.py",
 )  # fmt: skip
 
 

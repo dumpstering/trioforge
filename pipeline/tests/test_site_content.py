@@ -224,7 +224,10 @@ def test_every_hook_the_browser_code_writes_is_in_the_generated_page():
 
     results = data.load_trio(REPO / "fixtures" / "site" / "results" / "pal-mnk-ber")
     book = content.load_rulebook(REPO / "rules" / "rules.json")
-    page = view.trio_page(results, book, view.trio_caps(results.meta.trio, results.meta.level, rules_module.load()))
+    table = json.loads((REPO / "fixtures" / "site" / "results" / "items.json").read_text(encoding="utf-8"))
+    records = {r.get("key") or f"w{r['id']}": r for r in table["items"]}  # (the page has the panels of the rows only when it is given the stats of the items)
+    page = view.trio_page(results, book, view.trio_caps(results.meta.trio, results.meta.level, rules_module.load()), None, view.tier_vecs(records, table["defaults"], rules_module.load()))
+    page = dataclasses.replace(page, exalt_files=("/data/effects.json", "/data/pal-mnk-ber/exalt.json"))  # (a page of results that have the effects layer: the hooks of its section are looked up too)
     html = render_trio(page, book)
     root = parse(html)
     source = (STATIC / "trio.js").read_text(encoding="utf-8")

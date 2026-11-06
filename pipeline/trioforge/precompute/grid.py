@@ -100,7 +100,8 @@ from trioforge.model.roles import roles_for
 from trioforge.precompute import shards
 from trioforge.solver import _highs
 from trioforge.solver import solve as solver_solve
-from trioforge.solver.model import BuildOptions, build_milp, eval_buff_totals
+from trioforge.solver.haste import solve_scenario
+from trioforge.solver.model import BuildOptions, eval_buff_totals
 from trioforge.solver.prune import prune
 from trioforge.solver.solve import ExactnessError
 
@@ -401,7 +402,7 @@ def solver_info(canonical: bool) -> dict[str, Any]:
 
 def build_info() -> dict[str, Any]:
     """The builder options of a run as the shards record them: ``any_rule``, which items fit the Any places, and
-    ``haste_assumed``, null while the haste of the weapon index is worked out for each scenario (its value is in the row).
+    ``haste_assumed``, null while the weapon index is taken at the haste the kit counts (its value is in the row).
     The other options of :class:`~trioforge.solver.model.BuildOptions` (the test hook, the legacy objective and the owned-item
     options of the Upgrade tab) never apply to a shard and are not recorded; :data:`BUILD_OPTIONS` sets none of them."""
     assert BUILD_OPTIONS.mutation is None and BUILD_OPTIONS.legacy is None
@@ -575,14 +576,14 @@ def check_kit(
 
 def totals_vector(
     trio: Sequence[str], level: int, tables: Any, bands: Any, kit: Sequence[ItemVec | None], buff_totals: Mapping[str, Any],
-    breakdown: fm.Breakdown,
+    breakdown: fm.Breakdown, nd_pct: Any = 0,
 ) -> list[int]:
     """The totals of a kit as whole numbers, in the order of :data:`trioforge.precompute.shards.TOTALS_KEYS`: sheet AC, then HP, mana and END as the game's stat
     window prints them (:func:`trioforge.model.formulas.stat_window`), then the haste counted, ATK, the five resists and the
-    three regens as the objective counts them, each with its fraction dropped."""
+    three regens as the objective counts them, each with its fraction dropped. ``nd_pct`` is the profile's Natural Durability percent: the window's HP has it on the HP that comes from STA."""
     gear = {key: sum(item.stats.get(key, 0) for item in kit if item is not None) for key in ("HP", "MANA", "END")}
     buff = {key: buff_totals.get(key, 0) for key in ("HP", "MANA", "END")}
-    window = fm.stat_window(trio, level, breakdown.totals["attributes"], gear, buff, tables, bands)
+    window = fm.stat_window(trio, level, breakdown.totals["attributes"], gear, buff, tables, bands, nd_pct=nd_pct)
     t = breakdown.totals
     values = [
         t["sheet"]["total"], window["HP"], window["MANA"], window["END"], t["haste"]["counted"], t["atk"],
@@ -661,7 +662,7 @@ class Context:
     def empty_value(self, race: str, role: str, buffs: str) -> float:
         """The value of the naked character with its best buffs: the solve of an empty pool (the base of a gain)."""
         profile = self.profile(race, role, buffs, "wiki")
-        solution = solver_solve.solve(build_milp(profile, [], None, self.buffsets[buffs], BUILD_OPTIONS))
+        solution = solve_scenario(profile, [], None, self.buffsets[buffs], BUILD_OPTIONS, solver=solver_solve.solve).solution
         if solution.status != "optimal" or solution.F is None:
             raise ScenarioError(f"the empty kit of {race} {role} {buffs} did not solve to optimality")
         return solution.F
@@ -679,11 +680,12 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
     buffset = ctx.buffsets[key.buffs]
     profile = ctx.profile(race, key.role, key.buffs, key.evidence)
     started = time.perf_counter()
-    milp = build_milp(profile, pruned, key.setup, buffset, BUILD_OPTIONS)
-    built = time.perf_counter()
-    solve = solver_solve.solve_canonical if ctx.config.canonical else solver_solve.solve
-    solution = solve(milp)
-    solved = time.perf_counter()
+    solved_one = solve_scenario(
+        profile, pruned, key.setup, buffset, BUILD_OPTIONS,
+        solver=solver_solve.solve_canonical if ctx.config.canonical else solver_solve.solve,
+    )
+    solution, milp = solved_one.solution, solved_one.milp
+    built, solved = started + solved_one.build_seconds, time.perf_counter()
     if solution.status != "optimal":
         raise ScenarioError(f"the solver ended with status {solution.status!r}, not optimal (no time limit is set)")
     if ctx.config.canonical and solution.tie_stage not in ("applied", "kept-first"):
@@ -697,25 +699,32 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
     vecs = ctx.vecs(key.tier)
     rebuilt = [vecs[item.key] if item is not None else None for item in kit]  # again, by key and tier
     totals = eval_buff_totals(buffset.totals(solution.buffs))
+    # the kit is valued at the haste it counts (milp.haste_assumed is that haste: the weapon term is paid what the kit has)
     exact = fm.evaluate(profile.eval_profile, rebuilt, totals, setup=key.setup, haste_assumed=milp.haste_assumed)
     value = float(exact.F)
     if abs(value - solution.F) > EXACT_TOLERANCE * max(1.0, abs(value)):
         raise ExactnessError(f"the solver's value {solution.F!r} and the evaluator's value {value!r} of the kit differ")
+    if milp.haste_assumed != int(exact.totals["haste"]["counted"]):
+        raise ExactnessError(
+            f"the kit counts a haste of {exact.totals['haste']['counted']}% but its value assumes {milp.haste_assumed}%"
+        )
     # The model's own objective for the kit must be the evaluator's value, on whichever side it errs. The solver refuses only a
     # model that overstates its kit: it has to allow an objective below the value in general (a solve cut short, or the tie
     # stage, which minimizes a rank and leaves the continuous columns anywhere in its band). Here every solve ran to its end,
     # and the tie stage's band is 1e-7 relative, so an objective that falls short by more than the tolerance means that
-    # the model is not exact, and the kit may not be the best there is.
+    # the model is not exact, and the kit may not be the best there is. (The model's value is the kit's at the haste of the
+    # program it came from, ``level``; it is the haste the kit counts unless the kit counts more than that program assumed.)
+    at_level = fm.evaluate(profile.eval_profile, rebuilt, totals, setup=key.setup, haste_assumed=solved_one.level)
     limit = solver_solve.EXACTNESS_TOLERANCE * max(1.0, abs(value))
-    if solution.model_F is None or abs(solution.model_F - value) > limit:
+    if solution.model_F is None or abs(solution.model_F - float(at_level.F)) > limit:
         raise ExactnessError(
-            f"the model's objective {solution.model_F!r} and the evaluator's value {value!r} of its kit differ by more than "
-            f"{solver_solve.EXACTNESS_TOLERANCE:g} relative"
+            f"the model's objective {solution.model_F!r} and the evaluator's value {float(at_level.F)!r} of its kit differ by more "
+            f"than {solver_solve.EXACTNESS_TOLERANCE:g} relative"
         )
     row = {
         "race": race, "F": solution.F, "kit": [item.key if item is not None else None for item in kit],
         "buffs": list(solution.buffs), "haste": milp.haste_assumed,
-        "totals": totals_vector(ctx.trio, ctx.config.level, ctx.tables, profile.bands, kit, totals, exact),
+        "totals": totals_vector(ctx.trio, ctx.config.level, ctx.tables, profile.bands, kit, totals, exact, profile.nd_pct),
         "nodes": solution.nodes, "tie": solution.tie_stage,
     }  # fmt: skip
     return row, built - started, solved - built
@@ -736,8 +745,7 @@ def audit_race(ctx: Context, key: ChunkKey, race: str, pool: Sequence[ItemVec], 
     the two models disagree: either way it is a :class:`ScenarioError` and the run stops. Returns ``{"race", "F"}``, which
     the chunk keeps."""
     profile = ctx.profile(race, key.role, key.buffs, key.evidence)
-    milp = build_milp(profile, pool, key.setup, ctx.buffsets[key.buffs], BUILD_OPTIONS)
-    solution = solver_solve.solve(milp)
+    solution = solve_scenario(profile, pool, key.setup, ctx.buffsets[key.buffs], BUILD_OPTIONS, solver=solver_solve.solve).solution
     if solution.status != "optimal" or solution.F is None:
         raise ScenarioError(f"the unpruned solve of {race} ended with status {solution.status!r}, not optimal (no time limit is set)")
     if abs(solution.F - expected) > EXACT_TOLERANCE * max(1.0, abs(expected)):
@@ -815,8 +823,9 @@ def _fits(item: ItemVec, place: str, setup: str) -> bool:
 def runnerup_chunk(ctx: Context, role: str, tier: int, entries: Sequence[RunnerupInput]) -> dict[str, Any]:
     """The runner-ups of one ``(role, tier)``: for each race of ``entries`` and each place, the best swaps (see below).
 
-    A swap puts one candidate in one place of the kit and nothing else changes (the buffs and the assumed haste are those
-    of the solved kit). Its delta is the exact value of the swapped kit minus the exact value of the kit, so it is
+    A swap puts one candidate in one place of the kit and nothing else changes (the buffs are those
+    of the solved kit; the swapped kit is valued at the haste it counts, as the kit is). Its delta is the exact value of the
+    swapped kit minus the exact value of the kit, so it is
     at most 0 for every item of the solve pool (the kit is the best there is) and may be positive for a deity-locked item.
     A candidate is skipped when the swapped kit is not a legal one (:func:`check_kit` is asked of every trial kit: a Lore item
     already worn elsewhere, a two-hander beside an off-hand item, in either hand, a hand the setup does not allow ...), or
@@ -842,7 +851,7 @@ def runnerup_chunk(ctx: Context, role: str, tier: int, entries: Sequence[Runneru
         kit = [vecs[k] if k is not None else None for k in entry.kit]
 
         def value(trial: list[ItemVec | None]) -> Any:
-            return fm.evaluate(ep, trial, totals, setup=entry.setup, haste_assumed=entry.haste).F
+            return fm.evaluate_truthful(ep, trial, totals, setup=entry.setup).F
 
         base = value(kit)
         beaten = EXACT_TOLERANCE * max(1.0, abs(float(base)))  # the most a swap of an item anyone can wear may be worth

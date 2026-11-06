@@ -31,7 +31,7 @@ Result files (``<trio>/``)
                number of rows of this file whose tie stage kept the first-stage kit (the optimum, with the choice among
                equal kits left to the solver; 0 when every row is canonical)
 ``build_options``  the builder options of every model: ``any_rule`` (``all``: an Any place takes every item that has a slot)
-               and ``haste_assumed`` (null: the weapon index's haste is worked out for each scenario, see the rows)
+               and ``haste_assumed`` (null: the weapon index is taken at the haste the kit counts, see the rows)
 ``assumptions``  the profile choices that are not model rows: ``aa`` (Combat Stability rank and Physical Enhancement, the
                defaults) and ``deity`` (null: items locked to a deity are left out of every precomputed kit). These and ``caps``
                are the same for every race and role of the trio (:func:`trioforge.precompute.layout_facts`; the run stops if not)
@@ -64,7 +64,7 @@ Result files (``<trio>/``)
 ``scenarios``  ``[race, role, tier, setup, kit, F, gain, totals, buffs, haste]``: ``kit``, ``totals`` and ``buffs`` index
                ``kits``, ``totals`` and ``buff_sets``; ``F`` is the value of the kit (HP-equivalents) and ``gain`` is ``F``
                minus the value of the naked character with its best buffs (both have two decimals); ``haste`` is the haste
-               percent the weapon index was taken at (``haste_assumed``, a constant of the scenario). With the kit, the buffs
+               percent the weapon index was taken at, which is the haste the kit counts (the spell haste of its buffs plus its best worn haste, up to the cap). With the kit, the buffs
                and ``haste`` a reader can value the kit again and get ``F``. All items of a kit are at the scenario's tier.
 =============  ===============================================================================================
 
@@ -117,6 +117,11 @@ wins), ``runner_up_race``, the ``margin`` between them, its ``F`` and best ``set
 says that an open rule, switched to its alternative, would put another race on top of the default view:
 ``"Iksar, if Iksar AC stacks inside the cap (test B17)"`` (the race, the alternative, the in-game test that settles the rule); the
 list is empty when no alternative flips the best race, and while the robustness is skipped (see :mod:`trioforge.precompute.seals`).
+``why`` (written when the default view has a kit): ``places``, one entry for each of the 22 places of the default race's kit in the default
+view (null for an empty place), ``{"key": the item, "loss": [[term, loss, reason]...]}``. For each stat the item carries (``term``: ``AC``, ``STA``, a
+regen, ``HASTE``, a resist school or ``DAMAGE`` for the weapon) the ``loss`` is the value the kit loses when that stat alone is taken from that item,
+the difference of two ``evaluate_truthful`` values as a float (0 for a stat past its cap, below 0 for a negative stat), the largest first; ``reason`` says
+why a loss of 0 is 0 (``resist-cap``, ``regen-cap``, ``haste-cap``, ``haste-covered``, ``ac-softcap``) or is null. See :mod:`trioforge.precompute.kitwhy`.
 
 ``robust.json``: ``race`` (the default race), ``tiers`` (the sealed tiers, +4 and +10 where the grid has them) and
 ``roles``, ``{role: {tier: {place: label}}}``: for each role at the default race (its best setup), whether the item worn in a
@@ -586,9 +591,10 @@ def default_race(values: Mapping[str, float], legal: Collection[str], order: Seq
 
 def defaults_doc(
     layout: Layout, *, view: Mapping[str, Any], per_race: Mapping[str, tuple[float, str]], strict_empty: bool,
-    robustness: str, flip_notes: Sequence[str] = (),
+    robustness: str, flip_notes: Sequence[str] = (), why: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
-    """``defaults.json``: ``per_race`` maps a race to its value and best setup in the default view."""
+    """``defaults.json``: ``per_race`` maps a race to its value and best setup in the default view. ``why`` (the 22 places of
+    :func:`trioforge.precompute.kitwhy.default_why`) is written as ``why.places`` when given."""
     order = [code for code, _ in layout.races]
     choice = default_race({race: value for race, (value, _) in per_race.items()}, layout.legal_races(), order)
     doc = {
@@ -603,6 +609,8 @@ def defaults_doc(
         ],
         "flip_notes": list(flip_notes), "robustness": robustness,
     }  # fmt: skip
+    if why is not None:
+        doc["why"] = {"places": list(why)}
     return doc
 
 

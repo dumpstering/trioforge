@@ -442,7 +442,7 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect(rowNames()).toEqual(AC2.kit.map((ident) => (ident === null ? "Leave empty" : nameOf(ident))));
     expect(rowNames()).not.toEqual(before);
     expect(text("#solve")).toContain(AC2.F);
-    expect(text("#solve")).toContain("19,069");
+    expect(text("#solve")).toContain("20,007");
     expect($$("#solve button").map((button) => button.textContent)).toEqual([BACK]);
     expect($("#main").classList.contains("solving")).toBe(false);
     expect($("#main").classList.contains("solved")).toBe(true);
@@ -450,13 +450,13 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect(new Set(tiers)).toEqual(new Set(["+4"]));
     expect(text("#kit-caption")).toBe("For Ogre · Balanced · +4 · Dual wield");
     expect(text('[data-f="assume-weights"]')).toBe("armor class x2");
-    expect(ANNOUNCED).toEqual(["Weights armor class x2. Solved for your settings. Showing Ogre, Balanced, +4, Dual wield. Kit value 19,069."]);
+    expect(ANNOUNCED).toEqual(["Weights armor class x2. Solved for your settings. Showing Ogre, Balanced, +4, Dual wield. Kit value 20,007."]);
     // the rows are the shard's rows: a name that is a link where the page links its items, the deity badge and the seal of the item's level
     const row = $$("#kit-body tr")[0];
     expect(row.querySelector('[data-f="arrival"]').textContent).toBe("+4");
     expect(row.querySelector('[data-f="source"]').textContent).toBe("Plane of Fear");
     expect($$("#kit-body tr")[7].querySelector('[data-f="arrival"]').textContent).toBe("+0"); // (a crafted item arrives at +0)
-    expect($$("#kit-body tr")[10].querySelector('[data-f="source"]').textContent).toBe("quest: Kael Drakkel quest");
+    expect($$("#kit-body tr")[16].querySelector('[data-f="source"]').textContent).toBe("quest: Lake Rathetear quest");
     expect($$("#kit-body tr")[3].querySelector('[data-f="name"]').textContent).toBe("Stud of the Fallen");
     // the figures that describe the shard's kit (the totals, the weapons block) are not shown for the answer, whose totals the page does not work out: the stylesheet hides them by this class
     expect($("#main").classList.contains("solved")).toBe(true);

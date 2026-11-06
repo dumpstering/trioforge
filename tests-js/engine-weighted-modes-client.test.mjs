@@ -21,7 +21,7 @@ beforeAll(async () => {
 const [C0, C1] = WEIGHTED.cases;
 const pick = (object, keys) => Object.fromEntries(keys.map((key) => [key, object[key]]));
 const ANSWER = ["F", "value", "kit", "buffs", "hasteAssumed"];
-const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs"];
+const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs", "hasteAssumed"];
 const base = (c, over = {}) => ({
   v: 1,
   kind: "scenario",
@@ -111,7 +111,7 @@ describe("runScenario with weights", () => {
     expect(pick(got, ANSWER)).toEqual(pick(C0.equipNow, ANSWER));
     const seen = [];
     const path = await h.client.runScenario(farm(C0), { onStep: (step) => seen.push(step) });
-    expect(path).toMatchObject({ mode: "farm-path", stopped: C0.farmPath.stopped, steps: C0.farmPath.path.length, hasteAssumed: C0.farmPath.hasteAssumed });
+    expect(path).toMatchObject({ mode: "farm-path", stopped: C0.farmPath.stopped, steps: C0.farmPath.path.length, hasteAssumed: C0.equipNow.hasteAssumed });
     expect(pick(seen[0], ["F", "value", "kit", "buffs"])).toEqual(C0.farmPath.start);
     expect(seen.slice(1).map((step) => pick(step, STEP))).toEqual(C0.farmPath.path);
     const set = await h.client.runScenario(sets(C0, 3));

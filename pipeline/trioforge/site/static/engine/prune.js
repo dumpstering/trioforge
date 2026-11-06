@@ -6,7 +6,7 @@
 //   pruneReport(...)  -> {kept, dropped, hasteAssumed, compared, weightRule}: the same, with the reason each item went
 //   fitGroups(item, setup, anyRule)  -> the Set of slot groups the builder gives the item a column in (whether it is eligible is not asked)
 //   scoredDimensions(profile, setup) -> the names of the dimensions the objective can reward, and so the ones that are compared
-//   hastePercent(profile, hastes, buffs)  -> the haste percent a weapon index assumes for items that carry the worn hastes `hastes` (path.js shares it)
+//   hastePercent(profile, hastes, buffs)  -> the highest haste percent a kit of items that carry the worn hastes `hastes` can count (what the weapon index is ranked at)
 //
 // The arguments are those of Python's, in its order, and the builder's own: `items` and `profile` as `buildMilp` takes them (a list of items as
 // `atTier` gives them; a profile as `assembleProfile` gives it, read with the evaluator's reader), `tier` a whole number (every item is at it) or null
@@ -14,7 +14,7 @@
 // `options` the builder's options (`any_rule`, `haste_assumed`, `owned_caps`, `new_keys`, `max_new`, `upgrades`, and `monk_bins` for a Monk whose
 // weight is scored; the same checks as `buildMilp` makes), and `owned` the idents (`key@tier`) of owned items besides the keys of `owned_caps`. Pass
 // it the same setup, buffset and options as the builder: the groups an item fits depend on the setup and on the Any rule, and the weapon index on the
-// assumed haste. The input is not changed and the items that come back are the very objects that went in.
+// setup. (The ranking of the weapons of a hand does not depend on the haste, so the pruned pool is the same for every haste the truthful solve assumes.) The input is not changed and the items that come back are the very objects that went in.
 //
 // The rule in short: an item B goes only if a kept, plain (non-Lore) item A fits every group B fits, is at least as good in every dimension that the
 // objective scores (and no heavier, where a Monk's weight is scored), and is not a two-hander where B is not and B fits the primary hand. Of two
@@ -187,6 +187,7 @@ export function hastePercent(profile, hastes, buffs) {
   if (spell === null) {
     spell = p.buff[HASTE_INDEX];
     for (const buff of buffs === null ? [] : buffs.optional) spell = larger(spell, buff.haste);
+    spell = spell.add(p.hasteBonus); // Unbound Alacrity stacks with the spell haste (the profile's own spell_haste has it already)
   }
   let worn = ZERO;
   for (const haste of hastes) if (haste > 0) worn = larger(worn, whole(haste));

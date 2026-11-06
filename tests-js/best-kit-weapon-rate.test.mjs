@@ -1,5 +1,5 @@
 // The weapon tier rate of the best kit: the percent of damage a weapon grows a tier, 5 or 10, which a request names in `options: {weaponTierRate}`. The rule
-// `tier.weapon_damage_pct` (5) is the default, and `at_tier(weapon_pct=)` is Python's reference. fixtures/site/weapon-rate.json (pipeline/tests/engine_fixture.py makes it, and
+// `tier.weapon_damage_pct` (10) is the default, and `at_tier(weapon_pct=)` is Python's reference. fixtures/site/weapon-rate.json (pipeline/tests/engine_fixture.py makes it, and
 // test_site_engine_fixture.py keeps it current) has views of the whole pool at +10, +4 and +0, each with the answer that Python gives at 5 and at 10 and with the rate left to the
 // rules. The worker's mode, asked for the same view and tier with the same rate, must give that answer: the exact value as a reduced p/q text, the kit place for place, the
 // optional buffs and the haste assumed. The pool, its pruning and the evaluator all use the rate (the items of the pool carry the damage it gives), and nothing else changes.
@@ -53,12 +53,12 @@ describe("the worker's best kit at a weapon tier rate", () => {
       });
     }
 
-    it(`gives the answer at 5 percent with no rate, with an empty options and with the rate of the rules: ${c.name}`, async () => {
+    it(`gives the answer at 10 percent with no rate, with an empty options and with the rate of the rules: ${c.name}`, async () => {
       const h = harness({ solver: highs });
       await h.start();
       const none = (await h.ask(request(c))).last;
       expect(fieldsOf(none)).toEqual(answerOf(c.rules));
-      expect(fieldsOf(none)).toEqual(answerOf(c.rates["5"]));
+      expect(fieldsOf(none)).toEqual(answerOf(c.rates["10"]));
       const empty = (await h.ask(bestKitRequest(c.scenario, c.tier, c.weights, { options: {} }))).last;
       expect(fieldsOf(empty)).toEqual(fieldsOf(none));
     });
@@ -82,7 +82,7 @@ describe("the worker's best kit at a weapon tier rate", () => {
     const order = [10, 5, 10, undefined, 5];
     for (const rate of order) {
       const got = (await h.ask(request(c, rate))).last;
-      expect(fieldsOf(got), `rate ${rate}`).toEqual(answerOf(c.rates[String(rate ?? 5)]));
+      expect(fieldsOf(got), `rate ${rate}`).toEqual(answerOf(c.rates[String(rate ?? 10)]));
     }
     expect(h.scenarios.stats().bestKits).toBe(order.length);
   });
@@ -110,11 +110,11 @@ describe("the best kit function at a weapon tier rate", () => {
   it("makes the pool, the pruned pool and the kit of the items the rate gives: the damage of a two-hander at +10 is 54 at 5 percent and 72 at 10", () => {
     const c = WEAPON_RATE.cases.find((candidate) => candidate.scenario.setup === "2h" && candidate.tier === 10);
     const damage = (items) => items.find((item) => item.key === "w80524")?.weapon.dmg; // a two-hander of 36 damage in the invented catalog
-    const wants = { 5: 36 + Math.max(10, Math.floor((36 * 10 * 5) / 100)), 10: 36 + Math.max(10, Math.floor((36 * 10 * 10) / 100)) };
+    const wants = { 5: 36 + Math.floor((36 * 10 * 5) / 100), 10: 36 + Math.floor((36 * 10 * 10) / 100) }; // no minimum step a tier
     expect(wants).toEqual({ 5: 54, 10: 72 });
     for (const rate of [5, 10, undefined]) {
       const got = solve(c, rate);
-      const want = wants[rate ?? 5];
+      const want = wants[rate ?? 10];
       expect(damage(got.pool), `the pool at ${rate}`).toBe(want);
       expect(damage(got.pruned), `the pruned pool at ${rate}`).toBe(want);
       expect(damage(got.answer.kit.filter((item) => item !== null)), `the kit at ${rate}`).toBe(want); // the evaluator values the kit with it

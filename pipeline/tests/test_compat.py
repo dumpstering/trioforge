@@ -723,7 +723,7 @@ def test_a_pool_nobody_can_wear_is_the_empty_kit():
 def test_the_default_options_of_the_builder_are_untouched():
     fields = {f.name: f.default for f in dataclasses.fields(BuildOptions)}
     assert fields == {
-        "any_rule": "all", "haste_assumed": None, "mutation": None, "legacy": None,
+        "any_rule": "all", "haste_assumed": None, "haste_floor": None, "haste_exact": False, "mutation": None, "legacy": None,
         "owned_caps": None, "new_keys": frozenset(), "max_new": None, "upgrades": None,  # the owned-item options: all off
     }
     prof = eval_profile(weights={"HP": 1})

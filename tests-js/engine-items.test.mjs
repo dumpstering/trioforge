@@ -168,12 +168,12 @@ describe("the stat rule", () => {
 });
 
 describe("the weight", () => {
-  it("falls by the same amount to a floor of a tenth of a stone", () => {
-    for (const [weight10, tier, want] of [[100, 0, 100], [100, 4, 60], [100, 10, 1], [1, 10, 1]]) {
+  it("falls nine percent of the base a tier, rounded down and with no minimum step, to a floor of a tenth of a stone", () => {
+    for (const [weight10, tier, want] of [[100, 0, 100], [100, 4, 64], [100, 10, 10], [30, 10, 3], [19, 1, 18], [10, 4, 7], [2, 5, 2], [10, 10, 1], [1, 10, 1]]) {
       expect(atTier(record({ weight10 }), tier, RULES).weight10, `${weight10} at +${tier}`).toBe(want);
     }
-    expect(atTier(record({ weight10: 73 }), 4, RULES).weight10).toBe(44); // 73 * 4 // 10 = 29 over the +4 minimum
-    expect(atTier(record({ weight10: 15 }), 4, RULES).weight10).toBe(9);
+    expect(atTier(record({ weight10: 73 }), 4, RULES).weight10).toBe(47); // 73 * 9 * 4 // 100 = 26
+    expect(atTier(record({ weight10: 15 }), 4, RULES).weight10).toBe(10);
     expect(atTier(record({ weight10: 15 }), 1, RULES).weight10).toBe(14);
   });
 
@@ -195,31 +195,31 @@ describe("the weight", () => {
 describe("weapons", () => {
   const primary = (weapon) => record({ slots: ["PRIMARY"], weapon });
 
-  it("rises five percent a tier of the damage, rounded down, at least a point, unless the rules say ten", () => {
-    expect(atTier(primary(sword("1H Slashing", 20, 30, 7)), 4, RULES).weapon).toEqual({ skill: "1H Slashing", dmg: 24, delay: 30, bonus: 7, two_handed: false });
-    expect(atTier(primary(sword("1H Slashing", 3)), 4, RULES).weapon.dmg).toBe(7);
-    for (const [dmg, tier, want] of [[20, 0, 20], [20, 1, 21], [45, 3, 51], [45, 10, 67], [100, 10, 150]]) {
+  it("rises ten percent a tier of the damage, rounded down, with no minimum step, unless the rules say five", () => {
+    expect(atTier(primary(sword("1H Slashing", 20, 30, 7)), 4, RULES).weapon).toEqual({ skill: "1H Slashing", dmg: 28, delay: 30, bonus: 7, two_handed: false });
+    expect(atTier(primary(sword("1H Slashing", 3)), 4, RULES).weapon.dmg).toBe(4); // (7 with a point a tier)
+    for (const [dmg, tier, want] of [[20, 0, 20], [20, 1, 22], [45, 3, 58], [45, 10, 90], [100, 10, 200]]) {
       expect(atTier(primary(sword("1H Slashing", dmg)), tier, RULES).weapon.dmg, `${dmg} at +${tier}`).toBe(want);
     }
-    const ten = rulesWith((raw) => {
-      raw.weapon_rules.damage_pct = "10/1";
+    const five = rulesWith((raw) => {
+      raw.weapon_rules.damage_pct = "5/1";
     });
-    expect(atTier(primary(sword("1H Slashing", 20)), 4, ten).weapon.dmg).toBe(28);
+    expect(atTier(primary(sword("1H Slashing", 20)), 4, five).weapon.dmg).toBe(24);
     // the option does the same without a second rules object
-    expect(atTier(primary(sword("1H Slashing", 20)), 4, RULES, { weaponPct: 10 }).weapon.dmg).toBe(28);
-    expect(atTier(primary(sword("1H Slashing", 20)), 4, ten, { weaponPct: 5 }).weapon.dmg).toBe(24);
+    expect(atTier(primary(sword("1H Slashing", 20)), 4, RULES, { weaponPct: 5 }).weapon.dmg).toBe(24);
+    expect(atTier(primary(sword("1H Slashing", 20)), 4, five, { weaponPct: 10 }).weapon.dmg).toBe(28);
   });
 
   it("takes the rate of the rules when none is given, and null is none", () => {
-    const ten = rulesWith((raw) => {
-      raw.weapon_rules.damage_pct = "10/1";
+    const five = rulesWith((raw) => {
+      raw.weapon_rules.damage_pct = "5/1";
     });
     for (let tier = 0; tier <= 10; tier += 1) {
       const weapon = primary(sword("2H Blunt", 37, 40, 3));
-      expect(atTier(weapon, tier, RULES)).toEqual(atTier(weapon, tier, RULES, { weaponPct: 5 }));
-      expect(atTier(weapon, tier, RULES, { weaponPct: null })).toEqual(atTier(weapon, tier, RULES, { weaponPct: 5 }));
-      expect(atTier(weapon, tier, RULES, {})).toEqual(atTier(weapon, tier, RULES, { weaponPct: 5 }));
-      expect(atTier(weapon, tier, ten)).toEqual(atTier(weapon, tier, RULES, { weaponPct: 10 }));
+      expect(atTier(weapon, tier, RULES)).toEqual(atTier(weapon, tier, RULES, { weaponPct: 10 }));
+      expect(atTier(weapon, tier, RULES, { weaponPct: null })).toEqual(atTier(weapon, tier, RULES, { weaponPct: 10 }));
+      expect(atTier(weapon, tier, RULES, {})).toEqual(atTier(weapon, tier, RULES, { weaponPct: 10 }));
+      expect(atTier(weapon, tier, five)).toEqual(atTier(weapon, tier, RULES, { weaponPct: 5 }));
     }
   });
 
@@ -402,8 +402,8 @@ describe("what is refused", () => {
 
   it("is an option that atTier does not read (a misspelt weaponPct would be ignored, and the item look right at the rate of the rules)", () => {
     const axe = record({ slots: ["PRIMARY"], weapon: sword("1H Slashing", 20) });
-    expect(atTier(axe, 10, RULES).weapon.dmg).toBe(30); // 5 percent a tier
-    expect(atTier(axe, 10, RULES, { weaponPct: 10 }).weapon.dmg).toBe(40);
+    expect(atTier(axe, 10, RULES).weapon.dmg).toBe(40); // 10 percent a tier
+    expect(atTier(axe, 10, RULES, { weaponPct: 5 }).weapon.dmg).toBe(30);
     for (const key of ["weapon_pct", "weaponpct", "WeaponPct", "weaponPercent", "pct", "rate", "tier", "weaponPct "]) {
       const options = Object.defineProperty({}, key, { value: 10, enumerable: true });
       expect(() => atTier(axe, 10, RULES, options), JSON.stringify(key)).toThrow(ItemError);
@@ -500,8 +500,8 @@ describe("exactness", () => {
       const max = (x, y) => (x > y ? x : y);
       expect(BigInt(item.stats.AC)).toBe(b + max(n, (b * n) / 10n));
       expect(item.stats.STR).toBe(negative);
-      expect(BigInt(item.weight10)).toBe(max(1n, w - max(n, (w * n) / 10n)));
-      expect(BigInt(item.weapon.dmg)).toBe(d + max(n, (d * n * p) / 100n));
+      expect(BigInt(item.weight10)).toBe(max(1n, w - (w * 9n * n) / 100n)); // 9 percent of the base a tier, no minimum step
+      expect(BigInt(item.weapon.dmg)).toBe(d + (d * n * p) / 100n); // and none for the damage either
       checked += 1;
     }
     expect(checked).toBe(20_000);

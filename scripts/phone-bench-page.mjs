@@ -16,11 +16,11 @@
 import loadHighs from "highs";
 import { SOLVER_OPTIONS, toModelData } from "../pipeline/trioforge/site/static/engine/highs-data.js";
 import { atTier } from "../pipeline/trioforge/site/static/engine/items.js";
-import { equipNow, farmPath, sessionHaste } from "../pipeline/trioforge/site/static/engine/path.js";
+import { equipNow, farmPath } from "../pipeline/trioforge/site/static/engine/path.js";
 import { readBundle } from "../pipeline/trioforge/site/static/engine/profile.js";
 import { prune } from "../pipeline/trioforge/site/static/engine/prune.js";
 import { Rational } from "../pipeline/trioforge/site/static/engine/rational.js";
-import { closeSession, createSession, setScenario, solve } from "../pipeline/trioforge/site/static/engine/solve.js";
+import { closeSession, createSession, programsOf, solveScenario } from "../pipeline/trioforge/site/static/engine/solve.js";
 
 /** How close the value of an answer must be to the value Python recorded (relative, as the parity tests hold it). */
 const VALUE_TOLERANCE = 1e-9;
@@ -268,8 +268,12 @@ function agreesWithRecording(expected, found, stopped, asked) {
   return true;
 }
 
-/** The last solution of the Best-1 model in a session: null while there is none (the farm path makes the model when its first step reaches the solver). */
-const lastSolution = (session) => session.scenarios.get(BEST_1)?.last ?? null;
+/**
+ * The last solutions of the programs of the Best-1 scenario in a session (one for each haste level that a step looked at): an empty list while there is none (the farm path makes the
+ * model when its first step reaches the solver). Two lists are the same when no solve has been made between them.
+ */
+const lastSolution = (session) => programsOf(session, BEST_1).map((name) => session.scenarios.get(name).last);
+const sameSolutions = (a, b) => a.length === b.length && a.every((last, at) => last === b[at]);
 
 /** The one tier that every item of a pool is at, or null for no item or for several tiers (what `prune` takes for its tier). */
 function commonTier(items) {
@@ -300,16 +304,17 @@ export async function createRunner({ highs, read, bundlePaths, profilesPath }) {
       const tier = recording === null ? commonTier(input) : recording.tier;
       const pruneOptions = c.withBins(recording === null ? recorded.options : recording.options);
       const owned = recording === null ? [] : recording.owned;
-      const solveOptions = deepFreeze(clone(recorded.options));
+      // a truthful solve (the case records the levels of its haste) is made as the browser makes it: one program for each haste a kit can count, the options of the scenario fixing none
+      const solveOptions = deepFreeze({ ...clone(recorded.options), ...(recorded.haste === null ? {} : { haste_assumed: null, haste_floor: null, haste_exact: false }) });
       const session = createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins });
       try {
         const began = ms();
         const kept = prune(input, c.profile, tier, c.setup, c.buffset, pruneOptions, owned);
         const pruned = ms();
-        const built = setScenario(session, MAIN, kept, solveOptions);
-        const loaded = ms();
-        const answer = solve(session, { scenario: MAIN, budgetMs, canonical: false });
+        const answer = solveScenario(session, { name: MAIN, items: kept, options: solveOptions, budgetMs, canonical: false });
         const solved = ms();
+        const built = answer.build;
+        const buildMs = built.buildMs + built.syncMs;
         return {
           name: path,
           id: doc.id,
@@ -322,10 +327,10 @@ export async function createRunner({ highs, read, bundlePaths, profilesPath }) {
           columns: built.columns,
           rows: built.rows,
           pruneMs: pruned - began,
-          buildMs: loaded - pruned,
+          buildMs,
           builderMs: built.buildMs,
           syncMs: built.syncMs,
-          solveMs: solved - loaded,
+          solveMs: solved - pruned - buildMs,
           totalMs: solved - began,
           status: answer.status,
           proven: answer.proven,
@@ -340,8 +345,7 @@ export async function createRunner({ highs, read, bundlePaths, profilesPath }) {
     },
 
     /**
-     * The Upgrade functions on an Upgrade case: Equip now alone (`equipMs`, on a session of its own, the assumed haste fixed at the session's as the farm
-     * path fixes it), then the farm path (`pathMs`) asking for `steps` steps, each step as `onStep` is told it: `ownMs` is the step's own time that the
+     * The Upgrade functions on an Upgrade case: Equip now alone (`equipMs`, on a session of its own, valued at the haste its kit counts as the farm path values it), then the farm path (`pathMs`) asking for `steps` steps, each step as `onStep` is told it: `ownMs` is the step's own time that the
      * engine reports (`timings.totalMs`: its plan, pruning, model and solve), `arrivalMs` the moment it was told, counted from the start of the call (so
      * the first step's includes Equip now, which the path runs first). `tailMs` is what the call took after the last step was told.
      *
@@ -361,12 +365,11 @@ export async function createRunner({ highs, read, bundlePaths, profilesPath }) {
       const anyRule = doc.solves[0].options.any_rule;
       const owned = c.owned();
       const candidates = c.candidates();
-      const haste = sessionHaste(c.profile, owned, candidates, c.setup, c.buffset, { any_rule: anyRule });
       const sessionWith = (options) => createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, options });
 
       let equip;
       let equipMs;
-      const alone = sessionWith({ any_rule: anyRule, haste_assumed: haste });
+      const alone = sessionWith({ any_rule: anyRule });
       try {
         const began = ms();
         equip = equipNow(alone, owned, { budgetMs, canonical: false });
@@ -378,7 +381,7 @@ export async function createRunner({ highs, read, bundlePaths, profilesPath }) {
       const session = sessionWith({ any_rule: anyRule });
       try {
         const arrivals = [];
-        let lastAtStep = null;
+        let lastAtStep = [];
         const began = ms();
         const result = farmPath(session, owned, candidates, {
           steps,
@@ -414,14 +417,14 @@ export async function createRunner({ highs, read, bundlePaths, profilesPath }) {
         const found = result.steps.filter((step) => step.found);
         const lastArrival = arrivals.length === 0 ? null : arrivals[arrivals.length - 1];
         const baselineMs = result.baseline === null ? 0 : result.baseline.build.buildMs + result.baseline.build.syncMs + result.baseline.elapsedMs;
-        const proved = result.stopped === "no-gain" && lastSolution(session) !== lastAtStep;
+        const proved = result.stopped === "no-gain" && !sameSolutions(lastSolution(session), lastAtStep);
         return {
           name: path,
           id: doc.id,
           label: doc.label,
           owned: owned.length,
           candidates: candidates.length,
-          hasteOk: haste === expected.session_haste && (result.hasteAssumed === null || result.hasteAssumed === haste),
+          hasteOk: equip.hasteAssumed === doc.solves[expected.equip_now].result.haste_assumed && (result.hasteAssumed === null || result.hasteAssumed === equip.hasteAssumed),
           equipMs,
           equipStatus: equip.status,
           equipTieMs: equip.timings.tieMs,

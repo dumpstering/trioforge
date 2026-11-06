@@ -67,8 +67,12 @@ __all__ = [
 BuffKeys = ("own", "group", "group+enchanter", "raid")
 BRUTE_COUNT = 330
 #: the Upgrade sessions of the committed sample: one of each tier mode, and between them steps that add a new item, another
-#: copy and an owned-item tier upgrade (a run checks that they do)
-SAMPLE_SESSIONS = (2, 7, 12)
+#: copy and an owned-item tier upgrade (a run checks that they do), and a session whose first step upgrades an owned copy and whose
+#: second copies the upgraded item (test_a_best_set_may_upgrade_an_owned_copy...: 12 had it for the catalog of 2026-10-14, 9 has it for
+#: the one of 2026-10-27; which session has it depends on the items the seed has the visitor own, so the test looks for the shape), and
+#: a session in the mode "as it arrives" whose Every slot rows offer an item the visitor has, in every copy the kit wears elsewhere
+#: (the page says "get another copy": 14 for the catalog of 2026-10-27; the JS tests look for the shape)
+SAMPLE_SESSIONS = (2, 7, 9, 14)
 #: what the sessions of a run of three or more must show between them: each kind of step, each tier mode, an owned item that
 #: is locked to a deity
 UPGRADE_REQUIRED = (
@@ -427,7 +431,7 @@ SCALES = {
     "mini": Scale("mini", 6, (MINI_STRATA, 1), 1, 1, 30, 1, 2, 10, 16, True),
     "tiny": Scale("tiny", 2, (("composed-weights",), 1), 0, 0, 10, 1, 2, 5, 6, True),
     "sample": Scale(
-        "sample", 40, (REQUIRED_STRATA + ("evidence:strict-proxy", "level:55", "prune-check"), 2), 6, 3, 150, 1, None, 60, 150,
+        "sample", 40, (REQUIRED_STRATA + ("evidence:strict-proxy", "level:55", "prune-check"), 2), 6, len(SAMPLE_SESSIONS), 150, 1, None, 60, 150,
         False,
     ),
 }

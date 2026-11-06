@@ -51,9 +51,10 @@ from trioforge.precompute import grid, seals, shards
 from trioforge.solver import _highs
 from trioforge.solver import robust as robust_module
 from trioforge.solver import solve as solve_module
-from trioforge.solver.model import BuildOptions, build_milp, eval_buff_totals
+from trioforge.solver.haste import solve_scenario
+from trioforge.solver.model import BuildOptions, eval_buff_totals
 from trioforge.solver.prune import prune
-from trioforge.solver.solve import ExactnessError, solve_canonical
+from trioforge.solver.solve import ExactnessError
 
 TRIO = ("PAL", "MNK", "BER")
 SLUG = "pal-mnk-ber"
@@ -196,8 +197,8 @@ def independent(items, tier, race, role, setup, buffs, evidence, *, pruned=True,
     profile = make_profile(race, TRIO, 50, role, buffset, None, TABLES, evidence=evidence)
     if pruned:
         pool = prune(pool, profile, tier, setup, buffset)
-    milp = build_milp(profile, pool, setup, buffset)
-    return solve_canonical(milp), milp, profile, buffset
+    found = solve_scenario(profile, pool, setup, buffset)  # the weapons are paid the haste the kit counts, as the precompute pays them
+    return found.solution, found.milp, profile, buffset
 
 
 def read(path):
@@ -527,7 +528,7 @@ def test_the_shard_header_names_the_data_the_rules_and_the_solver_choice(tiny):
     assert solver["highs"] == highspy.Highs().version() and solver["revision"] == highspy.Highs().githash()
     assert shard["build_options"] == {"any_rule": "all", "haste_assumed": None}
     sample = make_profile("OGR", TRIO, 50, "balanced", buffset_of("own"), None, TABLES)
-    assert shard["assumptions"] == {"aa": dict(sample.aa), "deity": None} == {"aa": {"combat_stability": 3, "physical_enhancement": True}, "deity": None}
+    assert shard["assumptions"] == {"aa": dict(sample.aa), "deity": None} == {"aa": {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}, "deity": None}
     assert shard["partial"] is True
     assert shard["flags"] == ["strict pool empty"]
     assert shard["pool"] == len(eligible(CATALOG, "wiki"))
@@ -631,7 +632,7 @@ def test_the_caps_and_the_assumptions_are_one_set_for_every_race_and_role_of_a_t
     assert len(facts) == 15 * 3
     caps, assumptions = facts[("OGR", "balanced")]
     assert (caps["haste"], caps["resist"], caps["regen"]) == (85, 200, {"HP": 30, "MANA": 15, "END": 15})
-    assert assumptions == {"aa": {"combat_stability": 3, "physical_enhancement": True}, "deity": None}
+    assert assumptions == {"aa": {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}, "deity": None}
     assert {key: value for key, value in facts.items() if value != (caps, assumptions)} == {}
 
 
@@ -673,7 +674,7 @@ def test_totals_are_the_whole_numbers_the_game_window_would_print_for_the_exact_
         totals = eval_buff_totals(buffset.totals(solution.buffs))
         breakdown = fm.evaluate(profile.eval_profile, kit, totals, setup=setup, haste_assumed=milp.haste_assumed)
         gear = {k: sum(item.stats.get(k, 0) for item in kit if item) for k in ("HP", "MANA", "END")}
-        window = fm.stat_window(TRIO, 50, breakdown.totals["attributes"], gear, {k: totals.get(k, 0) for k in ("HP", "MANA", "END")}, TABLES, profile.bands)
+        window = fm.stat_window(TRIO, 50, breakdown.totals["attributes"], gear, {k: totals.get(k, 0) for k in ("HP", "MANA", "END")}, TABLES, profile.bands, nd_pct=profile.nd_pct)
         t = row["totals"]
         assert (t["hp"], t["mana"], t["end"]) == (window["HP"], window["MANA"], window["END"])
         assert t["ac"] == int(breakdown.totals["sheet"]["total"]) and t["haste"] == int(breakdown.totals["haste"]["counted"])
@@ -727,6 +728,40 @@ def test_the_defaults_are_the_best_creation_legal_race_by_total_value_in_the_bal
     assert defaults["flip_notes"] == [] and defaults["robustness"] == "skipped: disabled"
 
 
+def test_the_defaults_carry_the_why_of_the_default_kit_each_stat_valued_again_without_it(tiny):
+    """p7kit: ``why.places`` has the 22 places of the default race's kit; the loss of a stat is the exact value of the kit less its value without that stat (``evaluate_truthful`` both times)."""
+    defaults = read(tiny.dir / "defaults.json")
+    row = expand(read(tiny.dir / "wiki-own.json"))[(defaults["race"], "balanced", 4, defaults["setup"])]
+    places = defaults["why"]["places"]
+    assert [place["key"] if place else None for place in places] == row["kit"]
+    _, _, profile, buffset = independent(CATALOG, 4, defaults["race"], "balanced", defaults["setup"], "own", "wiki")
+    totals = eval_buff_totals(buffset.totals(tuple(row["buffs"])))
+    vecs = {item["key"]: at_tier(item, 4, RULES) for item in CATALOG}
+    kit = [vecs[key] if key else None for key in row["kit"]]
+    base = fm.evaluate_truthful(profile.eval_profile, kit, totals, setup=defaults["setup"]).F
+    checked = 0
+    for index, place in enumerate(places):
+        if place is None:
+            continue
+        item = kit[index]
+        assert [term[0] for term in place["loss"]] == sorted((term[0] for term in place["loss"]), key=lambda t: -dict((x[0], x[1]) for x in place["loss"])[t])
+        for term, loss, reason in place["loss"]:
+            if term == "HASTE":
+                changed = dataclasses.replace(item, haste=0)
+            elif term == "DAMAGE":
+                changed = dataclasses.replace(item, weapon=None)
+            elif term in fm.SCHOOLS:
+                changed = dataclasses.replace(item, sv={k: v for k, v in item.sv.items() if k != term})
+            else:
+                changed = dataclasses.replace(item, stats={k: v for k, v in item.stats.items() if k != term})
+            trial = list(kit)
+            trial[index] = changed
+            assert loss == float(base - fm.evaluate_truthful(profile.eval_profile, trial, totals, setup=defaults["setup"]).F), (index, term)
+            assert (reason is None) or loss == 0.0
+            checked += 1
+    assert checked >= 5  # (the invented kit carries something)
+
+
 def test_the_default_race_ignores_a_better_race_that_cannot_be_created_and_breaks_ties_in_race_order():
     f = {"ELF": 120.0, "OGR": 100.0, "TRL": 90.0, "KER": 95.0}
     choice = shards.default_race(f, {"OGR", "TRL", "KER"}, ["HUM", "ELF", "OGR", "TRL", "KER"])
@@ -763,8 +798,8 @@ def test_runner_ups_are_exact_swaps_three_plain_ones_and_at_most_one_deity_locke
         totals = eval_buff_totals(buffset.totals(solution.buffs))
         ep = profile.eval_profile
 
-        def value(trial):
-            return fm.evaluate(ep, trial, totals, setup=setup, haste_assumed=milp.haste_assumed).F
+        def value(trial):  # a swapped kit is valued at the haste it counts
+            return fm.evaluate_truthful(ep, trial, totals, setup=setup).F
 
         base = value(kit)
         pool = {i["key"]: at_tier(i, tier, RULES) for i in CATALOG if i["evidence"]["level"] == "wiki" and set(i["slots"]) & WEARABLE
@@ -1573,12 +1608,12 @@ def test_the_seals_are_computed_without_a_time_limit_and_stop_the_run_if_they_de
 
 
 def test_the_labels_of_a_group_are_given_to_each_place_of_it():
-    groups = {"HEAD": "robust", "EAR": "AC x2", "FINGER": "robust", "ANY": "WIS band 0.654"}
+    groups = {"HEAD": "robust", "EAR": "AC x2", "FINGER": "robust", "ANY": "Weapon damage +5%"}
     places = seals.place_labels({**dict.fromkeys((group for group, _ in SLOT_GROUPS), "robust"), **groups})
     assert list(places) == list(shards.PLACES) and len(places) == 22
     assert [group for group, _ in SLOT_GROUPS] == list(dict.fromkeys(group_of(place) for place in shards.PLACES))  # the 18 groups
     assert (places["EAR1"], places["EAR2"], places["ANY1"], places["ANY2"], places["HEAD"], places["FINGER2"]) == (
-        "AC x2", "AC x2", "WIS band 0.654", "WIS band 0.654", "robust", "robust"
+        "AC x2", "AC x2", "Weapon damage +5%", "Weapon damage +5%", "robust", "robust"
     )
     with pytest.raises(KeyError):
         seals.place_labels({"HEAD": "robust"})  # a group without a label is a bug of the caller, not a guess
@@ -1594,7 +1629,7 @@ def test_a_flip_note_names_the_race_a_rule_alternative_puts_on_top_the_rule_and_
     variants = [
         variant("Iksar placement inside", "race.iksar_ac_placement", "B17", IKS=120.0),
         variant("Monk placement inside", "monk.bonus_placement", "B9", OGR=80.0, TRL=90.0, IKS=85.0, ELF=500.0),
-        variant("WIS band 0.654", "mana.wis_bands", "B4", OGR=100.0 - 1e-12, TRL=100.0),
+        variant("Iksar placement inside", "race.iksar_ac_placement", "B17", OGR=100.0 - 1e-12, TRL=100.0),
         variant("Weapon damage +10%", "tier.weapon_damage_pct", "B5", TRL=200.0, OGR=210.0),
         variant("Monk curve full until 34", "monk.weight_curve", None, TRL=120.0),
     ]
@@ -1607,8 +1642,8 @@ def test_a_flip_note_names_the_race_a_rule_alternative_puts_on_top_the_rule_and_
     assert RACE_NAMES["IKS"] == "Iksar" and RACE_NAMES["TRL"] == "Troll"
     # no flip: a tie is no flip, a float's noise is none, the same winner is none, and no variant gives no note
     assert seals.flip_notes([], base, "OGR", legal, order) == []
-    assert seals.flip_notes([variant("WIS band 0.654", "mana.wis_bands", "B4", TRL=100.0 + 1e-12)], base, "OGR", legal, order) == []
-    assert seals.flip_notes([variant("WIS band 0.654", "mana.wis_bands", "B4", OGR=500.0)], base, "OGR", legal, order) == []
+    assert seals.flip_notes([variant("Iksar placement inside", "race.iksar_ac_placement", "B17", TRL=100.0 + 1e-12)], base, "OGR", legal, order) == []
+    assert seals.flip_notes([variant("Iksar placement inside", "race.iksar_ac_placement", "B17", OGR=500.0)], base, "OGR", legal, order) == []
     # an unknown rule is named by the label of its variant
     assert seals.flip_notes([variant("Some new variant", "some.rule", "B99", TRL=300.0)], base, "OGR", legal, order) == [
         "Troll, if Some new variant (test B99)"

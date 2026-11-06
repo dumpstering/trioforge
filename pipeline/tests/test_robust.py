@@ -54,8 +54,8 @@ OPTIONS = BuildOptions(any_rule="explicit", haste_assumed=0)
 
 FULL_LABELS = [
     "AC x0.5", "AC x2", "MANA x0.5", "MANA x2", "ATK+HASTE x0.5", "ATK+HASTE x2", "SV x0.5", "SV x2",
-    "regen x0.5", "regen x2", "WIS band 0.654", "Monk curve full until 34", "Monk placement inside",
-    "Iksar placement inside", "Weapon damage +10%",
+    "regen x0.5", "regen x2", "Monk curve full until 34", "Monk placement inside",
+    "Iksar placement inside", "Weapon damage +5%",
 ]  # fmt: skip
 
 
@@ -85,6 +85,19 @@ def rules_with_alternative(rule_id, value):
     return rules_module.Rules(data)
 
 
+def rules_with_band_alternative(value):
+    """The real rules with one alternative listed for mana.wis_bands, which is settled and lists none."""
+    data = copy.deepcopy(RAW_RULES)
+    for rule in data["rules"]:
+        if rule["id"] == "mana.wis_bands":
+            assert "alternatives" not in rule
+            rule["alternatives"] = [{"value": value, "seal": "model", "source": [{"kind": "public-text", "ref": "an invented reading"}]}]
+    return rules_module.Rules(data)
+
+
+BAND_654 = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}  # an invented curve, not a reading of the game
+
+
 def raw_item(key, slots, *, stats=None, sv=None, weight=0.1, weapon=None, item_type=None, lore=False):
     """A schema-shaped catalog item with an invented name."""
     return {
@@ -99,15 +112,15 @@ def raw_item(key, slots, *, stats=None, sv=None, weight=0.1, weapon=None, item_t
     }  # fmt: skip
 
 
-def weapon_of(dmg, delay, skill="1H Slashing"):
-    return {"skill": skill, "dmg": dmg, "delay": delay, "bonus": None}
+def weapon_of(dmg, delay, skill="1H Slashing", bonus=None):
+    return {"skill": skill, "dmg": dmg, "delay": delay, "bonus": bonus}
 
 
-def scenario(profile, raws, setup="stick", tier=0, **changes):
+def scenario(profile, raws, setup="stick", tier=0, rules=RULES, **changes):
     def pool(**item_options):
         return [at_tier(raw, tier, RULES, **item_options) for raw in raws]
 
-    return RobustScenario(profile, RULES, pool, setup, tier, options=changes.pop("options", OPTIONS), **changes)
+    return RobustScenario(profile, rules, pool, setup, tier, options=changes.pop("options", OPTIONS), **changes)
 
 
 def worn(solution):
@@ -124,7 +137,7 @@ def full():
 # ---- the labels -------------------------------------------------------------------------------------------------
 
 
-def test_a_trio_with_everything_gets_all_fifteen_variants_in_a_fixed_order():
+def test_a_trio_with_everything_gets_all_fourteen_variants_in_a_fixed_order():
     assert labels(full()) == FULL_LABELS
     assert [label for label, _ in perturbations(full(), RULES)] == FULL_LABELS
     assert [label for label, _ in perturbations(full(), RULES)] == labels(full())  # and the same on every call
@@ -143,17 +156,18 @@ def test_a_trio_without_mana_a_monk_or_an_iksar_gets_only_the_variants_that_can_
     p = profile_of("HUM", ("WAR", "ROG", "BER"))
     assert labels(p) == [
         "AC x0.5", "AC x2", "ATK+HASTE x0.5", "ATK+HASTE x2", "SV x0.5", "SV x2", "regen x0.5", "regen x2",
-        "Weapon damage +10%",
+        "Weapon damage +5%",
     ]  # fmt: skip
 
 
-def test_an_all_caster_trio_has_a_mana_band_but_no_damage_to_weigh():
+def test_an_all_caster_trio_has_no_damage_to_weigh_and_the_settled_mana_band_adds_no_variant():
     p = profile_of("HUM", ("WIZ", "MAG", "ENC"))
     assert p.weights["DMG"] == 0 and p.pools["MANA"]
     assert labels(p) == [
         "AC x0.5", "AC x2", "MANA x0.5", "MANA x2", "ATK+HASTE x0.5", "ATK+HASTE x2", "SV x0.5", "SV x2",
-        "regen x0.5", "regen x2", "WIS band 0.654",
+        "regen x0.5", "regen x2",
     ]  # fmt: skip
+    assert labels(p, rules_with_band_alternative(BAND_654))[-1] == "WIS band 0.654"  # a rules file that lists one gets it
 
 
 def test_a_group_whose_weights_are_all_zero_is_left_out():
@@ -166,12 +180,14 @@ def test_the_mana_variants_need_a_mana_pool_whatever_the_mana_weight_says():
     p = with_weights(profile_of("HUM", ("WAR", "ROG", "BER")), HP=1.0, MANA=3.0)
     assert not p.pools["MANA"] and labels(p) == []
     q = with_weights(profile_of("HUM", ("CLR", "ROG", "BER")), HP=1.0, MANA=3.0)
-    assert labels(q) == ["MANA x0.5", "MANA x2", "WIS band 0.654"]
+    assert labels(q) == ["MANA x0.5", "MANA x2"]
+    assert labels(q, rules_with_band_alternative(BAND_654)) == ["MANA x0.5", "MANA x2", "WIS band 0.654"]
+    assert labels(p, rules_with_band_alternative(BAND_654)) == []  # no mana pool, no band variant
 
 
 def test_the_weapon_variant_needs_a_damage_weight_and_a_setup_that_scores_it():
     p = with_weights(profile_of("HUM", ("WAR", "ROG", "BER")), HP=1.0, DMG=100.0)
-    both = ["ATK+HASTE x0.5", "ATK+HASTE x2", "Weapon damage +10%"]  # the damage weight is part of the ATK+HASTE group
+    both = ["ATK+HASTE x0.5", "ATK+HASTE x2", "Weapon damage +5%"]  # the damage weight is part of the ATK+HASTE group
     assert labels(p) == both and labels(p, setup="2h") == both
     assert labels(p, setup="stick") == both[:2]  # the stick scores no damage, so its damage rate cannot matter
     assert labels(with_weights(p, HP=1.0)) == []
@@ -183,13 +199,15 @@ def test_a_variant_that_the_profile_already_is_at_is_left_out():
     assert "Monk placement inside" not in labels(inside) and "Iksar placement inside" not in labels(inside)
     alt_monk = dataclasses.replace(p, monk={**p.monk, "full_until_stones": 34})
     assert "Monk curve full until 34" not in labels(alt_monk)
-    alt_bands = dataclasses.replace(p, bands={"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]})
-    assert "WIS band 0.654" not in labels(alt_bands)
+    banded = rules_with_band_alternative(BAND_654)
+    assert "WIS band 0.654" in labels(p, banded)
+    alt_bands = dataclasses.replace(p, bands=BAND_654)
+    assert "WIS band 0.654" not in labels(alt_bands, banded)
 
 
 def test_the_monk_and_iksar_variants_only_matter_when_armor_class_is_weighted():
     p = with_weights(full(), HP=1.0, MANA=1.0)
-    assert labels(p) == ["MANA x0.5", "MANA x2", "WIS band 0.654"]
+    assert labels(p) == ["MANA x0.5", "MANA x2"]
 
 
 # ---- what each variant changes -------------------------------------------------------------------------------------
@@ -198,9 +216,9 @@ def test_the_monk_and_iksar_variants_only_matter_when_armor_class_is_weighted():
 CHANGED = {
     "AC x0.5": {"weights"}, "AC x2": {"weights"}, "MANA x0.5": {"weights"}, "MANA x2": {"weights"},
     "ATK+HASTE x0.5": {"weights"}, "ATK+HASTE x2": {"weights"}, "SV x0.5": {"weights"}, "SV x2": {"weights"},
-    "regen x0.5": {"weights"}, "regen x2": {"weights"}, "WIS band 0.654": {"bands"},
+    "regen x0.5": {"weights"}, "regen x2": {"weights"},
     "Monk curve full until 34": {"monk"}, "Monk placement inside": {"placement"},
-    "Iksar placement inside": {"placement"}, "Weapon damage +10%": set(),
+    "Iksar placement inside": {"placement"}, "Weapon damage +5%": set(),
 }  # fmt: skip
 
 
@@ -242,8 +260,6 @@ def test_the_weight_variants_scale_exactly_their_group_and_nothing_else():
 def test_the_rule_variants_carry_the_values_of_the_rules_file():
     base = full()
     pairs = dict(describe_pairs(base))
-    assert list(pairs["WIS band 0.654"].bands["breaks"]) == [100, 200, 510]
-    assert list(pairs["WIS band 0.654"].bands["slopes"]) == [1, 2.5, 0.654, 0]
     assert pairs["Monk curve full until 34"].monk == {**base.monk, "full_until_stones": 34}
     assert dict(pairs["Monk placement inside"].placement) == {"monk": "inside", "iksar": base.placement["iksar"]}
     assert dict(pairs["Iksar placement inside"].placement) == {"monk": base.placement["monk"], "iksar": "inside"}
@@ -252,27 +268,31 @@ def test_the_rule_variants_carry_the_values_of_the_rules_file():
 
 def test_the_weapon_variant_changes_the_items_not_the_profile():
     described = {p.label: p for p in describe_perturbations(full(), RULES)}
-    weapon = described["Weapon damage +10%"]
-    assert weapon.profile == full() and dict(weapon.item_options) == {"weapon_pct": 10}
-    assert all(dict(p.item_options) == {} for label, p in described.items() if label != "Weapon damage +10%")
+    weapon = described["Weapon damage +5%"]
+    assert weapon.profile == full() and dict(weapon.item_options) == {"weapon_pct": 5}
+    assert all(dict(p.item_options) == {} for label, p in described.items() if label != "Weapon damage +5%")
 
 
 def test_every_variant_names_the_test_that_settles_it():
     described = {p.label: p for p in describe_perturbations(full(), RULES)}
     tests = {label: p.test for label, p in described.items()}
-    assert tests["WIS band 0.654"] == "B4" and tests["Weapon damage +10%"] == "B5"
+    assert not any(label.startswith("WIS band") for label in tests)  # mana.wis_bands is settled
+    assert tests["Weapon damage +5%"] == "B5"
     assert tests["Monk curve full until 34"] == tests["Monk placement inside"] == "B9"
     assert tests["Iksar placement inside"] == "B17"
     assert all(tests[label] is None for label in FULL_LABELS[:10])
     assert {label: p.kind for label, p in described.items()} == {
         **dict.fromkeys(FULL_LABELS[:10], "weight"), **dict.fromkeys(FULL_LABELS[10:], "rule"),
     }
+    band = {p.label: p for p in describe_perturbations(full(), rules_with_band_alternative(BAND_654))}["WIS band 0.654"]
+    assert band.kind == "rule" and band.test is None  # the settled rule names no test
 
 
 def test_a_rules_file_with_another_alternative_gives_another_variant():
-    other = rules_with_alternative("mana.wis_bands", {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.7, 0]})
+    other = rules_with_band_alternative({"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.7, 0]})
     pairs = describe_pairs(full(), other)
     assert "WIS band 0.7" in [label for label, _ in pairs] and "WIS band 0.654" not in [label for label, _ in pairs]
+    assert list(dict(pairs)["WIS band 0.7"].bands["breaks"]) == [100, 200, 510]
     assert list(dict(pairs)["WIS band 0.7"].bands["slopes"]) == [1, 2.5, 0.7, 0]
     other = rules_with_alternative("monk.weight_curve", {"full_until_stones": 30})
     assert dict(describe_pairs(full(), other))["Monk curve full until 30"].monk["full_until_stones"] == 30
@@ -293,12 +313,12 @@ def test_the_placement_texts_are_the_ones_the_profile_generator_reads():
 
 
 def test_rules_lists_the_alternatives_of_a_rule_as_copies():
-    alternatives = RULES.alternatives("mana.wis_bands")
-    assert len(alternatives) == 1 and alternatives[0]["value"]["slopes"] == [1, 2.5, 0.654, 0]
-    assert alternatives[0]["seal"] == "measured" and alternatives[0]["source"][0]["kind"] == "url"
-    alternatives[0]["value"]["slopes"][2] = 99  # a copy: the rules do not change
-    assert RULES.alternatives("mana.wis_bands")[0]["value"]["slopes"][2] == 0.654
-    assert RULES.alternatives("tier.weapon_damage_pct")[0]["value"] == 10
+    assert RULES.alternatives("mana.wis_bands") == []  # settled by an in-game reading: no other reading is kept
+    alternatives = RULES.alternatives("tier.weapon_damage_pct")
+    assert len(alternatives) == 1 and alternatives[0]["value"] == 5
+    assert alternatives[0]["seal"] == "player" and alternatives[0]["source"][0]["kind"] == "url"
+    alternatives[0]["value"] = 99  # a copy: the rules do not change
+    assert RULES.alternatives("tier.weapon_damage_pct")[0]["value"] == 5
     assert RULES.alternatives("monk.weight_curve")[0]["value"] == {"full_until_stones": 34}
     assert RULES.alternatives("hp.sta_curve") == []
     with pytest.raises(KeyError):
@@ -306,7 +326,7 @@ def test_rules_lists_the_alternatives_of_a_rule_as_copies():
 
 
 def test_rules_names_the_test_that_settles_an_open_rule():
-    assert RULES.settled_by("mana.wis_bands") == "B4"
+    assert RULES.settled_by("mana.wis_bands") is None  # settled: B4 was done
     assert RULES.settled_by("race.iksar_ac_placement") == "B17"
     assert RULES.settled_by("hp.sta_curve") is None
     with pytest.raises(KeyError):
@@ -345,14 +365,15 @@ def kit_with(**placed):
 
 def test_a_slot_that_flips_under_a_rule_and_a_weight_is_labelled_by_the_rule():
     p = with_weights(profile_of("HUM", ("CLR", "WAR", "ROG")), HP=1.0, MANA=1.0)  # the one mana class, Cleric, uses WIS
-    # Back: WIS up to 215, which puts the neck item's 25 WIS in the 200-255 band. The neck holds that item or 100 HP.
+    banded = rules_with_band_alternative(BAND_654)  # the rule is settled; a rules file that lists a flatter curve gets a variant
+    # Back: WIS up to 215, which puts the neck item's 25 WIS above 200. The neck holds that item or 100 HP.
     need = 215 - p.naked["WIS"]
     assert need > 0
     back = at_tier(raw_item("back", ["BACK"], stats={"WIS": need}), 0, RULES)
     neck = at_tier(raw_item("neck-wis", ["NECK"], stats={"WIS": 25}), 0, RULES)
     gain = [
         float(fm.evaluate(prof, kit_with(BACK=back, NECK=neck)).F - fm.evaluate(prof, kit_with(BACK=back)).F)
-        for prof in (p, dict(describe_pairs(p))["WIS band 0.654"])
+        for prof in (p, dict(describe_pairs(p, banded))["WIS band 0.654"])
     ]
     hp = 100
     assert gain[1] < hp < gain[0]  # the band flips the neck ...
@@ -362,11 +383,12 @@ def test_a_slot_that_flips_under_a_rule_and_a_weight_is_labelled_by_the_rule():
         raw_item("neck-wis", ["NECK"], stats={"WIS": 25}),
         raw_item("neck-hp", ["NECK"], stats={"HP": hp}),
     ]
-    report = robustness_report(scenario(p, raws))
+    report = robustness_report(scenario(p, raws, rules=banded))
     assert report.picks["NECK"] == ("neck-wis",)
     assert report.flips["NECK"] == ("WIS band 0.654", "MANA x0.5")  # rules come first, then weights in order
-    result = robustness(scenario(p, raws))
+    result = robustness(scenario(p, raws, rules=banded))
     assert result["NECK"] == "WIS band 0.654" and result["BACK"] == "robust"
+    assert robustness_report(scenario(p, raws)).flips["NECK"] == ("MANA x0.5",)  # the settled rule has no such variant
 
 
 def test_a_slot_that_flips_under_the_monk_curve_gets_that_label():
@@ -386,9 +408,10 @@ def test_a_slot_that_flips_under_the_monk_curve_gets_that_label():
 
 
 def test_a_slot_that_flips_under_the_weapon_damage_rate_gets_that_label():
-    # Two one-handers at +4. At 5 percent a tier the short fast one is better; at 10 percent the slow heavy one is.
+    # Two one-handers at +4. At 5 percent a tier the short fast one with a big listed bonus is better; at 10 percent (the rule) the slow
+    # heavy one is, because its damage grows and the listed bonus does not.
     p = with_weights(profile_of("HUM", ("WAR", "ROG", "BER")), HP=1.0, DMG=100.0)
-    low, high = weapon_of(12, 20), weapon_of(30, 50)
+    low, high = weapon_of(10, 20, bonus=18), weapon_of(40, 50)
     def score(w, pct):
         item = at_tier(raw_item("w", ["PRIMARY"], weapon=w), 4, RULES, weapon_pct=pct)
         return float(wp.damage_index_exact(item, "primary", "1h-shield", 0))
@@ -398,8 +421,8 @@ def test_a_slot_that_flips_under_the_weapon_damage_rate_gets_that_label():
     raws = [raw_item("w-low", ["PRIMARY"], weapon=low), raw_item("w-high", ["PRIMARY"], weapon=high)]
     s = scenario(p, raws, setup="1h-shield", tier=4)
     report = robustness_report(s)
-    assert report.picks["PRIMARY"] == ("w-low",) and report.flips["PRIMARY"] == ("Weapon damage +10%",)
-    assert robustness(s)["PRIMARY"] == "Weapon damage +10%"
+    assert report.picks["PRIMARY"] == ("w-high",) and report.flips["PRIMARY"] == ("Weapon damage +5%",)
+    assert robustness(s)["PRIMARY"] == "Weapon damage +5%"
     # the stick scores no damage, so there is no such variant and nothing flips
     assert robustness(scenario(p, raws, setup="stick", tier=4))["PRIMARY"] == "robust"
 
@@ -483,3 +506,18 @@ def test_the_pool_is_pruned_unless_the_scenario_says_not_to():
     robustness(scenario(p, raws, prune=False), solver=spy)
     assert pruned == 1 and seen[0] == 5
     assert robustness(scenario(p, raws)) == robustness(scenario(p, raws, prune=False))
+
+
+def test_every_rule_a_variant_can_come_from_has_a_flip_phrase_in_the_seals():
+    """A rules file can list an alternative for any rule robust.py reads; the flip note then says what the variant is. A rule with no phrase would fall back to the bare label ("WIS band 0.654")."""
+    import re
+    from pathlib import Path
+
+    from trioforge.precompute import seals
+
+    source = Path(robust.__file__).read_text(encoding="utf-8")
+    read_rules = set(re.findall(r'"((?:mana|monk|race|tier)\.[a-z_]+)"', source))
+    assert {"mana.wis_bands", "monk.weight_curve", "monk.bonus_placement", "race.iksar_ac_placement", "tier.weapon_damage_pct"} <= read_rules
+    assert sorted(rule for rule in read_rules if rule not in seals.PHRASES) == []
+    band = {p.label: p for p in describe_perturbations(full(), rules_with_band_alternative(BAND_654))}["WIS band 0.654"]
+    assert band.rule in seals.PHRASES

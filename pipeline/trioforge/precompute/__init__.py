@@ -81,7 +81,7 @@ from typing import Any
 from trioforge.model import tables as tables_module
 from trioforge.model import weapons as wp
 from trioforge.model.roles import roles_for
-from trioforge.precompute import engine, grid, shards
+from trioforge.precompute import engine, grid, kitwhy, shards
 from trioforge.scope import GRID_TIERS, MILESTONE_TRIO, default_tiers
 from trioforge.solver.solve import ExactnessError
 
@@ -109,7 +109,7 @@ class RunSummary:
     counts are the same for the runner-up chunks. ``tiers`` is the scope of the run. ``partial`` is true when the grid
     was narrowed (races, roles, evidence levels or buff sets: the tiers are the scope and never a narrowing) or the run stopped at
     ``limit``. ``phases`` gives the wall seconds of each phase (``inputs``, ``solve``,
-    ``bases``, ``runnerups``, ``seals``, ``flips``, ``files``) and ``sizes`` maps a result file to ``(bytes, gzip bytes)``."""
+    ``bases``, ``runnerups``, ``seals``, ``flips``, ``why``, ``files``) and ``sizes`` maps a result file to ``(bytes, gzip bytes)``."""
 
     trio: str
     out_dir: Path
@@ -604,9 +604,18 @@ def run(
                 status = "skipped: the grid has none of the tiers " + " and ".join(f"+{t}" for t in ROBUST_TIERS)
         if status != "done":
             summary.notes.append(f"robustness {status}")
+        why = None
+        if choice is not None:  # what each stat of each item of the default kit is worth (the rows of Wear this say it)
+            sealed = time.perf_counter()
+            _, best_setup, best_row = default_best[choice["race"]]
+            try:
+                why = kitwhy.default_why(ctx, choice["race"], DEFAULT_ROLE, DEFAULT_TIER, best_setup, best_row)
+            except Exception as error:
+                raise PrecomputeError(f"the why of the default kit failed: {type(error).__name__}: {error}") from error
+            summary.phases["why"] = time.perf_counter() - sealed
         out_docs["defaults.json"] = shards.defaults_doc(
             layout, view={"role": DEFAULT_ROLE, "tier": DEFAULT_TIER, "evidence": config.default_evidence, "buffs": "own"},
-            per_race=per_race, strict_empty=meta.pool_sizes["strict"] == 0, robustness=status, flip_notes=flips,
+            per_race=per_race, strict_empty=meta.pool_sizes["strict"] == 0, robustness=status, flip_notes=flips, why=why,
         )
     else:
         summary.notes.append(f"defaults skipped: the grid has no balanced, +{DEFAULT_TIER}, {config.default_evidence}, own-buffs view")

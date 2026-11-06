@@ -2523,7 +2523,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": 5695,
+    "MANA": 5705,
     "END": 1052,
     "hp_pools": [
      "CLR",
@@ -2544,8 +2544,8 @@
     },
     "mana_pool_values": {
      "CLR": 2781,
-     "WIZ": 2785,
-     "ENC": 2785
+     "WIZ": 2790,
+     "ENC": 2790
     },
     "end_pool_values": {
      "CLR": 699,
@@ -2585,7 +2585,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": 5691,
+    "MANA": 5696,
     "END": 1052,
     "hp_pools": [
      "CLR",
@@ -2605,7 +2605,7 @@
      "ENC": 1585
     },
     "mana_pool_values": {
-     "CLR": 2785,
+     "CLR": 2790,
      "WIZ": 2781,
      "ENC": 2781
     },
@@ -2647,7 +2647,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": 5939,
+    "MANA": 6199,
     "END": 1052,
     "hp_pools": [
      "CLR",
@@ -2667,9 +2667,9 @@
      "ENC": 1585
     },
     "mana_pool_values": {
-     "CLR": 2907,
-     "WIZ": 2907,
-     "ENC": 2907
+     "CLR": 3037,
+     "WIZ": 3037,
+     "ENC": 3037
     },
     "end_pool_values": {
      "CLR": 699,
@@ -2709,7 +2709,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": 7127,
+    "MANA": 8557,
     "END": 1052,
     "hp_pools": [
      "CLR",
@@ -2729,9 +2729,9 @@
      "ENC": 1585
     },
     "mana_pool_values": {
-     "CLR": 3501,
-     "WIZ": 3501,
-     "ENC": 3501
+     "CLR": 4216,
+     "WIZ": 4216,
+     "ENC": 4216
     },
     "end_pool_values": {
      "CLR": 699,
@@ -2771,7 +2771,7 @@
    "why": "which two mana pools count",
    "expected": {
     "HP": 3328,
-    "MANA": 7127,
+    "MANA": 8557,
     "END": 1052,
     "hp_pools": [
      "CLR",
@@ -2791,9 +2791,9 @@
      "ENC": 1585
     },
     "mana_pool_values": {
-     "CLR": 3501,
-     "WIZ": 3501,
-     "ENC": 3501
+     "CLR": 4216,
+     "WIZ": 4216,
+     "ENC": 4216
     },
     "end_pool_values": {
      "CLR": 699,

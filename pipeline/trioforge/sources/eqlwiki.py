@@ -6,7 +6,7 @@ Three things live here:
 * :func:`fetch_pages` fetches the wikitext of pages by id, 50 to a request;
 * a command line for the two jobs the pipeline needs::
 
-      python -m trioforge.sources.eqlwiki fetch --out sources/eqlwiki/2026-10-13 [--resume]
+      python -m trioforge.sources.eqlwiki fetch --out sources/eqlwiki/2026-10-13 [--resume] [--eqlegendstools-out sources/eqlegendstools/2026-10-13]
       python -m trioforge.sources.eqlwiki record --out fixtures/wiki "Page title" ...
 
 ``fetch`` pulls every page of a category (default ``Category:Items``) into
@@ -23,6 +23,11 @@ Three things live here:
 cut the same way as before) and skips each batch file that exists, parses, and holds exactly the
 page ids it should. A resumed run writes the same bytes as one clean run. Files are written to a
 temporary name and renamed, so a Ctrl-C never leaves a half-written batch.
+
+``--eqlegendstools-out DIR`` runs the fetch of :mod:`trioforge.sources.eqlegendstools` after the wiki's has finished (the items of the
+zone pages of EQ Legends Tools, which override the wiki's copy in the catalog: ``python -m trioforge.data.catalog --eqlegendstools DIR``),
+so that the normal pipeline fetch picks that source up too. It has its own lock, its own client and its own pace; the wiki's fetch does not
+wait for it and a failure of one leaves the other's files as they are (exit status 2).
 
 ``record`` saves the raw API reply for each given title (one request each, redirects not
 followed) as ``<slug>.json``: that is how ``fixtures/wiki`` was made.
@@ -625,6 +630,9 @@ def _parser() -> argparse.ArgumentParser:
     fetch.add_argument("--out", required=True, type=Path, help="e.g. sources/eqlwiki/2026-10-13")
     fetch.add_argument("--category", default=DEFAULT_CATEGORY)
     fetch.add_argument("--resume", action="store_true", help="continue an interrupted run")
+    fetch.add_argument(
+        "--eqlegendstools-out", type=Path, help="also fetch the EQ Legends Tools zone items into this folder, e.g. sources/eqlegendstools/2026-10-13"
+    )
     record = commands.add_parser("record", help="save the raw API reply for some page titles")
     record.add_argument("--out", required=True, type=Path, help="e.g. fixtures/wiki")
     record.add_argument("titles", nargs="+", metavar="TITLE")
@@ -666,6 +674,10 @@ def main(
         if args.command == "fetch":
             print("interrupted: run the same command again with --resume to continue.", file=sys.stderr)
         return 130
+    if args.command == "fetch" and args.eqlegendstools_out is not None:
+        from . import eqlegendstools  # (imported here: that module imports this one)
+
+        return eqlegendstools.main(["fetch", "--out", str(args.eqlegendstools_out)], today=today)
     return 0
 
 

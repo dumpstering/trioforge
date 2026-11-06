@@ -56,10 +56,11 @@ TERMS = {
     "knee-100": "totals of 99, 100 and 101: the first band of WIS and INT (mana) and of the END average",
     "knee-200": "totals of 199, 200 and 201: the second band of WIS and INT (mana)",
     "knee-201": "totals of 200, 201 and 202: the second band of the END average (352.5 at 201)",
-    "knee-255": "totals of 254, 255 and 256: the stat knee (STA for HP, DEX past a tenth) and the third band of WIS and INT",
+    "knee-255": "totals of 254, 255 and 256: the stat knee (STA for HP, DEX past a tenth); the WIS and INT curve does not bend there",
     "knee-510": "totals of 509, 510 and 511: the cap of every stat, and of each stat in the END average",
     "end": "the END average of STR, STA, DEX and AGI (each counted to 510), beside 100 and 201, between whole numbers, below 0",
     "mixed-mana": "WIS and INT pools together: which two pools count flips with the stats, and a tie keeps the trio's order",
+    "mana-wis-curve": "two WIS pools (Cleric and Shaman) at WIS 200, 255, 270, 280 and 510: the curve runs at one slope from 200 to 510 (the in-game reading behind mana.wis_bands)",
     "mana-none": "a trio with no mana class has no mana, whatever its items give",
     "bands-default": "a profile with no bands of its own reads the rule's bands for WIS and INT",
     "bands-custom": "a profile with bands of its own (three breaks, four slopes)",
@@ -77,6 +78,7 @@ TERMS = {
     "decimals": "profile numbers that are not whole: decimals, a pool number that only p/q can write",
     "limits": "the largest numbers held exactly: 22 items at 2^40 in every stat, weights up to 2^53 - 1, a weight in exponent notation",
     "empty": "an empty kit",
+    "natural-durability": "the HP pools of a profile with Natural Durability at ranks 0 to 4 (0, 2, 5, 10 and 12 percent of the HP from STA), STA below, at and past the knee and the cap, with flat item HP that the AA does not scale",
 }
 
 
@@ -217,7 +219,7 @@ def _end_cases(out: _Cases, base: Profile) -> None:
     out.add(["end"], profile, {_place("CHEST"): _item("itterm-end-big", stats=gear)})
 
 
-def _mana_cases(out: _Cases, casters: Profile, monk: Profile, melee: Profile) -> None:
+def _mana_cases(out: _Cases, casters: Profile, monk: Profile, melee: Profile, wis_pair: Profile) -> None:
     """WIS and INT pools: the pairs that flip which two of three pools count, a tie, a trio with no mana, the bands."""
     weights = _weights(MANA=1)
     mixed = _same(casters, weights=weights)
@@ -230,6 +232,9 @@ def _mana_cases(out: _Cases, casters: Profile, monk: Profile, melee: Profile) ->
     two = _same(monk, weights=weights)  # a WIS pool and an INT pool
     for wis, int_ in ((100, 200), (255, 90), (510, 510)):
         out.add(["mixed-mana"], two, {_place("CHEST"): _item("itterm-mana-two", stats=_gear(two, WIS=wis, INT=int_))})
+    both = _same(wis_pair, weights=weights)  # two WIS pools: the trio of the in-game reading
+    for wis in (200, 255, 270, 280, 510):
+        out.add(["mana-wis-curve"], both, {_place("CHEST"): _item("itterm-wis-curve", stats=_gear(both, WIS=wis))})
     flat = _same(mixed, weights=_weights(MANA=1), buff_totals={"MANA": 25})
     gear = {**_gear(flat, WIS=180, INT=240), "MANA": 70}  # flat mana from the item and from the buffs
     out.add(["mixed-mana"], flat, {_place("CHEST"): _item("itterm-mana-flat", stats=gear)})
@@ -260,6 +265,29 @@ def _pool_cases(out: _Cases, base: Profile) -> None:
     for average in (0, 100, 130, 139, 140, 141, 150, 250):  # the END pools meet at an average of 140
         gear = _gear(profile, STA=average, STR=average, DEX=average, AGI=average)
         out.add(["pool-order"], profile, {_place("CHEST"): _item("itterm-pools-end", stats=gear)})
+
+
+def _durability_cases(out: _Cases, make: Any) -> None:
+    """Natural Durability: the percent is in the ``fac`` of the HP pools of the profile, so the evaluator must give HP from STA with it and flat HP without it.
+
+    ``make(trio, rank)`` is the profile of a trio with the AA at ``rank``. Each rank is valued at STA totals below the knee, at it and past it and past the cap
+    (STA' stops at 510), with an item of flat HP in another place; one case has no flat HP, and a trio of three casters has pools that cross.
+    """
+    melee = ("WAR", "ROG", "BER")
+    for rank in range(5):
+        profile = _same(make(melee, rank), weights=_weights(HP=1))
+        for stamina in (100, 255, 300, 600):
+            gear = _gear(profile, STA=stamina, STR=0, DEX=0, AGI=0)
+            out.add(
+                ["natural-durability"], profile,
+                {_place("CHEST"): _item("itnd-sta", stats=gear), _place("FEET"): _item("itnd-hp", stats={"HP": 250})},
+            )  # fmt: skip
+    profile = _same(make(melee, 4), weights=_weights(HP=1))
+    out.add(["natural-durability"], profile, {_place("CHEST"): _item("itnd-sta-only", stats=_gear(profile, STA=300, STR=0, DEX=0, AGI=0))})
+    for rank in (0, 4):
+        profile = _same(make(("CLR", "SHD", "ENC"), rank), weights=_weights(HP=1))
+        for stamina in (200, 300):
+            out.add(["natural-durability"], profile, {_place("CHEST"): _item("itnd-casters", stats=_gear(profile, STA=stamina, STR=0, DEX=0, AGI=0))})
 
 
 def _sheet_cases(out: _Cases, base: Profile) -> None:
@@ -337,11 +365,14 @@ def _iksar_cases(out: _Cases, monk: Profile, melee: Profile, bonus: int) -> None
 
 
 def _haste_cases(out: _Cases, melee: Profile, monk: Profile) -> None:
-    """Spell haste against the cap, and the best worn haste in what room is left (75, or 85 with a Monk)."""
+    """Spell haste against the cap, and the best worn haste in what room is left (75, or 85 with a Monk, whose Unbound
+    Alacrity adds 10 to the spell haste: with no spell haste and no worn haste a Monk's trio counts 10)."""
     for base in (melee, monk):
         cap = int(base.haste_cap)
-        for spell in (0, 60, cap, cap + 5) if base is melee else (cap - 1, cap):
-            profile = _same(base, buff_totals={"HASTE": spell} if spell else {}, spell_haste=spell, weights=_weights(HASTE=2))
+        for spell in (0, 60, cap, cap + 5) if base is melee else (0, 45, cap - 11, cap - 1, cap):
+            profile = _same(
+                base, buff_totals={"HASTE": spell} if spell else {}, spell_haste=spell + base.haste_bonus, weights=_weights(HASTE=2)
+            )
             for worn in (0, 10, 30, 100) if base is melee else (0, 30):
                 kit = {
                     _place("CHEST"): _item("itterm-haste", haste=worn),
@@ -512,10 +543,11 @@ def build() -> dict[str, Any]:
     monk = make(("MNK", "SHD", "SHM"))  # a Monk, a WIS pool and an INT pool
     casters = make(("CLR", "SHD", "ENC"))  # three mana pools of both stats
     melee = make(("WAR", "ROG", "BER"))  # no mana class
+    wis_pair = make(("CLR", "SHM", "WAR"))  # two WIS pools
     out = _Cases()
     _attribute_cases(out, monk)
     _end_cases(out, monk)
-    _mana_cases(out, casters, monk, melee)
+    _mana_cases(out, casters, monk, melee, wis_pair)
     _pool_cases(out, casters)
     _sheet_cases(out, monk)
     iksar = rules.get("race.iksar_ac_bonus", level)
@@ -528,6 +560,7 @@ def build() -> dict[str, Any]:
     _decimal_cases(out, casters)
     _limit_cases(out, monk)
     _empty_case(out, monk)
+    _durability_cases(out, lambda trio, rank: make_profile("HUM", trio, level, "balanced", None, {"natural_durability": rank}, tables, rules))
     return {
         "format": FORMAT, "kind": KIND, "rules_version": rules.version, "level": level, "terms": dict(TERMS),
         "profiles": out.profiles, "cases": out.cases,

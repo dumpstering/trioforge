@@ -48,6 +48,7 @@ EXPECTED_IDS = (
     "naked.rule",
     "hp.pools_counted",
     "hp.sta_curve",
+    "hp.natural_durability_pct",
     "mana.pools_counted",
     "mana.base_l50",
     "mana.per_stat_l50",
@@ -78,6 +79,7 @@ EXPECTED_IDS = (
     "resist.cap",
     "tier.stat_rule",
     "tier.weight_floor",
+    "tier.weight_pct",
     "tier.weapon_damage_pct",
     "tier.accuracy_pct",
     "tier.socket_open",
@@ -96,10 +98,31 @@ EXPECTED_IDS = (
     "roles.balanced",
     "weapons.damage_weight",
     "weapons.dual_wield_factor",
+    "effects.focus_value",
+    "effects.spell_weight",
+    "effects.cast_categories",
+    "effects.cast_mass_full",
+    "effects.late_level",
+    "effects.click_relevance",
+    "effects.dispel_relevance",
+    "effects.gap_categories",
+    "effects.own_compare",
+    "effects.instant_categories",
+    "effects.instant_bonus",
+    "effects.proc_value",
+    "effects.score_shape",
+    "effects.haste_buff",
+    "effects.near_best",
+    "effects.access_cost",
+    "effects.raid_zones",
+    "effects.one_off_spas",
+    "effects.restricted_targets",
+    "effects.unverified_names",
+    "effects.rows_kept",
 )
 
 # The rules that carry an `alternatives` list.
-RULES_WITH_ALTERNATIVES = {"mana.wis_bands", "monk.weight_curve", "monk.bonus_placement", "tier.weapon_damage_pct"}
+RULES_WITH_ALTERNATIVES = {"monk.weight_curve", "monk.bonus_placement", "tier.weapon_damage_pct"}
 
 # The sources of every rule, as (kind, ref) pairs in list order, written out. Dropping,
 # adding or changing a source fails test_rule_sources_match_the_expected_sources.
@@ -107,6 +130,8 @@ EQEMU = ("url", "https://github.com/EQEmu/Server")
 TOOLS_ATTRIBUTES = ("url", "https://eqltools.com/attributes")
 TOOLS_COMBAT = ("url", "https://eqltools.com/combat")
 WIKI_UPGRADES = ("url", "https://eqlwiki.com/Item_Upgrade_System")
+WIKI_UPGRADES_INDEX = ("url", "https://eqlwiki.com/index.php/Item_Upgrade_System")
+CLIENT_READS = ("url", "https://xm2514-svg.github.io/sites/item-upgrades/")
 BASEDATA = ("client-file", "Resources/basedata.txt")
 PRIVATE_MEASURED = ("private-measured", PRIVATE_LABEL)
 PRIVATE_PLAYER = ("private-player", PRIVATE_LABEL)
@@ -118,10 +143,11 @@ EXPECTED_SOURCES = {
     "naked.rule": [TOOLS_ATTRIBUTES, PRIVATE_MEASURED],
     "hp.pools_counted": [BASEDATA, PRIVATE_MEASURED],
     "hp.sta_curve": [EQEMU, PRIVATE_PLAYER],
+    "hp.natural_durability_pct": [("client-file", "dbstr_us.txt"), ("public-text", "eqlwiki AA data, revision 151303, as extracted by eqlbuilds.com")],
     "mana.pools_counted": [PRIVATE_MEASURED],
     "mana.base_l50": [BASEDATA],
     "mana.per_stat_l50": [BASEDATA],
-    "mana.wis_bands": [EQEMU],
+    "mana.wis_bands": [EQEMU, PRIVATE_MEASURED],  # settled by an in-game reading
     "mana.stat_by_class": [("client-file", "eqstr_us.txt")],
     "end.formula": [EQEMU, PRIVATE_MEASURED],
     "ac.sheet.item_mult": [EQEMU, PRIVATE_MEASURED],
@@ -142,7 +168,8 @@ EXPECTED_SOURCES = {
     "haste.cap_pct_with_monk": [("public-text", "patch notes, Unbound Alacrity"), PRIVATE_PLAYER],
     "haste.worn_per_tier": [PRIVATE_PLAYER],
     "haste.unbound_alacrity": [
-        ("public-text", 'patch notes, Unbound Alacrity ("current and maximum haste value")')
+        ("public-text", 'patch notes 2026-07-28, Unbound Alacrity ("increase in your current and maximum haste value")'),
+        ("url", "https://eqlwiki.com/Haste_Guide"),
     ],
     "regen.gear_caps": [PRIVATE_PLAYER],
     "regen.per_tier": [WIKI_UPGRADES, PRIVATE_PLAYER],
@@ -150,7 +177,8 @@ EXPECTED_SOURCES = {
     "resist.cap": [JUDGMENT],
     "tier.stat_rule": [WIKI_UPGRADES],
     "tier.weight_floor": [WIKI_UPGRADES],
-    "tier.weapon_damage_pct": [WIKI_UPGRADES],
+    "tier.weight_pct": [CLIENT_READS, WIKI_UPGRADES_INDEX],
+    "tier.weapon_damage_pct": [CLIENT_READS, WIKI_UPGRADES_INDEX],
     "tier.accuracy_pct": [("public-text", "patch notes 2026-09-22")],
     "tier.socket_open": [WIKI_UPGRADES, ("public-text", "developer demo")],
     "tier.arrival": [("public-text", "developer hotfix notes 2026-07-29 and developer stream 2026-06-10")],
@@ -167,14 +195,34 @@ EXPECTED_SOURCES = {
     "roles.templates": [JUDGMENT],
     "roles.balanced": [JUDGMENT],
     "weapons.damage_weight": [JUDGMENT],
-    "weapons.dual_wield_factor": [JUDGMENT],
+    "weapons.dual_wield_factor": [("url", "https://eqlwiki.com/Skill_Dual_Wield")],
+    "effects.focus_value": [JUDGMENT],
+    "effects.spell_weight": [JUDGMENT],
+    "effects.cast_categories": [JUDGMENT],
+    "effects.cast_mass_full": [JUDGMENT],
+    "effects.late_level": [JUDGMENT],
+    "effects.click_relevance": [JUDGMENT],
+    "effects.dispel_relevance": [JUDGMENT],
+    "effects.gap_categories": [JUDGMENT],
+    "effects.own_compare": [JUDGMENT],
+    "effects.instant_categories": [JUDGMENT],
+    "effects.instant_bonus": [JUDGMENT],
+    "effects.proc_value": [JUDGMENT],
+    "effects.score_shape": [JUDGMENT],
+    "effects.haste_buff": [JUDGMENT],
+    "effects.near_best": [JUDGMENT],
+    "effects.access_cost": [JUDGMENT],
+    "effects.raid_zones": [JUDGMENT],
+    "effects.one_off_spas": [JUDGMENT],
+    "effects.restricted_targets": [JUDGMENT],
+    "effects.unverified_names": [JUDGMENT],
+    "effects.rows_kept": [JUDGMENT],
 }
 
 # The sources of each alternative, per rule, in list order. monk.bonus_placement's
 # alternative cites EQEmu's ACSum, the same address the other ACSum rules cite.
 EXPECTED_ALTERNATIVE_SOURCES = {
-    "mana.wis_bands": [[TOOLS_ATTRIBUTES]],
-    "tier.weapon_damage_pct": [[("url", "https://eqltools.com/")]],
+    "tier.weapon_damage_pct": [[WIKI_UPGRADES]],
     "monk.weight_curve": [[TOOLS_COMBAT]],
     "monk.bonus_placement": [[EQEMU]],
 }
@@ -662,6 +710,15 @@ def test_every_alternative_has_value_seal_and_source(raw):
             assert source_defects(alternative["source"]) == [], rule_id  # the list form
 
 
+def test_mana_wis_bands_is_settled_by_the_in_game_reading_of_2026_10_27(raw):
+    rule = next(r for r in raw["rules"] if r["id"] == "mana.wis_bands")
+    assert rule["value"] == {"breaks": [100, 200, 510], "slopes": [1, 2.5, 1.25, 0]}  # one slope from 200 to 510
+    assert (rule["seal"], rule["status"], rule["date"]) == ("measured", "active", "2026-10-27")
+    assert "test" not in rule and "alternatives" not in rule  # B4 is done, and the 0.654 reading is ruled out
+    assert ("private-measured", PRIVATE_LABEL) in [(x["kind"], x["ref"]) for x in rule["source"]]
+    assert not any(ch.isdigit() for ch in rule["notes"])  # a private source keeps digits out of the notes
+
+
 def test_in_the_real_file_a_null_value_belongs_to_open_rules_alone(raw):
     # naked.cap was the one exception until it became the string "none".
     nulls = {rule["id"] for rule in raw["rules"] if rule["value"] is None and rule["status"] != "open"}
@@ -1049,19 +1106,19 @@ def test_alternative_sources_match_the_expected_sources(raw):
     assert actual == EXPECTED_ALTERNATIVE_SOURCES
 
 
-def test_weapon_damage_keeps_the_eql_tools_figure_as_its_alternative(raw):
+def test_weapon_damage_is_ten_percent_with_the_wiki_figure_as_its_alternative(raw):
     rule = rules_by_id(raw)["tier.weapon_damage_pct"]
-    assert (rule["value"], rule["status"], rule["test"]) == (5, "open", "B5")
-    assert [alternative["value"] for alternative in rule["alternatives"]] == [10]
+    assert (rule["value"], rule["status"], rule["test"]) == (10, "active", "B5")
+    assert [alternative["value"] for alternative in rule["alternatives"]] == [5]
 
 
-def test_dual_wield_factor_is_a_model_value_open_until_test_b5(raw):
-    # The chance that an off-hand swing comes: the weapon index and the profile both read it.
+def test_dual_wield_factor_is_a_model_value_for_each_kind_of_trio_open_until_test_b5(raw):
+    # The chance that an off-hand swing comes: the profile reads the value for its trio and the weapon index gets it.
     rule = rules_by_id(raw)["weapons.dual_wield_factor"]
-    assert (rule["value"], rule["unit"], rule["seal"]) == (0.8, "fraction", "model")
+    assert (rule["value"], rule["seal"]) == ({"with_monk": 0.83, "without_monk": 0.69}, "model")
     assert (rule["status"], rule["test"]) == ("open", "B5")
-    assert rule["source"] == [{"kind": "public-text", "ref": "TrioForge judgment"}]
-    assert load(RULES_PATH).get("weapons.dual_wield_factor") == 0.8
+    assert rule["source"] == [{"kind": "url", "ref": "https://eqlwiki.com/Skill_Dual_Wield"}]
+    assert load(RULES_PATH).get("weapons.dual_wield_factor") == {"with_monk": 0.83, "without_monk": 0.69}
 
 
 def test_weapon_damage_weight_is_a_model_value_open_until_test_b18(raw):

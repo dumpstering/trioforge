@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 sources/**/raw/
 dist/
+site/dist-exalt/
 # the marker beside a build folder (site/dist.trioforge-build): it says the folder may be replaced, and is not part of it
 *.trioforge-build
 # the folders a build writes beside its output folder while it works (and removes): site/dist.<token>.trioforge-tmp

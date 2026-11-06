@@ -447,7 +447,7 @@ describe("the steps of a farm path", () => {
     expect(() => validateFromWorker(stepOne(), expectationOf(noKit))).toThrow(/protocol/);
   });
 
-  it("adds up as a whole: the gain of a step is its value less the value before it, above 0, and the assumed haste is one for the path", () => {
+  it("adds up as a whole: the gain of a step is its value less the value before it, above 0, and the result says the haste of Equip now (a step says the haste its own kit counts)", () => {
     const protocol = (value, setup = () => {}) => {
       const watch = watchOf();
       validateFromWorker(equipNowStep(), expectationOf(watch));
@@ -459,7 +459,10 @@ describe("the steps of a farm path", () => {
     protocol(stepOne({ ...exactOf(100), gain: "0/1", gainValue: 0 })); // a step gains something
     protocol(stepOne({ ...exactOf(90), gain: "-10/1", gainValue: -10 }));
     protocol(stepOne({ gainValue: 31 })); // the number is the text rounded
-    protocol(stepOne({ hasteAssumed: 41 })); // the haste of Equip now was 40
+    protocol(stepOne({ hasteAssumed: 1001 })); // a step's haste is a percent in range
+    const another = watchOf();
+    validateFromWorker(equipNowStep(), expectationOf(another));
+    expect(validateFromWorker(stepOne({ hasteAssumed: 41 }), expectationOf(another)).hasteAssumed).toBe(41); // the haste of Equip now was 40: a kit with a haste item counts more
     // the second step counts from the first
     const watch = watchOf();
     validateFromWorker(equipNowStep(), expectationOf(watch));

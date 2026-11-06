@@ -25,23 +25,28 @@ auto-attack damage per delay unit at the item's tier and the scenario's haste::
 * ``damage`` is the item's damage at its tier (the item view has already applied the per-tier growth) and
   ``delay`` is never changed by tier;
 * ``bonus`` is the tooltip's damage bonus when the item lists one, else 0.5 x delay for a one-hander and
-  0.67 x delay for a two-hander (the pattern the Sky weapons follow);
+  0.67 x min(delay, 50) for a two-hander (the pattern the Sky weapons follow; the wiki's Game Mechanics page
+  caps the delay a two-hander's bonus counts at 50);
 * the off hand in ``dw`` has no bonus and is multiplied by the dual-wield factor: the damage bonus belongs to
-  the primary hand, and the factor is the chance that an off-hand swing comes. The default, 0.8, is a model
-  value: (skill + level) / 375 at the Monk's dual-wield cap of 252 at level 50 is 0.805. A rule
-  ``weapons.dual_wield_factor``, once the rules file has one, overrides it; so does the ``dw_factor`` argument;
+  the primary hand, and the factor is the chance that an off-hand swing comes. The rule
+  ``weapons.dual_wield_factor`` gives it for each kind of trio, 0.83 with a Monk and 0.69 without
+  (``min(1, best Dual Wield skill / 400 x 1.32)`` with the skill at 252 for a Monk and 210 for the other dual
+  wielders, a working model :func:`dual_wield_factor_for` picks from). A rule that holds one number gives it to
+  every trio. The module default, 0.8, is only for a call with no rules; the ``dw_factor`` argument overrides all;
 * an item the setup does not allow in that hand adds nothing (the builder keeps such items out of the hand with its
   setup rows; the index just answers 0 for them), and so does everything in ``stick``;
 * procs are listed elsewhere and not scored.
 
-The haste is the scenario's attainable haste, fixed per scenario, not a variable (:func:`haste_assumed`): that keeps
-the term linear in the item columns. The index exists as an exact :class:`~fractions.Fraction` for the oracle and as
-a float for the model.
+The haste a program takes is a constant of that program, which keeps the term linear in the item columns; the solve makes
+it the haste the kit counts by building one program for each haste a kit can count (:mod:`trioforge.solver.haste`), and
+:func:`haste_assumed` is the highest of them (the ceiling of the scenario, what a kit would count with the best spell haste
+on offer and the best worn haste of the pool). The index exists as an exact :class:`~fractions.Fraction` for the oracle and
+as a float for the model.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from fractions import Fraction
 from typing import Any
 
@@ -49,6 +54,7 @@ from trioforge.classes import CLASS_CODES
 from trioforge.rules import DEFAULT_LEVEL
 
 __all__ = [
+    "BONUS_TWO_HANDED_DELAY_CAP",
     "DUAL_WIELD_FACTOR",
     "HANDS",
     "ROLES",
@@ -56,6 +62,7 @@ __all__ = [
     "allowed_in_hand",
     "damage_index",
     "damage_index_exact",
+    "dual_wield_factor_for",
     "haste_assumed",
     "setups_for",
     "shield_available",
@@ -74,6 +81,7 @@ DUAL_WIELD_SKILL = "Dual Wield"
 
 BONUS_ONE_HANDED = Fraction(1, 2)  # of the delay, when the item lists no damage bonus
 BONUS_TWO_HANDED = Fraction(67, 100)
+BONUS_TWO_HANDED_DELAY_CAP = 50  # the delay a two-hander's fallback bonus counts: 0.67 x min(delay, 50)
 DUAL_WIELD_FACTOR = Fraction(4, 5)  # the default chance that the off hand swings
 
 _ROLE_SETUPS = {"tank": ("1h-shield", "2h", "dw"), "melee": ("2h", "dw"), "balanced": ("1h-shield", "2h", "dw")}
@@ -185,16 +193,39 @@ def allowed_in_hand(item: Any, hand: str, setup: str) -> bool:
 def _bonus(weapon: Any) -> Fraction:
     if weapon.bonus:
         return _frac(weapon.bonus)
-    return (BONUS_TWO_HANDED if weapon.two_handed else BONUS_ONE_HANDED) * _frac(weapon.delay)
+    if weapon.two_handed:
+        return BONUS_TWO_HANDED * min(_frac(weapon.delay), BONUS_TWO_HANDED_DELAY_CAP)
+    return BONUS_ONE_HANDED * _frac(weapon.delay)
+
+
+def dual_wield_factor_for(trio: Sequence[str], rules: Any, level: int = DEFAULT_LEVEL) -> Any:
+    """The dual-wield factor of a trio under ``rules``: the rule's ``with_monk`` value when the trio has a Monk and its
+    ``without_monk`` value when it has not, or the rule's one number when it is not a pair of values. The value is
+    returned as the rules file has it (0.83, 0.69); a pair that lacks one of the two is a ``ValueError``."""
+    value = rules.get("weapons.dual_wield_factor", level)
+    if not isinstance(value, Mapping):
+        return value
+    key = "with_monk" if "MNK" in trio else "without_monk"
+    if set(value) != {"with_monk", "without_monk"} or any(
+        isinstance(number, bool) or not isinstance(number, (int, float)) for number in value.values()
+    ):
+        raise ValueError(f"weapons.dual_wield_factor is a number or {{with_monk, without_monk}} numbers, not {value!r}")
+    return value[key]
 
 
 def _dual_wield_factor(rules: Any, given: Any) -> Fraction:
     if given is not None:
         return _frac(given)
     try:
-        return _frac(rules.get("weapons.dual_wield_factor"))
+        value = rules.get("weapons.dual_wield_factor")
     except (AttributeError, KeyError):  # no rules, or no such rule yet
         return DUAL_WIELD_FACTOR
+    if isinstance(value, Mapping):
+        raise ValueError(
+            "weapons.dual_wield_factor has a value for each kind of trio (with_monk, without_monk): "
+            "name the factor with dw_factor, or take it from dual_wield_factor_for"
+        )
+    return _frac(value)
 
 
 def damage_index_exact(
@@ -220,9 +251,12 @@ def damage_index(
 
 
 def haste_assumed(profile: Any, items: Iterable[Any]) -> int:
-    """The haste the damage term assumes: the spell haste plus the best worn haste in the pool, up to the cap.
+    """The highest haste a kit of this pool can count: the spell haste on offer plus the best worn haste in the pool, up to the cap.
+    (It is the ceiling of the hastes the truthful solve looks at, and the constant the bare builder takes when it is given none; the
+    weapon term of a solve is paid the haste the kit really counts.)
 
-    ``profile.haste_cap`` is 75 (85 with a Monk) and ``profile.spell_haste`` the haste of the scenario's buffs.
+    ``profile.haste_cap`` is 75 (85 with a Monk) and ``profile.spell_haste`` the haste of the scenario's buffs, with
+    the 10 of Unbound Alacrity when the trio has a Monk (``Profile.haste_bonus``, already in ``spell_haste``).
     Only the best worn piece counts, and a negative worn haste counts for nothing.
     """
     best_worn = max((item.haste for item in items if item.haste > 0), default=0)

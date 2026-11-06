@@ -1113,18 +1113,23 @@ def test_a_note_the_caller_adds_is_in_both_renderings_and_only_then(tmp_path):
 REPO = Path(__file__).resolve().parents[2]
 SCOPED_RULES = {
     "race.iksar_ac_bonus", "race.iksar_ac_placement", "monk.weight_curve", "monk.bonus_placement", "haste.cap_pct_with_monk", "haste.cap_pct",
-    "weapons.dual_wield_factor", "tier.weapon_damage_pct", "tier.stat_rule", "tier.weight_floor", "tier.negatives_scale",
+    "weapons.dual_wield_factor", "tier.weapon_damage_pct", "tier.stat_rule", "tier.weight_floor", "tier.weight_pct", "tier.negatives_scale",
+    "haste.unbound_alacrity",
 }  # fmt: skip
 EVERY_PICK_RULES = {
-    "level.current", "mana.wis_bands", "mana.stat_by_class", "ac.softcap.combat_stability_pct", "ac.softcap.physical_enhancement_pct",
+    "level.current", "mana.wis_bands", "mana.stat_by_class", "ac.softcap.combat_stability_pct", "ac.softcap.physical_enhancement_pct", "hp.natural_durability_pct",
     "ac.softcap.pe_for_caster_only_trios", "ac.shield.offhand_raises_cap", "haste.worn_per_tier", "regen.gear_caps", "regen.per_tier", "regen.value_minutes",
     "resist.cap", "buffs.min_duration_minutes", "buffs.max_slots", "roles.templates", "weapons.damage_weight",
 }  # fmt: skip
 NEVER_READ_RULES = {
     "naked.cap", "naked.rule", "hp.pools_counted", "hp.sta_curve", "mana.pools_counted", "mana.base_l50", "mana.per_stat_l50", "end.formula",
     "ac.sheet.item_mult", "ac.sheet.defense_div", "ac.sheet.spell_ac_div", "ac.sheet.agi_div", "ac.softcap.past_cap_rate", "stats.knee", "stats.hard_cap",
-    "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "haste.unbound_alacrity", "packrat.pct_per_rank", "tier.accuracy_pct",
+    "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "packrat.pct_per_rank", "tier.accuracy_pct",
     "tier.socket_open", "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "roles.balanced",
+        "effects.focus_value", "effects.spell_weight", "effects.cast_categories", "effects.cast_mass_full", "effects.late_level", "effects.click_relevance",
+        "effects.dispel_relevance", "effects.gap_categories", "effects.own_compare", "effects.instant_categories", "effects.instant_bonus", "effects.proc_value",
+        "effects.score_shape", "effects.haste_buff", "effects.near_best", "effects.access_cost", "effects.raid_zones", "effects.one_off_spas",
+        "effects.restricted_targets", "effects.unverified_names", "effects.rows_kept",
 }  # fmt: skip
 PICKS = [
     results_diff.Scope(frozenset({"PAL", "MNK", "BER"}), "OGR", 4, "dw"),

@@ -214,12 +214,12 @@ def test_a_weapon_has_a_second_table_with_its_damage_and_delay_and_the_seal_of_t
     html = item_html(built.out, "w80524")  # a two-hander: 36 damage, a delay of 38
     _, head, body = table_of(html, "weapon-tiers")
     assert head == ["Stat", *(f"+{tier}" for tier in TIERS)]
-    assert body["Damage"] == ["36", "37", "39", "41", "43", "45", "46", "48", "50", "52", "54"] and body["Delay"] == ["38"] * 11
+    assert body["Damage"] == ["36", "39", "43", "46", "50", "54", "57", "61", "64", "68", "72"] and body["Delay"] == ["38"] * 11
     section = html.by_id("weapon")
     assert "2H Slashing" in section.text()
     link = next(a for a in section.find_all("a") if a.get("href") == "/rules/#tier.weapon_damage_pct")
     assert link.text() == "Weapon damage per tier"
-    assert section.find(cls="seal-player") is not None and "open test" in section.text()  # the seal, and the test that is open
+    assert section.find(cls="seal-player") is not None and "open test" not in section.text()  # the seal; the rule is settled, so no test is open
     assert item_html(built.out, "w90001").find_all("table", id_="weapon-tiers") == []  # a helm has none
     assert item_html(built.out, "w80583").find_all("table", id_="weapon-tiers") == []  # nor has a shield
 
@@ -228,8 +228,8 @@ def test_the_stat_rules_are_linked_with_their_seals_under_the_table(built):
     html = item_html(built.out, "w90008")  # stats, haste and weight
     rules = html.by_id("tier-rules")
     hrefs = [a.get("href") for a in rules.find_all("a")]
-    assert hrefs == ["/rules/#tier.stat_rule", "/rules/#haste.worn_per_tier", "/rules/#tier.weight_floor"]
-    assert len(rules.find_all(cls="seal")) == 3 and all(s.find("svg") is not None for s in rules.find_all(cls="seal"))
+    assert hrefs == ["/rules/#tier.stat_rule", "/rules/#haste.worn_per_tier", "/rules/#tier.weight_pct", "/rules/#tier.weight_floor"]
+    assert len(rules.find_all(cls="seal")) == 4 and all(s.find("svg") is not None for s in rules.find_all(cls="seal"))
     assert "estimated" in rules.text()  # (said once: every figure is worked out)
 
 
@@ -787,3 +787,64 @@ def test_decisions_records_what_gets_an_item_page_what_it_says_its_budgets_and_t
     line = next(line for line in (REPO / "docs" / "DECISIONS.md").read_text(encoding="utf-8").splitlines() if line.startswith("- 2026-10-17 Item pages"))
     counts = [int(n.replace(",", "")) for n in re.findall(r"([0-9][0-9,]*) (?:pages|items|records|names)(?![a-z])", line)]
     assert counts and all(n < 100 for n in counts), "the decision line writes a count of pages or items of the real results (the fixture's are small; the flags decide the others)"
+
+
+# ---- EQ Legends Tools (p7nek): an item read from that site says so, and the sources page names it ------------------------------------------------
+
+
+def eqlt_build(tmp_path: Path):
+    """A build in which the cap that no kit wears is an item of EQ Legends Tools with no wiki page (key rlt-moon-cap), and the first item is a wiki item that the site's tooltip overrides."""
+    need_node()
+    results = tmp_path / "results"
+    shutil.copytree(RESULTS, results)
+    changed = json.loads((results / "items.json").read_text(encoding="utf-8"))
+    cap = next(r for r in changed["items"] if browser.record_key(r) == "w90040")
+    cap["id"], cap["key"] = None, "rlt-moon-cap"
+    cap["evidence"]["codes"] = ["source-eql-tools"]
+    (results / "items.json").write_text(json.dumps(changed), encoding="utf-8")
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    del manifest["items"]["w90040"]  # (the item has no wiki page)
+    manifest["eqlegendstools"] = {"rlt-moon-cap": {"title": "Moon Cap", "slug": "moon-cap"}, "w90001": {"title": "Helm of the Stoneward", "slug": "helm-of-the-stoneward"}}
+    edited = tmp_path / "manifest.json"
+    edited.write_text(json.dumps(manifest), encoding="utf-8")
+    out = tmp_path / "dist"
+    run_build(out, tmp_path, results=results, sources_manifest=edited, noindex=True)
+    return out
+
+
+def test_an_item_read_from_eqlegendstools_has_a_source_credit_with_the_link_to_its_page_there_and_no_wiki_credit(tmp_path):
+    out = eqlt_build(tmp_path)
+    html = item_html(out, "rlt-moon-cap")
+    assert [h.text() for h in html.find("main").find_all("h2")][-1] == "Source credit"
+    assert html.find_all(None, id_="credit") == []  # (no wiki page to credit)
+    (link,) = [a for a in html.by_id("origin").find_all("a")]
+    assert link.get("href") == "https://eqlegendstools.com/items/moon-cap/" and link.text() == "EQ Legends Tools"
+    assert "Stats and drop sources are read from the EQ Legends Tools page of the item" in read(out, "item/rlt-moon-cap/index.html")  # the evidence note, with its seal
+
+
+def test_an_item_that_overrides_a_wiki_copy_keeps_the_wiki_credit_and_adds_the_source_credit(tmp_path):
+    out = eqlt_build(tmp_path)
+    html = item_html(out, "w90001")
+    assert [h.text() for h in html.find("main").find_all("h2")][-2:] == ["Wiki credit", "Source credit"]
+    assert html.by_id("credit") is not None and html.by_id("origin").find_all("a")[0].get("href") == "https://eqlegendstools.com/items/helm-of-the-stoneward/"
+    assert item_html(out, "w90002").find_all(None, id_="origin") == []  # an item of the wiki alone has none
+
+
+def test_the_sources_page_names_eqlegendstools_with_a_link_and_lists_its_items_and_the_wiki_attribution_is_as_it_was(tmp_path):
+    out = eqlt_build(tmp_path)
+    text = read(out, "sources/index.html")
+    html = page(out, "sources/index.html")
+    hrefs = {a.get("href") for a in html.find_all("a")}
+    assert {"https://eqlegendstools.com/", "https://eqlegendstools.com/zones/nektropos-castle/", "https://eqlegendstools.com/items/moon-cap/"} <= hrefs
+    assert "the source of the Nektropos Castle items" in text and "not covered by the wiki" in text
+    rows = html.by_id("eqlt-items").find_all("tr")
+    assert len(rows) == 3  # a header row and the two items
+    assert build.ATTRIBUTION in text and text.count(build.ATTRIBUTION) == 1  # the wiki's attribution, word for word (and the footer's is the same text, in its own page element)
+    assert "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors" in text
+
+
+def test_a_build_without_eqlegendstools_items_does_not_mention_it(tmp_path):
+    need_node()
+    out = tmp_path / "dist"
+    run_build(out, tmp_path, noindex=True)
+    assert "EQ Legends Tools" not in read(out, "sources/index.html") and "eqlegendstools" not in read(out, "item/w90001/index.html")

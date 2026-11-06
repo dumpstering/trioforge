@@ -209,16 +209,22 @@ def test_conv_end_is_continuous_at_its_knees():
 @pytest.mark.parametrize(
     "stat, expected",
     [
-        (-1, 0), (0, 0), (100, 100), (150, 225), (200, 350), (255, F(1675, 4)), (256, F(3355, 8)), (510, F(4625, 8)),
-        (511, F(4625, 8)), (900, F(4625, 8)),
+        (-1, 0), (0, 0), (100, 100), (150, 225), (200, 350), (255, F(1675, 4)), (256, 420), (280, 450), (510, F(1475, 2)),
+        (511, F(1475, 2)), (900, F(1475, 2)),
     ],
 )
 def test_mana_bands_default(stat, expected):
     assert conv_mana(stat) == expected
 
 
-def test_mana_bands_alternative_is_a_whole_band_of_654_thousandths_above_200():
-    alternative = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}
+def test_mana_bands_default_has_no_bend_at_255():
+    # one slope of 1.25 from 200 to 510: the rule is settled by an in-game reading, so the 255 knee of the stats is not a break
+    assert formulas.MANA_BANDS == ((100, 200, 510), (F(1), F(5, 2), F(5, 4), F(0)))
+    assert conv_mana(255) - conv_mana(200) == F(5, 4) * 55 and conv_mana(300) - conv_mana(255) == F(5, 4) * 45
+
+
+def test_mana_bands_given_to_conv_mana_replace_the_default():
+    alternative = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}  # an invented curve
     assert conv_mana(200, alternative) == 350
     assert conv_mana(300, alternative) == 350 + F("0.654") * 100
     assert conv_mana(510, alternative) == 350 + F("0.654") * 310
@@ -331,7 +337,7 @@ def test_a_trio_without_a_mana_class_has_no_mana_whatever_the_items_give():
 
 
 def test_mana_uses_the_band_it_is_given():
-    alternative = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}
+    alternative = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}  # an invented curve
     assert mana_total(("WAR", "CLR", "ROG"), 50, 300, 0, 0, 0, TABLES, alternative) == F(900) + F("4.5") * (350 + F("65.4"))
 
 
@@ -398,6 +404,17 @@ def test_the_window_floors_the_converted_wis_and_each_pool_product():
     got = window(("WAR", "CLR", "ROG"), {"WIS": 255})
     assert got["MANA"] == 900 + 1881
     assert mana_total(("WAR", "CLR", "ROG"), 50, 255, 0, 0, 0, TABLES) == 900 + F("4.5") * F("418.75")
+
+
+def test_ten_wis_above_255_adds_the_mana_of_the_continuous_curve_in_the_stat_window():
+    # The in-game reading that settled mana.wis_bands: WIS 270 -> 280, no buffs. The curve runs at 1.25 from 200 to 510, so
+    # the converted value goes 437.5 -> 450, floored 437 and 450; two WIS pools of factor 4.5 give floor(4.5 * 437) = 1966
+    # and 4.5 * 450 = 2025, 59 a pool and 118 for the two.
+    trio = ("CLR", "SHM", "WAR")
+    low, high = window(trio, {"WIS": 270}), window(trio, {"WIS": 280})
+    assert list(low["mana_pools"]) == ["CLR", "SHM"] and low["mana_pool_values"]["CLR"] == 900 + 1966
+    assert high["mana_pool_values"]["CLR"] == 900 + 2025
+    assert high["MANA"] - low["MANA"] == 118
 
 
 def test_the_window_adds_item_and_buff_points_whole_and_ignores_natural_durability():
@@ -582,9 +599,11 @@ def test_weapon_index_of_a_one_hander_without_a_listed_bonus():
     assert weapon_index(sword, "PRIMARY", "1h-shield", 0, 1) == F(7, 6)
 
 
-def test_weapon_index_of_a_two_hander_uses_67_hundredths_of_the_delay():
+def test_weapon_index_of_a_two_hander_uses_67_hundredths_of_the_delay_up_to_50():
     axe = WeaponVec("2H Slashing", 40, 60, None, True)
-    assert weapon_index(axe, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 60) / 60
+    assert weapon_index(axe, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 50) / 60  # the delay counts at most 50
+    short = WeaponVec("2H Slashing", 40, 40, None, True)
+    assert weapon_index(short, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 40) / 40
 
 
 def test_a_listed_bonus_replaces_the_pattern_and_a_listed_zero_is_not_listed():
@@ -891,7 +910,7 @@ def test_evaluate_scores_a_hand_the_setup_does_not_allow_as_zero():
     prof = profile(weights={"DMG": 1})
     for setup, kit, want in (
         ("2h", kit_of(("PRIMARY", sword)), 0),  # a one-hander in the two-hander setup
-        ("2h", kit_of(("PRIMARY", axe), ("SECONDARY", sword)), (40 + F(67, 100) * 60) / 60),  # only the axe counts
+        ("2h", kit_of(("PRIMARY", axe), ("SECONDARY", sword)), (40 + F(67, 100) * 50) / 60),  # only the axe counts
         ("dw", kit_of(("PRIMARY", axe)), 0),
         ("1h-shield", kit_of(("PRIMARY", sword), ("SECONDARY", sword)), F(7, 6)),  # the second sword is no shield
     ):
@@ -1013,12 +1032,12 @@ def test_a_mana_pool_names_wis_or_int_and_only_those():
 
 
 def test_the_profiles_band_curve_replaces_the_default():
-    alternative = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}
+    alternative = {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]}  # an invented curve
     wis_300 = {**NAKED_100, "WIS": 300}
     default = value({"MANA": 1}, naked=wis_300)
     other = value({"MANA": 1}, naked=wis_300, bands=alternative)
-    # default: 100 + 250 + 1.25 * 55 + 0.625 * 45 = 446.875 for the cleric; the enchanter stays at INT 100 -> 1350
-    assert default.parts["MANA"] == (900 + F("4.5") * F("446.875")) + 1350
+    # default: 100 + 250 + 1.25 * 100 = 475 for the cleric; the enchanter stays at INT 100 -> 1350
+    assert default.parts["MANA"] == (900 + F("4.5") * 475) + 1350
     assert other.parts["MANA"] == (900 + F("4.5") * (350 + F("65.4"))) + 1350
 
 
@@ -1045,13 +1064,13 @@ def test_items_made_at_a_tier_feed_the_evaluator():
     catalog = [piece("w1", "HEAD", 20, 3.0), piece("w2", "CHEST", 40, 10.0), piece("w3", "LEGS", 30, 8.0)]
     prof = profile(weights={"AC": 4}, softcap=(10 ** 6, 0.5), monk=monk_curve(TABLES.rules, 50))
     fade = MONK_FILE["levels"]["50"]["stand_in"]
-    # tier: (worn AC, tenths of a stone). 3.0 / 10.0 / 8.0 stones lose 10 % a tier, at least 0.1, to a floor of 0.1 each.
-    for tier, (worn_ac, tenths) in {0: (90, 210), 4: (126, 126), 10: (180, 3)}.items():
+    # tier: (worn AC, tenths of a stone). 3.0 / 10.0 / 8.0 stones lose 9 % of the base a tier, rounded down, to a floor of 0.1 each.
+    for tier, (worn_ac, tenths) in {0: (90, 210), 4: (126, 136), 10: (180, 21)}.items():
         kit = kit_of(*[(item["slots"][0], at_tier(item, tier, TABLES.rules)) for item in catalog])
         result = evaluate(prof, kit)
         assert result.totals["sheet"]["worn_ac"] == worn_ac and result.totals["weight10"] == tenths, tier
         assert result.totals["sheet"]["monk_bonus"] == fade[tenths // 10], tier
-    assert fade[21] < 73 and fade[12] == fade[0] == 73  # +0 is over the fade, +4 and +10 are light enough for the full bonus
+    assert fade[21] < 73 and fade[13] == fade[2] == fade[0] == 73  # +0 is over the fade, +4 and +10 are light enough for the full bonus
 
 
 # ---- inputs it refuses ---------------------------------------------------------------------

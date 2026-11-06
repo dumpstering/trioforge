@@ -66,6 +66,20 @@
       "status": "active"
     },
     {
+      "id": "hp.natural_durability_pct",
+      "title": "Natural Durability: percent of the HP that comes from STA, by rank",
+      "value": {"1": 2, "2": 5, "3": 10, "4": 12},
+      "unit": "percent (cumulative)",
+      "seal": "player",
+      "source": [
+        {"kind": "client-file", "ref": "dbstr_us.txt"},
+        {"kind": "public-text", "ref": "eqlwiki AA data, revision 151303, as extracted by eqlbuilds.com"}
+      ],
+      "date": "2026-10-25",
+      "status": "active",
+      "notes": "AA 107, type 4 in the client's text: increases your maximum base health (derived from your stamina) by #1%. The ranks (2, 5, 10 and 12 percent, costs 2, 4, 6 and 2) are the wiki's data. It scales only the HP that comes from STA (the hp_fac x STA' of 5 + base_hp + hp_fac x STA'), not the constant, the class base or the flat HP of items and buffs. The model assumes the top rank for every class, as it assumes Combat Stability 3 of 3; the window floors the STA part first and the scaled part after."
+    },
+    {
       "id": "mana.pools_counted",
       "title": "Mana pools counted",
       "value": 2,
@@ -104,24 +118,16 @@
     {
       "id": "mana.wis_bands",
       "title": "WIS multiplier bands for mana",
-      "value": {"breaks": [100, 200, 255, 510], "slopes": [1, 2.5, 1.25, 0.625, 0]},
+      "value": {"breaks": [100, 200, 510], "slopes": [1, 2.5, 1.25, 0]},
       "unit": "multiplier",
-      "seal": "model",
+      "seal": "measured",
       "source": [
-        {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
-      "test": "B4",
-      "alternatives": [
-        {
-          "value": {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]},
-          "seal": "measured",
-          "source": [
-            {"kind": "url", "ref": "https://eqltools.com/attributes"}
-          ]
-        }
-      ]
+      "date": "2026-10-27",
+      "status": "active",
+      "notes": "Settled by an in-game stat window reading with no buffs: above the second break the slope stays the same up to the hard cap, with no bend at the stat knee. The flatter slope above the second break that the EQEmu code and a public stat page suggested is ruled out."
     },
     {
       "id": "mana.stat_by_class",
@@ -370,15 +376,16 @@
     {
       "id": "haste.unbound_alacrity",
       "title": "Unbound Alacrity: effect on haste",
-      "value": "raises the cap only",
+      "value": "adds 10 haste and raises the cap by 10",
       "unit": "text",
-      "seal": "model",
+      "seal": "developer",
       "source": [
-        {"kind": "public-text", "ref": "patch notes, Unbound Alacrity (\"current and maximum haste value\")"}
+        {"kind": "public-text", "ref": "patch notes 2026-07-28, Unbound Alacrity (\"increase in your current and maximum haste value\")"},
+        {"kind": "url", "ref": "https://eqlwiki.com/Haste_Guide"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
-      "test": "B8"
+      "date": "2026-10-22",
+      "status": "active",
+      "notes": "A trio with a Monk gets 10 haste that stacks with the best spell haste and the best worn haste, up to haste.cap_pct_with_monk (the cap already includes its 10). The wiki's Haste Guide says it grants up to 10% haste and raises the cap by 10%; the patch notes say it raises both the current and the maximum haste value. 2026-10-22: the weapon index is paid the haste the kit counts (the spell haste of the buffs it takes, this 10 included, plus the best worn haste it wears, up to the cap), not a haste the scenario could reach; the solver chooses the buffs and the haste item together with the weapons."
     },
     {
       "id": "regen.gear_caps",
@@ -456,23 +463,39 @@
       "status": "active"
     },
     {
+      "id": "tier.weight_pct",
+      "title": "Weight reduction per tier",
+      "value": 9,
+      "unit": "percent of the base weight per tier",
+      "seal": "player",
+      "source": [
+        {"kind": "url", "ref": "https://xm2514-svg.github.io/sites/item-upgrades/"},
+        {"kind": "url", "ref": "https://eqlwiki.com/index.php/Item_Upgrade_System"}
+      ],
+      "date": "2026-10-22",
+      "status": "active",
+      "notes": "In tenths of a stone, w at tier n becomes max(floor, w - w*9*n//100), with no minimum step. Player client reads: 1.9 stone weighs 1.8 at +1, 1.0 weighs 0.7 at +4, 0.2 stays 0.2 at +5. The floor is tier.weight_floor."
+    },
+    {
       "id": "tier.weapon_damage_pct",
       "title": "Weapon damage per tier",
-      "value": 5,
+      "value": 10,
       "unit": "percent per tier",
       "seal": "player",
       "source": [
-        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"}
+        {"kind": "url", "ref": "https://xm2514-svg.github.io/sites/item-upgrades/"},
+        {"kind": "url", "ref": "https://eqlwiki.com/index.php/Item_Upgrade_System"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
+      "date": "2026-10-22",
+      "status": "active",
       "test": "B5",
+      "notes": "Damage at tier n is dmg + dmg*n*10//100 with no minimum of 1 a tier. Player client reads: a weapon of base damage 6 reads 8 at +4 and 9 at +5. Delay and the listed damage bonus do not change. The in-game test B5 can still confirm it; the robustness runs try the alternative.",
       "alternatives": [
         {
-          "value": 10,
+          "value": 5,
           "seal": "player",
           "source": [
-            {"kind": "url", "ref": "https://eqltools.com/"}
+            {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"}
           ]
         }
       ]
@@ -708,16 +731,289 @@
     {
       "id": "weapons.dual_wield_factor",
       "title": "Dual-wield off-hand factor",
-      "value": 0.8,
+      "value": {"with_monk": 0.83, "without_monk": 0.69},
+      "unit": "fraction, by whether the trio has a Monk",
+      "seal": "model",
+      "source": [
+        {"kind": "url", "ref": "https://eqlwiki.com/Skill_Dual_Wield"}
+      ],
+      "date": "2026-10-22",
+      "status": "open",
+      "test": "B5",
+      "notes": "The share of the off hand's damage that counts in the weapon index. Derivation: min(1, best Dual Wield skill / 400 x 1.32), with the Dual Wield skill at 252 for a Monk and 210 for the other dual wielders, and Ambidexterity as the x1.32: 0.83 with a Monk in the trio, 0.69 without. The source calls this a working model, not a measured figure, so the rule stays open."
+    },
+    {
+      "id": "effects.focus_value",
+      "title": "Value of one percent of each kind of focus",
+      "value": {"improved_damage": 1.0, "improved_healing": 1.0, "spell_haste": 0.8, "mana_preservation": 0.6, "extended_duration": 0.15, "extended_range": 0.1, "reagent_conservation": 0.05, "pet_power": 0.5, "instrument_mod": 0.5, "resist_reduction": 0.3, "spell_hate": 0.1},
+      "unit": "relative to one percent of damage or healing",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "How much a focus kind is worth next to damage; used to rank the foci of the Effects to exalt section."
+    },
+    {
+      "id": "effects.spell_weight",
+      "title": "How much a class leans on each kind of spell",
+      "value": {"damage": 1.0, "lifetap": 1.0, "dot": 1.0, "heal": 1.0, "heal_over_time": 0.6, "slow": 0.4, "snare": 0.3, "crowd_control": 0.4, "debuff": 0.3, "haste": 0.05, "mana": 0.2, "summon_pet": 0.5, "buff_stats": 0.03, "buff_resist": 0.03, "buff_protection": 0.03, "other": 0.0},
+      "unit": "weight per kind of spell",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Weights how much of a class's late spells a focus touches. A kind that is not listed (utility, summoned items, teleports, illusions) counts as the weight of other."
+    },
+    {
+      "id": "effects.cast_categories",
+      "title": "Kinds of spell that make a class a caster in a fight",
+      "value": ["damage", "lifetap", "dot", "heal", "heal_over_time", "slow", "crowd_control", "summon_pet"],
+      "unit": "spell kinds",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "A class's cast mass is the weight of its late spells of these kinds."
+    },
+    {
+      "id": "effects.cast_mass_full",
+      "title": "Weight of late combat spells that counts as a full caster",
+      "value": 8,
+      "unit": "weighted spells",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "A class with this weight of late spells of the kinds above, or more, has cast mass 1."
+    },
+    {
+      "id": "effects.late_level",
+      "title": "First spell level that counts as late",
+      "value": 30,
+      "unit": "spell level",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "A level-50 character still casts spells from this level up."
+    },
+    {
+      "id": "effects.click_relevance",
+      "title": "Relevance of a click or worn effect to each role",
+      "value": {"heal": [0.8, 0.5, 0.6], "heal_over_time": [0.5, 0.3, 0.4], "mana": [0.2, 0.2, 1.0], "damage": [0.3, 0.4, 0.6], "lifetap": [0.5, 0.5, 0.4], "dot": [0.2, 0.2, 0.5], "haste": [0.9, 1.0, 0.2], "run_speed": [0.6, 0.6, 0.6], "levitate": [0.3, 0.3, 0.3], "invisibility": [0.2, 0.2, 0.2], "see_invisible": [0.2, 0.2, 0.2], "vision": [0.15, 0.15, 0.15], "water_breathing": [0.15, 0.15, 0.15], "buff_stats": [0.7, 0.6, 0.5], "buff_resist": [0.5, 0.4, 0.4], "buff_protection": [0.9, 0.5, 0.4], "slow": [0.6, 0.5, 0.4], "snare": [0.4, 0.4, 0.4], "crowd_control": [0.4, 0.3, 0.7], "debuff": [0.4, 0.3, 0.4], "cure": [0.5, 0.5, 0.6], "teleport": [0.4, 0.4, 0.4], "resurrect": [0.3, 0.3, 0.3], "summon_item": [0.3, 0.3, 0.3], "summon_pet": [0.1, 0.1, 0.6], "illusion": [0.1, 0.1, 0.1], "mount": [0.1, 0.1, 0.1], "feign_death": [0.2, 0.3, 0.3], "bind": [0.1, 0.1, 0.1], "proc_buff": [0.5, 0.6, 0.1], "utility_other": [0.1, 0.1, 0.1], "melee_skill": [0.6, 0.4, 0.0], "hate": [0.8, 0.3, 0.1], "other": [0.1, 0.1, 0.1]},
+      "unit": "relevance, 0 to 1, for a tank, a melee and a caster role",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Dispel has a rule of its own (effects.dispel_relevance)."
+    },
+    {
+      "id": "effects.dispel_relevance",
+      "title": "Relevance of a dispel click to each role",
+      "value": [0.6, 0.5, 0.7],
+      "unit": "relevance, 0 to 1, for a tank, a melee and a caster role",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "The site's default is difficulty 4 content, where mobs carry buffs, so a click that strips four of them (Pillage Enchantment) is worth more than the trio's own one-buff dispel spell. It is a constant, not a difficulty switch. A dispel is scored by how many buffs it strips, and no cut applies for the trio's own Cancel Magic: the click is free and instant."
+    },
+    {
+      "id": "effects.gap_categories",
+      "title": "Kinds of click that only fill a gap",
+      "value": ["run_speed", "levitate", "invisibility", "see_invisible", "vision", "water_breathing", "teleport", "cure", "resurrect", "summon_item", "illusion", "mount", "feign_death", "bind", "utility_other"],
+      "unit": "click kinds",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Cut to a fraction when a trio class already has its own spell of the kind up to the cap."
+    },
+    {
+      "id": "effects.own_compare",
+      "title": "Kinds of click compared with the trio's own best spell",
+      "value": ["heal", "damage", "lifetap", "dot", "mana"],
+      "unit": "click kinds",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "The magnitude of the click is compared with the trio's own best spell of the same kind."
+    },
+    {
+      "id": "effects.instant_categories",
+      "title": "Kinds of click that gain from being instant",
+      "value": ["heal", "damage", "lifetap", "dot", "crowd_control", "debuff", "dispel", "snare", "slow"],
+      "unit": "click kinds",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "An instant click skips spell recovery, which a caster values."
+    },
+    {
+      "id": "effects.instant_bonus",
+      "title": "Bonus of an instant output click for a caster",
+      "value": 0.25,
+      "unit": "fraction of the score, times the role's spell factor",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Applied to the kinds in effects.instant_categories."
+    },
+    {
+      "id": "effects.proc_value",
+      "title": "Value of one proc, by kind, next to damage",
+      "value": {"slow": 0.5, "crowd_control": 0.35, "hate": 0.45, "snare": 0.25, "debuff": 0.3, "mana": 0.1, "haste": 0.6, "buff_protection": 0.3, "buff_stats": 0.2, "heal": 0.6},
+      "unit": "fraction of a full damage proc",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "A proc of a kind that is not listed counts for the unlisted_proc factor of effects.score_shape. Damage procs are scaled by their size against the strong ones."
+    },
+    {
+      "id": "effects.score_shape",
+      "title": "Constants of the click, proc and role scores",
+      "value": {"gap_utility": 0.6, "gap_covered": 0.15, "no_magnitude": 0.2, "own_floor": 0.3, "own_span": 0.7, "proc_melee_floor": 0.2, "proc_full_percentile": 0.9, "unlisted_proc": 0.05, "spell_floor": 0.3, "spell_span": 0.7, "off_role_class": 0.25},
+      "unit": "factors",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "gap_utility scales a utility click below an output click; gap_covered is the cut for a gap already covered by the trio's own spell; no_magnitude is the size taken for a click with no number; own_floor and own_span give the part of an output click's score that depends on beating the trio's own spell; proc_melee_floor is the least share of melee classes counted for a proc and proc_full_percentile the proc damage percentile that counts as a full score; spell_floor and spell_span make the spell factor of a role from its mana weight; off_role_class is the weight of a class outside the role's group."
+    },
+    {
+      "id": "effects.haste_buff",
+      "title": "Haste buff classes, and what a haste click or proc is worth next to them",
+      "value": {"min_pct": 30, "cut": 0.1, "click_full_pct": 50, "classes": ["BST"]},
+      "unit": "percent, factor, class codes",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "A trio class with a haste buff of min_pct or more for a player (not pet-only) cuts a haste click or proc to the cut factor. Beastlord is counted by decision although its only haste spell targets the pet. Worn haste is an item stat and is never moved."
+    },
+    {
+      "id": "effects.near_best",
+      "title": "Share of the best focus score within which the cheapest source wins",
+      "value": 0.9,
       "unit": "fraction",
       "seal": "model",
       "source": [
         {"kind": "public-text", "ref": "TrioForge judgment"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
-      "test": "B5",
-      "notes": "The share of the off hand's damage that counts in the weapon index."
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Among the donors of a focus type within this share of the best score, the easiest to get wins."
+    },
+    {
+      "id": "effects.access_cost",
+      "title": "Cost of getting an item, by source",
+      "value": {"vendor": 1, "quest": 2, "crafted": 2, "drop": 3, "raid": 4, "none": 9},
+      "unit": "rank, 1 easiest",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Vendor, quest or crafted, drop in a group zone, drop in a raid zone, no known source."
+    },
+    {
+      "id": "effects.raid_zones",
+      "title": "Zones that need a raid or a hard group",
+      "value": ["Nagafen's Lair", "Permafrost", "Veeshan's Peak", "Dragon Necropolis", "Sleeper's Tomb", "Temple of Veeshan", "Kael Drakkel", "Skyshrine"],
+      "unit": "zone names",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Level cap 50 content. A zone whose name starts with Plane of counts too."
+    },
+    {
+      "id": "effects.one_off_spas",
+      "title": "Effect ids of odd one-off utility spells",
+      "value": [10, 19, 24, 41, 42, 44, 61, 67, 68, 76, 77, 86, 87, 89, 112, 121, 289, 368],
+      "unit": "effect ids",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Size change, identify, locate corpse, telescope and the like are grouped as other utility."
+    },
+    {
+      "id": "effects.restricted_targets",
+      "title": "Damage that only works on some targets",
+      "value": {"targets": [9, 10, 11], "fraction": 0.35},
+      "unit": "spell target types, fraction of plain damage",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Dismiss and Banish spells (animals, undead, summoned) are scored at this fraction of a plain damage spell of their size."
+    },
+    {
+      "id": "effects.unverified_names",
+      "title": "Effects whose description may differ from the spell data",
+      "value": ["Ykesha"],
+      "unit": "effect names",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "Marked unverified on the page. The spell data says a small damage proc with a stun; players call it a hate proc."
+    },
+    {
+      "id": "effects.rows_kept",
+      "title": "Rows of each list kept for a trio",
+      "value": {"focus": 14, "click": 6, "carry": 8, "worn": 3, "proc": 6},
+      "unit": "rows",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-10-24",
+      "status": "active",
+      "notes": "The best rows of each kind, which the page shows and the placement on a kit uses."
     }
   ]
 }

@@ -90,12 +90,14 @@
         "dw_factor": {"type": "number"},
         "weights": {"type": "object"},
         "setups": {"type": "array", "items": {"enum": ["1h-shield", "2h", "dw", "stick"]}},
-        "deity": {"type": ["string", "null"]}
+        "deity": {"type": ["string", "null"]},
+        "haste_bonus": {"type": "number", "minimum": 0},
+        "nd_pct": {"type": "number", "minimum": 0}
       },
       "required": [
         "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap",
         "cs_pct", "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights",
-        "setups", "deity"
+        "setups", "deity", "haste_bonus", "nd_pct"
       ],
       "additionalProperties": false
     },
@@ -188,12 +190,14 @@
       "properties": {
         "any_rule": {"enum": ["all", "explicit"]},
         "haste_assumed": {"type": ["integer", "null"], "minimum": 0},
+        "haste_floor": {"type": ["integer", "null"], "minimum": 0},
+        "haste_exact": {"type": "boolean"},
         "owned_caps": {"type": "object", "propertyNames": {"pattern": "^[^@\\s]+@(10|[0-9])$"}, "additionalProperties": {"type": "integer", "minimum": 0}},
         "new_keys": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
         "max_new": {"type": ["integer", "null"], "minimum": 0},
         "upgrades": {"type": "object", "propertyNames": {"pattern": "^[^@\\s]+@(10|[0-9])$"}, "additionalProperties": {"$ref": "#/$defs/ident"}}
       },
-      "required": ["any_rule", "haste_assumed", "owned_caps", "new_keys", "max_new", "upgrades"],
+      "required": ["any_rule", "haste_assumed", "haste_floor", "haste_exact", "owned_caps", "new_keys", "max_new", "upgrades"],
       "additionalProperties": false
     },
     "prune": {
@@ -235,10 +239,24 @@
         "options": {"$ref": "#/$defs/options"},
         "pool": {"type": "array", "items": {"$ref": "#/$defs/ident"}},
         "prune": {"$ref": "#/$defs/prune"},
+        "haste": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {
+                "levels": {"type": "array", "items": {"type": "integer", "minimum": 0}, "minItems": 1},
+                "level": {"type": "integer", "minimum": 0}
+              },
+              "required": ["levels", "level"],
+              "additionalProperties": false
+            }
+          ]
+        },
         "model": {"type": "object"},
         "result": {"$ref": "#/$defs/result"}
       },
-      "required": ["label", "options", "pool", "prune", "model", "result"],
+      "required": ["label", "options", "pool", "prune", "haste", "model", "result"],
       "additionalProperties": false
     },
     "caseInputs": {
@@ -393,7 +411,6 @@
             "brute_F": {"$ref": "#/$defs/rational"},
             "kits": {"type": "integer", "minimum": 1},
             "buff_sets": {"type": "integer", "minimum": 1},
-            "session_haste": {"type": "integer", "minimum": 0},
             "equip_now": {"const": 0},
             "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
             "stopped": {"enum": ["limit", "no-gain"]},

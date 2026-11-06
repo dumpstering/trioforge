@@ -106,7 +106,7 @@ def session_of(case):
 
 def base_options(case):
     """The options an Upgrade session is started with: the first program's, without the owned counts and the fixed haste."""
-    return fixture_cases.options_from_json({**case["solves"][0]["options"], "haste_assumed": None, "owned_caps": {}})
+    return fixture_cases.options_from_json({**case["solves"][0]["options"], "haste_assumed": None, "haste_floor": None, "haste_exact": False, "owned_caps": {}})
 
 
 @pytest.fixture(scope="module")
@@ -469,9 +469,12 @@ def test_the_brute_force_value_is_exact_independent_and_the_solvers(mini_docs):
         assert abs(float(got - want)) <= 1e-9 * max(1.0, abs(float(want))), case["id"]
         # the instance is drawn again from the text that is stored, and enumerated once more
         number = int(case["id"].split("-")[1])
-        inst = brute.random_instance(
-            random.Random(case["inputs"]["seed"]), trio_index=number % len(brute.TRIO_MENU), haste_buffs=number % 8 == 5
-        )
+        rng = random.Random(case["inputs"]["seed"])
+        if "truthful-haste" in case["tags"]:  # a truthful instance: the weapons are paid the haste each kit counts
+            inst = brute.truthful_instance(rng, trio_index=number % len(brute.TRIO_MENU))
+            assert inst.haste_assumed is None and case["solves"][0]["haste"] is not None
+        else:
+            inst = brute.random_instance(rng, trio_index=number % len(brute.TRIO_MENU), haste_buffs=number % 8 == 5)
         space = brute.Space(inst)
         assert browser.rat(space.best()[0]) == case["expected"]["brute_F"]
         assert case["expected"]["kits"] == len(space.kits) and case["expected"]["buff_sets"] == len(space.buff_sets)
@@ -526,10 +529,9 @@ def test_an_upgrade_case_is_what_the_reference_makes_of_its_owned_set(mini_docs)
         assert made == [(w["index"], w["item"], w["kind"], w["source_tier"]) for w in want]
         assert [(browser.rat(s.F), browser.rat(s.gain)) for s in steps] == [(w["F"], w["gain"]) for w in want]
         assert case["expected"]["stopped"] == ("limit" if len(steps) == case["inputs"]["steps"] else "no-gain")
-        fixed = dataclasses.replace(base_options(case), haste_assumed=case["expected"]["session_haste"])
-        assert browser.rat(UP.equip_now(profile, owned, setup, buffset, fixed).breakdown.F) == case["solves"][0]["result"]["F"]
-        session_haste = case["expected"]["session_haste"]
-        assert [step["haste_assumed"] for step in want] == [session_haste] * len(want)  # fixed for the session
+        assert browser.rat(UP.equip_now(profile, owned, setup, buffset, base_options(case)).breakdown.F) == case["solves"][0]["result"]["F"]
+        # each step is valued at the haste its own kit counts, which is the haste its program assumed
+        assert [step["haste_assumed"] for step in want] == [case["solves"][step["solve"]]["result"]["haste_assumed"] for step in want]
         assert [step["solve"] for step in want] == list(range(1, len(want) + 1))
 
 
@@ -554,7 +556,7 @@ def test_an_upgrade_case_records_the_best_two_and_three_sets_the_reference_makes
                 "F": browser.rat(best.F), "gain": browser.rat(best.gain), "haste_assumed": best.haste_assumed,
             }, case["id"]  # fmt: skip
             assert fm.fr(entry["F"]) - fm.fr(equip["F"]) == fm.fr(entry["gain"]) >= 0
-            assert entry["haste_assumed"] == case["expected"]["session_haste"]
+            assert entry["haste_assumed"] == (programs.get(entry["k"]) or case["solves"][0])["result"]["haste_assumed"]
             if entry["acquired"]:  # the kit of the best set is the result of its program
                 assert fm.fr(programs[entry["k"]]["result"]["F"]) == fm.fr(entry["F"]), case["id"]
         labels = [solve["label"] for solve in case["solves"]]
@@ -572,7 +574,7 @@ def test_the_program_of_a_best_set_is_built_and_pruned_as_the_reference_does_it(
             options = solve["options"]
             assert options["max_new"] == k and options["owned_caps"] == started
             assert options["new_keys"] or options["upgrades"]  # something to acquire
-            assert options["haste_assumed"] == case["expected"]["session_haste"]
+            assert options["haste_assumed"] == solve["haste"]["level"] == solve["result"]["haste_assumed"]  # the program of the winning level
             assert solve["prune"] is not None and solve["prune"]["owned"] == sorted(started)
             assert solve["prune"]["kept"] == solve["pool"] and solve["prune"]["options"]["max_new"] == k
             milp_now = milp_json.to_dict(fixtures.build_solve(case, case["solves"].index(solve)))
@@ -596,13 +598,47 @@ def test_a_best_set_is_no_worse_than_the_first_step_nor_than_the_path_after_as_m
 
 
 def test_a_best_set_may_upgrade_an_owned_copy_and_add_a_copy_of_the_upgrade_as_the_path_does(sample_docs):
-    # upgrade-012: step 1 upgrades an owned copy to +10 and step 2 copies the upgraded item; so does the set of two additions
-    case = cases_of(sample_docs, "upgrade")["upgrade-012"]
-    steps = case["expected"]["steps"]
-    assert [(step["kind"], step["item"]) for step in steps[:2]] == [("upgrade", "w16201@10"), ("copy", "w16201@10")]
-    two, three = case["expected"]["best_sets"]
-    assert two["acquired"] == ["w16201@10", "w16201@10"] and fm.fr(two["F"]) == fm.fr(steps[1]["F"])
-    assert fm.fr(three["F"]) >= fm.fr(two["F"])
+    # a case of this shape: step 1 upgrades an owned copy and step 2 copies the upgraded item; so does the set of two additions (which case it is depends on the items
+    # the seed has the visitor own, so the shape is looked for in the sample and not given by an id: fixture_plan.SAMPLE_SESSIONS is chosen to have one)
+    found = []
+    for name, case in cases_of(sample_docs, "upgrade").items():
+        steps = case["expected"]["steps"]
+        if len(steps) >= 2 and steps[0]["kind"] == "upgrade" and steps[1]["kind"] == "copy" and steps[0]["item"] == steps[1]["item"]:
+            found.append((name, case))
+    assert found, "no case of the sample has a step that upgrades an owned copy followed by a step that copies the upgraded item"
+    for name, case in found:
+        steps = case["expected"]["steps"]
+        item = steps[0]["item"]
+        assert steps[0]["source_tier"] < int(item.partition("@")[2]), name  # the owned copy is at a lower tier than the one it is brought to
+        two, three = case["expected"]["best_sets"]
+        assert two["acquired"] == [item, item] and fm.fr(two["F"]) == fm.fr(steps[1]["F"]), name
+        assert fm.fr(three["F"]) >= fm.fr(two["F"]), name
+
+
+def _every_slot_offers(case):
+    """The swaps of the Every slot rows of an upgrade case, each as (place, ident, copies the visitor has or None, copies the kit wears in the other places)."""
+    rows = case["expected"]["every_slot"]
+    kit = [place["current"] for place in rows]
+    owned = {name: count for name, count in case["inputs"]["owned"]} if isinstance(case["inputs"]["owned"], list) else dict(case["inputs"]["owned"])
+    return [
+        (place["index"], swap["item"], owned.get(swap["item"]), sum(1 for index, ident in enumerate(kit) if index != place["index"] and ident == swap["item"]))
+        for place in rows
+        for swap in place["swaps"]
+    ]
+
+
+def test_the_sample_has_the_every_slot_offers_the_page_words_differently(sample_docs):
+    """The JS tests of the Every slot table read the sample for these shapes (the seed decides which session has which, so SAMPLE_SESSIONS is chosen to have them)."""
+    cases = {name: case for name, case in cases_of(sample_docs, "upgrade").items() if case["inputs"]["tier_mode"]}  # (the invented cases for Every slot have no tier mode)
+    arrives_to_get = [name for name, case in cases.items() if case["inputs"]["tier_mode"]["mode"] == "arrives" and any(have is not None and have <= elsewhere for _, _, have, elsewhere in _every_slot_offers(case))]
+    assert arrives_to_get, "no session in the mode 'as it arrives' offers an item the visitor has in every copy the kit wears elsewhere (a copy to get)"
+    off_tier = []
+    for name, case in cases.items():
+        mode = case["inputs"]["tier_mode"]
+        granted = {"ready4": 4, "fixed": mode["N"]}.get(mode["mode"])
+        if granted is not None and any(have is not None and have > elsewhere and int(ident.partition("@")[2]) != granted for _, ident, have, elsewhere in _every_slot_offers(case)):
+            off_tier.append(name)
+    assert off_tier, "no session of a fixed tier offers an item the visitor has at a tier the mode does not give, because a copy is spare"
 
 
 def test_every_step_adds_one_item_to_the_owned_set_and_the_gains_add_up(mini_docs):
@@ -630,7 +666,7 @@ def test_each_program_of_a_session_is_built_under_the_owned_counts_before_its_st
     for number, solve in enumerate(case["solves"][:4]):
         options, rows = solve["options"], set(solve["model"]["row_names"])
         assert options["owned_caps"] == owned  # the counts before the step: a step's addition joins them only afterwards
-        assert options["haste_assumed"] == case["expected"]["session_haste"]  # one assumed haste for the whole session
+        assert options["haste_assumed"] == solve["haste"]["level"] == solve["result"]["haste_assumed"]  # the program of the level that won
         if number == 0:
             assert options["max_new"] is None and not options["new_keys"] and "new.limit" not in rows
         else:
@@ -640,7 +676,7 @@ def test_each_program_of_a_session_is_built_under_the_owned_counts_before_its_st
     for solve, k in zip(case["solves"][4:], (2, 3)):  # a best set is a choice from the owned set as it started, not after a step
         assert solve["label"] == f"best-{k}"
         assert solve["options"]["owned_caps"] == started and solve["options"]["max_new"] == k
-        assert solve["options"]["haste_assumed"] == case["expected"]["session_haste"]
+        assert solve["options"]["haste_assumed"] == solve["haste"]["level"] == solve["result"]["haste_assumed"]
         assert "new.limit" in solve["model"]["row_names"]
 
 
@@ -674,7 +710,7 @@ def test_every_slot_rows_are_the_references_for_every_upgrade_case(mini_docs, sa
         owned, candidates = session_of(case)
         profile = Profile.from_dict(case["inputs"]["profile"])
         buffset = fixture_cases.buffset_from_doc(case["inputs"]["buffset"])
-        options = dataclasses.replace(base_options(case), haste_assumed=case["expected"]["session_haste"])
+        options = base_options(case)  # no haste fixed: each swapped kit is valued at the haste it counts
         equip = UP.equip_now(profile, owned, case["inputs"]["setup"], buffset, options)
         rows = UP.every_slot(profile, equip, candidates, case["inputs"]["setup"], buffset, options, limit=3, owned=owned)
         got = [
@@ -922,6 +958,17 @@ def test_the_tier_tables_are_the_modes_and_merge_costs_of_the_reference(mini_doc
     assert doc["exp_needed"] == fixture_cases.exact_json(RULES.get("tier.exp_needed"))
 
 
+@pytest.mark.parametrize("count", [1, 5, 20, 46, 47, 60, 150, 151, 200, 400])  # (the first rows are below the number of feature picks, which are then cut at the count)
+def test_a_sample_of_the_item_table_has_exactly_the_count_asked_for_of_distinct_records_in_table_order(inputs, count):
+    records = inputs.table["items"]
+    sampled = fixture_tables.sample_records(records, count)
+    keys = [browser.record_key(r) for r in sampled]
+    assert len(sampled) == count and len(set(keys)) == count  # (the evenly spaced picks once collided with the feature picks and the sample fell short: 148 of 150 on the table of 2026-10-27)
+    assert keys == sorted(keys, key=list(inputs.records).index)  # in the order of the table
+    assert fixture_tables.sample_records(records, count) == sampled  # the same every time
+    assert len(fixture_tables.sample_records(records[:20], 50)) == 20  # a table with fewer records than asked for is all of it
+
+
 def test_the_item_table_holds_every_wearable_including_the_hidden_ones_flagged_owned_only(inputs):
     table = fixture_tables.item_table(inputs, None)
     places = {name for name, _ in SLOT_GROUPS}
@@ -934,8 +981,11 @@ def test_the_item_table_holds_every_wearable_including_the_hidden_ones_flagged_o
     examples = ("Band of (Fire) (RoF)", "Chestguard", "X (Level 90 required)")
     assert [browser.match_name(title) for title in examples] == ["Band of (Fire)", "Chestguard", "X"]
     by_key = {item["key"]: item for item in wearable}
-    titles = {key: item["wiki"]["title"] for key, item in by_key.items()}
-    assert all(browser.effective_match_name(r) == browser.match_name(titles[browser.record_key(r)]) for r in table["items"])
+    titles = {key: item["wiki"]["title"] for key, item in by_key.items() if item["wiki"] is not None}
+    unpaged = [key for key, item in by_key.items() if item["wiki"] is None]  # no wiki page, no title: the match name is made of the name
+    assert unpaged  # the case stays covered: a wearable with no wiki page is in the catalog
+    assert all(browser.effective_match_name(r) == browser.match_name(titles[browser.record_key(r)]) for r in table["items"] if browser.record_key(r) in titles)
+    assert all(browser.effective_match_name(r) == browser.match_name(by_key[browser.record_key(r)]["name"]) for r in table["items"] if browser.record_key(r) in unpaged)
     sampled = fixture_tables.item_table(inputs, 150)
     assert sampled["count"] == len(sampled["items"]) == 150 and sampled["defaults"] == table["defaults"]
     keys = [browser.record_key(r) for r in sampled["items"]]
@@ -1343,7 +1393,7 @@ def test_the_sample_has_every_family_and_covers_every_stratum_at_least_twice(sam
     families = sample_manifest["families"]
     assert families["brute"]["count"] == 40 and families["pmb36"]["count"] == 6 and families["evaluate"]["count"] == 150
     upgrades = cases_of(sample_docs, "upgrade")
-    assert len(upgrades) == 6
+    assert len(upgrades) == len(fixture_plan.SAMPLE_SESSIONS) + 3  # the sessions of the plan, and the three invented ones for Every slot
     modes = {c["inputs"]["tier_mode"]["mode"] for c in upgrades.values() if c["inputs"]["tier_mode"]}
     assert modes == {"ready4", "arrives", "fixed"}
     kinds = {step["kind"] for case in upgrades.values() for step in case["expected"]["steps"]}

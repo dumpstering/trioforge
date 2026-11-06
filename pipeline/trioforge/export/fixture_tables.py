@@ -427,7 +427,8 @@ def _features(record: dict[str, Any]) -> list[str]:
 def sample_records(records: Sequence[dict[str, Any]], count: int) -> list[dict[str, Any]]:
     """``count`` records of the table, in table order: the first three that have each feature of :data:`FEATURES` (a weapon of
     each hand, a shield, Lore, a hidden item, no weight, a race or deity or class list, haste, a negative stat ...), the first of
-    every feature before the second of any, then evenly spaced ones."""
+    every feature before the second of any, then evenly spaced ones (the next free record where a spaced one is a pick already). The sample has ``count`` records whenever the table has that many, also for a
+    ``count`` below the number of feature picks: the picks are then cut at ``count`` (the first of every feature before the second of any)."""
     firsts: dict[str, list[int]] = {feature: [] for feature in FEATURES}
     for position, record in enumerate(records):
         for feature in _features(record):
@@ -441,6 +442,12 @@ def sample_records(records: Sequence[dict[str, Any]], count: int) -> list[dict[s
     if len(chosen) < count:
         step = max(1, len(records) // max(1, count - len(chosen)))
         for position in range(0, len(records), step):
+            if len(chosen) >= count:
+                break
+            while position in chosen and position + 1 < len(records):  # a position that a feature pick has: the next one that is free
+                position += 1
+            chosen.setdefault(position, None)
+        for position in range(len(records)):  # (the walk can end short at the end of the table: fill from the start)
             if len(chosen) >= count:
                 break
             chosen.setdefault(position, None)

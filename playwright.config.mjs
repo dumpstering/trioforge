@@ -12,7 +12,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.TRIOFORGE_PREVIEW_PORT ?? 8788);
-const ORIGIN = `http://127.0.0.1:${PORT}`;
+export const ORIGIN = `http://127.0.0.1:${PORT}`;
+// the section Effects to exalt needs the two files of the effects layer, which the fixture results (made before the layer) do not have: a second preview is built from a copy of them that has
+// them (scripts/preview.mjs, TRIOFORGE_PREVIEW_EXALT=1), and only tests-e2e/exalt.spec.mjs uses it
+const EXALT_PORT = Number(process.env.TRIOFORGE_PREVIEW_EXALT_PORT ?? PORT + 1);
+export const EXALT_ORIGIN = `http://127.0.0.1:${EXALT_PORT}`;
 
 const WINDOWS = { desktop: { width: 1280, height: 900 }, phone: { width: 360, height: 740 } };
 const matrix = Object.entries(WINDOWS).flatMap(([size, viewport]) =>
@@ -46,12 +50,21 @@ export default defineConfig({
     ...matrix,
     { name: "once", grep: /@once/, use: { ...devices["Desktop Chrome"], viewport: WINDOWS.desktop, colorScheme: "light" } },
   ],
-  webServer: {
-    command: "node scripts/preview.mjs",
-    url: `${ORIGIN}/`,
-    // a server left over from an earlier run would hide a broken build, so an occupied port is an error
-    reuseExistingServer: false,
-    timeout: 180_000,
-    env: { TRIOFORGE_PREVIEW_PORT: String(PORT) },
-  },
+  webServer: [
+    {
+      command: "node scripts/preview.mjs",
+      url: `${ORIGIN}/`,
+      // a server left over from an earlier run would hide a broken build, so an occupied port is an error
+      reuseExistingServer: false,
+      timeout: 180_000,
+      env: { TRIOFORGE_PREVIEW_PORT: String(PORT) },
+    },
+    {
+      command: "node scripts/preview.mjs",
+      url: `${EXALT_ORIGIN}/`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+      env: { TRIOFORGE_PREVIEW_PORT: String(EXALT_PORT), TRIOFORGE_PREVIEW_EXALT: "1", TRIOFORGE_PREVIEW_DIST: "site/dist-exalt" },
+    },
+  ],
 });

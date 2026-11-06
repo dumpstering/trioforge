@@ -197,6 +197,10 @@ dd {
   overflow-wrap: anywhere;
 }
 
+#open-tests li {
+  padding-block: 0.15rem; /* links one per line: keep 24px between targets (WCAG 2.5.8) */
+}
+
 a:hover {
   text-decoration-thickness: 2px;
 }
@@ -928,6 +932,79 @@ tbody th {
   display: block;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* what each row of Wear this says of its item (the stats at the tier shown, and what each stat is worth in the default kit): a details element beside the name, closed, whose
+   summary is the button; it works without script, and the page does not move when the code starts (the summary is there from the first paint) */
+/* the cell of the name holds the button at its right edge, out of the flow: the row is as tall with it as without, and nothing moves when the page code starts. The open panel
+   is in the flow, under the name. */
+.kit td:nth-child(2) {
+  position: relative;
+  padding-inline-end: 4.6rem;
+}
+
+.kit-more {
+  font-size: 0.85rem;
+}
+
+.kit-more[open] {
+  margin: 0.3rem 0 0;
+}
+
+.kit-more > summary {
+  position: absolute;
+  top: 0.2rem;
+  inset-inline-end: 0.5rem;
+  min-height: 1.55rem;
+  padding: 0 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.2rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.kit-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.kit-more > summary::after {
+  content: "";
+  display: inline-block;
+  margin-inline-start: 0.45em;
+  border-inline: 0.3em solid transparent;
+  border-top: 0.35em solid currentColor;
+  vertical-align: middle;
+}
+
+.kit-more[open] > summary::after {
+  border-top: 0;
+  border-bottom: 0.35em solid currentColor;
+}
+
+.kit-more p {
+  margin: 0.25rem 0 0;
+}
+
+/* the button of the title bar that opens or closes every row: placed over the bar, so that it takes no room of its own (and is out of sight until the code that works it has started) */
+.answer {
+  position: relative;
+}
+
+.btn-quiet.kit-toggle-all {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.5rem;
+  min-height: 1.75rem;
+  margin: 0;
+  padding: 0 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-quiet.kit-toggle-all:disabled {
+  visibility: hidden;
 }
 
 .kit tbody tr:nth-child(even),
@@ -1829,6 +1906,7 @@ main .shared > h2:not(.sr-only) {
 
 .kit .reach,
 .kit .deity,
+.kit .kit-why,
 .kit .muted,
 .totals .muted,
 .kit .delta,
@@ -2016,6 +2094,7 @@ main .shared > h2:not(.sr-only) {
 /* the controls are square and bevelled, of the system's grey in the light theme and of slate in the dark one */
 .btn-change,
 .btn-quiet,
+.kit-more > summary,
 .engine-consent button,
 select {
   border: 2px solid;

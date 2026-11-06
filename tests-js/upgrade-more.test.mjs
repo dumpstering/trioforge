@@ -22,7 +22,9 @@ import {
   isOpen,
   lostSet,
   quiet,
+  rawCase,
   sampleCase,
+  sampleCaseIds,
   sampleName,
   setsDrawn,
   slotsDrawn,
@@ -595,35 +597,115 @@ describe("Every slot", () => {
 // ---- the cases of the optimizer's own fixtures ------------------------------------------------------------------------------------------------------------
 
 describe("Every slot on the cases of the optimizer's own fixtures", () => {
-  it("offers a copy to get for an item that the visitor has once and the kit wears elsewhere, and does not hide it (upgrade-007: Waist and the first Any slot are offered the item of the second Any slot, each Wrist the item of the other)", async () => {
-    const { shown, kit } = await sampleCase("upgrade-007");
-    const anySlot = sampleName(kit[19]);
-    expect(shown[16].swaps.find((swap) => swap.what === anySlot), "Waist").toEqual({ what: anySlot, delta: "+69", have: null, get: "get another copy" });
-    expect(shown[18].swaps.find((swap) => swap.what === anySlot), "the first Any slot").toEqual({ what: anySlot, delta: "+45", have: null, get: "get another copy" });
-    expect(shown[8].swaps, "the first Wrist").toEqual([{ what: sampleName(kit[9]), delta: "−13", have: null, get: "get another copy" }]);
-    expect(shown[9].swaps, "the second Wrist").toEqual([{ what: sampleName(kit[8]), delta: "+13", have: null, get: "get another copy" }]);
+  /**
+   * What the page shows of a change in kit value, worked out here from the exact fraction the Python reference wrote ("p/q"): rounded half up (floor of the value plus a half),
+   * with its sign (the page's minus sign) and its thousands separated; a change that is more than nothing and rounds to nothing is "+<1" or "−<1". Not read from the page.
+   */
+  const shownDelta = (fraction) => {
+    const [numerator, denominator = 1n] = fraction.split("/").map(BigInt); // ("5" is 5/1: the reference writes every exact number as p/q, and a bare integer is read the same)
+    const doubled = 2n * numerator + denominator; // floor((p / q) + 1/2) = floor((2p + q) / 2q), q > 0
+    let rounded = doubled / (2n * denominator);
+    if (doubled % (2n * denominator) < 0n) rounded -= 1n; // (BigInt division truncates toward zero)
+    if (numerator === 0n) return "0"; // nothing: the page writes a zero change as 0, with no sign
+    if (rounded === 0n) return numerator > 0n ? "+<1" : "\u2212<1";
+    const digits = (rounded < 0n ? -rounded : rounded).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return `${rounded < 0n ? "\u2212" : "+"}${digits}`;
+  };
+
+  /** What the page draws of a swap the case expects, by the rules of the case: the Python delta, and for an item the visitor has, "you have it" when a copy is spare or "get another copy" when the kit wears every copy elsewhere. */
+  const expectedSwap = (place, swap, owned, kit) => {
+    const count = owned.get(swap.item);
+    const elsewhere = kit.filter((ident, index) => index !== place.index && ident === swap.item).length;
+    const have = count !== undefined && count > elsewhere;
+    return { what: sampleName(swap.item), delta: shownDelta(swap.delta), have: have ? "you have it" : null, get: count !== undefined && !have ? "get another copy" : null };
+  };
+
+  /** The swaps of the case that offer an item the visitor has and the kit wears in every copy it has elsewhere ("get another copy"), with their places. */
+  const copiesToGet = (rows, owned, kit) =>
+    rows.flatMap((place) => place.swaps.filter((swap) => owned.has(swap.item) && owned.get(swap.item) <= kit.filter((ident, index) => index !== place.index && ident === swap.item).length).map((swap) => ({ place, swap })));
+
+  it("offers a copy to get for an item that the visitor has once and the kit wears elsewhere, and does not hide it (upgrade-007: the second Wrist and both Any slots are offered the item of the first Wrist)", async () => {
+    const { shown, rows, owned, kit } = await sampleCase("upgrade-007");
+    // (which places have such a swap is what the Python rows say: the sample is made from a seed, so the places and the deltas are read from it and not written here)
+    const offers = copiesToGet(rows, owned, kit).filter(({ swap }) => owned.get(swap.item) === 1);
+    expect(offers.map(({ place }) => place.index), "the places the Python rows offer a copy to get").toEqual([9, 18, 19]);
+    expect(new Set(offers.map(({ swap }) => swap.item)), "all of them the item of the first Wrist").toEqual(new Set([kit[8]]));
+    for (const { place, swap } of offers) {
+      expect(shown[place.index].swaps.find((drawn) => drawn.what === sampleName(swap.item)), `place ${place.index}`).toEqual(expectedSwap(place, swap, owned, kit));
+      expect(shown[place.index].swaps.find((drawn) => drawn.what === sampleName(swap.item)).get).toBe("get another copy");
+    }
+    expect(shown[8].swaps, "the first Wrist, which has the item and is offered one it does not have").toEqual(rows[8].swaps.map((swap) => expectedSwap(rows[8], swap, owned, kit)));
     expect(shown.map((place) => place.none)).not.toContain("None of the best swaps here is one you could make");
   });
 
-  it("does the same in another mode of the tiers (upgrade-002, as it arrives with drops at +3): the second Wrist is offered the item of the first, a +0 copy", async () => {
-    const { shown, kit } = await sampleCase("upgrade-002");
-    expect(shown[9].swaps).toEqual([{ what: sampleName(kit[8]), delta: "+17", have: null, get: "get another copy" }]);
-    expect(shown[8].swaps, "the first Wrist, which has the item, has nothing to swap").toEqual([]);
-    expect(shown[8].none).toBe("Nothing else fits here");
+  /** The tier a mode of the tiers gives every item, or null where it depends on the item (as it arrives). */
+  const grantedTier = (mode) => (mode.mode === "ready4" ? 4 : mode.mode === "fixed" ? mode.N : null);
+  const elsewhereOf = (raw, index, ident) => raw.kit.filter((worn, at) => at !== index && worn === ident).length;
+  /** Every swap of the case, with its place and the counts that decide what the page says of it. */
+  const swapsOf = (raw) =>
+    raw.rows.flatMap((place) => place.swaps.map((swap) => ({ place, swap, count: raw.owned.get(swap.item), elsewhere: elsewhereOf(raw, place.index, swap.item) })));
+
+  it("does the same in the mode 'as it arrives': a case of that mode whose rows offer an item the visitor has in every copy the kit wears elsewhere is drawn with 'get another copy' and the delta Python computed", async () => {
+    const found = sampleCaseIds().map(rawCase).filter((raw) => raw.mode.mode === "arrives" && swapsOf(raw).some(({ count, elsewhere }) => count !== undefined && count <= elsewhere));
+    expect(found.length, "the sample has a case in the mode 'as it arrives' with a copy to get (fixture_plan.SAMPLE_SESSIONS is chosen to have one)").toBeGreaterThan(0);
+    for (const raw of found) {
+      const { shown, rows, owned, kit } = await sampleCase(raw.id);
+      const offers = copiesToGet(rows, owned, kit);
+      expect(offers.length, raw.id).toBeGreaterThan(0);
+      for (const { place, swap } of offers) {
+        const drawn = shown[place.index].swaps.find((one) => one.what === sampleName(swap.item));
+        expect(drawn, `${raw.id}, place ${place.index}`).toEqual(expectedSwap(place, swap, owned, kit));
+        expect(drawn.get, `${raw.id}, place ${place.index}`).toBe("get another copy");
+        expect(drawn.have).toBeNull();
+      }
+      expect(shown.flatMap((place) => place.swaps).filter((swap) => swap.get === "get another copy"), `${raw.id}: no more copies to get than the rows offer`).toHaveLength(offers.length);
+      document.body.innerHTML = "";
+    }
   });
 
-  it("says 'you have it' of a spare, and not 'get another copy': an item the visitor has once and the kit does not wear, and one the visitor has twice and the kit wears in no other place (upgrade-007: Head and Chest)", async () => {
-    const { shown, rows, owned } = await sampleCase("upgrade-007");
-    expect(shown[0].swaps.map((swap) => [swap.delta, swap.have, swap.get])).toEqual([
-      ["−137", "you have it", null], // an item that can be got at the tier, and the visitor has it
-      ["−138", null, null], // one the visitor does not have
-      ["−144", "you have it", null], // one the visitor has, at a tier the mode does not give: offered only because a copy is spare
-    ]);
+  it("offers an item the visitor has at a tier the mode does not give because a copy is spare, and says 'you have it' of it (the sample has such an offer; upgrade-007: Head)", async () => {
+    const found = sampleCaseIds().map(rawCase).filter((raw) => grantedTier(raw.mode) !== null && swapsOf(raw).some(({ swap, count, elsewhere }) => count !== undefined && count > elsewhere && Number(swap.item.split("@")[1]) !== grantedTier(raw.mode)));
+    expect(found.length, "the sample has a case of a tier the mode gives with such an offer (fixture_plan.SAMPLE_SESSIONS)").toBeGreaterThan(0);
+    expect(found.map((raw) => raw.id)).toContain("upgrade-007");
+    for (const raw of found) {
+      const { shown, owned, kit } = await sampleCase(raw.id);
+      const granted = grantedTier(raw.mode);
+      const spare = swapsOf(raw).filter(({ swap, count, elsewhere }) => count !== undefined && count > elsewhere && Number(swap.item.split("@")[1]) !== granted);
+      for (const { place, swap } of spare) {
+        const drawn = shown[place.index].swaps.find((one) => one.what === sampleName(swap.item));
+        expect(drawn, `${raw.id}, place ${place.index}`).toEqual(expectedSwap(place, swap, owned, kit));
+        expect([drawn.have, drawn.get], `${raw.id}, place ${place.index}`).toEqual(["you have it", null]);
+      }
+      document.body.innerHTML = "";
+    }
+  });
+
+  it("writes a change of nothing as 0, with no sign (upgrade-007: Off hand), and the writer of the expected text agrees", async () => {
+    expect(shownDelta("0/1")).toBe("0");
+    expect(shownDelta("5")).toBe("+5");
+    expect(shownDelta("-7/2")).toBe("\u22123"); // (rounded half up: -3.5 is -3)
+    const zero = sampleCaseIds().map(rawCase).flatMap((raw) => swapsOf(raw).filter(({ swap }) => swap.delta === "0/1").map((one) => ({ ...one, id: raw.id })));
+    expect(zero.length, "the sample has a swap that changes nothing").toBeGreaterThan(0);
+    const { id, place, swap } = zero[0];
+    const { shown } = await sampleCase(id);
+    expect(shown[place.index].swaps.find((one) => one.what === sampleName(swap.item)).delta, `${id}, place ${place.index}`).toBe("0");
+  });
+
+  it("says 'you have it' of a spare and nothing of an item the visitor does not have, and of one the visitor has twice and the kit wears in no other place (upgrade-007: Head and Chest)", async () => {
+    const { shown, rows, owned, kit } = await sampleCase("upgrade-007");
+    // Head: each swap is the Python delta, with "you have it" for an item the visitor has and a copy is spare, and nothing for one the visitor does not have
+    expect(shown[0].swaps.map((swap) => [swap.delta, swap.have, swap.get])).toEqual(rows[0].swaps.map((swap) => {
+      const drawn = expectedSwap(rows[0], swap, owned, kit);
+      return [drawn.delta, drawn.have, drawn.get];
+    }));
+    expect(rows[0].swaps.map((swap) => (owned.has(swap.item) ? "owned" : "not owned")), "Head is offered an item the visitor has, and then two they do not").toEqual(["owned", "not owned", "not owned"]);
+    expect(shown[0].swaps.map((swap) => swap.have), "the item the visitor has, and nothing of the others").toEqual(["you have it", null, null]);
     const twice = rows[13].swaps.find((swap) => owned.get(swap.item) === 2); // (the Chest's other swap is an item the visitor does not have)
+    expect(twice, "the Chest is offered an item the visitor has twice").toBeDefined();
     expect(shown[13].swaps.find((swap) => swap.what === sampleName(twice.item)), "the Chest").toMatchObject({ have: "you have it", get: null });
   });
 
-  it.each(["upgrade-007", "upgrade-002"])("%s: every swap is drawn, in the optimizer's order, and says 'you have it' when the kit leaves a copy, 'get another copy' when it does not, and nothing of an item not on the list", async (id) => {
+  it.each([["upgrade-007", 8], ["upgrade-002", 8], ["upgrade-009", 0], ["upgrade-014", 0]])("%s: every swap is drawn, in the optimizer's order, and says 'you have it' when the kit leaves a copy, 'get another copy' when it does not, and nothing of an item not on the list", async (id, least) => {
     const { shown, rows, owned, kit } = await sampleCase(id);
     let ofOwned = 0;
     for (const place of rows) {
@@ -641,7 +723,7 @@ describe("Every slot on the cases of the optimizer's own fixtures", () => {
         else expect([drawn.have, drawn.get], `place ${place.index}, swap ${rank}: every copy is worn`).toEqual([null, "get another copy"]);
       });
     }
-    expect(ofOwned, "the case has swaps of items the visitor has to look at").toBeGreaterThan(8);
+    expect(ofOwned, "the case has swaps of items the visitor has to look at").toBeGreaterThan(least);
   });
 });
 

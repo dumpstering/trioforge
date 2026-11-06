@@ -3,7 +3,7 @@
 ``prune(items, profile, tier, setup, buffset=None, options=None)`` takes the pool that ``build_milp`` would be given and
 returns a smaller pool whose best kit is worth exactly what the best kit of the full pool is worth. Pass it the same
 ``setup``, ``buffset`` and ``options`` as the builder: the groups an item fits depend on the setup and on the Any rule,
-and the weapon index depends on the assumed haste. Pruning is per ``(tier, setup)``: ``tier`` is the tier the pool is
+and the weapon index depends on the setup. Pruning is per ``(tier, setup)``: ``tier`` is the tier the pool is
 viewed at (every item must be at it) and the weapon index changes with the setup.
 
 The rule
@@ -54,12 +54,14 @@ weight             dimensions it scores
                    weight, if the trio has a Monk and the bonus can change within the reachable weights
 ``ATK``            item ATK; STR
 ``DEX``, ``CHA``   DEX; CHA
-``HASTE``          the best worn haste. It is also compared when the weapon term is on, because the assumed
-                   haste is the best haste of the pool
+``HASTE``          the best worn haste. It is also compared when the weapon term is on, because the weapon
+                   term is paid the haste the kit counts (:mod:`trioforge.solver.haste`), which rises with the best
+                   worn haste, so a piece with more haste is worth at least as much to the weapons
 ``HPREG`` ...      each regen, with its own weight
 ``SV``/``SV_x``    each school's resist, with the school's weight, else ``SV``
-``DMG``            the weapon index of a hand, at the scenario's fixed assumed haste and for the setup; not in
-                   the stick
+``DMG``            the weapon index of a hand, for the setup (at the assumed haste of the options, else the
+                   best the scenario offers: the order of the weapons of a hand does not depend on it); not in the
+                   stick
 =================  =========================================================================================
 
 * **Armor class** counts one way in the primary hand, the Any group and every armor place (worn) and another way for a
@@ -68,7 +70,8 @@ weight             dimensions it scores
 * **Weapon index.** The primary hand's index has the damage bonus, the secondary's has the dual-wield factor instead and
   none of the bonus, so two weapons can swap order between the hands; both are compared. The index is exact (a fraction),
   ranked to integers for the comparison. The haste is one factor for every weapon of a hand, so two weapons in one hand
-  keep their order at any haste.
+  keep their order at any haste: the ranks, and so the pruned pool, are the same for every haste the truthful solve
+  assumes (one program for each haste a kit can count).
 * **Weight.** The worn weight only moves the Monk bonus. It is compared (lighter or equal) when the bonus differs within
   the weights the pool can reach (the builder's own range), and then only if the bonus never rises with weight; a curve
   that does rise makes the weight an equality. Otherwise (no Monk, no armor class weight, or every reachable weight gets
@@ -255,7 +258,7 @@ def _assumed_haste(
     spell = getattr(profile, "spell_haste", None)
     if spell is None:
         offered = [fm.fr(buff.haste) for buff in (buffset.optional if buffset else ())]
-        spell = max([Fraction(p.buff_totals.get("HASTE", 0)), *offered])
+        spell = max([Fraction(p.buff_totals.get("HASTE", 0)), *offered]) + p.haste_bonus  # Unbound Alacrity stacks
     worn = max([fm.fr(item.haste) for item in placed if item.haste > 0], default=Fraction(0))
     return int(min(Fraction(p.haste_cap), max(fm.fr(spell), Fraction(0)) + worn))
 

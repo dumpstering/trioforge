@@ -58,7 +58,7 @@
 // sliders, the custom weights and the regen window are composed on the role's own by weightsOverride, with the mana of the trio, and only when they are not the role's own. A choice
 // the bundle does not have (a race, a buff set, a slider group at x1 as at x2, a weight above the largest, a window above the longest) is a bad request; a bundle whose weight rules
 // the engine cannot use, found when weights are asked for, is a fault of the data (engine-load, with the bundle dropped), and a request with none does not need them. The
-// assumed haste is the model's rule (the owned items for Equip now, the session's pool for the rest), whatever the weights say.
+// weapons are paid the haste the kit counts (each answer says it: Equip now's kit, each step's, the set's), whatever the weights say.
 //
 // The best kit (engine/bestkit.js, the one function that makes the pool of a view, prunes it and solves it, which the shard parity test calls too). The request names no owned item and
 // no candidates: the pool is the records of the item table that the precompute solves for the view, each at the tier of the request. Its session is made for the view and closed

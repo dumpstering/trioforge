@@ -54,6 +54,7 @@ from trioforge.model.tables import REPO
 from trioforge.model.tables import load as load_tables
 from trioforge.model.tiers import arrival_tier, cost_to_reach
 from trioforge.precompute import grid
+from trioforge.solver.haste import HasteSolve, solve_scenario
 from trioforge.solver.model import BuildOptions, build_milp, eval_buff_totals, ident
 from trioforge.solver.prune import prune
 from trioforge.solver.solve import Solution, solve_canonical
@@ -91,6 +92,7 @@ FORBIDDEN_REASONS = ("seen-in-game",)
 OWNED_TIERS = (0, 0, 0, 2, 4, 4, 6)
 OWNED_COUNTS = (1, 1, 1, 2)
 BEST_SET_SIZES = (2, 3)  # the sizes of the best sets an Upgrade case records (the tab shows the best 2 and 3 behind an expander)
+TRUTHFUL_EVERY = 4  # every fourth brute-force instance is a truthful one (the weapon term is paid the haste each kit counts)
 REL = 1e-9  # the brute force and the solver must agree this closely, relative
 
 
@@ -133,14 +135,16 @@ def options_json(options: BuildOptions) -> dict[str, Any]:
     if options.mutation is not None or options.legacy is not None:
         raise FixtureError("a fixture is made with the production builder: no mutation and no legacy objective")
     return {
-        "any_rule": options.any_rule, "haste_assumed": options.haste_assumed, "owned_caps": dict(options.owned_caps or {}),
-        "new_keys": sorted(options.new_keys), "max_new": options.max_new, "upgrades": dict(options.upgrades or {}),
+        "any_rule": options.any_rule, "haste_assumed": options.haste_assumed, "haste_floor": options.haste_floor,
+        "haste_exact": options.haste_exact,
+        "owned_caps": dict(options.owned_caps or {}), "new_keys": sorted(options.new_keys), "max_new": options.max_new, "upgrades": dict(options.upgrades or {}),
     }  # fmt: skip
 
 
 def options_from_json(doc: Mapping[str, Any]) -> BuildOptions:
     return BuildOptions(
-        any_rule=doc["any_rule"], haste_assumed=doc["haste_assumed"], owned_caps=doc["owned_caps"] or None,
+        any_rule=doc["any_rule"], haste_assumed=doc["haste_assumed"], haste_floor=doc["haste_floor"], haste_exact=doc["haste_exact"],
+        owned_caps=doc["owned_caps"] or None,
         new_keys=frozenset(doc["new_keys"]), max_new=doc["max_new"], upgrades=doc["upgrades"] or None,
     )
 
@@ -417,11 +421,23 @@ def result_json(milp: Any, solution: Solution) -> dict[str, Any]:
     }  # fmt: skip
 
 
+def haste_doc(found: HasteSolve) -> dict[str, Any]:
+    """How a truthful solve chose its program: the hastes a kit of the scenario can count (rising) and the level whose program the
+    kit came from. A kit that counts more than its program assumed is refused: the fixtures hold programs whose model value is the
+    kit's own."""
+    if found.level != found.haste:
+        raise FixtureError(f"the kit counts {found.haste}% but its program assumed {found.level}%")
+    return {"levels": list(found.levels), "level": found.level}
+
+
 def solve_doc(
-    label: str, milp: Any, solution: Solution, options: BuildOptions, pool: Sequence[ItemVec], prune_doc: dict[str, Any] | None
+    label: str, milp: Any, solution: Solution, options: BuildOptions, pool: Sequence[ItemVec], prune_doc: dict[str, Any] | None,
+    haste: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """A solve of a case: the options and the model are the program's own (the truthful solve's winning level has them set
+    to its haste), ``haste`` says which levels the scenario has and which level won (None: one program at a fixed haste)."""
     return {
-        "label": label, "options": options_json(options), "pool": idents(pool), "prune": prune_doc,
+        "label": label, "options": options_json(options), "pool": idents(pool), "prune": prune_doc, "haste": haste,
         "model": milp_json.to_dict(milp), "result": result_json(milp, solution),
     }  # fmt: skip
 
@@ -508,14 +524,14 @@ def scenario_case(inputs: Inputs, scenario: Scenario) -> dict[str, Any]:
     """Prune, build and solve a scenario and write its case."""
     spec, profile, buffset, options = scenario.spec, scenario.profile, scenario.buffset, scenario.options
     kept = prune(scenario.pool, profile, spec.tier, spec.setup, buffset, options)
-    milp = build_milp(profile, kept, spec.setup, buffset, options)
-    solution = solve_canonical(milp)
+    found = solve_scenario(profile, kept, spec.setup, buffset, options)
+    milp, solution = found.milp, found.solution
     key_set = {item.key for item in scenario.pool} if spec.prune_check else {item.key for item in kept}
     records = inputs.records_for(key_set)
     by_key = {browser.record_key(record): record for record in records}
     inputs.check_records(scenario.pool if spec.prune_check else kept, by_key)
     pruning = prune_doc(scenario.pool, kept, spec.tier, options, ()) if spec.prune_check else None
-    solve = solve_doc("solve", milp, solution, options, kept, pruning)
+    solve = solve_doc("solve", milp, solution, milp.options, kept, pruning, haste_doc(found))
     label = (
         f"{'/'.join(spec.trio)} {spec.race} {spec.role} {spec.setup} +{spec.tier} {spec.buffs} {spec.evidence}"
         f"{f' L{spec.level}' if spec.level != 50 else ''}{f' deity {spec.deity}' if spec.deity else ''}"
@@ -551,6 +567,8 @@ def brute_seed(seed: int, number: int) -> str:
 def brute_instance(seed: int, number: int) -> brute.Instance:
     """The instance of a number: a real trio of the menu in turn, optional haste buffs on every eighth."""
     rng = random.Random(brute_seed(seed, number))
+    if number % TRUTHFUL_EVERY == TRUTHFUL_EVERY - 1:  # some instances are for the truthful solve (weapons and haste in the pool)
+        return brute.truthful_instance(rng, trio_index=number % len(brute.TRIO_MENU))
     return brute.random_instance(rng, trio_index=number % len(brute.TRIO_MENU), haste_buffs=number % 8 == 5)
 
 
@@ -560,8 +578,13 @@ def brute_case(inputs: Inputs, seed: int, number: int) -> dict[str, Any]:
     space = brute.Space(inst)
     best, _, _ = space.best()
     options = BuildOptions(**inst.options_kwargs())
-    milp = build_milp(inst.profile, inst.items, inst.setup, inst.buffset, options)
-    solution = solve_canonical(milp)
+    found = None
+    if inst.haste_assumed is None:  # a truthful instance: the weapon term is paid the haste each kit counts
+        found = solve_scenario(inst.profile, inst.items, inst.setup, inst.buffset, options)
+        milp, solution, options = found.milp, found.solution, found.milp.options
+    else:
+        milp = build_milp(inst.profile, inst.items, inst.setup, inst.buffset, options)
+        solution = solve_canonical(milp)
     value = solution.breakdown.F if solution.breakdown is not None else None
     if value is None or abs(float(value - best)) > REL * max(1.0, abs(float(best))):
         raise FixtureError(f"brute-{number:03d}: the solver's value {value} is not the brute force's {best}")
@@ -569,6 +592,8 @@ def brute_case(inputs: Inputs, seed: int, number: int) -> dict[str, Any]:
     inputs.check_records(inst.items, records)
     case_id = f"brute-{number:03d}"
     tags = [f"setup:{inst.setup}", f"any-rule:{inst.any_rule}", f"trio:{'-'.join(inst.trio)}", f"level:{inst.level}"]
+    if found is not None:
+        tags.append("truthful-haste")
     if inst.buffset is not None:
         tags.append("buffs")
     if "synthetic-pools" in inst.label:
@@ -581,7 +606,7 @@ def brute_case(inputs: Inputs, seed: int, number: int) -> dict[str, Any]:
         "seed": brute_seed(seed, number), "note": "an invented instance: its items are not in the catalog",
     }  # fmt: skip
     doc["records"] = [records[key] for key in sorted(records)]
-    doc["solves"] = [solve_doc("solve", milp, solution, options, inst.items, None)]
+    doc["solves"] = [solve_doc("solve", milp, solution, options, inst.items, None, None if found is None else haste_doc(found))]
     doc["expected"] = {"brute_F": browser.rat(best), "kits": int(len(space.kits)), "buff_sets": len(space.buff_sets)}
     return doc
 
@@ -611,8 +636,9 @@ class Session:
 
 
 class _Recorder:
-    """Records what :mod:`trioforge.upgrade` hands to the builder and to the pruning, so a case holds exactly what the
-    reference did without a second copy of its loop."""
+    """Records what :mod:`trioforge.upgrade` hands to the pruning and to the truthful solve, so a case holds exactly what the
+    reference did without a second copy of its loop. A ``"build"`` event is a solve: its arguments are those of
+    :func:`~trioforge.solver.haste.solve_scenario` and its result the :class:`~trioforge.solver.haste.HasteSolve`."""
 
     def __init__(self) -> None:
         self.events: list[tuple[str, dict[str, Any], Any]] = []
@@ -620,29 +646,25 @@ class _Recorder:
 
     @contextlib.contextmanager
     def active(self) -> Iterator[None]:
-        real_build, real_prune, real_solve = upgrade.build_milp, upgrade.prune, upgrade._solve
-        build_sig, prune_sig = inspect.signature(real_build), inspect.signature(real_prune)
+        real_solve, real_prune = upgrade.solve_scenario, upgrade.prune
+        solve_sig, prune_sig = inspect.signature(real_solve), inspect.signature(real_prune)
 
-        def build(*args: Any, **kwargs: Any) -> Any:
-            milp = real_build(*args, **kwargs)
-            self.events.append(("build", dict(build_sig.bind(*args, **kwargs).arguments), milp))
-            return milp
+        def solved(*args: Any, **kwargs: Any) -> HasteSolve:
+            found = real_solve(*args, **kwargs)
+            self.events.append(("build", dict(solve_sig.bind(*args, **kwargs).arguments), found))
+            self.solutions.append(found.solution)
+            return found
 
         def pruned(*args: Any, **kwargs: Any) -> Any:
             kept = real_prune(*args, **kwargs)
             self.events.append(("prune", dict(prune_sig.bind(*args, **kwargs).arguments), kept))
             return kept
 
-        def solved(*args: Any, **kwargs: Any) -> Solution:
-            solution = real_solve(*args, **kwargs)
-            self.solutions.append(solution)
-            return solution
-
-        upgrade.build_milp, upgrade.prune, upgrade._solve = build, pruned, solved
+        upgrade.solve_scenario, upgrade.prune = solved, pruned
         try:
             yield
         finally:
-            upgrade.build_milp, upgrade.prune, upgrade._solve = real_build, real_prune, real_solve
+            upgrade.solve_scenario, upgrade.prune = real_solve, real_prune
 
     def take(self) -> list[tuple[str, dict[str, Any], Any]]:
         events, self.events = self.events, []
@@ -726,9 +748,10 @@ def _best_set(
         best = upgrade.best_sets(
             session.profile, session.owned, session.candidates, k, session.setup, session.buffset, session.options
         )
-    events, solved = recorder.take(), recorder.take_solutions()
+    events = recorder.take()
+    recorder.take_solutions()
     equip_event, prune_event, build_event = _best_set_events(events)
-    first_diff = milp_json.compare(milp_json.to_dict(equip_milp), milp_json.to_dict(equip_event[2]))
+    first_diff = milp_json.compare(milp_json.to_dict(equip_milp), milp_json.to_dict(equip_event[2].milp))
     if first_diff:
         raise FixtureError(f"Equip now inside the best {k} set is not Equip now: {first_diff[0]}")
     entry = {
@@ -741,8 +764,8 @@ def _best_set(
     if prune_event is not None:
         _, prune_args, kept = prune_event
         pruning = prune_doc(prune_args["items"], kept, prune_args["tier"], prune_args["options"], prune_args["owned"])
-    _, build_args, milp = build_event
-    return entry, solve_doc(f"best-{k}", milp, solved[-1], build_args["options"], build_args["items"], pruning)
+    _, build_args, found = build_event
+    return entry, solve_doc(f"best-{k}", found.milp, found.solution, found.milp.options, build_args["items"], pruning, haste_doc(found))
 
 
 def upgrade_case(inputs: Inputs, session: Session) -> dict[str, Any]:
@@ -750,25 +773,24 @@ def upgrade_case(inputs: Inputs, session: Session) -> dict[str, Any]:
     the reference built."""
     profile, buffset, setup = session.profile, session.buffset, session.setup
     base = session.options
-    haste = upgrade.session_haste(profile, session.owned, session.candidates, setup, buffset, base)
-    fixed = dataclasses.replace(base, haste_assumed=haste)
     recorder = _Recorder()
     with recorder.active():
-        equip = upgrade.equip_now(profile, session.owned, setup, buffset, fixed)
-    (_, equip_args, equip_milp), *rest = recorder.take()
+        equip = upgrade.equip_now(profile, session.owned, setup, buffset, base)
+    (_, equip_args, equip_found), *rest = recorder.take()
     if rest:
         raise FixtureError("Equip now built more than one program")
+    equip_milp = equip_found.milp
     with recorder.active():
         steps = upgrade.farm_path(profile, session.owned, session.candidates, setup, buffset, session.steps, base)
     events = recorder.take()
     builds = [event for event in events if event[0] == "build"]
     if len(builds) < 1 + len(steps):
         raise FixtureError(f"the farm path made {len(steps)} steps but built {len(builds)} programs")
-    first_diff = milp_json.compare(milp_json.to_dict(equip_milp), milp_json.to_dict(builds[0][2]))
+    first_diff = milp_json.compare(milp_json.to_dict(equip_milp), milp_json.to_dict(builds[0][2].milp))
     if first_diff:
         raise FixtureError(f"Equip now inside the farm path is not Equip now: {first_diff[0]}")
 
-    solves = [solve_doc("equip-now", equip_milp, equip, equip_args["options"], equip_args["items"], None)]
+    solves = [solve_doc("equip-now", equip_milp, equip, equip_milp.options, equip_args["items"], None, haste_doc(equip_found))]
     # the events are: the build of Equip now, then for each step the pruning and the build
     position = 1
     step_docs = []
@@ -778,13 +800,14 @@ def upgrade_case(inputs: Inputs, session: Session) -> dict[str, Any]:
             if events[position][0] == "prune":
                 prune_event = events[position]
             position += 1
-        _, build_args, milp = events[position]
+        _, build_args, found = events[position]
+        milp = found.milp
         position += 1
         pruning = None
         if prune_event is not None:
             _, prune_args, kept = prune_event
             pruning = prune_doc(prune_args["items"], kept, prune_args["tier"], prune_args["options"], prune_args["owned"])
-        solves.append(solve_doc(f"step-{number}", milp, step.solution, build_args["options"], build_args["items"], pruning))
+        solves.append(solve_doc(f"step-{number}", milp, step.solution, milp.options, build_args["items"], pruning, haste_doc(found)))
         record = session.records[step.item.key]
         step_docs.append({
             "index": step.index, "item": ident(step.item.key, step.item.tier), "kind": step.kind,
@@ -798,7 +821,7 @@ def upgrade_case(inputs: Inputs, session: Session) -> dict[str, Any]:
         best_entries.append(entry)
         if program is not None:
             solves.append(program)
-    every = _every_slot(session, equip, fixed)
+    every = _every_slot(session, equip, base)
     keys = {item.key for item in session.owned} | {item.key for item in session.candidates}
     # the records in the order of the item table; the keys of an invented session are not in it, and go in key order
     records = [session.records[key] for key in sorted(keys, key=lambda k: (inputs.position.get(k, len(inputs.position)), k))]
@@ -816,7 +839,7 @@ def upgrade_case(inputs: Inputs, session: Session) -> dict[str, Any]:
     doc["records"] = records
     doc["solves"] = solves
     doc["expected"] = {
-        "session_haste": haste, "equip_now": 0, "steps": step_docs,
+        "equip_now": 0, "steps": step_docs,
         "stopped": "limit" if len(steps) == session.steps else "no-gain", "best_sets": best_entries, "every_slot": every,
     }  # fmt: skip
     return doc
@@ -834,11 +857,11 @@ def _cost(record: Mapping[str, Any], step: upgrade.Step, session: Session) -> di
     return {"from": start, "to": step.item.tier, "D": D, **cost_to_reach(record, start, step.item.tier, D)}
 
 
-def _every_slot(session: Session, equip: Solution, fixed: BuildOptions) -> list[dict[str, Any]]:
+def _every_slot(session: Session, equip: Solution, options: BuildOptions) -> list[dict[str, Any]]:
     """Every slot from Equip now's kit: the candidates of the tier mode (no count) and the owned items, an owned item that is not a
     candidate only while the visitor owns more copies of it than the kit wears in the other places (see ``upgrade.every_slot``)."""
     rows = upgrade.every_slot(
-        session.profile, equip, session.candidates, session.setup, session.buffset, fixed, limit=3, owned=session.owned
+        session.profile, equip, session.candidates, session.setup, session.buffset, options, limit=3, owned=session.owned
     )
     return [
         {

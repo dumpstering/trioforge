@@ -66,7 +66,7 @@ export const BUNDLE_LIMITS = Object.freeze({ ...LIMITS, maxDigits: MAX_DIGITS })
 /** The fields of Profile.to_dict(), in order. */
 export const PROFILE_FIELDS = Object.freeze([
   "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap", "cs_pct", "pe_pct",
-  "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity",
+  "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity", "haste_bonus", "nd_pct",
 ]); // fmt: skip
 const RACE_FIELDS = ["race", "naked", "iksar_ac"];
 const ROLE_FIELDS = ["role", "weights", "setups"];
@@ -311,10 +311,14 @@ function checkCommon(common, bundle, context) {
   if (JSON.stringify(common.trio) !== JSON.stringify(bundle.trio)) throw fail(`${where}.trio`, "must be the trio of the bundle");
   if (common.level !== bundle.level) throw fail(`${where}.level`, "must be the level of the bundle");
   if (typeof common.evidence !== "string" || !context.levels.has(common.evidence)) throw fail(`${where}.evidence`, "must be one of the evidence levels of the bundle");
-  const aa = needFields(common.aa, ["combat_stability", "physical_enhancement"], `${where}.aa`);
+  const aa = needFields(common.aa, ["combat_stability", "natural_durability", "physical_enhancement"], `${where}.aa`);
   needWhole(aa.combat_stability, `${where}.aa.combat_stability`, 0);
+  needWhole(aa.natural_durability, `${where}.aa.natural_durability`, 0);
   needBoolean(aa.physical_enhancement, `${where}.aa.physical_enhancement`);
   for (const field of ["haste_cap", "cs_pct", "pe_pct", "defense_cap", "dw_factor"]) needNumber(common[field], `${where}.${field}`);
+  needNumber(common.haste_bonus, `${where}.haste_bonus`, { min: 0 });
+  // Natural Durability: the percent it adds to the HP that comes from STA. It is already in the `fac` of the HP pools below (the evaluator and the builder read the pools), so it is only checked here
+  needNumber(common.nd_pct, `${where}.nd_pct`, { min: 0 });
   needList(common.softcap, `${where}.softcap`, { exactly: 2 }).forEach((value, index) => needNumber(value, `${where}.softcap[${index}]`));
   if (common.monk !== null) {
     needObject(common.monk, `${where}.monk`);

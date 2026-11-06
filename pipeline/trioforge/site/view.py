@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from trioforge.classes import CLASS_CODES, CLASS_NAMES
 from trioforge.data import races as races_module
 from trioforge.site import art, data
-from trioforge.site.content import SEALS, RuleBook, RuleView, wiki_url
+from trioforge.site.content import EQLT_NAME, SEALS, RuleBook, RuleView, eqlt_item_url, wiki_url
 
 __all__ = [
     "BEST_FOR_MAX",
@@ -54,15 +54,18 @@ __all__ = [
     "haste_text",
     "item_href",
     "item_page",
+    "item_stat_text",
     "race_options",
     "reach_text",
     "robust_note",
     "rule_ref",
     "tier_label",
+    "tier_vecs",
     "trio_caps",
     "trio_name",
     "trio_page",
     "weakest",
+    "why_text",
 ]
 
 MINUS = "−"
@@ -98,6 +101,9 @@ EMPTY_NAME = "Leave empty"
 SPELL_RANK = "spell rank"
 #: where the pages of the items are (``/item/<key>/``); the page code of a trio page links the names it paints by the same base (the ``data-items`` of the page)
 ITEM_BASE = "/item/"
+#: where the files of the section Effects to exalt are: the shared one, and the one of the trio (the page code fetches them when the section is opened)
+EXALT_EFFECTS = "/data/effects.json"
+EXALT_TRIO = "/data/{slug}/exalt.json"
 
 #: the pieces of the default weapons the page names in a search-result description, most telling first
 _DESCRIPTION_SLOTS = (20, 13, 0)
@@ -256,6 +262,8 @@ class KitRow:
     source: str
     href: str | None = None  # the page of the item, where it has one: the name is a link to it; plain text where it has none
     icon: str | None = None  # the art of the place (art.SLOT_ICONS), for the picture beside its name: None where the place has none or the art is not part of the site
+    stats: str = ""  # the stats of the item at the tier shown (:func:`item_stat_text`); empty for an empty place or when the page was given no figures
+    why: str = ""  # what each of its stats is worth in this kit, and the next best item for the place (:func:`why_text`); empty when the results have none
 
 
 @dataclass(frozen=True)
@@ -363,6 +371,10 @@ class TrioPage:
     aa_seal: RuleRef
     race_picture: str | None = None  # the asset of the picture beside "Best race for this trio" (``art.RACE_PICTURES``), from the page's static best race and never from the race a visitor picks, or None
     items_base: str = ""  # the address the page code links the names of the items it paints by, or nothing when no pages of items were given
+    kit_stats: bool = False  # whether the rows of Wear this carry the stats of their items (the page was given the figures), and so the panel under each name
+    kit_why: bool = False  # whether the default kit has its why (the results have it)
+    stat_rules: tuple[RuleRef, ...] = ()  # the rules the stats of a row and the values of its why follow: the header of the column of the items names them, the line under the table links them
+    exalt_files: tuple[str, str] | None = None  # the addresses of the shared effects file and of the trio's exalt file when the results have them (the section Effects to exalt), else None: no section
 
 
 def rule_ref(book: RuleBook, rule_id: str) -> RuleRef:
@@ -406,15 +418,131 @@ def trio_caps(trio: tuple[str, ...], level: int, rules: Any) -> Caps:
     )
 
 
-def kit_rows(scenario: data.Scenario, pages: Collection[str] | None = None) -> tuple[KitRow, ...]:
+# ---- the stats of a row of Wear this, and what they are worth --------------------------------------------------------------------
+
+#: the short names of the stats in a row (the figures are the model's, at the tier of the view)
+KIT_STAT_NAMES = {
+    "AC": "AC", "STR": "STR", "STA": "STA", "AGI": "AGI", "DEX": "DEX", "WIS": "WIS", "INT": "INT", "CHA": "CHA", "HP": "HP", "MANA": "Mana",
+    "END": "End", "ATK": "ATK", "HPREG": "HP regen", "MANAREG": "Mana regen", "ENDREG": "End regen", "HASTE": "Haste",
+    "MAGIC": "MR", "FIRE": "FR", "COLD": "CR", "DISEASE": "DR", "POISON": "PR", "CORRUPTION": "Corruption resist",
+}  # fmt: skip
+#: the order a row lists the resists in (the order of the totals table)
+_RESIST_ORDER = ("MAGIC", "FIRE", "COLD", "DISEASE", "POISON", "CORRUPTION")
+WHY_REASON_TEXT = {
+    "resist-cap": "past the resist cap",
+    "regen-cap": "past the regen cap",
+    "haste-cap": "past the haste cap",
+    "haste-covered": "another piece gives as much haste",
+    "ac-softcap": "past the AC softcap",
+}
+WHY_NO_REASON = "not valued in this view"
+WHY_TOP = 3  # the losses a row names, the largest first
+#: the rules the figures of a row follow: the stat rule and the steps of haste and regeneration, the weight and the weapon damage a tier, and the weights that value a stat
+STAT_RULES = ("tier.stat_rule", "haste.worn_per_tier", "regen.per_tier", "tier.weight_pct", "tier.weapon_damage_pct", "roles.templates")
+
+
+def _figure(term: str, amount: int) -> str:
+    """A stat with its sign: ``STA +18``, ``Haste +12%``, ``AGI −5``."""
+    text = f"{KIT_STAT_NAMES[term]} {fmt_signed(amount)}"
+    return text + "%" if term == "HASTE" else text
+
+
+def _tenths(tenths: int) -> str:
+    return f"{tenths // 10}.{tenths % 10}"
+
+
+def item_stat_text(vec: Any) -> str:
+    """The stats of an item at the tier of ``vec`` (``at_tier``), as a row of Wear this says them: the stats, the regens, the worn haste and the resists with their signs, a
+    weapon as damage/delay (and its listed damage bonus) and the weight in stone. The figures are the model's own; nothing is worked out here."""
+    from trioforge.model import items as item_model
+
+    parts = [_figure(key, vec.stats[key]) for key in (*item_model.STAT_KEYS, *item_model.REGEN_KEYS) if vec.stats.get(key)]
+    if vec.haste:
+        parts.append(_figure("HASTE", vec.haste))
+    parts += [_figure(key, vec.sv[key]) for key in _RESIST_ORDER if vec.sv.get(key)]
+    if vec.weapon is not None:
+        bonus = "" if vec.weapon.bonus is None else f" (damage bonus {fmt_int(vec.weapon.bonus)})"
+        parts.append(f"Damage {fmt_int(vec.weapon.dmg)}/{fmt_int(vec.weapon.delay)}{bonus}")
+    if vec.weight_known:
+        parts.append(f"Weight {_tenths(vec.weight10)}")
+    return ", ".join(parts) if parts else "No stats"
+
+
+def _term_figure(term: str, vec: Any) -> str:
+    """How a term of the why is named: the stat with its figure at the tier, or the weapon's damage and delay."""
+    if term == "DAMAGE":
+        return f"Damage {fmt_int(vec.weapon.dmg)}/{fmt_int(vec.weapon.delay)}"
+    if term == "HASTE":
+        return _figure(term, vec.haste)
+    return _figure(term, vec.sv.get(term, 0) if term in _RESIST_ORDER else vec.stats.get(term, 0))
+
+
+def why_text(place: data.WhyPlace, vec: Any, swaps: Sequence[data.Swap] = ()) -> str:
+    """The why line of a row: the kit value lost without each of the largest stats of the item (:data:`WHY_TOP`), what is worth nothing (and why), what costs more than it is worth,
+    and the next best item for the place (the first runner-up that anyone can wear). Values are whole, as every figure of the page is."""
+    gains = [t for t in place.terms if t.loss > 0][:WHY_TOP]
+    nothing = [t for t in place.terms if t.loss == 0]
+    costs = [t for t in place.terms if t.loss < 0]
+    sentences = []
+    if gains:
+        sentences.append("Lost without it: " + "; ".join(f"{_term_figure(t.stat, vec)}: {fmt_int(display_int(t.loss))}" for t in gains) + ".")
+    if nothing:
+        named = "; ".join(f"{_term_figure(t.stat, vec)} ({WHY_REASON_TEXT.get(t.reason, WHY_NO_REASON)})" for t in nothing[:WHY_TOP])
+        more = f" and {len(nothing) - WHY_TOP} more" if len(nothing) > WHY_TOP else ""
+        sentences.append(f"Worth nothing here: {named}{more}.")
+    if costs:
+        worst = costs[-1]
+        sentences.append(f"Costs: {_term_figure(worst.stat, vec)} takes {fmt_int(display_int(-worst.loss))} off.")
+    better = next((swap for swap in swaps if swap.item.deity is None), None)
+    sentences.append(f"Next best: {better.item.name}, {_less(better.delta)}." if better is not None else "No close alternative.")
+    return " ".join(sentences)
+
+
+def _less(delta: float) -> str:
+    """The change in the kit value of a swap, as a row says it: ``12 less``, or ``the same`` when it rounds to nothing."""
+    shown = display_int(delta)
+    if shown == 0:
+        return "worth the same"
+    return f"{fmt_int(abs(shown))} {'less' if shown < 0 else 'more'}"
+
+
+def tier_vecs(records: Mapping[str, Mapping[str, Any]], defaults: Mapping[str, Any], rules: Any) -> Callable[[str, int], Any]:
+    """The item of a key at a tier as the model sees it: ``at_tier`` of the catalog item rebuilt from its record of the item table (the one way the pages of the items make theirs),
+    made once for each key and tier."""
+    from trioforge.export import browser
+    from trioforge.model import items as item_model
+
+    made: dict[tuple[str, int], Any] = {}
+    catalog: dict[str, Any] = {}
+
+    def vec(key: str, tier: int) -> Any:
+        if (key, tier) not in made:
+            if key not in catalog:
+                catalog[key] = browser.item_to_catalog(records[key], defaults)
+            made[(key, tier)] = item_model.at_tier(catalog[key], tier, rules)
+        return made[(key, tier)]
+
+    return vec
+
+
+def kit_rows(
+    scenario: data.Scenario, pages: Collection[str] | None = None, vecs: Callable[[str, int], Any] | None = None, why: data.Why | None = None,
+    runner_view: data.RunnerUpView | None = None,
+) -> tuple[KitRow, ...]:
     """The 22 rows of "Wear this". ``pages`` are the keys of the items that have a page of their own (:func:`trioforge.site.build.item_page_keys`): the name of such an item links to
-    its page, and that of any other (a disputed or a hidden item has no page) stays plain text, as it does when no pages are given."""
+    its page, and that of any other (a disputed or a hidden item has no page) stays plain text, as it does when no pages are given.
+
+    ``vecs`` gives the item of a key at a tier as the model sees it (``at_tier``): with it each row has its ``stats``. ``why`` (the why of the default kit) and ``runner_view`` (the
+    runner-ups of the view) give each row its ``why`` line; the caller gives them only for the view they were made for."""
     rows = []
-    for label, group, item in zip(SLOT_LABELS, data.SLOT_INSTANCES, scenario.kit, strict=True):
+    for index, (label, group, item) in enumerate(zip(SLOT_LABELS, data.SLOT_INSTANCES, scenario.kit, strict=True)):
         icon = art.slot_icon(group)
         if item is None:
             rows.append(KitRow(label, True, EMPTY_NAME, "", DASH, DASH, "", DASH, icon=icon))
             continue
+        vec = vecs(item.key, scenario.tier) if vecs is not None else None
+        place = why.places[index] if why is not None else None
+        swaps = runner_view.slots[index] if runner_view is not None else ()
         rows.append(
             KitRow(
                 slot=label,
@@ -427,6 +555,8 @@ def kit_rows(scenario: data.Scenario, pages: Collection[str] | None = None) -> t
                 source=item.source,
                 href=item_href(item.key) if pages is not None and item.key in pages else None,
                 icon=icon,
+                stats=item_stat_text(vec) if vec is not None else "",
+                why=why_text(place, vec, swaps) if vec is not None and place is not None else "",
             )
         )
     return tuple(rows)
@@ -540,7 +670,14 @@ def description(scenario: data.Scenario, name: str, level: int) -> str:
         picks.pop()
 
 
-def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Collection[str] | None = None) -> TrioPage:
+def trio_page(
+    results: data.TrioResults,
+    book: RuleBook,
+    caps: Caps,
+    pages: Collection[str] | None = None,
+    vecs: Callable[[str, int], Any] | None = None,
+    exalt: data.Exalt | None = None,
+) -> TrioPage:
     """The trio page with its default answer baked in. The answer is the view ``defaults.json`` names: its role, tier,
     evidence level (the wiki level: no item is strict in a release) and buffs, the best race there and that race's best setup. The page words no evidence level and offers no
     choice of one; the level is only the shard the page code reads (``default["ev"]``).
@@ -548,7 +685,13 @@ def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Coll
     ``pages`` are the keys of the items that have a page (:func:`kit_rows`). The page code paints other kits when a switch changes, and links their names the same way, by
     ``items_base``: it is set when pages are given, and they must then cover every item the page can show, so that a name the code paints is never a link that leads nowhere.
     Kits hold strict and wiki wearables only, and those have pages, so it holds; a ``ValueError`` that names the trio and the item says so when it does not, where a page that
-    quietly lost every link would hide it."""
+    quietly lost every link would hide it.
+
+    ``vecs`` gives an item of a key at a tier as the model sees it (:func:`tier_vecs` makes it from the item table): the rows then carry the stats of their items and, where the
+    results have the why of the default kit, the line that says what each stat is worth and what the next best item is.
+
+    ``exalt`` is the effects layer of the results (:func:`trioforge.site.data.load_exalt`): a trio that has its file gets the section Effects to exalt, which the page code fills when it is
+    opened (:data:`EXALT_EFFECTS` and :data:`EXALT_TRIO` are the addresses it fetches); a trio without one, or results without the layer, have no section."""
     meta = results.meta
     if pages is not None:
         unlinked = sorted(item.key for item in data.used_items(results) if item.key not in pages)
@@ -613,7 +756,7 @@ def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Coll
         assume_haste=haste_text(scenario.haste_assumed),
         summary_assumes=f"{SETUP_PHRASES[setup]}, {BUFF_PHRASES[defaults.buffs]}",
         runnerups_assumes=f"{BUFF_PHRASES[defaults.buffs]}, the role's best weapon setup and the role's own weights",
-        rows=kit_rows(scenario, pages),
+        rows=kit_rows(scenario, pages, vecs, defaults.why, runner_view),
         value=fmt_int(value),
         gain=fmt_signed(gain),
         totals=totals_rows(scenario, caps, book),
@@ -639,6 +782,10 @@ def trio_page(results: data.TrioResults, book: RuleBook, caps: Caps, pages: Coll
         aa_seal=weakest([rule_ref(book, rule_id) for _, rule_id in _aa_labels(caps.cs_rank, caps.pe)]),
         race_picture=art.race_picture(race),
         items_base=ITEM_BASE if pages is not None else "",
+        kit_stats=vecs is not None,
+        kit_why=vecs is not None and defaults.why is not None,
+        stat_rules=tuple(rule_ref(book, rule_id) for rule_id in STAT_RULES) if vecs is not None else (),
+        exalt_files=(EXALT_EFFECTS, EXALT_TRIO.format(slug=meta.slug)) if exalt is not None and exalt.has(meta.slug) else None,
     )
 
 
@@ -687,6 +834,7 @@ ITEM_NOTES = {
         "Kept in the catalog and not used for best-in-slot: a temporary item, one a quest takes on hand-in, one open to no class or race, or a hand weapon that cannot be scored.",
     ),
     "not-for-default-kits": ("model", "Deity-locked: left out of default kits, offered as a runner-up."),
+    "source-eql-tools": ("player", "Stats and drop sources are read from the EQ Legends Tools page of the item, the source of truth for it."),
     "wiki-marked-revamped": ("player", "The wiki page is marked as revamped: its stats or sources may have changed."),
 }
 
@@ -756,6 +904,8 @@ class ItemPage:
     wiki_revid: int | None
     wiki_href: str | None
     icon: str | None = None  # the icon of the item's slot (``art.item_icon``), drawn beside its name, or None when its slot has none
+    origin_name: str | None = None  # the site the item's stats and drops were read from when it is not the wiki (EQ Legends Tools), and the address of the item's page there; both None otherwise
+    origin_href: str | None = None
 
 
 def default_kit_keys(results: data.TrioResults) -> frozenset[str]:
@@ -809,7 +959,7 @@ def _rows(vecs: Sequence[Any]) -> tuple[TierRow, ...]:
 
 
 def _rules_of(rows: Sequence[TierRow], book: RuleBook) -> tuple[RuleRef, ...]:
-    """The rules the rows follow, each with its seal: the stat rule for the stats and the resists, the step of worn haste, the step of regeneration and the floor of the weight."""
+    """The rules the rows follow, each with its seal: the stat rule for the stats and the resists, the step of worn haste, the step of regeneration and the percent and the floor of the weight."""
     from trioforge.model import items as item_model
 
     keys = {row.key for row in rows}
@@ -821,7 +971,7 @@ def _rules_of(rows: Sequence[TierRow], book: RuleBook) -> tuple[RuleRef, ...]:
     if keys & set(item_model.REGEN_KEYS):
         wanted.append("regen.per_tier")
     if "WEIGHT" in keys:
-        wanted.append("tier.weight_floor")
+        wanted.extend(["tier.weight_pct", "tier.weight_floor"])
     return tuple(rule_ref(book, rule_id) for rule_id in wanted)
 
 
@@ -918,6 +1068,7 @@ def item_page(
     book: RuleBook,
     wiki: tuple[str, int] | None,
     wearers: Sequence[tuple[str, str]] = (),
+    origin: str | None = None,
 ) -> ItemPage:
     """The page of one item, from its record in the item table of the results (``defaults`` is the table's own; ``rules`` the rules object ``at_tier`` reads, ``book`` the rules as the
     pages show them). ``wiki`` is the title and the revision of the wiki page the item was read from, ``wearers`` the ``(slug, name)`` of every trio whose default answer wears it.
@@ -961,4 +1112,6 @@ def item_page(
         wiki_revid=revid,
         wiki_href=None if wiki is None else wiki_url(title, revid),
         icon=art.item_icon(record["slots"]),
+        origin_name=None if origin is None else EQLT_NAME,
+        origin_href=None if origin is None else eqlt_item_url(origin),
     )

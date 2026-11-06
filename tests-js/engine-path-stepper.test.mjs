@@ -56,7 +56,7 @@ describe("stepping by hand", () => {
           expect(step.owned).toEqual(want.owned);
         });
         expect(result.stopped).toBe(expected.stopped);
-        expect(result.hasteAssumed).toBe(expected.session_haste);
+        expect(result.hasteAssumed, "the haste of Equip now").toBe(doc.solves[expected.equip_now].result.haste_assumed);
         // the result is the very objects that were handed out, and asking again after the end gives nothing
         expect(result.baseline).toBe(baseline);
         result.steps.forEach((step, at) => expect(step).toBe(steps[at]));

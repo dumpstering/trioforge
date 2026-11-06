@@ -36,7 +36,7 @@
 // tier limit is MAX_TIER of tiers.js, and the source of this file holds no number but 0 and 1 (tests-js/engine-literals.test.mjs scans it).
 // Lookups of a name from the data go through a Map or a Set. A list that is given is read whole: a hole in one is a ModelError.
 
-import { CONSTANTS, UNITS, monkTable, profileOf } from "./evaluate.js";
+import { CONSTANTS, UNITS, fallbackBonus, monkTable, profileOf } from "./evaluate.js";
 import { CLASS_CODES } from "./items.js";
 import { LIMITS } from "./protocol.js";
 import { ONE, Rational, ZERO } from "./rational.js";
@@ -78,7 +78,7 @@ const CLASS_SET = new Set(CLASS_CODES);
 export const ANY_RULES = ["all", "explicit"];
 const RULE_ALL = ANY_RULES[0];
 const TIER_TEXT = new Map(Array.from({ length: MAX_TIER + 1 }, (_, tier) => [String(tier), tier]));
-const OPTION_KEYS = ["any_rule", "haste_assumed", "owned_caps", "new_keys", "max_new", "upgrades", "monk_bins"];
+const OPTION_KEYS = ["any_rule", "haste_assumed", "haste_floor", "haste_exact", "owned_caps", "new_keys", "max_new", "upgrades", "monk_bins"];
 const BINARY_KINDS = ["ordering", "deficit", "selection", "monk", "haste", "buff", "made"];
 const SAFE_CHARS = new Set([..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.@|+ "]);
 const LABEL_SIGNS = new Set([..."[],#"]);
@@ -224,6 +224,13 @@ export function readOptions(raw) {
 
   const hasteAssumed = given.get("haste_assumed") ?? null;
   if (hasteAssumed !== null && !isCount(hasteAssumed)) throw fail(`haste_assumed is a whole number of at least 0, not ${show(hasteAssumed)}`);
+  const hasteFloor = given.get("haste_floor") ?? null;
+  if (hasteFloor !== null && !isCount(hasteFloor)) throw fail(`haste_floor is null or a whole number of at least 0, not ${show(hasteFloor)}`);
+
+  if (hasteFloor !== null && hasteAssumed === null) throw fail("haste_floor needs haste_assumed: a level program pays the weapon term at its own level");
+  const hasteExact = given.get("haste_exact") ?? false;
+  if (typeof hasteExact !== "boolean") throw fail(`haste_exact is true or false, not ${show(hasteExact)}`);
+  if (hasteExact && hasteFloor === null) throw fail("haste_exact needs haste_floor: it makes the kit count exactly that haste");
 
   const caps = new Map();
   const capsGiven = given.get("owned_caps");
@@ -261,7 +268,7 @@ export function readOptions(raw) {
     }
   }
   const upgrades = new Map([...ups].sort((a, b) => compareText(a[0], b[0])));
-  return { anyRule, hasteAssumed, ownedCaps, newKeys, maxNew, upgrades, monkBins: given.get("monk_bins") };
+  return { anyRule, hasteAssumed, hasteFloor, hasteExact, ownedCaps, newKeys, maxNew, upgrades, monkBins: given.get("monk_bins") };
 }
 
 // ---- the items ---------------------------------------------------------------------------------------------------------------------------
@@ -361,7 +368,7 @@ export function damageIndex(item, hand, setup, hastePercent, dwFactor) {
   const damage = whole(weapon.dmg);
   const delay = whole(weapon.delay);
   if (hand === SECONDARY) return damage.div(delay).mul(haste).mul(dwFactor);
-  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : (weapon.twoHanded ? CONSTANTS.weaponIndex.bonusTwoHanded : CONSTANTS.weaponIndex.bonusOneHanded).mul(delay);
+  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : fallbackBonus(weapon.twoHanded, delay);
   return damage.add(bonus).div(delay).mul(haste);
 }
 
@@ -540,6 +547,24 @@ export function planTopPools(specs) {
 
 // ---- the builder -------------------------------------------------------------------------------------------------------------------------
 
+/** A bound of the document: null for none, else the number. */
+const bound = (value) => (value === null ? null : real(value));
+
+/** The CSR arrays `{start, index, value}` of rows `{terms, lb, ub}` (the columns of a row rise). */
+function csrOf(rows) {
+  const start = [0];
+  const index = [];
+  const value = [];
+  for (const { terms } of rows) {
+    for (const column of [...terms.keys()].sort((a, b) => a - b)) {
+      index.push(column);
+      value.push(real(terms.get(column)));
+    }
+    start.push(index.length);
+  }
+  return { start, index, value };
+}
+
 class Builder {
   constructor(profile, rawItems, setup, buffset, options) {
     if (!SETUP_SET.has(setup)) throw fail(`unknown setup ${show(setup)} (use ${[...SETUP_SET].map((name) => JSON.stringify(name)).join(", ")})`);
@@ -579,6 +604,12 @@ class Builder {
     this.keys = 0;
     this.cache = new Map();
     this.hasteAssumed = 0;
+    // the programs of the haste levels (LevelPrograms) are built once, leaving out what depends on the level: the rows after the worn-haste columns (haste.floor and the
+    // ceilings) and the weapon part of the objective
+    this.capture = false;
+    this.hasteCtx = null;
+    this.hasteSlot = 0;
+    this.weaponCols = [];
     this.items = this.collect(rawItems);
   }
 
@@ -662,6 +693,10 @@ class Builder {
   build() {
     this.itemColumns();
     this.buffColumns();
+    return this.buildTerms();
+  }
+
+  buildTerms() {
     this.hasteAssumed = this.assumedHaste();
     for (const term of [
       this.termHp, this.termMana, this.termEnd, this.termAc, this.termAtk, this.termDex, this.termCha, this.termHaste, this.termRegen, this.termResists,
@@ -1191,12 +1226,48 @@ class Builder {
     if (spell === null) {
       spell = this.bconst(HASTE);
       for (const buff of this.buffset === null ? [] : this.buffset.optional) spell = larger(spell, buff.haste);
+      spell = spell.add(this.p.hasteBonus); // Unbound Alacrity stacks with the spell haste
     }
     let worn = ZERO;
     this.items.forEach((item, position) => {
       if (item.haste > 0 && this.colsOfItem.has(position)) worn = larger(worn, whole(item.haste));
     });
     return Number(smaller(this.p.hasteCap, larger(spell, ZERO).add(worn)).floor());
+  }
+
+  /**
+   * The hastes a kit of this scenario can count, in percent, rising (`haste_levels` in model.py): every spell haste the scenario offers (the always-on buffs' with Unbound
+   * Alacrity, or the best of those and one optional haste buff's, plus Unbound Alacrity) with 0 and with each distinct worn haste of the pool added, each cut at the cap.
+   * A ModelError for a haste that is not a whole number (the program assumes whole percents).
+   */
+  hasteLevels() {
+    const cap = this.p.hasteCap;
+    const bonus = this.p.hasteBonus;
+    const base = larger(this.bconst(HASTE).add(bonus), ZERO);
+    const spells = new Map([[base.toString(), base]]);
+    for (const buff of this.buffOfCol.values()) {
+      if (buff.haste.sign() > 0) {
+        const spell = larger(base, buff.haste.add(bonus));
+        spells.set(spell.toString(), spell);
+      }
+    }
+    const worn = new Map([[ZERO.toString(), ZERO]]);
+    this.items.forEach((item, position) => {
+      if (item.haste > 0 && this.colsOfItem.has(position)) worn.set(String(item.haste), whole(item.haste));
+    });
+    const levels = new Map();
+    for (const spell of spells.values()) {
+      for (const piece of worn.values()) {
+        const level = smaller(cap, spell.add(piece));
+        levels.set(level.toString(), level);
+      }
+    }
+    return [...levels.values()]
+      .sort((a, b) => a.compare(b))
+      .map((level) => {
+        if (!level.isInteger()) throw fail(`a haste of ${level.toString()} is not a whole number of percent: the weapon term assumes whole percents`);
+        return Number(level.floor());
+      });
   }
 
   /** One binary per distinct effective haste value; it may be 1 only if some item of that value is worn. */
@@ -1227,12 +1298,17 @@ class Builder {
 
   termHaste() {
     const w = this.p.weights.HASTE;
-    if (w.sign() === 0) return;
+    const floor = this.opts.hasteFloor;
+    if (w.sign() === 0 && floor === null) return;
     const cap = this.p.hasteCap;
-    const base = this.bconst(HASTE); // the haste of the always-on buffs
+    if (floor !== null && whole(floor).compare(cap) > 0) throw fail(`haste_floor ${floor} is above the haste cap ${cap.toString()}`);
+    // The spell haste is the buff haste plus the flat haste of Unbound Alacrity (a trio with a Monk): adding it to the always-on haste and to each buff's own
+    // haste shifts every spell haste by the same amount, so "the best one counts" still picks the same buff.
+    const bonus = this.p.hasteBonus;
+    const base = this.bconst(HASTE).add(bonus); // the haste of the always-on buffs, with Unbound Alacrity
     // Only the best spell haste counts and the haste buffs exclude each other, so the spell haste is one of a few constants: the base while no haste
     // buff is active, max(base, h) while the buff of haste h is.
-    const choices = [...this.buffOfCol].filter(([, buff]) => buff.haste.sign() > 0).map(([column, buff]) => [column, buff.haste]);
+    const choices = [...this.buffOfCol].filter(([, buff]) => buff.haste.sign() > 0).map(([column, buff]) => [column, buff.haste.add(bonus)]);
     this.constant = this.constant.add(w.mul(smaller(base, cap)));
     for (const [column, h] of choices) this.addObj(column, w.mul(smaller(larger(base, h), cap).sub(smaller(base, cap))));
     // worn haste: the best piece counts, up to the room the active spell haste leaves, max(0, cap - spell)
@@ -1241,15 +1317,78 @@ class Builder {
     let top = room0;
     for (const [, room] of rooms) top = larger(top, room);
     const flags = top.sign() > 0 ? this.hasteBinaries((h) => smaller(h, top)) : [];
-    if (flags.length === 0) return;
-    const q = this.newColumn("haste.q", ZERO, null);
-    const best = new Map(flags.map(([y, value]) => [y, value.neg()]));
-    best.set(q, ONE);
-    this.row("haste.best", best, null, ZERO); // no more than the best worn piece
-    const roomLeft = new Map(rooms.map(([column, room]) => [column, room0.sub(room)]));
-    roomLeft.set(q, ONE);
-    this.row("haste.room", roomLeft, null, room0); // nor than the room left
-    this.addObj(q, w);
+    let q = null;
+    if (flags.length > 0) {
+      q = this.newColumn("haste.q", ZERO, null);
+      const best = new Map(flags.map(([y, value]) => [y, value.neg()]));
+      best.set(q, ONE);
+      this.row("haste.best", best, null, ZERO); // no more than the best worn piece
+      const roomLeft = new Map(rooms.map(([column, room]) => [column, room0.sub(room)]));
+      roomLeft.set(q, ONE);
+      this.row("haste.room", roomLeft, null, room0); // nor than the room left
+      if (w.sign() !== 0) this.addObj(q, w);
+    }
+    this.hasteCtx = { base, cap, choices, q };
+    this.hasteSlot = this.rows.length;
+    if (floor !== null && !this.capture) this.hasteLevelRows(floor);
+  }
+
+  /** The rows that make the kit count the haste `floor` (the only rows of the haste term that depend on it). */
+  hasteLevelRows(floor) {
+    const { base, cap, choices, q } = this.hasteCtx;
+    if (whole(floor).compare(cap) > 0) throw fail(`haste_floor ${floor} is above the haste cap ${cap.toString()}`);
+    if (whole(floor).compare(smaller(base, cap)) > 0) {
+      // the haste the kit counts is the spell haste of its buffs plus the worn haste q: at least `floor`, so that the weapon term, which assumed `floor`, is true of the kit
+      const counted = new Map(choices.map(([column, h]) => [column, smaller(larger(base, h), cap).sub(smaller(base, cap))]));
+      if (q !== null) counted.set(q, ONE);
+      this.row("haste.floor", counted, whole(floor).sub(smaller(base, cap)), null);
+    }
+    if (this.opts.hasteExact && whole(floor).compare(cap) < 0) this.hasteCeiling(whole(floor), base, choices);
+  }
+
+  /**
+   * The kit counts no more than `floor` (below the cap), `_haste_ceiling` in model.py: under each spell haste that a choice of buffs can make active, no worn piece has more
+   * than `floor` less that haste, and a haste buff whose own spell haste is above `floor` is not taken. With `haste.floor` the kit counts exactly `floor`.
+   */
+  hasteCeiling(floor, base, choices) {
+    if (floor.compare(base) < 0) throw fail(`haste_floor ${floor.toString()} is below the haste ${base.toString()} that the always-on buffs and Unbound Alacrity give`);
+    const classes = new Map(); // a spell haste above the base -> the columns of the buffs that make it
+    for (const [column, h] of choices) {
+      const spell = larger(base, h);
+      if (spell.compare(base) <= 0) continue;
+      const key = spell.toString();
+      if (!classes.has(key)) classes.set(key, { spell, columns: [] });
+      classes.get(key).columns.push(column);
+    }
+    const stronger = [...classes.values()].flatMap(({ columns }) => columns);
+    const over = (allowed) => {
+      const columns = [];
+      this.items.forEach((item, position) => {
+        if (item.haste > 0 && whole(item.haste).compare(allowed) > 0 && this.colsOfItem.has(position)) columns.push(...this.colsOfItem.get(position));
+      });
+      return columns;
+    };
+    const big = (columns) => columns.reduce((sum, column) => sum.add(this.ub[column]), ZERO);
+    let pieces = over(floor.sub(base));
+    if (pieces.length > 0) {
+      // no buff stronger than the base is active: the worn piece may not be above what the base leaves
+      const m = big(pieces);
+      const terms = new Map(pieces.map((column) => [column, ONE]));
+      for (const column of stronger) terms.set(column, m.neg());
+      this.row(`haste.ceil[${fractionText(base)}]`, terms, null, ZERO);
+    }
+    for (const { spell, columns } of [...classes.values()].sort((a, b) => a.spell.compare(b.spell))) {
+      if (spell.compare(floor) > 0) {
+        this.row(`haste.over[${fractionText(spell)}]`, new Map(columns.map((column) => [column, ONE])), null, ZERO);
+        continue;
+      }
+      pieces = over(floor.sub(spell));
+      if (pieces.length === 0) continue;
+      const m = big(pieces);
+      const terms = new Map(pieces.map((column) => [column, ONE]));
+      for (const column of columns) terms.set(column, m);
+      this.row(`haste.ceil[${fractionText(spell)}]`, terms, null, m);
+    }
   }
 
   termRegen() {
@@ -1294,6 +1433,11 @@ class Builder {
     const w = this.p.weights.DMG;
     if (w.sign() === 0) return;
     const setup = this.setup ?? "stick";
+    if (this.capture) {
+      // (the coefficients are those of a level: LevelPrograms.programFor adds them)
+      this.weaponCols = this.itemCols.filter(({ group }) => HANDS.has(group));
+      return;
+    }
     for (const { col, group, item } of this.itemCols) {
       if (!HANDS.has(group)) continue;
       const index = damageIndex(item, group, setup, this.hasteAssumed, this.p.dwFactor);
@@ -1307,21 +1451,13 @@ class Builder {
     const columns = this.names.length;
     const c = new Array(columns).fill(0);
     for (const [column, coefficient] of this.obj) c[column] = real(coefficient);
-    const bound = (value) => (value === null ? null : real(value));
-    const start = [0];
-    const index = [];
-    const value = [];
-    for (const { terms } of this.rows) {
-      for (const column of [...terms.keys()].sort((a, b) => a - b)) {
-        index.push(column);
-        value.push(real(terms.get(column)));
-      }
-      start.push(index.length);
-    }
+    const { start, index, value } = csrOf(this.rows);
     const info = {
       binaries: Object.fromEntries(Object.keys(this.info.binaries).sort().map((kind) => [kind, this.info.binaries[kind]])),
       cols: columns,
       haste_assumed: this.hasteAssumed,
+      ...(this.opts.hasteExact ? { haste_exact: true } : {}),
+      ...(this.opts.hasteFloor === null ? {} : { haste_floor: this.opts.hasteFloor }),
       items: this.info.items,
       pools: Object.fromEntries(Object.keys(this.info.pools).sort().map((family) => [family, this.info.pools[family]])),
       rows: this.rows.length,
@@ -1347,6 +1483,113 @@ class Builder {
 }
 
 /**
+ * The programs of the haste levels of one scenario, `LevelPrograms` in model.py: what `buildMilp` gives for the options with `haste_assumed`, `haste_floor` set to the level and
+ * `haste_exact`, for each level, made from one build. The columns and the rows that do not depend on the level are built once, and `programFor(level)` adds the weapon coefficients of
+ * the level and the rows that make the kit count it (the arrays are `buildMilp`'s with the same options, to the last bit). `levels` are `hasteLevels`'; `eligible` is
+ * `buildMilpWithItems`'s.
+ */
+export class LevelPrograms {
+  constructor(profile, items, setup, buffset, options) {
+    this.options = options === undefined || options === null ? {} : options;
+    const builder = new Builder(profile, items, setup === undefined ? null : setup, buffset, { ...this.options, haste_assumed: 0, haste_floor: 0, haste_exact: true });
+    builder.capture = true;
+    builder.itemColumns();
+    builder.buffColumns();
+    this.levels = builder.hasteLevels();
+    this.base = builder.buildTerms();
+    this.builder = builder;
+    this.eligible = builder.items.map((item) => [item.key, item.tier]);
+    this.made = new Map();
+    this.partsMade = new Map();
+  }
+
+  /**
+   * What a level adds to the level-free build, as `{c, rows}`: the objective of the level (`c`, a plain array) and its rows, `rows` being `{count, lb, ub, start, index, value}`
+   * (CSR, the rows of the level only: they go after the first `slot` rows of the level-free model). Made once.
+   */
+  parts(level) {
+    const made = this.partsMade.get(level);
+    if (made !== undefined) return made;
+    const { builder, base } = this;
+    builder.opts = readOptions({ ...this.options, haste_assumed: level, haste_floor: level, haste_exact: true });
+    const saved = { rows: builder.rows, rowNames: builder.rowNames, rowUses: builder.rowUses, rowNameSet: builder.rowNameSet };
+    builder.rows = [];
+    builder.rowNames = [];
+    builder.rowUses = new Map(saved.rowUses);
+    builder.rowNameSet = new Set(saved.rowNameSet);
+    let added;
+    try {
+      builder.hasteLevelRows(level);
+      added = { rows: builder.rows, names: builder.rowNames };
+    } finally {
+      Object.assign(builder, saved);
+    }
+    const csr = csrOf(added.rows);
+    const c = base.c.slice();
+    const w = builder.p.weights.DMG;
+    if (w.sign() !== 0) {
+      const setup = builder.setup ?? "stick";
+      for (const { col, group, item } of builder.weaponCols) {
+        const weapon = damageIndex(item, group, setup, level, builder.p.dwFactor);
+        if (weapon.sign() !== 0) c[col] = real((builder.obj.get(col) ?? ZERO).add(w.mul(weapon)));
+      }
+    }
+    const parts = {
+      c,
+      names: added.names,
+      rows: { count: added.rows.length, lb: added.rows.map((row) => bound(row.lb)), ub: added.rows.map((row) => bound(row.ub)), start: csr.start, index: csr.index, value: csr.value },
+    };
+    this.partsMade.set(level, parts);
+    return parts;
+  }
+
+  /** The model of `level` (made once). */
+  programFor(level) {
+    const made = this.made.get(level);
+    if (made !== undefined) return made;
+    const { builder, base } = this;
+    const { c, names, rows } = this.parts(level);
+    const slot = builder.hasteSlot;
+    const cut = base.A.start[slot];
+    const start = [...base.A.start.slice(0, slot + 1), ...rows.start.slice(1).map((at) => at + cut), ...base.A.start.slice(slot + 1).map((at) => at + rows.index.length)];
+    const index = [...base.A.index.slice(0, cut), ...rows.index, ...base.A.index.slice(cut)];
+    const value = [...base.A.value.slice(0, cut), ...rows.value, ...base.A.value.slice(cut)];
+    const row_lb = [...base.row_lb.slice(0, slot), ...rows.lb, ...base.row_lb.slice(slot)];
+    const row_ub = [...base.row_ub.slice(0, slot), ...rows.ub, ...base.row_ub.slice(slot)];
+    const row_names = [...base.row_names.slice(0, slot), ...names, ...base.row_names.slice(slot)];
+    const info = {
+      binaries: base.info.binaries,
+      cols: base.info.cols,
+      haste_assumed: level,
+      haste_exact: true,
+      haste_floor: level,
+      items: base.info.items,
+      pools: base.info.pools,
+      rows: row_names.length,
+    };
+    const model = deepFreeze({
+      version: 1,
+      sense: "max",
+      const: base.const,
+      col_names: base.col_names,
+      col_lb: base.col_lb,
+      col_ub: base.col_ub,
+      integrality: base.integrality,
+      c,
+      row_names,
+      row_lb,
+      row_ub,
+      A: { start, index, value },
+      item_cols: base.item_cols,
+      buff_cols: base.buff_cols,
+      info,
+    });
+    this.made.set(level, model);
+    return model;
+  }
+}
+
+/**
  * The model JSON v1 document of the program for `profile`, the item pool `items`, the weapon `setup` and the buff set; see the head of this file for
  * what each is. A ModelError for an input that is not what is read: an unknown setup or stat, a repeated item, an ident that is not an item of the
  * pool, a `buffset` whose always-on buffs are not the profile's buff totals, optional haste buffs that can be active together, an option that is not read.
@@ -1354,6 +1597,17 @@ class Builder {
  */
 export function buildMilp(profile, items, setup, buffset, options) {
   return buildMilpWithItems(profile, items, setup, buffset, options).model;
+}
+
+/**
+ * The hastes a kit of the scenario can count, in percent, rising (`haste_levels` in model.py). The arguments are those of `buildMilp`; the options decide the Any rule, and so which
+ * items have a place.
+ */
+export function hasteLevels(profile, items, setup, buffset, options) {
+  const builder = new Builder(profile, items, setup === undefined ? null : setup, buffset, options);
+  builder.itemColumns();
+  builder.buffColumns();
+  return builder.hasteLevels();
 }
 
 /**

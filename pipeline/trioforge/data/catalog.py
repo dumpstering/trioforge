@@ -2,7 +2,7 @@
 
 ::
 
-    python -m trioforge.data.catalog --wiki sources/eqlwiki/2026-10-14 --client derived/client --out derived
+    python -m trioforge.data.catalog --wiki sources/eqlwiki/2026-10-14 --client derived/client --out derived [--eqlegendstools sources/eqlegendstools/2026-10-25]
 
 reads
 
@@ -20,7 +20,13 @@ and writes, all or nothing, into ``--out``:
 * ``catalog-summary.json``: counts by level, slot, class and reason, the shields by source (``item_types``),
   the zones the alias table does not know (the most common first), unknown era tags and warnings by code;
 * ``catalog-warnings.json``: every parse warning as ``{key, code, field}`` and every page that is not an item;
-* ``sources-manifest.json``: item key to ``{title, revid}``, for the credits page.
+* ``sources-manifest.json``: item key to ``{title, revid}``, for the credits page (wiki items only; with ``--eqlegendstools`` it also has
+  ``eqlegendstools``: item key to ``{title, slug}`` for the items read from that site).
+
+**EQ Legends Tools.** With ``--eqlegendstools DIR`` (a finished fetch of :mod:`trioforge.sources.eqlegendstools`) the items of that
+site's zone pages enter the catalog after the wiki pages are parsed: each overrides the wiki's copy of the same item or is added
+when the wiki lacks it, see :mod:`trioforge.data.eqlt_merge`; the summary has a section ``eqlegendstools`` with what was done and
+every field where the two disagree, and ``provenance.inputs`` names the zone pages and the hash of the fetch.
 
 **Shields.** Item pages rarely say ``Type: Shield``, and held items (crystals, orbs, totems) also fill the off
 hand and have an armor class, so the builder settles ``item_type`` and ``item_type_source`` for every item, in this
@@ -111,8 +117,12 @@ from trioforge.data.normalize import (
     sanitize_text,
     validate_item,
 )
+from trioforge.data.eqlt_merge import merge_eqlegendstools
 from trioforge.privacy.textnorm import normalize_unicode
 from trioforge.sources.client_tables import commit_files, iso_date, one_line, read_manifest, today_utc
+from trioforge.sources.eqlegendstools import HOST as EQLT_HOST
+from trioforge.sources.eqlegendstools import ParseError as EqltParseError
+from trioforge.sources.eqlegendstools import read_snapshot as read_eqlt_snapshot
 from trioforge.sources.eqlwiki import BATCH_SIZE
 from trioforge.sources.itempage import Skip, parse_page
 
@@ -733,6 +743,7 @@ def build_catalog(
     quests_path: str | os.PathLike[str] | None = None,
     rules_dir: str | os.PathLike[str] | None = None,
     catalog_keys_allowed: Iterable[str] = (),
+    eqlegendstools_dir: str | os.PathLike[str] | None = None,
     generated: str | None = None,
     workers: int | None = None,
     timeout: float = PAGE_TIMEOUT,
@@ -744,6 +755,8 @@ def build_catalog(
       with ``seen_path`` it is checked first (:func:`check_seen_output`) and nothing is read until it passes.
     * ``catalog_keys_allowed`` are the item keys an EQ Legends Tools listing may confirm; empty unless its
       owner has given permission.
+    * ``eqlegendstools_dir`` is a finished fetch of :mod:`trioforge.sources.eqlegendstools`: its items override the wiki's copy of
+      the same item and add the items the wiki lacks (:mod:`trioforge.data.eqlt_merge`); without it the catalog is the wiki's alone.
     * ``workers``, ``timeout`` and ``target`` are for :func:`parse_pages`.
 
     Raises :class:`BuildError` if an input is missing, damaged or from a different patch.
@@ -759,6 +772,12 @@ def build_catalog(
     generated = generated or today_utc()
 
     snapshot = read_wiki(wiki_dir)
+    eqlt = None
+    if eqlegendstools_dir is not None:
+        try:
+            eqlt = read_eqlt_snapshot(eqlegendstools_dir)
+        except (EqltParseError, OSError, ValueError) as error:  # (a missing folder or file, a damaged manifest or page)
+            raise BuildError(f"the EQ Legends Tools fetch {eqlegendstools_dir} ({type(error).__name__}): {one_line(error)}") from error
     client = check_client(client_dir)
     try:
         aliases = load_aliases(_need_file(rules / "zone-aliases.json", "rules/zone-aliases.json"), zone_ids=client.ids)
@@ -790,6 +809,12 @@ def build_catalog(
                  "title": sanitize_text(page["title"]) if isinstance(page.get("title"), str) else None,
                  "reason": reason}
             )  # fmt: skip
+    eqlt_report = None
+    if eqlt is not None:
+        try:
+            items, eqlt_report = merge_eqlegendstools(items, eqlt.items)
+        except ValueError as error:
+            raise BuildError(f"the EQ Legends Tools items: {one_line(error)}") from error
     keys = [item["key"] for item in items]
     if len(set(keys)) != len(keys):
         raise BuildError("two pages give the same item key")
@@ -824,6 +849,9 @@ def build_catalog(
         {"file": "rules/zone-aliases.json", "sha256": _file_sha256(rules / "zone-aliases.json"), "date": _version_of(rules / "zone-aliases.json", generated)},
         {"file": "rules/hand-lists.json", "sha256": _file_sha256(rules / "hand-lists.json"), "date": _version_of(rules / "hand-lists.json", generated)},
     ]  # fmt: skip
+    if eqlt is not None:
+        for zone in eqlt.zones:  # (one record for each zone page; the hash is that of the whole fetch: the zone pages and the item pages)
+            inputs.append({"file": f"https://{EQLT_HOST}/zones/{zone}/", "sha256": eqlt.sha256, "date": eqlt.date})
     if community_file.exists():
         inputs.append(
             {"file": "rules/community-seen.json", "sha256": _file_sha256(community_file), "date": _version_of(community_file, generated)}
@@ -864,6 +892,9 @@ def build_catalog(
         },
         "confusable_names": {"warning": "confusable-names", "pairs": len(pairs), "examples": [list(pair) for pair in pairs[:MAX_EXAMPLES]]},
     }  # fmt: skip
+    if eqlt_report is not None:
+        summary["eqlegendstools"] = eqlt_report
+        summary["warnings"]["build"]["eqlegendstools-skipped"] = len(eqlt_report["skipped"])  # (pages of new items that state no class or slot: left out, see eqlt_merge)
     if seen_path is not None:
         summary["seen"] = {"keys": len(seen), "unknown": len(seen - set(keys))}
 
@@ -882,7 +913,12 @@ def build_catalog(
                 "provenance": provenance,
                 "license": LICENSE,
                 "attribution": ATTRIBUTION,
-                "items": {item["key"]: {"title": item["wiki"]["title"], "revid": item["wiki"]["revid"]} for item in items},
+                "items": {item["key"]: {"title": item["wiki"]["title"], "revid": item["wiki"]["revid"]} for item in items if item["wiki"] is not None},
+                **(
+                    {"eqlegendstools": {item["key"]: {"title": item["name"], "slug": item["origin"]["slug"]} for item in items if "origin" in item}}
+                    if eqlt is not None
+                    else {}
+                ),
             },
             per_line=("items",),
         ),
@@ -956,6 +992,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--wiki", required=True, type=Path, help="a finished fetch, e.g. sources/eqlwiki/2026-10-14")
     parser.add_argument("--client", required=True, type=Path, help="the client extract, derived/client")
+    parser.add_argument(
+        "--eqlegendstools",
+        type=Path,
+        help="a finished EQ Legends Tools fetch, e.g. sources/eqlegendstools/2026-10-25: its items override the wiki's copy and add what the wiki lacks",
+    )
     parser.add_argument("--out", type=Path, help="output folder (default derived/, or build/catalog-with-seen/ with --seen)")
     parser.add_argument("--seen", type=Path, help="private seen-flags file: CI and private previews only, never derived/")
     parser.add_argument("--quests", type=Path, help="derived/quests.json")
@@ -972,6 +1013,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             seen_path=args.seen,
             quests_path=args.quests,
             rules_dir=args.rules,
+            eqlegendstools_dir=args.eqlegendstools,
             generated=args.date,
             workers=args.workers,
             timeout=args.timeout,
@@ -983,6 +1025,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {one_line(error)}", file=sys.stderr)
         return 2
     out = args.out or REPO_ROOT / ("build/catalog-with-seen" if args.seen else "derived")
+    for skipped in (summary.get("eqlegendstools") or {}).get("skipped", ()):
+        print(
+            f"warning: EQ Legends Tools page {skipped['slug']} ({skipped['name']}) is left out of the catalog: its tooltip states no {' and no '.join(skipped['missing'])} line, "
+            "and the item has no wiki copy to take it from",
+            file=sys.stderr,
+        )
     _print_summary(summary, out)
     return 0
 

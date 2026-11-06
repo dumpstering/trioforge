@@ -26,7 +26,7 @@
  },
  "mip-prunable-pool": {
   "status": "optimal",
-  "objective": 2777.3577969999997,
+  "objective": 3063.2143907500003,
   "integer_columns": 64
  },
  "lp-one-column": {

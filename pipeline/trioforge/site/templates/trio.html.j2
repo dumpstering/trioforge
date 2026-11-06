@@ -3,7 +3,9 @@
 {% macro tr_kit(row) -%}
 <tr role="row">
 <th scope="row" role="rowheader">{% if row.icon %}<span class="art art-{{ row.icon }}" aria-hidden="true"></span>{% endif %}{{ row.slot }}</th>
-<td role="cell"><span class="name" data-f="name">{% if row.href %}<a href="{{ row.href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</span> <span class="deity" data-f="deity"{% if not row.deity %} hidden{% endif %}>{{ row.deity }}</span></td>
+<td role="cell"><span class="name" data-f="name">{% if row.href %}<a href="{{ row.href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</span> <span class="deity" data-f="deity"{% if not row.deity %} hidden{% endif %}>{{ row.deity }}</span>
+{%- if page.kit_stats %}
+<details class="kit-more" data-f="more"{% if row.empty %} hidden{% endif %}><summary>Stats</summary><p class="kit-stats" data-f="stats">{{ row.stats }}</p>{% if page.kit_why %}<p class="kit-why" data-f="why">{{ row.why }}</p>{% endif %}</details>{% endif %}</td>
 <td role="cell"><span data-f="tier">{{ row.tier }}</span></td>
 <td role="cell"><span data-f="arrival">{{ row.arrival }}</span> <span class="reach" data-f="reach">{{ row.reach }}</span></td>
 <td role="cell"><span data-f="source">{{ row.source }}</span></td>
@@ -101,12 +103,13 @@
 
 <section class="answer" aria-labelledby="wear-h">
 <h2 id="wear-h" tabindex="-1">Wear this</h2>
+{% if page.kit_stats %}<button type="button" id="kit-stats-all" class="btn-quiet kit-toggle-all" aria-expanded="false" aria-controls="kit" disabled>All stats</button>{% endif %}
 <table class="kit" id="kit" role="table">
 <caption id="kit-caption">For <span data-f="v-race">{{ page.verdict_race }}</span> &middot; <span data-f="v-role">{{ page.verdict_role }}</span> &middot; <span data-f="v-tier" data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> &middot; <span data-f="v-setup">{{ page.verdict_setup }}</span></caption>
 <thead role="rowgroup">
 <tr role="row">
 <th scope="col" role="columnheader">Slot</th>
-<th scope="col" role="columnheader">Item</th>
+<th scope="col" role="columnheader"{% if page.kit_stats %} data-rules="{{ page.stat_rules|map(attribute='id')|join(' ') }}"{% endif %}>Item</th>
 <th scope="col" role="columnheader" data-rules="tier.stat_rule">Tier</th>
 <th scope="col" role="columnheader" data-rules="tier.arrival tier.exp_needed">Arrives at</th>
 <th scope="col" role="columnheader">Source</th>
@@ -119,6 +122,8 @@
 </tbody>
 </table>
 <p id="kit-rules" class="rules">Tiers: {{ rule_links(page.tier_rules) }}</p>
+{% if page.kit_stats %}<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown.{% if page.kit_why %} &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing.{% endif %} {{ rule_links(page.stat_rules) }}</p>
+{% if page.kit_why %}<p id="why-note" class="note" hidden>The &ldquo;lost without it&rdquo; lines and the next best items are worked out for the default view only: the best race at the default role, tier, buffs and weapons. The stats are those of the view shown.</p>{% endif %}{% endif %}
 </section>
 
 <section class="why" id="why" aria-labelledby="why-h">
@@ -200,6 +205,16 @@
 </ul>
 <p id="robust-na" class="note" data-rules="tier.stat_rule"{% if page.robust_summary %} hidden{% endif %}>{{ page.robust_note }}</p>
 </details>
+{%- if page.exalt_files %}
+
+<details class="expander exalt" id="exalt" data-effects="{{ page.exalt_files[0] }}" data-exalt="{{ page.exalt_files[1] }}">
+<summary>Effects to exalt: a planning aid</summary>
+<p class="note">A planning aid, not a measured best-in-slot: it names the focus, click, worn and proc effects worth putting on the items of a kit, and where an effect can come from. It needs scripts to show.</p>
+<p id="exalt-status" class="note" hidden></p>
+<div id="exalt-body"></div>
+</details>
+{%- endif %}
+
 
 {% include "upgrade.html.j2" %}
 </main>

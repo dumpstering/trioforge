@@ -369,7 +369,9 @@ def test_each_buff_key_holds_the_totals_the_spell_haste_and_the_resolved_set(tri
     for key, buffset in buffsets.items():
         row = made["buffs"][key]
         assert row["buff_totals"] == eval_buffs(buffset.totals(()))
-        assert row["spell_haste"] == max((b.haste for b in (*buffset.always_on, *buffset.optional)), default=0)
+        # the best haste on offer, and the 10 of Unbound Alacrity when the trio has a Monk
+        unbound = 10 if "MNK" in trio else 0
+        assert row["spell_haste"] == max((b.haste for b in (*buffset.always_on, *buffset.optional)), default=0) + unbound
         listed = row["set"]
         assert listed["always_on"] == [b.id for b in buffset.always_on]
         assert listed["optional"] == [b.id for b in buffset.optional]
@@ -391,7 +393,7 @@ def test_each_buff_key_holds_the_totals_the_spell_haste_and_the_resolved_set(tri
 
 def test_the_enchanter_line_is_in_the_third_set_and_the_raid_holds_more_still(pmb):
     group, enchanted, raid = (pmb["buffs"][key] for key in ("group", "group+enchanter", "raid"))
-    assert (group["spell_haste"], enchanted["spell_haste"], raid["spell_haste"]) == (40, 60, 60)
+    assert (group["spell_haste"], enchanted["spell_haste"], raid["spell_haste"]) == (50, 70, 70)  # 40, 60, 60 and the 10 of Unbound Alacrity of the Monk
     assert enchanted != group
     assert raid["set"]["cardinality"] == 15 and len(raid["set"]["optional"]) > len(group["set"]["optional"])
     assert pmb["buffs"]["own"]["spell_haste"] <= group["spell_haste"]
@@ -531,10 +533,12 @@ def test_the_item_and_weapon_constants_are_exported_too(pmb):
     exported = {
         "BONUS_ONE_HANDED": "weapon_index.bonus_one_handed",
         "BONUS_TWO_HANDED": "weapon_index.bonus_two_handed",
-        "DUAL_WIELD_FACTOR": "weapon_index.dual_wield_factor_default",
+        "BONUS_TWO_HANDED_DELAY_CAP": "weapon_index.bonus_two_handed_delay_cap",
     }
     for name, dotted in exported.items():
         assert decode(path_get(constants, dotted)) == exact(getattr(weapons, name)), name
+    # the dual-wield factor is the trio's own (profile.dw_factor); no stale default of the module (0.8) is exported
+    assert sorted(constants["weapon_index"]) == ["bonus_one_handed", "bonus_two_handed", "bonus_two_handed_delay_cap"]
 
 
 def test_the_rule_driven_constants_come_from_the_rules_for_the_level(pmb):
@@ -548,6 +552,8 @@ def test_the_rule_driven_constants_come_from_the_rules_for_the_level(pmb):
     assert decode(constants["iksar_ac_bonus"]) == RULES.get("race.iksar_ac_bonus")
     steps = RULES.get("ac.softcap.combat_stability_pct")
     assert decode(constants["aa"]["combat_stability_pct"]) == {rank: Fraction(pct) for rank, pct in steps.items()}
+    durability = RULES.get("hp.natural_durability_pct")
+    assert decode(constants["aa"]["natural_durability_pct"]) == {rank: Fraction(pct) for rank, pct in durability.items()}
     assert decode(constants["aa"]["physical_enhancement_pct"]) == RULES.get("ac.softcap.physical_enhancement_pct")
     assert constants["aa"]["pe_for_caster_only_trios"] is RULES.get("ac.softcap.pe_for_caster_only_trios")
     assert constants["mana_stat_by_class"] == RULES.get("mana.stat_by_class")
@@ -649,6 +655,7 @@ def test_the_tier_rules_are_what_at_tier_reads(pmb):
     assert tier["stat_rule"] == RULES.get("tier.stat_rule") == items_module.STAT_RULE_TEXT
     assert tier["negatives_scale"] is False
     assert tier["weight_floor10"] == 1 and tier["unknown_weight10"] == items_module.UNKNOWN_WEIGHT10
+    assert tier["weight_pct"] == RULES.get("tier.weight_pct") == 9 and tier["weight_rule"] == items_module.WEIGHT_RULE_TEXT
     assert tier["haste_per_tier"] == RULES.get("haste.worn_per_tier")
     assert tier["regen_per_tier"] == RULES.get("regen.per_tier")
     assert tier["accuracy_pct"] == fm.fr(RULES.get("tier.accuracy_pct")) == Fraction(5, 2)
@@ -679,18 +686,23 @@ def test_the_exported_tier_numbers_are_the_ones_at_tier_applies(pmb):
         assert got.stats["HPREG"] == 3 + n * int(tier["regen_per_tier"])
         assert got.stats["STR"] == -5  # a negative stat does not scale
     assert at_tier(probe({}, 0.3), top, RULES).weight10 == floor10
+    weight_pct = int(tier["weight_pct"])
+    for tenths in range(1, 200):
+        for n in range(top + 1):
+            got = at_tier(probe({}, tenths / 10), n, RULES).weight10
+            assert got == max(floor10, tenths - tenths * weight_pct * n // 100), (tenths, n)
     unknown = at_tier(probe({}, None), 0, RULES)
     assert (unknown.weight10, unknown.weight_known) == (int(tier["unknown_weight10"]), False)
 
 
 def test_the_weapon_rules_label_the_switch_and_name_both_rates(pmb):
     weapon = decode(pmb["weapon_rules"])
-    assert weapon["damage_pct"] == 5 and weapon["damage_pct_choices"] == [5, 10]
+    assert weapon["damage_pct"] == 10 and weapon["damage_pct_choices"] == [5, 10]
     assert weapon["test"] == RULES.settled_by("tier.weapon_damage_pct") == "B5"
     assert weapon["seal"] == RULES.seal("tier.weapon_damage_pct")
     assert weapon["delay_changes"] is False and "dmg" in weapon["damage_rule"]
     assert weapon["damage_weight"] == RULES.get("weapons.damage_weight") == 600
-    assert weapon["dual_wield_factor"] == fm.fr(RULES.get("weapons.dual_wield_factor"))
+    assert weapon["dual_wield_factor"] == {"with_monk": Fraction(83, 100), "without_monk": Fraction(69, 100)}
     assert weapon["bonus_one_handed"] == Fraction(1, 2) == fm.fr(weapons.BONUS_ONE_HANDED)
     assert weapon["bonus_two_handed"] == Fraction(67, 100) == fm.fr(weapons.BONUS_TWO_HANDED)
     assert weapon["label"] == "Weapon damage per tier"
@@ -698,7 +710,7 @@ def test_the_weapon_rules_label_the_switch_and_name_both_rates(pmb):
 
 
 def test_the_damage_rule_text_gives_the_damage_the_tiers_give(pmb):
-    # dmg + max(n, dmg * n * pct // 100) for both rates: the rule the export names is the one at_tier applies
+    # dmg + dmg * n * pct // 100 for both rates: the rule the export names is the one at_tier applies
     weapon = {"skill": "1H Slashing", "dmg": 100, "delay": 40, "bonus": None}
     item = {
         "key": "w1", "name": "Probe", "slots": ["PRIMARY"], "classes": ["ALL"], "deity": None, "flags": [], "stats": {},
@@ -706,7 +718,7 @@ def test_the_damage_rule_text_gives_the_damage_the_tiers_give(pmb):
     }  # fmt: skip
     for pct in decode(pmb["weapon_rules"])["damage_pct_choices"]:
         for n in range(11):
-            assert at_tier(item, n, RULES, weapon_pct=int(pct)).weapon.dmg == 100 + max(n, 100 * n * int(pct) // 100)
+            assert at_tier(item, n, RULES, weapon_pct=int(pct)).weapon.dmg == 100 + 100 * n * int(pct) // 100
             assert at_tier(item, n, RULES, weapon_pct=int(pct)).weapon.delay == 40
 
 
@@ -769,8 +781,11 @@ def test_the_table_has_a_header_and_one_record_for_every_wearable_of_the_catalog
     assert table["data_release"] == f"data-{catalog_doc['version']}"
     wearables = [item for item in catalog_doc["items"] if wearable(item)]
     assert table["count"] == len(table["items"]) == len(wearables) > 6000
-    by_page = sorted(wearables, key=lambda item: item["wiki"]["pageid"])
-    assert [key_of(r) for r in table["items"]] == [item["key"] for item in by_page]
+    by_page = sorted((item for item in wearables if item["wiki"] is not None), key=lambda item: item["wiki"]["pageid"])
+    unpaged = sorted(item["key"] for item in wearables if item["wiki"] is None)  # no wiki page: no page id, a key of its own, after every page
+    assert unpaged  # the case stays covered: a wearable with no wiki page is in the catalog
+    assert [key_of(r) for r in table["items"]] == [item["key"] for item in by_page] + unpaged
+    assert [r["id"] for r in table["items"] if key_of(r) in unpaged] == [None] * len(unpaged)
     listed = {key_of(r) for r in table["items"]}
     assert not any(i["key"] in listed for i in catalog_doc["items"] if not wearable(i))
 
@@ -799,9 +814,13 @@ def test_hidden_wearables_are_in_the_table_flagged_owned_only_and_nothing_else_i
 
 
 def test_the_records_are_sorted_by_the_numeric_page_id(table):
-    ids = [r["id"] for r in table["items"]]
+    ids = [r["id"] for r in table["items"] if r["id"] is not None]
+    unpaged = [r for r in table["items"] if r["id"] is None]  # a record with no wiki page has no page id, and comes after every page
+    assert unpaged  # the case stays covered: the table holds records with no wiki page
+    assert [r["id"] for r in table["items"]] == ids + [None] * len(unpaged)
     assert ids == sorted(ids) and len(set(ids)) == len(ids)
     assert ids != sorted(ids, key=str)  # not the order of the text
+    assert [browser.record_key(r) for r in unpaged] == sorted(browser.record_key(r) for r in unpaged)  # and these in the order of their keys
 
 
 def test_every_record_carries_what_at_tier_reads_so_the_item_comes_back_exactly(table, catalog_doc):
@@ -983,8 +1002,12 @@ def test_in_the_real_export_every_title_and_its_parenthetical_forms_share_one_ma
     # the real titles hold at most one flat group, so a plain pattern does the job without sharing code with match_name
     trailing = re.compile(r"\s*\([^()]*\)\s*$")
     by_title = {}
+    unpaged = []
     for item in catalog_doc["items"]:
         if wearable(item):
+            if item["wiki"] is None:  # no wiki page, no title: the record's match name is its name's
+                unpaged.append(item)
+                continue
             by_title.setdefault(item["wiki"]["title"], []).append(item["key"])
     records = {key_of(r): r for r in table["items"]}
     shared = browser.shared_match_names(table)
@@ -1000,6 +1023,8 @@ def test_in_the_real_export_every_title_and_its_parenthetical_forms_share_one_ma
                 pairs += 1
     assert pairs >= 30  # "Gold Ring (Ring of Opolla)" and "Gold Ring", an "(Imbued)" piece and its plain base, ...
     assert "Gold Ring" in shared and "Silver Ring" in shared
+    assert unpaged  # the case stays covered: an item with no wiki page has no title, so its name is what the match name is made of
+    assert all(effective(records[item["key"]]) == trailing.sub("", item["name"]) for item in unpaged)
 
 
 def test_the_shared_match_names_of_the_real_export_are_consistent_and_counted(table):

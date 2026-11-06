@@ -30,7 +30,7 @@ const SOURCE = (name) => readFileSync(resolve(ROOT, "pipeline/trioforge/site/sta
 const pick = (object, keys) => Object.fromEntries(keys.map((key) => [key, object[key]]));
 const ANSWER = ["F", "value", "kit", "buffs", "hasteAssumed"];
 const START = ["F", "value", "kit", "buffs"];
-const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs"];
+const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs", "hasteAssumed"];
 const stepsOf = (messages) => messages.filter((message) => message.type === "step");
 const strip = ({ id, elapsedMs, ...rest }) => rest;
 
@@ -105,11 +105,11 @@ describe("the worker's farm path with the weights of a request", () => {
       expect(steps.map((step) => step.index)).toEqual(Array.from({ length: c.farmPath.path.length + 1 }, (_, at) => at));
       // Equip now is the start of the path, at the haste of the session
       expect(pick(steps[0], START)).toEqual(c.farmPath.start);
-      expect(steps[0]).toMatchObject({ status: "optimal", proven: true, label: null, hasteAssumed: c.farmPath.hasteAssumed });
+      expect(steps[0]).toMatchObject({ status: "optimal", proven: true, label: null, hasteAssumed: c.equipNow.hasteAssumed });
       // and each step is the best single addition after the steps before it: the item, how it is got, the value, the gain, the kit, the buffs
       expect(steps.slice(1).map((step) => pick(step, STEP))).toEqual(c.farmPath.path);
-      for (const step of steps.slice(1)) expect(step).toMatchObject({ found: true, status: "optimal", proven: true, label: null, hasteAssumed: c.farmPath.hasteAssumed });
-      expect(last).toMatchObject({ type: "result", mode: "farm-path", stopped: c.farmPath.stopped, steps: c.farmPath.path.length, hasteAssumed: c.farmPath.hasteAssumed });
+      for (const step of steps.slice(1)) expect(step).toMatchObject({ found: true, status: "optimal", proven: true, label: null });
+      expect(last).toMatchObject({ type: "result", mode: "farm-path", stopped: c.farmPath.stopped, steps: c.farmPath.path.length, hasteAssumed: c.equipNow.hasteAssumed });
     });
   }
 
@@ -265,20 +265,19 @@ describe("the session of a request with weights", () => {
   });
 });
 
-describe("the haste assumed stays the model's rule", () => {
-  it("is the haste of the owned items for Equip now and of the session for the rest, whatever the weights ask for", async () => {
+describe("the haste assumed is the haste the kit counts", () => {
+  it("is a whole percent that each answer says for its own kit, whatever the weights ask for, and the path says Equip now's", async () => {
     const h = harness({ solver: highs });
     await h.start();
     const c = WEIGHTED.cases[0];
     const heavy = [{ custom: { HASTE: 0, ATK: 0 } }, { multipliers: { "ATK+HASTE": 0.5 } }, { multipliers: { "ATK+HASTE": 2 }, custom: { HASTE: 40 } }, c.weights];
     for (const weights of heavy) {
       const got = (await h.ask(equip(c, { weights }))).last;
-      const own = (await h.ask(plain(equip(c)))).last;
-      expect(got.hasteAssumed, JSON.stringify(weights)).toBe(own.hasteAssumed);
+      expect(Number.isInteger(got.hasteAssumed) && got.hasteAssumed >= 0 && got.hasteAssumed <= 85, JSON.stringify(weights)).toBe(true);
       const path = await h.ask(farm(c, { weights, steps: 1 }));
-      const ownPath = await h.ask(plain(farm(c, { steps: 1 })));
-      expect(path.last.hasteAssumed, JSON.stringify(weights)).toBe(ownPath.last.hasteAssumed);
-      expect(stepsOf(path.messages)[0].hasteAssumed).toBe(stepsOf(ownPath.messages)[0].hasteAssumed);
+      const [start] = stepsOf(path.messages);
+      expect(start.hasteAssumed, "Equip now of the path is Equip now").toBe(got.hasteAssumed);
+      expect(path.last.hasteAssumed, JSON.stringify(weights)).toBe(start.hasteAssumed);
     }
   });
 });

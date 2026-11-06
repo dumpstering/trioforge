@@ -65,8 +65,9 @@ The order of the checks:
    ``Race: NONE``: nobody may use or wear it, or a hand weapon that names a skill but has no damage or no delay,
    see :func:`trioforge.data.normalize.weapon_incomplete`: the model could not score it and would read it as a
    non-weapon; the text of the reason names the causes that apply, such as ``race NONE``), ``not-for-default-kits``
-   (a deity-locked item) and ``wiki-marked-revamped`` (the page carries ``{{revamped}}``: its stats or
-   sources may have changed since it was written; it changes nothing else).
+   (a deity-locked item), ``wiki-marked-revamped`` (the page carries ``{{revamped}}``: its stats or
+   sources may have changed since it was written; it changes nothing else) and ``source-eql-tools`` (the item has an ``origin`` from EQ Legends Tools: its stats and drops
+   are read from that site's page, see :mod:`trioforge.data.eqlt_merge`; it changes nothing else).
 
 **Zones.** Wiki zone names reach client ids only through the hand-kept alias table
 (``rules/zone-aliases.json``), keyed by :func:`zkey`; a name with no entry is *unmapped*, is reported
@@ -175,7 +176,7 @@ CONFLICT_CODES = frozenset(
 )
 
 # Reasons that are notes on an item, not the reason for its level: they are left out of the counts of hidden items.
-NOTE_CODES = frozenset({"not-for-bis", "not-for-default-kits", "wiki-marked-revamped"})
+NOTE_CODES = frozenset({"not-for-bis", "not-for-default-kits", "source-eql-tools", "wiki-marked-revamped"})
 
 # The reasons that are no reason to hide an item: the notes, and the record that a report from players was received and outweighed (the mark or the closed zone beside it is the
 # reason). The summary of the catalog counts the items hidden for each reason that is not one of these; ``NOTE_CODES`` stays the notes the pages word.
@@ -419,6 +420,8 @@ class HandLists:
     unreleased_ids: frozenset[int] = frozenset()
     exists_unflagged_names: frozenset[str] = frozenset()
     exists_unflagged_ids: frozenset[int] = frozenset()
+    exists_unflagged_by_name: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)  # zkey -> the entry (its seal and source)
+    exists_unflagged_by_id: Mapping[int, Mapping[str, Any]] = field(default_factory=dict)
     eql_only_ids: frozenset[int] = frozenset()
     cultural_containers: frozenset[str] = frozenset()
     in_era: frozenset[str] = frozenset()
@@ -451,6 +454,14 @@ class HandLists:
             if "exists_unflagged_zones" in data
             else (frozenset(), frozenset())
         )
+        by_name: dict[str, Mapping[str, Any]] = {}
+        by_id: dict[int, Mapping[str, Any]] = {}
+        for entry in data.get("exists_unflagged_zones") or ():
+            if isinstance(entry, dict) and not problems:
+                for name in entry.get("names") or ():
+                    by_name.setdefault(zkey(name), entry)
+                for zone_id in entry.get("ids") or ():
+                    by_id.setdefault(zone_id, entry)
         eql_only = data.get("eql_only_zones")
         if "eql_only_zones" in data and (
             not isinstance(eql_only, list) or not all(_whole(i) for i in eql_only) or len(set(eql_only)) != len(eql_only)
@@ -494,6 +505,8 @@ class HandLists:
             unreleased_ids=unreleased_ids,
             exists_unflagged_names=exists_names,
             exists_unflagged_ids=exists_ids,
+            exists_unflagged_by_name=by_name,
+            exists_unflagged_by_id=by_id,
             eql_only_ids=frozenset(eql_only or ()),
             cultural_containers=frozenset(containers),
             in_era=frozenset(eras["in_era_tags"]),
@@ -772,8 +785,47 @@ def is_known_zone(name: str, ctx: Context) -> bool:
     return _zone_status(name, ctx)[0] != "unmapped"
 
 
-def _zone_seal(statuses: Iterable[str]) -> str:
-    return "client" if "live" in set(statuses) else "developer"
+def _exists_entry(name: str, ctx: Context) -> Mapping[str, Any] | None:
+    """The hand-list entry (``exists_unflagged_zones``) that makes ``name`` a zone that exists although the client does not flag it: by name first, else by client id."""
+    hand = ctx.hand
+    key = zkey(name)
+    if key in hand.exists_unflagged_by_name:
+        return hand.exists_unflagged_by_name[key]
+    for zone_id in ctx.aliases.get(key) or ():
+        if zone_id in hand.exists_unflagged_by_id:
+            return hand.exists_unflagged_by_id[zone_id]
+    return None
+
+
+def _zone_entries(zones: Iterable[tuple[str, str]], ctx: Context) -> list[Mapping[str, Any]]:
+    return [entry for zone, status in zones if status == "exists" and (entry := _exists_entry(zone, ctx)) is not None]
+
+
+def _zone_seal(zones: Iterable[tuple[str, str]], ctx: Context) -> str:
+    """The seal of a live source in the zones ``(name, status)``: ``client`` if the client flags one of them; else the strongest seal of the hand-list entries
+    that make them exist (an entry sealed ``player`` is the players' word, not the developers')."""
+    zones = list(zones)
+    if any(status == "live" for _, status in zones):
+        return "client"
+    entries = _zone_entries(zones, ctx)
+    return min((entry["seal"] for entry in entries), key=SEALS.index, default="developer")
+
+
+def _zone_source_note(zones: Iterable[tuple[str, str]], ctx: Context) -> str:
+    """`` Source: <address>.`` for a live source that rests on an exists-unflagged entry that is not the developers' (the developers' entries read as they always did)."""
+    zones = list(zones)
+    if _zone_seal(zones, ctx) in ("client", "developer"):
+        return ""
+    refs = sorted(
+        {
+            source["ref"]
+            for entry in _zone_entries(zones, ctx)
+            if entry["seal"] != "developer"
+            for source in entry.get("source") or ()
+            if isinstance(source, Mapping) and source.get("kind") == "url" and isinstance(source.get("ref"), str)
+        }
+    )
+    return f" Source: {', '.join(refs)}." if refs else ""
 
 
 def _found_quests(item: Mapping[str, Any], ctx: Context) -> list[Quest]:
@@ -857,9 +909,10 @@ def _signals(item: Mapping[str, Any], ctx: Context, report: Report | None) -> tu
                 unmapped.add(zone)
     live_zones = sorted(zone for zone, status in drop_status.items() if status in ("live", "exists"))
     for zone in live_zones[:MAX_LIVE_ZONE_REASONS]:
-        seal = _zone_seal([drop_status[zone]])
-        how = "a zone the client marks as part of EQL" if seal == "client" else "a zone that exists in EQL although the client does not flag it"
-        reasons[f"live-source:{zone}"] = _reason(f"live-source:{zone}", seal, f"Drops in {zone}, {how}.")
+        pair = [(zone, drop_status[zone])]
+        seal = _zone_seal(pair, ctx)
+        how = "a zone the client marks as part of EQL" if drop_status[zone] == "live" else "a zone that exists in EQL although the client does not flag it"
+        reasons[f"live-source:{zone}"] = _reason(f"live-source:{zone}", seal, f"Drops in {zone}, {how}." + _zone_source_note(pair, ctx))
 
     # foraged zones go through the same gate as the drop zones (a live one is a source; the EQL-only exemption applies)
     foraged_status: dict[str, str] = {}
@@ -873,7 +926,9 @@ def _signals(item: Mapping[str, Any], ctx: Context, report: Report | None) -> tu
                 unmapped.add(zone)
     if {"live", "exists"} & set(foraged_status.values()):
         reasons["live-source:foraged"] = _reason(
-            "live-source:foraged", _zone_seal(foraged_status.values()), "Foraged in a zone that is part of EQL."
+            "live-source:foraged",
+            _zone_seal(foraged_status.items(), ctx),
+            "Foraged in a zone that is part of EQL." + _zone_source_note(foraged_status.items(), ctx),
         )
 
     vendor_status = []
@@ -881,12 +936,14 @@ def _signals(item: Mapping[str, Any], ctx: Context, report: Report | None) -> tu
         zone = sold.get("zone")
         if zone:
             status, _ = _zone_status(zone, ctx)
-            vendor_status.append(status)
+            vendor_status.append((zone, status))
             if status == "unmapped":
                 unmapped.add(zone)
-    if {"live", "exists"} & set(vendor_status):
+    if {"live", "exists"} & {status for _, status in vendor_status}:
         reasons["live-source:vendor"] = _reason(
-            "live-source:vendor", _zone_seal(vendor_status), "Sold by a vendor in a zone that is part of EQL."
+            "live-source:vendor",
+            _zone_seal(vendor_status, ctx),
+            "Sold by a vendor in a zone that is part of EQL." + _zone_source_note(vendor_status, ctx),
         )
 
     quest_status = []
@@ -896,10 +953,12 @@ def _signals(item: Mapping[str, Any], ctx: Context, report: Report | None) -> tu
             if status == "unmapped":
                 unmapped.add(quest.zone)
             if status in ("live", "exists") and era_key(quest.era or "") not in hand.out_of_era:
-                quest_status.append(status)
+                quest_status.append((quest.zone, status))
     if quest_status:
         reasons["live-source:quest"] = _reason(
-            "live-source:quest", _zone_seal(quest_status), "A quest gives it, and the quest giver stands in a zone that is part of EQL."
+            "live-source:quest",
+            _zone_seal(quest_status, ctx),
+            "A quest gives it, and the quest giver stands in a zone that is part of EQL." + _zone_source_note(quest_status, ctx),
         )
 
     # -- recipes
@@ -934,10 +993,11 @@ def _signals(item: Mapping[str, Any], ctx: Context, report: Report | None) -> tu
                 live_links.append((status != "live", zone, label, status))  # a live zone is named before one that only exists
         if live_links:
             _, zone, label, _ = min(live_links)
+            linked = [(name, status) for _, name, _, status in live_links]
             reasons["live-source:quest"] = _reason(
                 "live-source:quest",
-                _zone_seal(status for _, _, _, status in live_links),
-                f"The item page links it to a quest in {zone} ({label}), a zone that is part of EQL.",
+                _zone_seal(linked, ctx),
+                f"The item page links it to a quest in {zone} ({label}), a zone that is part of EQL." + _zone_source_note(linked, ctx),
             )
 
     # -- era tags
@@ -1087,6 +1147,12 @@ def classify(item: Mapping[str, Any], ctx: Context, report: Report | None = None
     if item.get("deity"):
         reasons["not-for-default-kits"] = _reason(
             "not-for-default-kits", "model", "Deity-locked: left out of default kits, offered as a runner-up."
+        )
+    if (item.get("origin") or {}).get("source") == "eqlegendstools":
+        reasons["source-eql-tools"] = _reason(
+            "source-eql-tools",
+            "player",
+            "Stats and drop sources are read from the EQ Legends Tools page of the item, the source of truth for it.",
         )
     if "wiki_banner_revamped" in flags:
         reasons["wiki-marked-revamped"] = _reason(

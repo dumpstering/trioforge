@@ -69,10 +69,11 @@ Text (an item's name, a source, a label) is passed through untouched: escaping i
 from __future__ import annotations
 
 import datetime
+import gzip
 import hashlib
 import math
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NoReturn
@@ -85,6 +86,10 @@ __all__ = [
     "BUNDLE_LIMITS",
     "BrowserFile",
     "Credit",
+    "EFFECTS_NAME",
+    "EXALT_NAME",
+    "Exalt",
+    "exalt_slugs",
     "Defaults",
     "ENGINE_VERSION",
     "EVIDENCE",
@@ -116,10 +121,18 @@ __all__ = [
     "TOTALS_KEYS",
     "Totals",
     "TrioResults",
+    "WHY_REASONS",
+    "WHY_TERMS",
+    "Why",
+    "WhyPlace",
+    "WhyTerm",
     "engine_name",
     "list_trios",
+    "load_exalt",
     "load_items",
     "load_trio",
+    "site_effects_json",
+    "site_exalt_json",
     "site_robust_json",
     "site_runnerups_json",
     "site_shard_json",
@@ -176,6 +189,12 @@ ITEMS_NAME = "items.json"  # the item table, in the folder of results
 BROWSER_VERSION = 1  # the browser's shard files
 RUNNERUPS_VERSION = 2  # the browser's runner-up file: version 2 is the file of a role with every tier of the run in it (version 1 was one for a role and a tier)
 ROBUST_VERSION = 2  # the browser's robust file: version 2 says, for each view, what it was sealed for
+#: the terms of the why of a kit row (precompute/kitwhy.py: TERMS, REASONS; a test holds them equal)
+WHY_TERMS = (
+    "AC", "STR", "STA", "AGI", "DEX", "WIS", "INT", "CHA", "HP", "MANA", "END", "ATK", "HPREG", "MANAREG", "ENDREG", "HASTE",
+    "FIRE", "COLD", "MAGIC", "POISON", "DISEASE", "DAMAGE",
+)  # fmt: skip
+WHY_REASONS = ("resist-cap", "regen-cap", "haste-cap", "haste-covered", "ac-softcap")
 
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\s\S])")
 _RELEASE = re.compile(r"data-([0-9]{4}-[0-9]{2}-[0-9]{2})(?![\s\S])")
@@ -410,6 +429,29 @@ class Robust:
 
 
 @dataclass(frozen=True)
+class WhyTerm:
+    """What one stat of an item is worth in the default kit: ``loss``, the value the kit loses when that stat alone is taken from the item (0 past a cap, below 0 for a
+    negative stat), and ``reason``, why a loss of 0 is 0 (one of :data:`WHY_REASONS`) or None."""
+
+    stat: str
+    loss: float
+    reason: str | None
+
+
+@dataclass(frozen=True)
+class WhyPlace:
+    key: str  # the item the default kit wears in this place
+    terms: tuple[WhyTerm, ...]  # largest loss first
+
+
+@dataclass(frozen=True)
+class Why:
+    """The why of the default kit, ``places`` the 22 places of the kit (None for an empty place)."""
+
+    places: tuple[WhyPlace | None, ...]
+
+
+@dataclass(frozen=True)
 class Defaults:
     """The default answer: the best race the trio can start as in the default view, the next one and the gap between them.
 
@@ -429,6 +471,7 @@ class Defaults:
     value: float
     strict_empty: bool
     robustness: str
+    why: Why | None = None  # what each stat of the default kit is worth (precompute/kitwhy.py); None for results made before it, whose rows then say no why
 
 
 @dataclass(frozen=True)
@@ -1027,7 +1070,44 @@ def _defaults(directory: Path, slug: str, shards: Mapping[tuple[str, str], Shard
     flips_raw = file.sequence(file.field(doc, "flip_notes", ""), "flip_notes")
     flips = tuple(file.text(note, f"flip_notes[{n}]") for n, note in enumerate(flips_raw))
     robustness = file.text(file.field(doc, "robustness", ""), "robustness")
-    return Defaults(race, runner_up, margin, flips, role, tier, evidence, buffs, setup, value, strict_empty, robustness)
+    why = _why(file, doc["why"]) if "why" in doc else None
+    return Defaults(race, runner_up, margin, flips, role, tier, evidence, buffs, setup, value, strict_empty, robustness, why)
+
+
+def _why(file: _File, raw: Any) -> Why:
+    """``why`` of ``defaults.json``: 22 places, each null or ``{"key", "loss": [[term, loss, reason]...]}`` (the loss of a stat is a finite number, the largest first)."""
+    body = file.mapping(raw, "why")
+    places = file.sequence(file.field(body, "places", "why"), "why.places")
+    if len(places) != KIT_SIZE:
+        file.fail("why.places", f"must have {KIT_SIZE} places, not {len(places)}")
+    out: list[WhyPlace | None] = []
+    for n, entry in enumerate(places):
+        where = f"why.places[{n}]"
+        if entry is None:
+            out.append(None)
+            continue
+        place = file.mapping(entry, where)
+        key = file.text(file.field(place, "key", where), f"{where}.key", limit=MAX_TEXT)
+        if _KEY.fullmatch(key) is None:
+            file.fail(f"{where}.key", "must be an item key")
+        terms: list[WhyTerm] = []
+        for m, raw_term in enumerate(file.sequence(file.field(place, "loss", where), f"{where}.loss")):
+            at = f"{where}.loss[{m}]"
+            row = file.sequence(raw_term, at)
+            if len(row) != 3:
+                file.fail(at, "must be [term, loss, reason]")
+            stat = file.choice(row[0], f"{at}[0]", WHY_TERMS)
+            loss = file.number(row[1], f"{at}[1]")
+            reason = None if row[2] is None else file.choice(row[2], f"{at}[2]", WHY_REASONS)
+            if reason is not None and loss != 0:
+                file.fail(at, "gives a reason for a loss that is not 0")
+            if terms and loss > terms[-1].loss:
+                file.fail(at, "is out of order: the largest loss comes first")
+            if any(term.stat == stat for term in terms):
+                file.fail(at, f"lists {stat} twice")
+            terms.append(WhyTerm(stat, loss, reason))
+        out.append(WhyPlace(key, tuple(terms)))
+    return Why(tuple(out))
 
 
 # ---- the engine's files: the bundle of a trio and the item table of the folder of results ----------------------------------------
@@ -1492,12 +1572,280 @@ def load_trio(directory: str | Path) -> TrioResults:
     )
 
 
+# ---- the effects to exalt (the two files of the effects layer, when the results have them) -----------------------------------------------------------
+
+
+#: the shared file of the effects layer (in the folder of results, beside ``items.json``) and the file of each trio (in its folder); a release made before the layer has neither
+EFFECTS_NAME = "effects.json"
+EXALT_NAME = "exalt.json"
+EXALT_VERSION = 1
+EFFECT_KINDS = ("focus", "click", "carry", "worn", "proc")
+PLAN_KINDS = ("focus", "click", "worn", "proc")
+#: why a row is marked unverified, and why an effect has no host in a plan (effects/files.py and effects/plan.py; a test holds them equal)
+EXALT_UNVERIFIED = ("ambiguous", "equip", "inferred", "description")
+EXALT_NO_ROOM = ("donor", "primary", "slot", "class", "tier", "taken")
+#: the budgets of the two files (effects/files.py: SHARED_RAW_LIMIT, SHARED_GZIP_LIMIT, TRIO_GZIP_LIMIT; a test holds them equal)
+EXALT_SHARED_RAW = 200 * 1024
+EXALT_SHARED_GZIP = 50 * 1024
+EXALT_TRIO_GZIP = 20 * 1024
+EXALT_MAX_EFFECTS = 2000
+EXALT_NAME_LIMIT = 160
+_EFFECT_ID = re.compile(r"e[0-9]{3,5}(?![\s\S])")
+
+
+@dataclass(frozen=True)
+class Exalt:
+    """The effects layer of a folder of results, read and checked: the shared document and the document of each trio that has one (``trios``: slug to document)."""
+
+    effects: dict[str, Any] = field(repr=False)
+    trios: dict[str, dict[str, Any]] = field(repr=False)
+
+    def has(self, slug: str) -> bool:
+        return slug in self.trios
+
+
+def _gzip_len(raw: bytes) -> int:
+    return len(gzip.compress(raw, 9, mtime=0))
+
+
+def _record_key_of(record: Mapping[str, Any]) -> str:
+    return record.get("key") or f"w{record['id']}"
+
+
+def _effect_rows(file: _File, doc: Mapping[str, Any], records: Mapping[str, Any]) -> None:
+    """Check the effect rows of the shared file."""
+    rows = file.sequence(file.field(doc, "effects", ""), "effects")
+    if len(rows) > EXALT_MAX_EFFECTS:
+        file.fail("effects", f"has more than {EXALT_MAX_EFFECTS} effects")
+    found: set[str] = set()
+    for n, raw in enumerate(rows):
+        where = f"effects[{n}]"
+        row = file.mapping(raw, where)
+        effect = file.text(file.field(row, "id", where), f"{where}.id", limit=8)
+        if not _EFFECT_ID.match(effect) or effect in found:
+            file.fail(f"{where}.id", "must be a new id like e012")
+        found.add(effect)
+        where = f"effects {effect}"
+        file.text(file.field(row, "n", where), f"{where}.n", limit=EXALT_NAME_LIMIT)
+        kind = file.choice(file.field(row, "k", where), f"{where}.k", EFFECT_KINDS)
+        file.text(file.field(row, "c", where), f"{where}.c", limit=40)
+        for name in ("m", "q", "r"):
+            if row.get(name) is not None:
+                file.number(row[name], f"{where}.{name}")
+        if row.get("u") is not None:
+            file.text(row["u"], f"{where}.u", limit=20)
+        for reason in file.sequence(file.field(row, "x", where), f"{where}.x"):
+            file.choice(reason, f"{where}.x", EXALT_UNVERIFIED)
+        for pair in file.sequence(file.field(row, "d", where), f"{where}.d"):
+            donor = file.sequence(pair, f"{where}.d")
+            if len(donor) != 2 or not isinstance(donor[0], str) or donor[0] not in records:
+                file.fail(f"{where}.d", "must list [item key, access cost] of items that the item table has")
+            file.whole(donor[1], f"{where}.d cost", 0, 99)
+        if kind == "focus":
+            focus = file.mapping(file.field(row, "f", where), f"{where}.f")
+            for name in ("fam", "kind", "type", "lim"):
+                file.text(file.field(focus, name, f"{where}.f"), f"{where}.f.{name}", limit=400)
+            for name in ("lo", "hi", "pen"):
+                file.number(file.field(focus, name, f"{where}.f"), f"{where}.f.{name}")
+            for name in ("tier", "max"):
+                if focus.get(name) is not None:
+                    file.whole(focus[name], f"{where}.f.{name}", 0, 999)
+            for cls, share in file.mapping(file.field(focus, "cov", f"{where}.f"), f"{where}.f.cov").items():
+                if cls not in CLASS_CODES:
+                    file.fail(f"{where}.f.cov", f"names {cls!r}, which is not a class")
+                file.whole(share, f"{where}.f.cov.{cls}", 0, 100)
+        elif "f" in row:
+            file.fail(f"{where}.f", "is there for a focus only")
+
+
+def _shared_exalt(results: Path, items_doc: Mapping[str, Any], records: Mapping[str, Any]) -> dict[str, Any] | None:
+    if not (results / EFFECTS_NAME).is_file():
+        return None
+    file = _read(results, EFFECTS_NAME.removesuffix(".json"), folder=False)
+    if len(file.raw) > EXALT_SHARED_RAW or _gzip_len(file.raw) > EXALT_SHARED_GZIP:
+        file.fail("", f"is over its budget of {EXALT_SHARED_RAW // 1024} KB raw and {EXALT_SHARED_GZIP // 1024} KB gzipped")
+    doc = file.mapping(file.document, "")
+    if file.field(doc, "version", "") != EXALT_VERSION or isinstance(doc["version"], bool):
+        file.fail("version", f"must be {EXALT_VERSION}")
+    if file.field(doc, "data_release", "") != items_doc["data_release"]:
+        file.fail("data_release", f"is {doc['data_release']!r}, but items.json says {items_doc['data_release']!r}: the files are not from one run")
+    file.date(file.field(doc, "rules_version", ""), "rules_version")
+    file.text(file.field(doc, "license", ""), "license", limit=40)
+    file.text(file.field(doc, "attribution", ""), "attribution", limit=1000)
+    if doc.get("spells_us") is not None and not _SHA256.match(str(doc["spells_us"])):
+        file.fail("spells_us", "must be the SHA-256 of the client's spell text")
+    file.whole(file.field(doc, "cap", ""), "cap", 1, 100)
+    for cls, mass in file.mapping(file.field(doc, "mass", ""), "mass").items():
+        if cls not in CLASS_CODES or isinstance(mass, bool) or not isinstance(mass, (int, float)) or not 0 <= mass <= 1:
+            file.fail("mass", "must give each class a number from 0 to 1")
+    _effect_rows(file, doc, records)
+    return doc
+
+
+def _trio_exalt(
+    results: Path, trio: TrioResults, shared: Mapping[str, Any], records: Mapping[str, Any], rows: Mapping[str, Mapping[str, Any]]
+) -> dict[str, Any] | None:
+    # (the donors an effect has in the shipped effects.json: the names, slots and classes the page shows and matches with are those of that file's items, and no other item is one)
+    donors = {effect: {key for key, _ in row["d"]} for effect, row in rows.items()}
+    slug = trio.meta.slug
+    folder = results / slug
+    if not (folder / EXALT_NAME).is_file():
+        return None
+    file = _read(folder, EXALT_NAME.removesuffix(".json"))
+    if _gzip_len(file.raw) > EXALT_TRIO_GZIP:
+        file.fail("", f"is over its budget of {EXALT_TRIO_GZIP // 1024} KB gzipped")
+    doc = file.mapping(file.document, "")
+    if file.field(doc, "version", "") != EXALT_VERSION or isinstance(doc["version"], bool):
+        file.fail("version", f"must be {EXALT_VERSION}")
+    if file.field(doc, "trio", "") != slug:
+        file.fail("trio", f"must be {slug!r}, the name of the folder")
+    if file.field(doc, "data_release", "") != shared["data_release"] or doc["data_release"] != trio.meta.data_tag:
+        file.fail("data_release", f"is {doc['data_release']!r}, but the shards say {trio.meta.data_tag!r}: the files are not from one run")
+    if list(file.sequence(file.field(doc, "classes", ""), "classes")) != list(trio.meta.trio):
+        file.fail("classes", f"must be {list(trio.meta.trio)}")
+    if file.field(doc, "race", "") != trio.defaults.race or file.field(doc, "tier", "") != trio.defaults.tier:
+        file.fail("race", "and tier must be the race and the tier of the default answer (the plan is made for that kit)")
+    offered = set(next(iter(trio.shards.values())).roles)
+    for role, entry in file.mapping(file.field(doc, "roles", ""), "roles").items():
+        where = f"roles.{role}"
+        if role not in offered:
+            file.fail(where, "is a role the page does not offer")
+        body = file.mapping(entry, where)
+        for kind in EFFECT_KINDS:
+            for n, row in enumerate(file.sequence(file.field(body, kind, where), f"{where}.{kind}")):
+                at = f"{where}.{kind}[{n}]"
+                row = file.mapping(row, at)
+                if file.field(row, "e", at) not in rows or rows[row["e"]]["k"] != kind:
+                    file.fail(f"{at}.e", f"must be an effect of the shared file that is listed as {kind}")
+                for key in [file.field(row, "d", at), *file.sequence(file.field(row, "o", at), f"{at}.o")]:
+                    if key not in records:
+                        file.fail(f"{at}.d", "names an item the item table does not have")
+                    if key not in donors[row["e"]]:
+                        file.fail(f"{at}.d", f"names {key}, which is no donor of that effect in {EFFECTS_NAME}")
+                file.number(file.field(row, "s", at), f"{at}.s")
+                if file.field(row, "m", at) not in CLASS_CODES:
+                    file.fail(f"{at}.m", "must be a class")
+                if kind == "focus":
+                    file.text(file.field(row, "t", at), f"{at}.t", limit=20)
+                    for family in file.sequence(file.field(row, "l", at), f"{at}.l"):
+                        file.text(family, f"{at}.l", limit=EXALT_NAME_LIMIT)
+                    for cls, gain in file.mapping(file.field(row, "g", at), f"{at}.g").items():
+                        if cls not in CLASS_CODES:
+                            file.fail(f"{at}.g", "must name classes")
+                        file.number(gain, f"{at}.g.{cls}")
+        for n, row in enumerate(file.sequence(file.field(body, "plan", where), f"{where}.plan")):
+            at = f"{where}.plan[{n}]"
+            row = file.mapping(row, at)
+            kind = file.choice(file.field(row, "k", at), f"{at}.k", PLAN_KINDS)
+            if file.field(row, "e", at) not in rows or rows[row["e"]]["k"] != kind:
+                file.fail(f"{at}.e", "must be an effect of the shared file, of the kind the row says")
+            if file.field(row, "d", at) not in records or file.field(row, "h", at) not in records:
+                file.fail(f"{at}.h", "names an item the item table does not have")
+            if row["d"] not in donors[row["e"]]:
+                file.fail(f"{at}.d", f"names {row['d']}, which is no donor of that effect in {EFFECTS_NAME}")
+            file.choice(file.field(row, "p", at), f"{at}.p", PLACES)
+            for cls in file.sequence(file.field(row, "c", at), f"{at}.c"):
+                if cls not in CLASS_CODES:
+                    file.fail(f"{at}.c", "must name classes")
+            file.choice(file.field(row, "u", at), f"{at}.u", (0, 1))
+        for n, row in enumerate(file.sequence(file.field(body, "noroom", where), f"{where}.noroom")):
+            at = f"{where}.noroom[{n}]"
+            row = file.mapping(row, at)
+            if file.field(row, "e", at) not in rows:
+                file.fail(f"{at}.e", "must be an effect of the shared file")
+            if file.choice(file.field(row, "k", at), f"{at}.k", PLAN_KINDS) != rows[row["e"]]["k"]:
+                file.fail(f"{at}.k", "must be the kind of the effect in the shared file")
+            file.choice(file.field(row, "w", at), f"{at}.w", EXALT_NO_ROOM)
+    return doc
+
+
+def load_exalt(results_dir: str | Path, trios: Sequence[TrioResults], items_doc: Mapping[str, Any]) -> Exalt | None:
+    """Read and check the files of the effects layer in a folder of results (the format is in :mod:`trioforge.effects.files`), or ``None`` when it has none.
+
+    The shared file ``effects.json`` and the ``exalt.json`` of a trio are each optional, but a trio file without the shared one is refused, and a file must come from the
+    run of the item table, name only effects, items and classes that exist, and be within its budget. A trio without a file has no section on its page."""
+    results = Path(results_dir)
+    records = {_record_key_of(record): record for record in items_doc["items"]}
+    present = exalt_slugs(results, [trio.meta.slug for trio in trios])  # (raises for a trio file with no shared file)
+    shared = _shared_exalt(results, items_doc, records)
+    if shared is None:
+        return None
+    rows = {row["id"]: row for row in shared["effects"]}
+    found: dict[str, dict[str, Any]] = {}
+    for trio in trios:
+        if trio.meta.slug in present:
+            found[trio.meta.slug] = _trio_exalt(results, trio, shared, records, rows)
+    return Exalt(shared, found)
+
+
+def exalt_slugs(results_dir: str | Path, slugs: Sequence[str]) -> frozenset[str]:
+    """The trios of ``slugs`` that have the file of the effects layer in a folder of results, which is the one answer to "does this trio ship an ``exalt.json``" (the site build, the files it lists
+    and the release's count of them all use it): the trio's own file counts only with the shared ``effects.json`` beside the items, and a trio file with no shared file is refused."""
+    results = Path(results_dir)
+    present = [slug for slug in slugs if (results / slug / EXALT_NAME).is_file()]
+    if not (results / EFFECTS_NAME).is_file():
+        if present:
+            raise ResultsError(f"{present[0]}/{EXALT_NAME}: is there, but {EFFECTS_NAME} is not")
+        return frozenset()
+    return frozenset(present)
+
+
+def site_effects_json(exalt: Exalt, items_doc: Mapping[str, Any], credit: Credit, with_page: Collection[str] = (), late: int = 30) -> str:
+    """The shared file as the browser fetches it: the effects, and what the page needs to say and to match their donors (``items``: for every donor, ``[name, 1 if the item has a page
+    of its own else 0, its slots, its classes, 1 if it is a two-hand weapon, the tier it arrives at]``, the slots and classes as words in a text, ``ALL`` for every class), and ``late``, the
+    first spell level that counts as late (the coverage of a focus is the share of the spells of a class from this level up that it touches)."""
+    shared = exalt.effects
+    records = {_record_key_of(record): record for record in items_doc["items"]}
+    every = items_doc["defaults"]["classes"]
+    donors = sorted({key for row in shared["effects"] for key, _ in row["d"]})
+    items: dict[str, list[Any]] = {}
+    for key in donors:
+        record = records[key]
+        skill = (record.get("weapon") or {}).get("skill") or ""
+        rule = record["tier_rule"]
+        items[key] = [
+            record["name"], 1 if key in with_page else 0, " ".join(record["slots"]), " ".join(record.get("classes", every)),
+            1 if skill.startswith("2H") else 0, 4 if rule == "drop" else (0 if rule == "fixed0" else None),
+        ]  # fmt: skip
+    document = {
+        "v": BROWSER_VERSION,
+        **_credited(credit),
+        "spells_us": shared.get("spells_us"),
+        "cap": shared["cap"],
+        "late": late,
+        "mass": shared["mass"],
+        "items": items,
+        "effects": shared["effects"],
+    }
+    return render(document, per_line=("items", "effects"))
+
+
+def site_exalt_json(exalt: Exalt, slug: str, items_doc: Mapping[str, Any], credit: Credit) -> str:
+    """The file of a trio as the browser fetches it: the roles as the results have them, and ``names``, the name of each item the plans put an effect on (the kit of the default view, which
+    the page does not have the keys of until a switch is used)."""
+    doc = exalt.trios[slug]
+    names = {_record_key_of(record): record["name"] for record in items_doc["items"]}
+    hosts = sorted({row["h"] for entry in doc["roles"].values() for row in entry["plan"]})
+    document = {
+        "v": BROWSER_VERSION,
+        **_credited(credit),
+        "trio": slug,
+        "classes": doc["classes"],
+        "race": doc["race"],
+        "tier": doc["tier"],
+        "names": {key: names[key] for key in hosts},
+        "roles": doc["roles"],
+    }
+    return render(document, per_line=("names", "roles"))
+
+
 # ---- the browser format ----------------------------------------------------------------------------------------------------------
 #
 # Compact, positional and versioned ("v"), so the page code can index it without a schema. Every file starts with the same four
 # keys: "v", "release" (the data release it was made from: the page refuses a file of another release), "license" and "attribution".
-#   shard      {"v", ..., "ev", "buffs" (the set: own or group), "items": [[key, name, tier rule, arrival (a tier, or null for a
-#               summoned item), source, evidence, [deity names]]...], "kits": [[22 item indexes]...],
+#   shard      {"v", ..., "ev", "buffs" (the set: own or group), "stat_tiers" (the tiers of the shard; only with the stats),
+#               "items": [[key, name, tier rule, arrival (a tier, or null for a
+#               summoned item), source, evidence, [deity names], [stats at each of stat_tiers: the text of a row of Wear this]]...], "kits": [[22 item indexes]...],
 #               "totals": [[ac, hp, mana, end, haste, atk, 5 resists, 3 regen]...],
 #               "rows": [[race, role, tier, setup, kit, F, gain, totals, haste assumed]...]}
 #              (the optional buff ids and the solver's options are not sent: no page uses them)
@@ -1522,8 +1870,11 @@ def _credited(credit: Credit) -> dict[str, Any]:
     return {"release": credit.release, "license": credit.license, "attribution": credit.attribution}
 
 
-def site_shard_json(shard: Shard, credit: Credit) -> str:
-    """The shard as the browser fetches it. Kits and totals are deduplicated, items numbered by first use."""
+def site_shard_json(shard: Shard, credit: Credit, lines: Callable[[str, int], str] | None = None) -> str:
+    """The shard as the browser fetches it. Kits and totals are deduplicated, items numbered by first use.
+
+    ``lines`` (an item key and a tier to the stats of that item at that tier, as a row of Wear this says them) adds ``stat_tiers`` (the tiers of the shard) and, as the last
+    entry of each item, its stats at each of them, so that the page can show the stats of any view the shard answers."""
     item_index: dict[str, int] = {}
     items: list[Item] = []
     kit_index: dict[tuple[int, ...], int] = {}
@@ -1557,7 +1908,8 @@ def site_shard_json(shard: Shard, credit: Credit) -> str:
         **_credited(credit),
         "ev": shard.evidence,
         "buffs": shard.buffs,
-        "items": [_item_row(item) for item in items],
+        **({} if lines is None else {"stat_tiers": list(shard.tiers)}),
+        "items": [_item_row(item) + ([] if lines is None else [[lines(item.key, tier) for tier in shard.tiers]]) for item in items],
         "kits": kits,
         "totals": [_totals_row(t) for t in totals],
         "rows": rows,

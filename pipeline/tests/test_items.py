@@ -7,8 +7,9 @@ schema) into an ``ItemVec`` at one upgrade tier. The tier rules are read from ru
 * a negative stat is not scaled (``tier.negatives_scale`` is false);
 * worn haste and the three regens add a flat amount per tier when the base is above zero;
 * resists follow the stat rule;
-* the weight, in tenths of a stone, falls by the same amount to a floor of 0.1 stone;
-* weapon damage rises by ``tier.weapon_damage_pct`` per tier, rounded down, at least +1 a tier.
+* the weight, in tenths of a stone, falls by ``tier.weight_pct`` percent of the base a tier, rounded down, to a floor of
+  0.1 stone;
+* weapon damage rises by ``tier.weapon_damage_pct`` percent of the base a tier, rounded down, with no minimum step.
 
 Every item below is invented. The expected numbers are written out by hand, so these tests do not
 trust the module they check.
@@ -145,17 +146,19 @@ def test_resists_follow_the_stat_rule():
     assert vec.sv == {"FIRE": 28, "COLD": 7, "MAGIC": -4}
 
 
-@pytest.mark.parametrize("weight, tier, expected", [(10.0, 0, 100), (10.0, 4, 60), (10.0, 10, 1), (0.1, 10, 1)])
+@pytest.mark.parametrize("weight, tier, expected", [(10.0, 0, 100), (10.0, 4, 64), (10.0, 10, 10), (3.0, 10, 3), (0.1, 10, 1)])
 def test_weight_in_tenths_of_a_stone_falls_to_a_floor_of_one(weight, tier, expected):
     assert at_tier(item(weight=weight), tier, RULES).weight10 == expected
 
 
-def test_weight_rounds_the_reduction_down_with_a_minimum_of_a_tenth_per_tier():
-    # 7.3 stones = 73 tenths: +4 takes max(4, 73 * 4 // 10 = 29) = 29 -> 44.
-    assert at_tier(item(weight=7.3), 4, RULES).weight10 == 44
-    # 1.5 stones = 15 tenths: +4 takes max(4, 6) = 6 -> 9; +1 takes max(1, 1) = 1 -> 14.
-    assert at_tier(item(weight=1.5), 4, RULES).weight10 == 9
+def test_weight_rounds_the_reduction_down_with_no_minimum_step():
+    # 7.3 stones = 73 tenths: +4 takes 73 * 9 * 4 // 100 = 26 -> 47.
+    assert at_tier(item(weight=7.3), 4, RULES).weight10 == 47
+    # 1.5 stones = 15 tenths: +4 takes 15 * 9 * 4 // 100 = 5 -> 10; +1 takes 15 * 9 // 100 = 1 -> 14.
+    assert at_tier(item(weight=1.5), 4, RULES).weight10 == 10
     assert at_tier(item(weight=1.5), 1, RULES).weight10 == 14
+    # a small weight loses nothing until the percent adds up to a tenth: 0.2 stone is still 0.2 at +5
+    assert at_tier(item(weight=0.2), 5, RULES).weight10 == 2
 
 
 def test_a_weightless_item_stays_weightless_and_an_unknown_weight_is_flagged():
@@ -233,26 +236,26 @@ def test_a_weight_that_is_not_a_multiple_of_a_tenth_rounds_half_up():
 # ---- weapons -------------------------------------------------------------------------------
 
 
-def test_weapon_damage_five_percent_a_tier_is_the_default():
+def test_weapon_damage_ten_percent_a_tier_is_the_default():
     vec = at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=20, delay=30, bonus=7)), 4, RULES)
-    assert vec.weapon == WeaponVec(skill="1H Slashing", dmg=24, delay=30, bonus=7, two_handed=False)
+    assert vec.weapon == WeaponVec(skill="1H Slashing", dmg=28, delay=30, bonus=7, two_handed=False)
 
 
-def test_weapon_damage_ten_percent_a_tier_when_the_rule_says_ten():
-    ten = rules_with({"tier.weapon_damage_pct": 10})
-    vec = at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=20)), 4, ten)
-    assert vec.weapon.dmg == 28
+def test_weapon_damage_five_percent_a_tier_when_the_rule_says_five():
+    five = rules_with({"tier.weapon_damage_pct": 5})
+    vec = at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=20)), 4, five)
+    assert vec.weapon.dmg == 24
     # the keyword does the same without a second rules object
-    assert at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=20)), 4, RULES, weapon_pct=10).weapon.dmg == 28
+    assert at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=20)), 4, RULES, weapon_pct=5).weapon.dmg == 24
 
 
-def test_weapon_damage_gains_at_least_one_point_a_tier():
-    assert at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=3)), 4, RULES).weapon.dmg == 7
+def test_weapon_damage_has_no_minimum_step_a_tier():
+    assert at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=3)), 4, RULES).weapon.dmg == 4  # was 7 with a point a tier
 
 
-@pytest.mark.parametrize("dmg, tier, expected", [(20, 0, 20), (20, 1, 21), (45, 3, 51), (45, 10, 67), (100, 10, 150)])
-def test_weapon_damage_five_percent_rounded_down(dmg, tier, expected):
-    # 45 * 3 * 5 // 100 = 6; 45 * 10 * 5 // 100 = 22; 100 * 10 * 5 // 100 = 50.
+@pytest.mark.parametrize("dmg, tier, expected", [(20, 0, 20), (20, 1, 22), (45, 3, 58), (45, 10, 90), (100, 10, 200)])
+def test_weapon_damage_ten_percent_rounded_down(dmg, tier, expected):
+    # 45 * 3 * 10 // 100 = 13 (1350 / 100 rounded down); 45 * 10 * 10 // 100 = 45; 20 * 1 * 10 // 100 = 2
     assert at_tier(item(slots=["PRIMARY"], weapon=weapon(dmg=dmg)), tier, RULES).weapon.dmg == expected
 
 
@@ -414,9 +417,9 @@ def test_the_tier_rules_on_disk_say_what_the_module_implements():
     # The same facts, read straight from the file: if one changes, this fails before a pick does.
     assert RULES.get("tier.stat_rule") == "base + max(n, floor(base*n/10))"
     assert RULES.get("tier.negatives_scale") is False
-    assert RULES.get("tier.weapon_damage_pct") == 5
+    assert RULES.get("tier.weapon_damage_pct") == 10
     assert RULES.get("haste.worn_per_tier") == 1 and RULES.get("regen.per_tier") == 1
-    assert RULES.get("tier.weight_floor") == 0.1
+    assert RULES.get("tier.weight_floor") == 0.1 and RULES.get("tier.weight_pct") == 9
 
 
 # ---- slots ---------------------------------------------------------------------------------

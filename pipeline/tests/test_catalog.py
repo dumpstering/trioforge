@@ -697,9 +697,12 @@ def test_no_test_that_flags_an_item_builds_a_recorded_page_of_a_real_item():
 @pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
 def test_the_invented_items_are_no_item_of_the_committed_catalog():
     items = read_json(REPO / "derived" / "catalog.json")["items"]
-    taken = {item["key"] for item in items} | {item["name"] for item in items} | {item["wiki"]["title"] for item in items}
-    revisions = {item["wiki"]["revid"] for item in items}
-    newest = max(item["wiki"]["pageid"] for item in items)
+    paged = [item for item in items if item["wiki"] is not None]  # an item read from EQ Legends Tools alone has no wiki page: no title, revision or page id to compare
+    assert paged and len(paged) < len(items)  # the case stays covered: the catalog holds items with no wiki page
+    assert all(item["key"].startswith("rlt-") for item in items if item["wiki"] is None)  # and they have a key of their own, never a w<pageid>
+    taken = {item["key"] for item in items} | {item["name"] for item in items} | {item["wiki"]["title"] for item in paged}
+    revisions = {item["wiki"]["revid"] for item in paged}
+    newest = max(item["wiki"]["pageid"] for item in paged)
     for record in (flagged_record(), bystander_record()):
         found = (f"w{record['pageid']}" in taken, record["title"] in taken, record["revid"] in revisions)
         assert not any(found), found  # a key, a title and a revision that a real page has
@@ -912,7 +915,10 @@ def test_the_committed_catalog_has_no_seen_in_game_reason_and_strict_only_from_c
     assert "seen-in-game" not in text
     assert "seen" not in read_json(REPO / "derived" / "catalog-summary.json")
     manifest = read_json(REPO / "derived" / "sources-manifest.json")
-    assert list(manifest["items"]) == keys
+    paged = [item["key"] for item in document["items"] if item["wiki"] is not None]  # the manifest lists the wiki pages the items were read from
+    unpaged = [item["key"] for item in document["items"] if item["wiki"] is None]
+    assert list(manifest["items"]) == paged
+    assert unpaged and not set(unpaged) & set(manifest["items"])  # the case stays covered: items with no wiki page exist, and the manifest has no entry for them
 
 
 @pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")

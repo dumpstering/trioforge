@@ -889,7 +889,7 @@ describe("the page's measuring functions", () => {
     expect(second.steps[1].F).not.toBe("1/1");
     expect((await run(1)).stepsOk, "a recorded step beyond the steps asked for is not held to anything").toBe(true);
     change(path, (doc) => {
-      doc.expected.session_haste = 99;
+      doc.solves[doc.expected.equip_now].result.haste_assumed = 99;
     });
     expect((await run()).hasteOk).toBe(false);
     change(path, (doc) => {

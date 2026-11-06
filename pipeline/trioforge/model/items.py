@@ -11,18 +11,19 @@ model sees when the item is worn at tier ``tier`` (0 to 10). The tier rules are 
   stat would grow is not defined anywhere.
 * **Worn haste** and the three **regens**: a flat ``haste.worn_per_tier`` / ``regen.per_tier`` a tier when
   the base is above zero. Haste is a field of its own (``ItemVec.haste``), not one of the stats.
-* **Weight**, in tenths of a stone: ``max(1, w - max(n, w * n // 10))`` for a weight ``w`` above zero, so it
-  never falls below 0.1 stone (``tier.weight_floor``). A weightless item stays weightless. An item with **no
-  weight on its page** counts as 1.0 stone (``weight10 = 10``) at every tier, for the Monk's worn weight, and
-  keeps ``weight_known = False`` so that a pick can be marked ``weight-unknown``: with no base weight there is
-  nothing for the tiers to reduce.
+* **Weight**, in tenths of a stone: ``max(floor10, w - w * pct * n // 100)`` for a weight ``w`` above zero, with
+  ``pct`` = ``tier.weight_pct`` (9, a percent of the base weight a tier, no minimum step) and ``floor10`` the
+  ``tier.weight_floor`` in tenths (0.1 stone, so a weight never falls below it). A weightless item stays
+  weightless. An item with **no weight on its page** counts as 1.0 stone (``weight10 = 10``) at every tier, for
+  the Monk's worn weight, and keeps ``weight_known = False`` so that a pick can be marked ``weight-unknown``: with
+  no base weight there is nothing for the tiers to reduce.
 * **Races**: ``races`` is None for an item any race may wear (``ALL`` in any case, or no ``races`` field at all, as on
   a hand-built item) and otherwise the frozenset of race codes that may wear it. An **empty list** is a page that
   says ``Race: NONE``: no race may wear the item, so ``races`` is the empty frozenset. The builder and the pruning
   leave out an item whose ``races`` exclude the race of the profile, so that item has no column for any race. A
   ``races`` that is not a list of strings is a ``ValueError`` (a bare ``"HUM"`` would be read as the races H, U and M).
-* **Weapon damage**: ``dmg + max(n, dmg * n * pct // 100)`` with ``pct`` = ``tier.weapon_damage_pct`` (5, or
-  10 for the alternative rule). Delay and the listed damage bonus never change. An item has a
+* **Weapon damage**: ``dmg + dmg * n * pct // 100`` with ``pct`` = ``tier.weapon_damage_pct`` (10, or 5 for the
+  alternative rule), with no minimum of a point a tier. Delay and the listed damage bonus never change. An item has a
   :class:`WeaponVec` only when the page gives both a damage and a delay, and a shield (below) has none.
 * **Shield**: ``is_shield`` is true for an item that fits the off hand (the ``SECONDARY`` slot) and whose catalog
   ``item_type`` is ``Shield`` in any case. Nothing else makes one (see :func:`_is_shield`).
@@ -74,6 +75,8 @@ SV_KEYS: tuple[str, ...] = ("FIRE", "COLD", "MAGIC", "POISON", "DISEASE", "CORRU
 MAX_TIER = 10
 STAT_RULE_TEXT = "base + max(n, floor(base*n/10))"
 WEAPON_PCTS = (5, 10)
+DAMAGE_RULE_TEXT = "dmg + dmg * n * pct // 100"  # what the browser's bundle names, and items.js checks
+WEIGHT_RULE_TEXT = "max(floor, w - w * pct * n // 100)"
 UNKNOWN_WEIGHT10 = 10  # an item whose page gives no weight counts as 1.0 stone
 
 
@@ -122,6 +125,7 @@ class _TierRules:
     haste_per_tier: int
     regen_per_tier: int
     floor10: int
+    weight_pct: int
 
 
 def _whole(value: Any, rule: str, minimum: int = 0) -> int:
@@ -155,6 +159,7 @@ def _tier_rules(rules: Any) -> _TierRules:
         haste_per_tier=_whole(rules.get("haste.worn_per_tier"), "haste.worn_per_tier"),
         regen_per_tier=_whole(rules.get("regen.per_tier"), "regen.per_tier"),
         floor10=int(floor),
+        weight_pct=_whole(rules.get("tier.weight_pct"), "tier.weight_pct"),
     )
 
 
@@ -183,13 +188,14 @@ def _tenths(weight: Any) -> int:
     return math.floor(Fraction(str(weight)) * 10 + Fraction(1, 2))
 
 
-def _weight10(weight: Any, n: int, floor10: int) -> tuple[int, bool]:
+def _weight10(weight: Any, n: int, floor10: int, weight_pct: int) -> tuple[int, bool]:
+    """The weight in tenths at tier ``n``: ``max(floor10, w - w * weight_pct * n // 100)``, no minimum step."""
     if weight is None:
         return UNKNOWN_WEIGHT10, False
     w10 = _tenths(weight)
     if w10 <= 0:
         return 0, True
-    return max(floor10, w10 - max(n, w10 * n // 10)), True
+    return max(floor10, w10 - w10 * weight_pct * n // 100), True
 
 
 def _races(listed: Any) -> frozenset[str] | None:
@@ -262,7 +268,7 @@ def at_tier(item: dict[str, Any], tier: int, rules: Any, *, weapon_pct: int | No
     if raw_weapon is not None and not is_shield and raw_weapon["dmg"] is not None and raw_weapon["delay"] is not None:
         dmg = raw_weapon["dmg"]
         if dmg > 0:
-            dmg += max(n, dmg * n * pct // 100)
+            dmg += dmg * n * pct // 100
         skill = raw_weapon["skill"]
         weapon = WeaponVec(skill, dmg, raw_weapon["delay"], raw_weapon["bonus"], _two_handed(skill))
 
@@ -271,7 +277,7 @@ def at_tier(item: dict[str, Any], tier: int, rules: Any, *, weapon_pct: int | No
     except ValueError as error:
         raise ValueError(f"item {item['key']}: {error}") from None
 
-    weight10, weight_known = _weight10(item["weight"], n, rule.floor10)
+    weight10, weight_known = _weight10(item["weight"], n, rule.floor10, rule.weight_pct)
     return ItemVec(
         key=item["key"],
         name=item["name"],

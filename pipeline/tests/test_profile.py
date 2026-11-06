@@ -196,13 +196,13 @@ def test_the_default_aas_are_combat_stability_3_of_3_and_physical_enhancement_fo
     for trio in (PBM, SCS):
         p = build("OGR", trio)
         assert (p.cs_pct, p.pe_pct) == (10, 2)
-        assert dict(p.aa) == {"combat_stability": 3, "physical_enhancement": True}
+        assert dict(p.aa) == {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}
 
 
 def test_an_all_caster_trio_has_no_physical_enhancement_until_test_b10():
     p = build("HUM", WME)
     assert (p.cs_pct, p.pe_pct) == (10, 0)
-    assert dict(p.aa) == {"combat_stability": 3, "physical_enhancement": False}
+    assert dict(p.aa) == {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": False}
     assert RULES.get("ac.softcap.pe_for_caster_only_trios") is False
 
 
@@ -217,13 +217,13 @@ def test_every_all_caster_trio_is_without_physical_enhancement_and_every_other_t
 def test_the_rule_for_caster_only_trios_decides_their_default():
     rules = rules_with(**{"ac.softcap.pe_for_caster_only_trios": True})
     p = build("HUM", WME, rules=rules)
-    assert p.pe_pct == 2 and dict(p.aa) == {"combat_stability": 3, "physical_enhancement": True}
+    assert p.pe_pct == 2 and dict(p.aa) == {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}
 
 
 def test_the_aa_argument_overrides_the_defaults_and_is_listed_as_given():
     p = build("OGR", PBM, aa={"combat_stability": 2, "physical_enhancement": False})
     assert (p.cs_pct, p.pe_pct) == (5, 0)
-    assert dict(p.aa) == {"combat_stability": 2, "physical_enhancement": False}
+    assert dict(p.aa) == {"combat_stability": 2, "natural_durability": 4, "physical_enhancement": False}
     assert build("OGR", PBM, aa={"combat_stability": 1}).cs_pct == 2
     assert build("OGR", PBM, aa={"combat_stability": 0}).cs_pct == 0
     assert build("OGR", PBM, aa={}).cs_pct == 10  # an empty mapping means the defaults
@@ -244,7 +244,7 @@ def test_the_evidence_level_is_strict_by_default_and_listed_in_the_json():
     assert build().evidence == "strict"
     assert build(evidence="wiki").evidence == "wiki"
     data = json.loads(build(evidence="wiki").to_json())
-    assert data["evidence"] == "wiki" and data["aa"] == {"combat_stability": 3, "physical_enhancement": True}
+    assert data["evidence"] == "wiki" and data["aa"] == {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}
     with pytest.raises(ValueError, match="evidence"):
         build(evidence="all")
 
@@ -358,8 +358,9 @@ def test_the_caps_the_bands_and_the_dual_wield_factor_are_the_rules():
     assert RULES.get("regen.gear_caps") == {"HP": 30, "MANA": 15, "END": 15} and RULES.get("resist.cap") == 200
     bands = RULES.get("mana.wis_bands")
     assert list(p.bands["breaks"]) == bands["breaks"] and list(p.bands["slopes"]) == bands["slopes"]
-    assert p.dw_factor == 0.8 == RULES.get("weapons.dual_wield_factor")
-    assert compile_profile(p).dw_factor == F(4, 5)
+    assert p.dw_factor == 0.83 == RULES.get("weapons.dual_wield_factor")["with_monk"]  # PAL/MNK/BER has a Monk
+    assert compile_profile(p).dw_factor == F(83, 100)
+    assert build(trio=SCS).dw_factor == 0.69 == RULES.get("weapons.dual_wield_factor")["without_monk"]
     other = build(rules=rules_with(**{"weapons.dual_wield_factor": 0.5, "resist.cap": 150}))
     assert other.dw_factor == 0.5 and other.caps["resist"] == 150
 
@@ -399,21 +400,26 @@ def test_buff_totals_are_the_always_on_totals_and_the_spell_haste_is_the_best_ha
     p = build(buffset=bs)
     assert p.buff_totals == {"STR": 10, "AC": 20, "SV": {"FIRE": 15}}
     assert p.spell_ac == 20
-    assert p.spell_haste == 40  # Beta, which is optional: what the weapon term assumes is the best on offer
+    # Beta (40), which is optional: what the weapon term assumes is the best on offer, with the 10 of Unbound Alacrity
+    # that a trio with a Monk (PAL/MNK/BER here) has on top
+    assert p.spell_haste == 50 and p.haste_bonus == 10
     assert eval_buffs(bs.totals([2, 3])) == {"STR": 10, "AC": 50, "HP": 50, "SV": {"FIRE": 15}, "HASTE": 40}
 
 
 def test_a_scenario_without_buffs_has_empty_totals():
     for buffset in (None, resolve([], RULES)):
         p = build(buffset=buffset)
-        assert dict(p.buff_totals) == {} and p.spell_ac == 0 and p.spell_haste == 0
+        assert dict(p.buff_totals) == {} and p.spell_ac == 0
+        assert p.spell_haste == 10 == p.haste_bonus  # no buff, but the Monk's Unbound Alacrity (PAL/MNK/BER)
+        assert build(buffset=buffset, trio=SCS).spell_haste == 0
 
 
 def test_the_real_own_buffs_of_the_three_trios():
     pbm = build("OGR", PBM)
     assert dict(pbm.buff_totals) == eval_buffs(own_set(PBM).totals(()))
     assert pbm.spell_ac == pbm.buff_totals["AC"] > 0
-    assert pbm.spell_haste == pbm.buff_totals["HASTE"] > 0  # a haste spell stands with every other own buff
+    # a haste spell stands with every other own buff, and the Monk's Unbound Alacrity adds 10 to it
+    assert pbm.spell_haste == pbm.buff_totals["HASTE"] + 10 > 10
     # the 15-slot limit binds for SHD/CLR/SHM: nothing is fixed, the solver chooses, and the haste is on offer
     scs = build("OGR", SCS)
     assert own_set(SCS).cardinality == 15 and own_set(SCS).always_on == ()
@@ -428,7 +434,7 @@ def test_the_real_own_buffs_of_the_three_trios():
 
 
 def test_the_pools_are_the_client_tables_pools_in_trio_order():
-    p = build("OGR", PBM)
+    p = build("OGR", PBM, aa={"natural_durability": 0})  # (the default rank puts the AA's percent on the HP factor: test_natural_durability.py)
     assert dict(p.pools) == dict(formulas.pools_for(PBM, 50, TABLES))
     assert p.pools["HP"] == (PoolSpec("PAL", 1440, 4.8), PoolSpec("MNK", 1275, 4.25), PoolSpec("BER", 1275, 4.25))
     assert p.pools["MANA"] == (PoolSpec("PAL", 900, 4.5, "WIS"),)  # the Monk and the Berserker have none
@@ -813,7 +819,7 @@ def test_f_of_the_empty_kit_is_the_naked_plus_buff_value_worked_by_hand():
     ward = buff(
         1, "Ward Delta", [(1, "STR", 10), (2, "AC", 20), (3, "HP", 100), (4, "MANA", 50), (5, "MANAREG", 4), (6, "FIRE", 15)]
     )
-    p = build("HUM", WME, buffset=resolve([ward], RULES))
+    p = build("HUM", WME, buffset=resolve([ward], RULES), aa={"natural_durability": 0})  # (the AA's percent on the HP factor is worked in test_natural_durability.py)
     result = evaluate(p, kit_of())
 
     # totals: Human 75 each; the three classes add STA 15 + 15, INT 15 x 3, CHA 15; the buff adds STR 10

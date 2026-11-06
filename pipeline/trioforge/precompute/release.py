@@ -81,21 +81,28 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import zlib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlsplit
 
 from trioforge import community as community_module
 from trioforge import precompute
+from trioforge import rules as rules_module
 from trioforge.checks_dir import checks_dir as folder_of_the_checks
 from trioforge.data import catalog as catalog_module
 from trioforge.data.jsonio import MAX_FILE_BYTES, JsonFileError, load_strict, loads_strict, render
+from trioforge.effects import files as effects_files
+from trioforge.effects import judgment as effects_judgment
+from trioforge.effects import spells as effects_spells
 from trioforge.export import browser
 from trioforge.model import tables as tables_module
 from trioforge.model import weapons as wp
@@ -107,15 +114,20 @@ from trioforge.reports import results_diff
 from trioforge.scope import MILESTONE_TRIO, default_tiers
 from trioforge.site import build, data
 from trioforge.solver import solve as solver_solve
-from trioforge.solver.model import build_milp
+from trioforge.solver.haste import solve_scenario
 from trioforge.sources.client_tables import commit_files
+from trioforge.sources.eqlegendstools import HOST as EQLT_HOST
 
 __all__ = [
     "MARKER",
     "PARITY_FILES",
     "PARITY_MIN_CHUNKS",
+    "PNG_INFLATE_LIMIT",
+    "PNG_SIGNATURE",
     "SCHEDULED_CHECKS",
     "SPOT_TOLERANCE",
+    "VENDOR_LITERALS",
+    "ExaltReaderCheck",
     "Git",
     "PrivacyScanner",
     "ReleaseRefused",
@@ -126,6 +138,7 @@ __all__ = [
     "TrioFacts",
     "TrioOutcome",
     "TrioSpec",
+    "VendorLiteral",
     "build_release",
     "check_build_folder",
     "check_bundle_reader",
@@ -137,6 +150,7 @@ __all__ = [
     "check_invariants",
     "check_item_rows",
     "check_no_local_paths",
+    "check_eqlegendstools_source",
     "check_no_strict_item",
     "check_parity",
     "check_private_output",
@@ -155,6 +169,7 @@ __all__ = [
     "run_trio",
     "scheduled_warnings",
     "work_tree_of",
+    "write_effects",
     "write_item_table",
     "write_outputs",
 ]
@@ -166,6 +181,7 @@ MARKER_FORMAT = 1
 SPOT_TOLERANCE = 0.0101  # a shard keeps F to two decimals: the unpruned optimum, rounded the same way, may be a hundredth away
 INVARIANT_SLACK = 0.0201  # the invariants are read from values of two decimals, and the naked value from the difference of two of them
 PARITY_FILES = ("tests-js/parity-fixtures.test.mjs", "tests-js/engine-solve-parity.test.mjs", "tests-js/shard-parity.test.mjs")
+SHARD_PARITY_FILE = "tests-js/shard-parity.test.mjs"  # (the one file that divides into parts: TRIOFORGE_SHARD_PART=k/K)
 PARITY_MIN_CHUNKS = 1  # the chunks of the sample of the shard parity that every trio has at least: the stride is no more than the smallest trio has chunks
 SCHEDULED_CHECKS = ("sources-check", "smoke-live")  # the weekly checks of the PC: each leaves <name>.last-run, an ISO time, in the folder of the checks (trioforge.checks_dir)
 STAMP_DAYS = 10
@@ -394,6 +410,28 @@ def write_item_table(
     return engine.write_items(out, texts.items)[1]
 
 
+def write_effects(
+    results: str | os.PathLike[str], trios: Sequence[str], catalog: Mapping[str, Any], tables_root: str | os.PathLike[str], say: Callable[[str], None]
+) -> bool:
+    """Write the effects layer's files into the folder of results: ``effects.json`` and, for each trio, ``exalt.json`` (:mod:`trioforge.effects.files`), from the public
+    catalog, the client's spell text in ``derived/client/effect-spells.json`` and the rules of ``tables_root``. They are made from the shipped kits, so they are written
+    after the precompute and again for a trio that was resumed. Returns False, and writes nothing, when the spell file is not there (a checkout from before the layer): the
+    effects files an earlier build left in the results are then taken away, so that they are not staged as this build's; a file that is there and wrong is refused."""
+    spell_file = Path(tables_root) / "derived" / "client" / "effect-spells.json"
+    if not spell_file.is_file():
+        effects_files.remove_release(results, trios)
+        return False
+    try:
+        rules = rules_module.load(Path(tables_root) / "rules" / "rules.json")
+        built = effects_files.build(dict(catalog), effects_spells.SpellBook.load(spell_file), effects_judgment.Judgment.from_rules(rules), rules.version)
+        sizes = effects_files.write_release(results, trios, built)
+    except (OSError, ValueError, KeyError, JsonFileError) as error:
+        raise ReleaseRefused(f"the effects files cannot be made: {' '.join(str(error).split())}") from None
+    biggest = max((packed for name, (_, packed) in sizes.items() if name != effects_files.EFFECTS_FILE), default=0)
+    say(f"effects: {len(sizes) - 1} trio files (the largest {biggest:,} bytes gzip) and {effects_files.EFFECTS_FILE} ({sizes[effects_files.EFFECTS_FILE][1]:,} bytes gzip)")
+    return True
+
+
 def _weight(spec: TrioSpec) -> int:
     """A guess at how long a trio takes, only to run the heavy ones first: its roles times its tiers."""
     try:
@@ -532,11 +570,14 @@ def check_consistent(facts: Sequence[TrioFacts]) -> None:
                 )
 
 
-def check_grid(folder: str | os.PathLike[str], trios: Sequence[str], *, scopes: Mapping[str, Sequence[int]] | None = None) -> list[TrioFacts]:
+def check_grid(
+    folder: str | os.PathLike[str], trios: Sequence[str], *, scopes: Mapping[str, Sequence[int]] | None = None, on_trio: Callable[[data.TrioResults], None] | None = None
+) -> list[TrioFacts]:
     """Every trio of ``trios`` is in ``folder``, complete, not partial, at its default scope (``scopes`` names another for a sample), and read by the site build.
 
     Refused, by name: a trio with no folder or a file missing (``missing``), a trio made by a narrowed run (``partial``), a trio whose shards have other tiers than a full
     run of it (:func:`trioforge.site.build.check_scope`) and any file the site build's own reader (:func:`trioforge.site.data.load_trio`) cannot read.
+    ``on_trio`` is called with each trio the reader has read, so that another check can use it without the trio being read twice or all of them held at once.
     Returns the facts of each trio, in order."""
     base = Path(folder)
     trios = list(dict.fromkeys(trios))
@@ -567,6 +608,8 @@ def check_grid(folder: str | os.PathLike[str], trios: Sequence[str], *, scopes: 
         except (data.ResultsError, build.BuildError) as error:
             what = "cannot be read by the site build" if isinstance(error, data.ResultsError) else "is refused by the site build"
             raise ReleaseRefused(f"{slug} {what}: {error}") from None
+        if on_trio is not None:
+            on_trio(trio)
         meta = trio.meta
         levels = tuple(sorted(int(path.name.removeprefix(shards.ENGINE_PREFIX).removesuffix(".json")) for path in (base / slug).glob(f"{shards.ENGINE_PREFIX}*.json")))
         found.append(
@@ -577,6 +620,45 @@ def check_grid(folder: str | os.PathLike[str], trios: Sequence[str], *, scopes: 
         )
     check_consistent(found)
     return found
+
+
+class ExaltReaderCheck:
+    """The site's own reader of the effects files (:func:`trioforge.site.data.load_exalt`) run over a staged folder, a trio at a time as :func:`check_grid` reads them.
+
+    :func:`trioforge.effects.files.check_release` holds the files to the budgets and to the rules it copies from the reader, and misses some of them (a donor of another
+    effect, a list row of another kind, a shared file of another run than the item table). The site build refuses what its reader refuses, so the release must too: it does not
+    ship a folder that the build of the site would refuse. The reader is given one trio at a time (it reads the shared file again each time, a few milliseconds), so that
+    no more than one trio is held. The first refusal is kept, and :meth:`result` raises it, after the checks of the effects module have had their say. The shared file is read
+    for the first trio whether or not it has a file, and then for the trios that have one."""
+
+    def __init__(self, folder: str | os.PathLike[str]) -> None:
+        self.folder = Path(folder)
+        self.error: str | None = None
+        self.reads = 0
+        self._items: Mapping[str, Any] | None = None
+
+    def __call__(self, trio: data.TrioResults) -> None:
+        if self.error is not None:
+            return
+        slug = trio.meta.slug
+        if self.reads and not (self.folder / slug / data.EXALT_NAME).is_file():
+            return
+        if self._items is None:
+            try:
+                self._items = load_strict(self.folder / assemble.ITEMS_FILE)
+            except (OSError, JsonFileError):
+                self.error = ""  # (the release reads the item table itself, and refuses it by its own message)
+                return
+        self.reads += 1
+        try:
+            data.load_exalt(self.folder, [trio], self._items)
+        except data.ResultsError as error:
+            self.error = f"the site's reader refuses the effects files: {error}"
+
+    def result(self) -> None:
+        """Raise :class:`ReleaseRefused` with the reader's message if it refused a file."""
+        if self.error:
+            raise ReleaseRefused(self.error)
 
 
 def check_item_rows(folder: str | os.PathLike[str], trios: Sequence[str]) -> int:
@@ -675,6 +757,54 @@ def check_no_strict_item(document: Mapping[str, Any]) -> None:
             f"the catalog has {strict} strict item{'' if strict == 1 else 's'}, and wiki is the one evidence level of a release: no report in {COMMUNITY_INPUT} may stay in force "
             "(take the report out of the list, or retract it), then build the catalog again"
         )
+
+
+def _eqlt_address(text: Any) -> str | None:
+    """The page of EQ Legends Tools an address names, in one form (``eqlegendstools.com/zones/x``: no scheme, no ``www.``, host in small letters, no trailing slash, no fragment), or None
+    for anything else (a file path, another host, another scheme). Both sides of the comparison of :func:`check_eqlegendstools_source` are put in this form."""
+    if not isinstance(text, str):
+        return None
+    try:
+        parts = urlsplit(text.strip())
+        port = parts.port
+    except ValueError:
+        return None
+    host = (parts.hostname or "").rstrip(".").removeprefix("www.")
+    if parts.scheme.lower() not in ("http", "https") or host != EQLT_HOST:
+        return None
+    # (an odd port keeps its number, so the page it names is never one the catalog recorded and the release is refused)
+    return f"{host}{'' if port in (None, 80, 443) else f':{port}'}{parts.path.rstrip('/')}" + (f"?{parts.query}" if parts.query else "")
+
+
+def check_eqlegendstools_source(rules: str | os.PathLike[str], document: Mapping[str, Any]) -> None:
+    """The items of a zone that ``rules/hand-lists.json`` takes from EQ Legends Tools were put in the catalog: its provenance names the zone page it was built from.
+
+    The catalog builder reads that site only when it is given ``--eqlegendstools`` (the option is not required), and a catalog built without it still has the hand-listed zone,
+    with the wiki's copy of its items; a release would then solve with the wiki's numbers for items the maintainers decided that site settles. Every ``exists_unflagged_zones`` entry
+    whose source is a page of that site must be one of the catalog's inputs (the builder records each zone page it read); :class:`ReleaseRefused` otherwise, naming the zone and the page.
+    No hand-lists file, or no such entry, asks nothing of the catalog.
+    """
+    path = Path(rules) / "hand-lists.json"
+    if not path.exists():
+        return
+    try:
+        lists = load_strict(path)
+    except (OSError, JsonFileError) as error:
+        raise ReleaseRefused(f"rules/hand-lists.json cannot be read: {error}") from None
+    inputs = (document.get("provenance") or {}).get("inputs") or ()
+    recorded = {address for record in inputs if isinstance(record, Mapping) and (address := _eqlt_address(record.get("file"))) is not None}
+    for entry in lists.get("exists_unflagged_zones") or () if isinstance(lists, Mapping) else ():
+        if not isinstance(entry, Mapping):
+            continue
+        for source in entry.get("source") or ():
+            ref = source.get("ref") if isinstance(source, Mapping) else None
+            address = _eqlt_address(ref)
+            if address is not None and address not in recorded:
+                names = ", ".join(str(name) for name in entry.get("names") or ()) or "a zone"
+                raise ReleaseRefused(
+                    f"rules/hand-lists.json takes the items of {names} from {ref}, which the public catalog does not name among its inputs: the catalog was built without "
+                    "--eqlegendstools, so those items are still the wiki's; build the catalog again with the EQ Legends Tools fetch"
+                )
 
 
 @contextlib.contextmanager
@@ -867,14 +997,15 @@ def check_bundle_reader(folder: str | os.PathLike[str], trios: Sequence[str], *,
     return totals
 
 
-def check_file_count(facts: Sequence[TrioFacts], evidence: Mapping[str, str], *, assets: Sequence[str] | None = None) -> int:
+def check_file_count(facts: Sequence[TrioFacts], evidence: Mapping[str, str], *, assets: Sequence[str] | None = None, exalt: Collection[str] = ()) -> int:
     """The exact number of the files of the site this release would make (:func:`trioforge.site.build.site_files`: the trios with their roles, scopes and levels, an
     item page for each strict or wiki item of the evidence map, the fixed pages and the page code) is at most the budget (15,000). ``assets`` are the names of the page
-    code; None bundles it, as a build does (it needs Node and esbuild). Returns the count."""
+    code; None bundles it, as a build does (it needs Node and esbuild). ``exalt`` are the trios that have the file of the effects layer (each adds a data file to the site, and the
+    shared effects file comes with the first). Returns the count."""
     try:
         names = tuple(assets) if assets is not None else build.page_code_files()
         pages = sorted(key for key, level in evidence.items() if level in ("strict", "wiki"))
-        listed = build.site_files([build.TrioFiles(f.slug, f.roles, f.tiers, f.levels) for f in facts], assets=names, item_pages=pages, noindex=False)
+        listed = build.site_files([build.TrioFiles(f.slug, f.roles, f.tiers, f.levels, f.slug in exalt) for f in facts], assets=names, item_pages=pages, noindex=False)
         return build.check_file_budget(listed)
     except build.BudgetError as error:
         raise ReleaseRefused(str(error)) from None
@@ -909,7 +1040,9 @@ def _spot_task(spec: Mapping[str, Any]) -> SpotResult:
         )
         context = grid.Context(config)
         profile = context.profile(race, role, buffs, evidence)
-        solution = solver_solve.solve(build_milp(profile, context.pool(evidence, tier), setup, context.buffsets[buffs], grid.BUILD_OPTIONS))
+        solution = solve_scenario(
+            profile, context.pool(evidence, tier), setup, context.buffsets[buffs], grid.BUILD_OPTIONS, solver=solver_solve.solve
+        ).solution
     except Exception as error:  # noqa: BLE001
         return SpotResult(slug, view, shipped, float("nan"), False, f"the unpruned solve failed: {type(error).__name__}: {' '.join(str(error).split())}")
     if solution.status != "optimal" or solution.F is None:
@@ -962,12 +1095,17 @@ def _check_sample(sample: str) -> str:
     return sample
 
 
-def _vitest(folder: Path, sample: str, files: Sequence[str]) -> tuple[int, str]:
+def _vitest(folder: Path, sample: str, files: Sequence[str], part: str | None = None) -> tuple[int, str]:
+    """One Node process of the parity suite on ``files``: the whole shard parity, or (``part`` = "k/K") the part k of K of it. A part left in the environment of
+    the caller is not passed on to a run that asks for none."""
     node = shutil.which("node")
     entry = CODE_ROOT / "node_modules" / "vitest" / "vitest.mjs"
     if node is None or not entry.is_file():
         raise OSError("Node and vitest are needed (run `npm ci --ignore-scripts`)")
     environment = {**os.environ, "TRIOFORGE_RESULTS": str(folder), "TRIOFORGE_SHARD_SAMPLE": sample, "NODE_OPTIONS": "--max-old-space-size=16384"}
+    environment.pop("TRIOFORGE_SHARD_PART", None)
+    if part is not None:
+        environment["TRIOFORGE_SHARD_PART"] = part
     done = subprocess.run(
         [node, str(entry), "run", *files, "--reporter=dot"], cwd=CODE_ROOT, env=environment, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
     )
@@ -975,20 +1113,85 @@ def _vitest(folder: Path, sample: str, files: Sequence[str]) -> tuple[int, str]:
 
 
 def check_parity(
-    folder: str | os.PathLike[str], *, sample: str, files: Sequence[str] = PARITY_FILES, runner: Callable[[Path, str, Sequence[str]], tuple[int, str]] | None = None
+    folder: str | os.PathLike[str], *, sample: str, files: Sequence[str] = PARITY_FILES, runner: Callable[..., tuple[int, str]] | None = None,
+    processes: int = 1, say: Callable[[str], None] | None = None,
 ) -> None:
     """Run the parity suite: the tests that hold the browser engine to the Python reference (the fixtures, and the engine's solves) and the shard parity on ``folder``
     (the release), on the sample ``sample`` of its chunks (:func:`choose_parity_sample` makes it) and on the ``defaults.json`` of every trio, which the sample does not
     leave out. ``runner(folder, sample, files)`` returns ``(exit status, output)``; the default starts Node. A failure refuses the release and shows the end of the
-    output."""
+    output.
+
+    The shard parity solves each of its views again, about three seconds on one core, and a release has tens of thousands of them: with ``processes`` above 1 it is
+    run in that many Node processes at once, each doing its part of all the work (``TRIOFORGE_SHARD_PART=k/K``, k = 0 to K-1: ``runner(folder, sample, (shard parity,),
+    "k/K")``, which together do every view once), and the other files are run once, in a process of their own (``runner(folder, sample, files)``, as with one
+    process). Every process is waited for. Each one that failed is named, with the end of its output, in the refusal. With 1 process (the default) the runner is called
+    once, with all the files and no part. ``say`` is told, as the check begins, how many processes it starts, and (with
+    parts) as each ends, with its seconds; a closed pipe is no failure."""
     _check_sample(sample)
-    try:
-        status, output = (runner or _vitest)(Path(folder), sample, tuple(files))
-    except OSError as error:
-        raise ReleaseRefused(f"the parity suite could not be run: {error}") from None
-    if status != 0:
+    if type(processes) is not int or processes < 1:
+        raise ReleaseRefused(f"the number of parity processes must be a whole number of at least 1, not {processes!r}")
+    shard_files = tuple(name for name in files if name == SHARD_PARITY_FILE)
+    parts = processes if (processes > 1 and shard_files) else 1
+    told = threading.Lock()
+
+    def tell(text: str) -> None:
+        if say is None:
+            return
+        with told:
+            try:
+                say(text)
+            except (OSError, ValueError):  # a closed pipe is no failure of the check
+                pass
+
+    tell(f"check: the parity suite starts, {parts} process{'' if parts == 1 else 'es'}" + (f" (the shard parity in {parts} parts)" if parts > 1 else ""))
+    run = runner or _vitest
+    target = Path(folder)
+    jobs: list[tuple[str, Callable[[], tuple[int, str]]]] = []
+    if parts == 1:
+        jobs.append(("the suite", lambda: run(target, sample, tuple(files))))
+    else:
+        for k in range(parts):
+            part = f"{k}/{parts}"
+            jobs.append((f"part {part}", lambda part=part: run(target, sample, shard_files, part)))  # type: ignore[misc]
+        others = tuple(name for name in files if name != SHARD_PARITY_FILE)
+        if others:
+            jobs.append(("the other files", lambda: run(target, sample, others)))
+    outcomes: list[tuple[str, int, str] | OSError] = [None] * len(jobs)  # type: ignore[list-item]
+
+    def one(at: int) -> None:
+        name = jobs[at][0]
+        began = time.monotonic()
+        try:
+            status, output = jobs[at][1]()
+            outcomes[at] = (name, status, output)
+        except OSError as error:
+            outcomes[at] = error
+            return
+        if parts > 1:  # (a long run shows its progress; one process says nothing more than it began)
+            label = "of the other files" if name == "the other files" else name
+            tell(f"check: parity {label} {'done' if status == 0 else f'failed (exit status {status})'}, {time.monotonic() - began:.0f} s")
+
+    if len(jobs) == 1:
+        one(0)
+    else:
+        with ThreadPoolExecutor(max_workers=len(jobs)) as pool:  # (threads only wait for the Node processes they started)
+            for future in [pool.submit(one, at) for at in range(len(jobs))]:
+                future.result()
+    for found in outcomes:
+        if isinstance(found, OSError):
+            raise ReleaseRefused(f"the parity suite could not be run: {found}") from None
+    failed = [found for found in outcomes if found[1] != 0]  # type: ignore[index]
+    if failed and parts == 1:
+        _, status, output = failed[0]
         tail = "\n".join(output.strip().splitlines()[-15:])
         raise ReleaseRefused(f"the parity suite failed (exit status {status}); the end of its output:\n{tail}")
+    if failed:
+        shown = []
+        for name, status, output in failed[:3]:
+            tail = "\n".join(output.strip().splitlines()[-15:])
+            shown.append(f"{name} (exit status {status}); the end of its output:\n{tail}")
+        more = f"\n(and {len(failed) - 3} more that failed)" if len(failed) > 3 else ""
+        raise ReleaseRefused(f"the parity suite failed in {len(failed)} of {len(jobs)} processes:\n" + "\n".join(shown) + more)
 
 
 GIT_TIMEOUT = 600.0
@@ -1360,6 +1563,150 @@ _LOCAL_PATH = re.compile(
 )
 
 
+#: What of a PNG is read for a path. Every chunk is read but the compressed picture (``IDAT``, and ``fdAT`` of an animated one): its bytes are close to random, and
+#: a run of them reads like ``b:/`` now and then. A chunk whose body is compressed (``zTXt``, a compressed ``iTXt``, ``iCCP``) is read as its header bytes and its
+#: inflated body, since its raw bytes show nothing. A file that has the PNG signature and is not a whole, well-formed PNG (a bad chunk length or CRC, no ``IHDR``
+#: first, no ``IEND`` last or one with a body, bytes after it, or a critical chunk this reader does not know) refuses the release as a malformed PNG, and so does a
+#: compressed chunk that cannot be inflated: a whole read cannot see inside compressed text, so neither is ever read as plain bytes.
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+#: the most a compressed chunk of a PNG may inflate to; one that inflates to more refuses the release
+PNG_INFLATE_LIMIT = 8 * 1024 * 1024
+_PNG_TYPE = re.compile(rb"[A-Za-z]{4}")
+#: the critical chunks of PNG (an upper-case first letter); the animated PNG chunks are all ancillary
+_PNG_CRITICAL = frozenset({b"IHDR", b"PLTE", b"IDAT", b"IEND"})
+#: the chunks whose body is the compressed picture
+_PNG_PICTURE = frozenset({b"IDAT", b"fdAT"})
+
+
+class _NotPng(Exception):
+    """The bytes have the PNG signature and are not a whole, well-formed PNG that this reader knows."""
+
+
+class _Unreadable(Exception):
+    """A compressed chunk of a PNG that cannot be inflated, or inflates past the limit."""
+
+
+def _inflate(raw: bytes) -> list[bytes]:
+    """The text a zlib stream holds, and what follows the stream (read too, as it is hidden bytes if it is anything); :class:`_Unreadable` for a stream that is not
+    whole, or that inflates to more than :data:`PNG_INFLATE_LIMIT`."""
+    unpacker = zlib.decompressobj()
+    try:
+        text = unpacker.decompress(raw, PNG_INFLATE_LIMIT + 1)
+    except zlib.error:
+        raise _Unreadable from None
+    if len(text) > PNG_INFLATE_LIMIT or not unpacker.eof:
+        raise _Unreadable
+    return [text, unpacker.unused_data] if unpacker.unused_data else [text]
+
+
+def _png_segments(data: bytes) -> list[bytes]:
+    """The segments of a PNG to read (see :data:`PNG_SIGNATURE`), or :class:`_NotPng` or :class:`_Unreadable` (refuse the file). Every chunk must be whole and
+    have its CRC, the first must be ``IHDR``, and the file must end with an empty ``IEND`` and nothing after it."""
+    segments: list[bytes] = []
+    at, size, first, ended = len(PNG_SIGNATURE), len(data), True, False
+    while at < size:
+        if ended or at + 12 > size:
+            raise _NotPng
+        length = int.from_bytes(data[at : at + 4], "big")
+        kind = data[at + 4 : at + 8]
+        end = at + 8 + length
+        if length > 0x7FFFFFFF or end + 4 > size or _PNG_TYPE.fullmatch(kind) is None:
+            raise _NotPng
+        body = data[at + 8 : end]
+        if zlib.crc32(kind + body) & 0xFFFFFFFF != int.from_bytes(data[end : end + 4], "big"):
+            raise _NotPng
+        if first and kind != b"IHDR":
+            raise _NotPng
+        first = False
+        if kind[:1].isupper() and kind not in _PNG_CRITICAL:
+            raise _NotPng  # a critical chunk of a kind this reader does not know: it cannot say what is picture and what is not
+        if kind == b"IEND":
+            if body:
+                raise _NotPng  # the standard says it is empty; a body would be bytes that no reader looks at
+            ended = True
+        elif kind in _PNG_PICTURE:
+            pass
+        elif kind in (b"zTXt", b"iCCP"):  # keyword (or profile name) NUL, method (0), deflated body
+            stop = body.find(b"\0")
+            if stop < 0 or stop + 2 > len(body) or body[stop + 1] != 0:
+                raise _Unreadable
+            segments.append(body[: stop + 2])
+            segments.extend(_inflate(body[stop + 2 :]))
+        elif kind == b"iTXt":  # keyword NUL, flag, method, language NUL, translated keyword NUL, text
+            stop = body.find(b"\0")
+            lang = body.find(b"\0", stop + 3) if stop >= 0 else -1
+            translated = body.find(b"\0", lang + 1) if lang >= 0 else -1
+            if translated < 0 or body[stop + 1] not in (0, 1) or (body[stop + 1] == 1 and body[stop + 2] != 0):
+                raise _Unreadable
+            segments.append(body[: translated + 1])
+            segments.extend(_inflate(body[translated + 1 :]) if body[stop + 1] == 1 else [body[translated + 1 :]])
+        else:
+            segments.append(body)
+        at = end + 4
+    if not ended:
+        raise _NotPng
+    return segments
+
+
+def _texts_to_read(data: bytes) -> tuple[list[bytes], bool]:
+    """``(segments, whole)``: what of a published file is read for a path, and whether it is the whole file. Not the whole only for a PNG (known by its signature,
+    whatever its name). Raises :class:`_NotPng` for a file with the signature that does not parse, and :class:`_Unreadable` for a PNG with a compressed chunk
+    that cannot be inflated."""
+    if data.startswith(PNG_SIGNATURE):
+        return _png_segments(data), False
+    return [data], True
+
+
+@dataclass(frozen=True)
+class VendorLiteral:
+    """A string literal of vendored code that reads like a path and is none: ``literal`` (these exact bytes, with the quotes the code has round them, so that it is
+    a whole string and not the start of a longer one) may stand ``max_count`` times in a published file whose name (its place in the release, with ``/``)
+    ``file`` matches in full. A match is ignored only when it lies inside one of those occurrences; any other match in that file, and the literal in any other
+    file, still refuses the release."""
+
+    file: re.Pattern[str]
+    literal: bytes
+    max_count: int
+
+
+_SOLVER_WORKER = re.compile(rf"{build.ENGINE_DIR}/worker-[A-Z0-9]{{8}}\.js")
+#: The entries. Each one is a literal that the solver's library (npm ``highs``, compiled with Emscripten) carries for its own use and that no part of this project
+#: wrote. They are all in the optimizer's worker, the one script of the site that carries the solver; that file is a bundle of the library's loader and of the
+#: project's own ``static/engine/worker.js``, so the file name alone does not say who wrote a byte of it. What makes an entry safe is that it is exact: the
+#: whole quoted string, a fixed number of times, and every other match in the file still refuses. A literal that the project's own code wrote the same way would
+#: be no leak either, since each one names a place that exists in the page's memory only (Emscripten's in-memory file system) or no place at all (a URL
+#: scheme), and the count caps it. The browser has no such folders, and a visitor's computer is never named.
+VENDOR_LITERALS: tuple[VendorLiteral, ...] = (
+    # ``startsWith("file://")``: the glue tests whether its own address is a file URL. It is the scheme alone, with no folder or file name after it.
+    VendorLiteral(_SOLVER_WORKER, b'"file://"', 1),
+    # ``mkdir(<it>)`` and ``HOME:<it>``: the home folder of Emscripten's in-memory file system, which exists in the page's memory only (written in two pieces
+    # because the repository's privacy scan reads any folder under the home folder in the source as a person's).
+    VendorLiteral(_SOLVER_WORKER, b'"/hom' + b'e/web_user"', 2),
+    # ``"/tmp/highs-js-"+n+"."+ext``: the name the solver gives a temporary file in that same in-memory file system.
+    VendorLiteral(_SOLVER_WORKER, b'"/tmp/highs-js-"', 1),
+)
+
+
+def _vendor_literal(label: str, text: bytes, match: re.Match[bytes], used: dict[int, set[tuple[int, int]]], index: int = 0) -> bool:
+    """Whether ``match`` lies inside an allowed occurrence of a vendor entry's literal in the file ``label``; counts the occurrence in ``used`` (by entry number,
+    then by the number of the segment of the file and the place in it, so that an occurrence is counted once and two segments never share a count)."""
+    for number, entry in enumerate(VENDOR_LITERALS):
+        if entry.file.fullmatch(label) is None:
+            continue
+        at = text.find(entry.literal)
+        while at >= 0:
+            if at <= match.start() and match.end() <= at + len(entry.literal):
+                taken = used.setdefault(number, set())
+                if (index, at) in taken or len(taken) < entry.max_count:
+                    taken.add((index, at))
+                    return True
+                return False
+            if at > match.start():
+                break
+            at = text.find(entry.literal, at + 1)
+    return False
+
+
 def check_no_local_paths(folder: str | os.PathLike[str] | None, extra: Mapping[str, bytes] | None = None) -> None:
     """Refuse a release if any text that is published holds an absolute path of the computer it was made on, or a drive letter, whatever the build folder is called
     (the keyed scan has a rule against build paths, which sees only the folder named ``build``). It reads every file of ``folder`` and the ``extra`` texts
@@ -1367,10 +1714,26 @@ def check_no_local_paths(folder: str | os.PathLike[str] | None, extra: Mapping[s
     found: list[str] = []
 
     def look(label: str, data: bytes) -> None:
-        match = _LOCAL_PATH.search(data)
-        if match is not None:
-            line = data.count(b"\n", 0, match.start()) + 1
-            found.append(f"{label}:{line}")
+        used: dict[int, set[tuple[int, int]]] = {}
+        try:
+            texts, whole = _texts_to_read(data)
+        except _NotPng:
+            raise ReleaseRefused(
+                f"{label}: a malformed PNG (a chunk that is cut, has a wrong length or checksum, is critical and unknown, or follows the end), "
+                "and what it holds could not be checked for a path"
+            ) from None
+        except _Unreadable:
+            raise ReleaseRefused(
+                f"{label}: a compressed chunk of this picture cannot be read (it does not inflate, or it inflates to more than {PNG_INFLATE_LIMIT} bytes), "
+                "so a path in it could not be seen"
+            ) from None
+        for index, text in enumerate(texts):
+            for match in _LOCAL_PATH.finditer(text):
+                if whole and _vendor_literal(label, text, match, used, index):
+                    continue
+                line = text.count(b"\n", 0, match.start()) + 1
+                found.append(f"{label}:{line}")
+                return
 
     if folder is not None:
         base = Path(folder)
@@ -1442,16 +1805,17 @@ def build_release(
     *, tag: str, root: str | os.PathLike[str], privacy_key: str | os.PathLike[str], processes: int = 1,
     trios: Sequence[str] | None = None, trial: bool | None = None, catalog: str | os.PathLike[str] | None = None,
     tables_root: str | os.PathLike[str] | None = None, build_dir: str | os.PathLike[str] | None = None,
-    previous: str = "auto", parity_stride: int | None = None, say: Callable[[str], None] = print,
+    previous: str = "auto", parity_stride: int | None = None, parity_processes: int = 1, say: Callable[[str], None] = print,
     now: datetime.datetime | None = None, seed: int | None = None,
     runner: Callable[[TrioSpec], TrioOutcome] | None = None, bundle_reader: Callable[..., dict[str, int]] | None = None,
-    assets: Sequence[str] | None = None, parity_runner: Callable[[Path, str, Sequence[str]], tuple[int, str]] | None = None, robustness: Any = None,
+    assets: Sequence[str] | None = None, parity_runner: Callable[..., tuple[int, str]] | None = None, robustness: Any = None,
     whole_grid: Sequence[str] | None = None, git: Any = None, checks_dir: str | os.PathLike[str] | None = None,
 ) -> ReleaseResult:
     """Build a release (see the module docstring). ``root`` is the folder with ``derived/``, ``rules/``, ``privacy/``, ``releases/``, ``reports/`` and ``build/``
     (the checkout, in a real run, and it must be a git worktree: ``git`` is the :class:`Git` of it, or a stand-in in a test). ``trios`` is the grid of the release
     (None: all 560); a release is the whole grid, and a build of some trios is a ``trial`` that writes no pointer, nothing in ``releases/`` or ``reports/`` and uses up
-    no tag. ``parity_stride`` is the stride of the sample of the parity suite (None: the largest that is allowed). ``whole_grid`` and the keyword arguments from
+    no tag. ``parity_stride`` is the stride of the sample of the parity suite (None: the largest that is allowed); ``parity_processes`` the number of Node processes the
+    shard parity is divided between (:func:`check_parity`; 1: one process, as it was). ``whole_grid`` and the keyword arguments from
     ``runner`` on stand in for the grid and for the slow and external steps in the tests. The catalog is the public one (``derived/catalog.json``) and must have no strict
     item (:func:`check_no_strict_item`). ``checks_dir`` is the folder of the stamps of the scheduled checks
     (None: the folder of the checks, outside every worktree; see :func:`scheduled_warnings`). A failure to say something (a closed pipe) is no failure of the build.
@@ -1482,6 +1846,8 @@ def build_release(
             f"a release is the whole grid ({len(the_grid)} trios), and this build has {len(wanted)}" + (f", without {_more(lacking, 3)}" if lacking else "")
             + "; a build of some trios is a trial (--trios), which makes no release"
         )
+    if type(parity_processes) is not int or parity_processes < 1:
+        raise ReleaseRefused(f"the number of parity processes must be a whole number of at least 1, not {parity_processes!r}")
     if parity_stride is not None:
         if type(parity_stride) is not int or parity_stride < 1:
             raise ReleaseRefused(f"the parity stride must be a whole number of at least 1, not {parity_stride!r}")
@@ -1533,6 +1899,7 @@ def build_release(
     except (OSError, JsonFileError) as error:
         raise ReleaseRefused(f"the public catalog cannot be read: {error}") from None
     check_no_strict_item(public_document)  # (wiki is the one evidence level: before the community entries are read, and before any hour is spent)
+    check_eqlegendstools_source(base / "rules", public_document)  # (the items of a zone taken from EQ Legends Tools were put in the catalog: before any hour is spent)
     community_entries = read_community(base / "rules", public_document)  # (read once, here, with the catalog: release.json records these entries)
     previous_path, note = (None, None) if is_trial and previous == "auto" else resolve_previous(base, build_path, tag, previous)  # (a trial is no release to compare)
     if note:
@@ -1566,13 +1933,16 @@ def build_release(
         f"({sum(o.reused for o in outcomes)} reused, {sum(o.redone for o in outcomes)} redone), {sum(o.scenarios for o in outcomes)} scenarios"
     )
     check_code_unchanged(begun, git=git, tables=tables, public=public)
+    if not write_effects(results, wanted, public_document, tables, tell):
+        warn("derived/client/effect-spells.json is not there: the release has no effects files")
 
     # 4. the release folder and its checks
     snapshot_id = assemble.new_snapshot_id()  # (random for each release; the sample of the parity suite is drawn from it)
     stage_report = assemble.stage(results, wanted, staging)
     try:
         tell(f"staged: {stage_report.files} files ({stage_report.linked} linked, {stage_report.copied} copied)")
-        facts = check_grid(staging, wanted)
+        exalt_reader = ExaltReaderCheck(staging)
+        facts = check_grid(staging, wanted, on_trio=exalt_reader)
         tell(f"check: {len(facts)} trios present, complete, none partial, each at its scope")
         sample = choose_parity_sample(facts, snapshot_id, stride=parity_stride)
         rows = check_item_rows(staging, wanted)
@@ -1584,11 +1954,21 @@ def build_release(
         counts = (bundle_reader or check_bundle_reader)(staging, wanted)
         tell(f"check: the browser's reader read {counts['bundles']} bundles ({counts['profiles']} profiles)")
         evidence = assemble.evidence_map(load_strict(staging / assemble.ITEMS_FILE))
-        site_files = check_file_count(facts, evidence, assets=assets)
+        try:
+            checked = effects_files.check_release(staging, wanted, set(evidence))
+        except effects_files.EffectsError as error:
+            raise ReleaseRefused(str(error)) from None
+        exalt_reader.result()  # (the site's own reader of the same files, which ran as each trio was read for the grid check)
+        tell(f"check: {checked} trio files of the effects layer, each within its budget" if checked else "check: no effects files in this release")
+        try:
+            with_exalt = data.exalt_slugs(staging, wanted)  # (the site build's own answer: which trios ship the file of the effects layer)
+        except data.ResultsError as error:
+            raise ReleaseRefused(str(error)) from None
+        site_files = check_file_count(facts, evidence, assets=assets, exalt=with_exalt)
         tell(f"check: {site_files:,} files in the site (limit {build.LIMITS['files']:,})")
         spots = check_pruning(staging, wanted, catalog=public, tables_root=tables, seed=seed, processes=processes, chunk_code=begun.chunk_code)
         tell(f"check: {len(spots)} scenarios against the unpruned optimum")
-        check_parity(staging, sample=sample, runner=parity_runner)
+        check_parity(staging, sample=sample, runner=parity_runner, processes=parity_processes, say=tell)
         tell(f"check: the parity suite passed (sample {sample}, and the defaults of every trio)")
 
         # 5. release.json, the report, the scan (from the values read at the start)
