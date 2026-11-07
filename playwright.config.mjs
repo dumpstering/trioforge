@@ -14,7 +14,8 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.TRIOFORGE_PREVIEW_PORT ?? 8788);
 export const ORIGIN = `http://127.0.0.1:${PORT}`;
 // the section Effects to exalt needs the two files of the effects layer, which the fixture results (made before the layer) do not have: a second preview is built from a copy of them that has
-// them (scripts/preview.mjs, TRIOFORGE_PREVIEW_EXALT=1), and only tests-e2e/exalt.spec.mjs uses it
+// them (scripts/preview.mjs, TRIOFORGE_PREVIEW_EXALT=1; real results have the files and are used as they are), and only tests-e2e/exalt.spec.mjs uses it.
+// Each preview builds into a folder of its own (site/dist-e2e, site/dist-exalt), never into site/dist, which holds only what `python -m trioforge.site.build --out site/dist` writes.
 const EXALT_PORT = Number(process.env.TRIOFORGE_PREVIEW_EXALT_PORT ?? PORT + 1);
 export const EXALT_ORIGIN = `http://127.0.0.1:${EXALT_PORT}`;
 
@@ -57,7 +58,7 @@ export default defineConfig({
       // a server left over from an earlier run would hide a broken build, so an occupied port is an error
       reuseExistingServer: false,
       timeout: 180_000,
-      env: { TRIOFORGE_PREVIEW_PORT: String(PORT) },
+      env: { TRIOFORGE_PREVIEW_PORT: String(PORT), TRIOFORGE_PREVIEW_DIST: "site/dist-e2e" },
     },
     {
       command: "node scripts/preview.mjs",

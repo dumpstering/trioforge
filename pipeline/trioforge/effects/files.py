@@ -7,7 +7,7 @@
                   "x": [why it is unverified], "d": [[donor item key, access cost], ...], "f": {focus}}]}
 
 ``k`` is ``focus``, ``click`` (must be equipped), ``carry`` (an "Any Slot" click: carry the item), ``worn`` or ``proc``. ``d`` lists the items that carry the effect
-and can be worn, the easiest to get first; an item's classes and slots are those of the item table. A focus ``f`` is ``{"fam": family, "tier", "kind", "type": the stacking
+and can be worn (an effect that no wearable item carries has no row), the easiest to get first; an item's classes and slots are those of the item table. A focus ``f`` is ``{"fam": family, "tier", "kind", "type": the stacking
 type, "lo", "hi": percent, "max": highest spell level, "pen": percent lost for each level above it, "lim": the limits in words, "cov": {class: percent of the class's
 late spells it touches}}``. An unverified effect says why in ``x``: ``ambiguous`` (several spells have the name), ``equip`` (the wiki does not say whether the click
 must be equipped), ``inferred`` (a proc inferred from a weapon with no trigger wording) or ``description`` (players describe it differently from the spell data).
@@ -124,6 +124,8 @@ def shared_document(built: Built) -> dict[str, Any]:
         if effect.get("category") == "unresolved" or (effect["kind"] == "focus" and "focus" not in effect):
             continue  # (a label of focus on a spell that is no focus effect: the analysis keeps the record, the lists never offer it, and a row would have no "f")
         donors = sorted((d for d in effect["items"] if d["eligible"]), key=lambda d: (d["access"], -len(d["slots"]), d["key"]))
+        if not donors:
+            continue  # (a mount in the ammo slot, a potion, a poison, a scroll: no item of the item table carries it, no list of a trio offers it, and a row would have no donor)
         row: dict[str, Any] = {
             "id": effect["id"], "n": effect["name"], "k": _kind(effect), "c": effect["category"], "m": effect.get("magnitude"), "u": effect.get("unit"),
             "q": effect["cast_level"], "r": effect["rate_pct"], "x": effect["unverified"], "d": [[d["key"], d["access"]] for d in donors],

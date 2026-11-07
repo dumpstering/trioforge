@@ -414,6 +414,8 @@ test("the drop zone and the controls of the section show where the focus is, whe
 // ---- the answer: Equip now, the Next step and the steps after it, worked out by the optimizer in a real worker -----------------------------------------------------
 
 const FIXTURE = !process.env.TRIOFORGE_RESULTS;
+/** What Python's reference gives for the view and the gear of this test (fixtures/site/upgrade-view.json, made by pipeline/tests/engine_fixture.py): Equip now and the first steps of the farm path. */
+const REFERENCE_VIEW = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/upgrade-view.json"), "utf8"));
 /** What the question of the optimizer says, in the results area of the section (it is the client's own question). */
 const question = (page) => page.locator("#upgrade-results .engine-consent");
 const yes = (page) => question(page).getByRole("button", { name: /^Load the optimizer \(about/ });
@@ -449,6 +451,58 @@ function slowStream(page) {
       }
     };
   });
+}
+
+/**
+ * Keep every step message the optimizer's worker sends the page (Equip now is index 0, then each step), in the order they come: `window.__tfSteps`, and every request the page
+ * sends it: `window.__tfRequests`. The worker and the page are not touched; this is one more listener on the worker. It is what the page was told, so the test can work out from it, and from the item table of the results, what the page must say.
+ */
+function recordSteps(page) {
+  return page.addInitScript(() => {
+    const Native = window.Worker;
+    window.__tfSteps = [];
+    window.__tfRequests = [];
+    window.Worker = class extends Native {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener("message", (event) => {
+          if (event.data && event.data.type === "step") window.__tfSteps.push(event.data);
+        });
+      }
+      postMessage(message, ...rest) {
+        if (message && message.type === "solve") window.__tfRequests.push(message.request);
+        return super.postMessage(message, ...rest);
+      }
+    };
+  });
+}
+
+/** The item table of the results the page is built from (the fixture's, or real results'), by key. */
+const ITEMS = new Map(
+  JSON.parse(readFileSync(resolve(ROOT, process.env.TRIOFORGE_RESULTS ?? "fixtures/site/results", "items.json"), "utf8")).items.map((record) => [record.key ?? `w${record.id}`, record]),
+);
+
+/** Where an item comes from, in the words of the Source line of a step (the table's first kind that has any: drops, quests, vendor, crafted, foraged). */
+function sourceLine(record) {
+  const source = record.source ?? {};
+  const more = source.more ?? {};
+  const list = (kind, lead) => (source[kind] === undefined ? "" : lead + source[kind].join(", ") + (more[kind] ? ` and ${more[kind]} more` : ""));
+  return list("drops", "") || list("quests", "quest: ") || list("sold", "vendor: ") || (source.crafted ? "crafted" : "") || list("forage", "Foraged in ");
+}
+
+/** What the page must say of a step the optimizer sent: the line of what to do, the gain (rounded half up, thousands separated; a gain that rounds to nothing is "+<1"), and the source. */
+function sayingOf(step) {
+  const at = step.ident.lastIndexOf("@");
+  const record = ITEMS.get(step.ident.slice(0, at));
+  expect(record, `${step.ident} is in the item table of the results`).toBeDefined();
+  const tier = (n) => `+${n}`;
+  const shown = Math.floor(step.gainValue + 0.5);
+  const gain = shown === 0 ? "+<1" : `+${shown.toLocaleString("en-US")}`;
+  const what =
+    step.kind === "upgrade"
+      ? `Upgrade your ${record.name} ${tier(step.sourceTier)} to ${tier(step.ident.slice(at + 1))}`
+      : `Get ${step.kind === "copy" ? "another " : ""}${record.name} ${tier(step.ident.slice(at + 1))}`;
+  return { what, gain: `Gain ${gain} kit value`, source: sourceLine(record) === "" ? "" : `Source: ${sourceLine(record)}` };
 }
 
 /** The first item the picker offers for what is typed, added at +0 `times` times; no item is named (on real results, whose items have other names). */
@@ -491,6 +545,7 @@ const liveRegions = (page) => page.evaluate(() => document.querySelectorAll('#up
 test("a gear list is answered by the optimizer in the browser: the question comes in the section, then Equip now, the Next step and the steps as they arrive, and Stop ends the path @once", async ({ page, watch }) => {
   test.setTimeout(120_000);
   const seen = watchRequests(page);
+  await recordSteps(page);
   await open(page, TRIO);
   // Stop is pressed the moment the first step under Then is drawn, as a visitor's click would be were it fast enough
   await page.evaluate(() => {
@@ -542,11 +597,39 @@ test("a gear list is answered by the optimizer in the browser: the question come
       ["Main hand", "Tinker's Awl +0", "in your bags: move to worn"],
       ["Off hand", "Pellbrook Mallet +3", ""],
     ]);
-    await expect(page.locator("#upgrade-next .step-what")).toHaveText("Get Ferryman's Pike +4");
-    await expect(page.locator("#upgrade-next .step-gain")).toHaveText("Gain +435 kit value");
-    await expect(page.locator("#upgrade-next .step-source")).toHaveText("Source: The Hole");
-    await expect(page.locator("#upgrade-then-list > li").first().locator(".step-what")).toHaveText("Get another Helm of the Stoneward +4");
   }
+  // the Next step and the first step under Then are what the optimizer sent the page (steps 1 and 2; step 0 is Equip now), said in the words of the table of items of the results:
+  // the item, its tier, what to do about it, its gain and where it comes from. These checks work out what the page must say from what the worker sent, so they hold on any results.
+  const sent = await page.evaluate(() => window.__tfSteps);
+  if (FIXTURE) {
+    // and on the fixture the worker's answer for this gear is Python's: the request the page made is the view and the gear the reference was made for, Equip now and the first
+    // steps are the reference's to the exact value and the kit place for place, and the page says them in these words (written here from the reference, not from the worker)
+    const [request] = await page.evaluate(() => window.__tfRequests);
+    expect(request.scenario).toEqual(REFERENCE_VIEW.scenario);
+    expect(request.tierMode).toEqual(REFERENCE_VIEW.tierMode);
+    expect([...request.owned].sort()).toEqual([...REFERENCE_VIEW.owned].sort());
+    const only = (step, keys) => Object.fromEntries(keys.map((key) => [key, step[key]]));
+    expect(only(sent[0], ["F", "value", "kit", "buffs", "hasteAssumed"])).toEqual(REFERENCE_VIEW.equipNow);
+    const STEP = ["ident", "kind", "sourceTier", "F", "value", "gain", "gainValue", "kit", "buffs", "hasteAssumed"];
+    expect(sent.slice(1, 1 + REFERENCE_VIEW.path.length).map((step) => only(step, STEP))).toEqual(REFERENCE_VIEW.path);
+    expect(REFERENCE_VIEW.path[0].ident, "the reference's Next step is the Gold Hoop of Haste at +4 (a vendor item of Freeport)").toBe("w90008@4");
+    await expect(page.locator("#upgrade-next .step-what")).toHaveText("Get Gold Hoop of Haste +4");
+    await expect(page.locator("#upgrade-next .step-gain")).toHaveText("Gain +597 kit value");
+    await expect(page.locator("#upgrade-next .step-source")).toHaveText("Source: vendor: Freeport");
+    expect(REFERENCE_VIEW.path[1], "the reference's first step under Then is an upgrade of the +0 Tinker's Awl to +4").toMatchObject({ ident: "w80923@4", kind: "upgrade", sourceTier: 0 });
+    await expect(page.locator("#upgrade-then-list > li").first().locator(".step-what")).toHaveText("Upgrade your Tinker's Awl +0 to +4");
+  }
+  expect(sent.map((step) => step.index), "the worker sent Equip now, the Next step and at least the first step under Then").toEqual(expect.arrayContaining([0, 1, 2]));
+  const [next, first] = [1, 2].map((index) => sent.find((step) => step.index === index));
+  expect(next.found, "a next step was found").toBe(true);
+  expect(next.gainValue, "and it gains something").toBeGreaterThan(0);
+  const saying = sayingOf(next);
+  await expect(page.locator("#upgrade-next .step-what")).toHaveText(saying.what);
+  await expect(page.locator("#upgrade-next .step-gain")).toHaveText(saying.gain);
+  if (saying.source === "") await expect(page.locator("#upgrade-next .step-source")).toHaveCount(0);
+  else await expect(page.locator("#upgrade-next .step-source")).toHaveText(saying.source);
+  expect(first.found, "a first step under Then was found").toBe(true);
+  await expect(page.locator("#upgrade-then-list > li").first().locator(".step-what")).toHaveText(sayingOf(first).what);
   await expect(page.locator("#upgrade-next .step-what")).toHaveText(/^(Get|Upgrade your) /);
   await expect(page.locator("#upgrade-next .step-gain")).toHaveText(/^Gain \+[\d,]+ kit value$/);
   const streamed = await page.locator("#upgrade-then-list > li").count();

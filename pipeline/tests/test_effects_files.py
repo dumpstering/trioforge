@@ -4,6 +4,7 @@ and the writer the release build calls."""
 import gzip
 import json
 import shutil
+from dataclasses import replace
 from itertools import combinations
 from pathlib import Path
 
@@ -156,6 +157,39 @@ def test_the_shared_file_lists_each_effect_once_with_its_donors_easiest_first(bu
     for effect in shared["effects"]:
         assert set(effect["x"]) <= {"ambiguous", "equip", "inferred", "description"}
     assert next(e for e in shared["effects"] if e["n"] == "Ykesha")["x"] == ["description"]
+
+
+def _ineligible(effect):
+    return {**effect, "items": [{**d, "eligible": False} for d in effect["items"]]}
+
+
+def test_an_effect_whose_donors_are_none_of_them_in_the_item_table_is_not_in_the_shared_file(built):
+    # data-2026-10-27: e183 and e186 (AMMO-only mount clicks) were written with an empty donor list
+    shared = files.shared_document(built)
+    assert all(row["d"] for row in shared["effects"])
+    skipped = [e for e in built.effects if not any(d["eligible"] for d in e["items"])]
+    assert skipped, "the catalog has effects with no wearable donor (the mounts); the test would prove nothing without them"
+    assert not {e["id"] for e in skipped} & {row["id"] for row in shared["effects"]}
+    template = next(e for e in built.effects if any(d["eligible"] for d in e["items"]) and e.get("category") != "unresolved" and e["kind"] != "focus")
+    extra = {**_ineligible(template), "id": "e999"}
+    more = replace(built, effects=[*built.effects, extra])
+    assert "e999" not in {row["id"] for row in files.shared_document(more)["effects"]}
+
+
+def test_no_trio_file_names_an_effect_that_the_shared_file_skipped(built):
+    template = next(e for e in built.effects if e["kind"] == "click" and e.get("category") not in ("unresolved", None) and any(d["eligible"] for d in e["items"]))
+    extra = {**_ineligible(template), "id": "e999"}
+    ctx = replace(built.ctx, effects=[*built.ctx.effects, extra], by_id={**built.ctx.by_id, "e999": extra})
+    more = replace(built, effects=[*built.effects, extra], ctx=ctx)
+    shared_ids = {row["id"] for row in files.shared_document(more)["effects"]}
+    skipped = {e["id"] for e in more.effects if not any(d["eligible"] for d in e["items"])}  # (the mounts of the catalog, and the effect made here)
+    assert "e999" in skipped and len(skipped) > 1 and not skipped & shared_ids
+    for classes in (["PAL", "MNK", "BER"], ["WAR", "CLR", "PAL"], ["WIZ", "MAG", "ENC"]):
+        kit = pseudo_kit(more, classes)
+        doc = files.trio_document(more, "-".join(c.lower() for c in classes), "OGR", 4, {role: kit for role in roles_for(classes)})
+        named = {row["e"] for entry in doc["roles"].values() for part in ("focus", "click", "carry", "worn", "proc", "plan", "noroom") for row in entry[part]}
+        assert named and not named & skipped
+        assert named <= shared_ids
 
 
 def test_the_shared_file_has_no_unresolved_effect_and_no_fingerprint_and_no_evidence_level(built):

@@ -646,14 +646,17 @@ class ExaltReaderCheck:
         if self._items is None:
             try:
                 self._items = load_strict(self.folder / assemble.ITEMS_FILE)
-            except (OSError, JsonFileError):
-                self.error = ""  # (the release reads the item table itself, and refuses it by its own message)
+            except (OSError, JsonFileError) as error:
+                reason = str(error) if isinstance(error, JsonFileError) else f"{self.folder / assemble.ITEMS_FILE}: {type(error).__name__}"
+                self.error = f"the site's reader cannot read the item table: {reason}"
                 return
         self.reads += 1
         try:
             data.load_exalt(self.folder, [trio], self._items)
         except data.ResultsError as error:
             self.error = f"the site's reader refuses the effects files: {error}"
+        except (KeyError, TypeError, AttributeError, ValueError, IndexError) as error:  # (a table of the wrong shape, which the reader meets as a crash and not as a refusal)
+            self.error = f"the site's reader refuses the effects files: malformed item table or effects files ({type(error).__name__}: {error})"
 
     def result(self) -> None:
         """Raise :class:`ReleaseRefused` with the reader's message if it refused a file."""

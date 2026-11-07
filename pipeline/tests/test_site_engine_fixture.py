@@ -26,6 +26,8 @@ from engine_fixture import (
     SLOT_LIMIT,
     TIER_MODES,
     TRIO_FOLDER,
+    UPGRADE_VIEW,
+    UPGRADE_VIEW_OWNED,
     VIEW_BUFFS,
     VIEW_ROLES,
     WEAPON_RATE,
@@ -41,6 +43,8 @@ from engine_fixture import (
     kit_values,
     kit_values_text,
     texts,
+    upgrade_view_answers,
+    upgrade_view_text,
     weapon_rate_answers,
     weapon_rate_text,
     weighted_answers,
@@ -319,3 +323,14 @@ def test_the_weapon_rate_moves_the_answer_where_a_weapon_has_grown_and_nowhere_e
         for answer in row["rates"].values():
             assert len(answer["kit"]) == 22 and answer["hasteAssumed"] >= 0 and answer["value"] > 0, row["name"]
             assert {ident.split("@")[1] for ident in answer["kit"] if ident is not None} <= {str(row["tier"])}, row["name"]
+
+
+def test_the_committed_upgrade_view_is_what_the_reference_gives():
+    document = upgrade_view_answers()
+    assert UPGRADE_VIEW.is_file(), "fixtures/site/upgrade-view.json is missing; run pipeline/tests/engine_fixture.py"
+    assert UPGRADE_VIEW.read_text(encoding="utf-8") == upgrade_view_text(document), "upgrade-view.json is stale; run pipeline/tests/engine_fixture.py"
+    assert UPGRADE_VIEW.read_bytes().endswith(b"}\n") and b"\r" not in UPGRADE_VIEW.read_bytes()
+    # the path gains something at every step, and the gear is the whole owned list
+    steps = document["path"]
+    assert len(steps) == 3 and all(step["gainValue"] > 0 for step in steps)
+    assert len(document["owned"]) == len(UPGRADE_VIEW_OWNED)

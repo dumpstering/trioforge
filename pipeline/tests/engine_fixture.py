@@ -37,6 +37,9 @@ catalog file).
 the invented items, write them again with::
 
     PYTHONPATH=pipeline .venv/bin/python pipeline/tests/engine_fixture.py
+* ``fixtures/site/upgrade-view.json``: the view and the gear that ``tests-e2e/upgrade.spec.mjs`` gives the page (the dump ``fixtures/dumps/site-small.txt`` read as the page reads it, on the page's
+  default view), with the answers of Python's reference: Equip now and a farm path of three steps (``upgrade.equip_now``, ``upgrade.farm_path``, the tie stage on and off agreeing), so that the
+  test can pin the Next step and the first step under Then to the reference and not to what the worker said.
 
 Every name and number here is invented: ``test_site_fixture_items.py`` fails when the key or the name of a real item of the wiki
 (``derived/catalog.json``) is in this file or anywhere in the fixture.
@@ -59,6 +62,7 @@ KIT_VALUES = REPO / "fixtures" / "site" / "kit-values.json"
 BEST_KIT = REPO / "fixtures" / "site" / "best-kit.json"
 WEIGHTED = REPO / "fixtures" / "site" / "weighted.json"
 WEAPON_RATE = REPO / "fixtures" / "site" / "weapon-rate.json"
+UPGRADE_VIEW = REPO / "fixtures" / "site" / "upgrade-view.json"
 SLUG = "pal-mnk-ber"
 TRIO = ("PAL", "MNK", "BER")
 LEVEL = 50
@@ -813,10 +817,66 @@ def weighted_text(document: dict[str, Any] | None = None) -> str:
     return json.dumps(weighted_answers() if document is None else document, indent=1, ensure_ascii=False) + "\n"
 
 
+#: the view and the owned set the Upgrade test gives the page: the default view of the trio page, and the items of fixtures/dumps/site-small.txt as the page reads them, as (key, tier, count)
+UPGRADE_VIEW_SCENARIO = {"race": "OGR", "role": "balanced", "buffs": "own", "evidence": "strict", "setup": "dw"}
+UPGRADE_VIEW_OWNED = [
+    ("w80631", 4, 1), ("w90020", 0, 1), ("w90029", 4, 1), ("w90011", 0, 1), ("w90023", 1, 1), ("w90001", 4, 2),
+    ("w8091", 4, 1), ("w90006", 0, 1), ("w80113", 3, 1), ("w90007", 2, 2), ("w80923", 0, 1), ("w90014", 1, 1),
+]  # fmt: skip
+UPGRADE_VIEW_STEPS = 3
+
+
+def upgrade_view_answers() -> dict[str, Any]:
+    """Equip now and the first steps of the farm path (ready4) for the view and the gear of the Upgrade test, as Python's reference gives them, with and without the tie stage."""
+    from trioforge import upgrade
+
+    world = _world()
+    scenario = UPGRADE_VIEW_SCENARIO
+    profile = _profile(world, scenario)
+    buffset = world.buffsets[scenario["buffs"]]
+    owned = _owned(world, UPGRADE_VIEW_OWNED)
+    mode = {"mode": "ready4"}
+    offered = _candidates(world, scenario, mode)
+    equip = upgrade.equip_now(profile, owned, scenario["setup"], buffset, canonical=True)
+    plain_equip = upgrade.equip_now(profile, owned, scenario["setup"], buffset, canonical=False)
+    assert equip.status == "optimal" and equip.breakdown is not None and _same(equip, plain_equip), "Equip now depends on the tie stage"
+    path = upgrade.farm_path(profile, owned, offered, scenario["setup"], buffset, UPGRADE_VIEW_STEPS, canonical=True)
+    plain = upgrade.farm_path(profile, owned, offered, scenario["setup"], buffset, UPGRADE_VIEW_STEPS, canonical=False)
+    key = lambda s: (s.item, s.kind, s.source_tier, s.F, _kit_idents(s.solution.kit), s.solution.buffs)  # noqa: E731
+    assert [key(s) for s in path] == [key(s) for s in plain], "the farm path depends on the tie stage"
+    return {
+        "trio": SLUG,
+        "level": LEVEL,
+        "scenario": scenario,
+        "owned": [[f"{k}@{t}", c] for k, t, c in UPGRADE_VIEW_OWNED],
+        "tierMode": mode,
+        "equipNow": {"F": _exact_text(equip.breakdown.F), "value": float(equip.breakdown.F), "kit": _kit_idents(equip.kit), "buffs": list(equip.buffs), "hasteAssumed": _counted_haste(equip)},
+        "path": [
+            {
+                "ident": f"{step.item.key}@{step.item.tier}",
+                "kind": step.kind,
+                "sourceTier": step.source_tier,
+                "F": _exact_text(step.F),
+                "value": float(step.F),
+                "gain": _exact_text(step.gain),
+                "gainValue": float(step.gain),
+                "kit": _kit_idents(step.solution.kit),
+                "buffs": list(step.solution.buffs),
+                "hasteAssumed": step.haste_assumed,
+            }
+            for step in path
+        ],
+    }  # fmt: skip
+
+
+def upgrade_view_text(document: dict[str, Any] | None = None) -> str:
+    return json.dumps(upgrade_view_answers() if document is None else document, indent=1, ensure_ascii=False) + "\n"
+
+
 def write_all() -> None:
     texts_made = {
         **texts(), EQUIP_NOW: equip_now_text(), KIT_VALUES: kit_values_text(), BEST_KIT: best_kit_text(), WEIGHTED: weighted_text(),
-        WEAPON_RATE: weapon_rate_text(),
+        WEAPON_RATE: weapon_rate_text(), UPGRADE_VIEW: upgrade_view_text(),
     }  # fmt: skip
     for path, text in texts_made.items():
         path.write_text(text, encoding="utf-8", newline="\n")

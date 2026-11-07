@@ -3,16 +3,18 @@
 //   node scripts/preview.mjs [RESULTS_FOLDER]        (or: npm run preview -- RESULTS_FOLDER)
 //
 // The results folder is the argument, else $TRIOFORGE_RESULTS, else the synthetic fixture (fixtures/site/results, built with
-// the fixture's own sources manifest). The site goes into site/dist with --noindex (a local preview is never for search
-// engines) and `wrangler pages dev` serves it on http://127.0.0.1:8788.
+// the fixture's own sources manifest). The site goes into site/dist-preview with --noindex (a local preview is never for search
+// engines) and `wrangler pages dev` serves it on http://127.0.0.1:8788. It never builds into site/dist, which holds only what
+// `python -m trioforge.site.build --out site/dist` writes (a release build): the folders of a preview are all other ones.
 //
 // Other variables:
 //   TRIOFORGE_PREVIEW_PORT        the port to serve on (default 8788)
 //   TRIOFORGE_SOURCES_MANIFEST    a sources manifest other than the default (derived/, or the fixture's for the fixture)
 //   TRIOFORGE_PYTHON              the Python that runs the build (default: the one in .venv, else python3 or python)
-//   TRIOFORGE_PREVIEW_DIST        the folder the site is built into (default site/dist), so that two previews can run side by side
-//   TRIOFORGE_PREVIEW_EXALT=1     build from a copy of the results (under build/) that has the two files of the effects layer, made by the code that makes them for a release
-//                                 (the fixture results were made before the layer, and the section Effects to exalt of a trio page needs them)
+//   TRIOFORGE_PREVIEW_DIST        the folder the site is built into (default site/dist-preview), so that two previews can run side by side
+//   TRIOFORGE_PREVIEW_EXALT=1     for the section Effects to exalt of a trio page, which needs the two files of the effects layer (effects.json and the exalt.json of each trio):
+//                                 results that have them (a release's do) are built as they are; the fixture results, made before the layer, are copied under build/ and given
+//                                 the files by the code that makes them for a release (scripts/preview-plan.mjs says which); other results without them are refused
 //
 // Playwright's webServer starts this script (playwright.config.mjs). Stopping it stops wrangler and its workerd too.
 
@@ -20,10 +22,18 @@ import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, rmSync } from "node:fs";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { distFolder, exaltResults } from "./preview-plan.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE = join(ROOT, "fixtures", "site");
-const DIST = process.env.TRIOFORGE_PREVIEW_DIST ? resolve(ROOT, process.env.TRIOFORGE_PREVIEW_DIST) : join(ROOT, "site", "dist");
+function chooseDist() {
+  try {
+    return distFolder(ROOT, process.env);
+  } catch (error) {
+    return fail(error.message);
+  }
+}
+const DIST = chooseDist();
 // wrangler wants a compatibility date; this is a static site, so the value changes nothing except the warning it prints without one
 const COMPATIBILITY_DATE = "2026-09-26";
 
@@ -71,7 +81,13 @@ function withEffects(source) {
   return copy;
 }
 
-const results = process.env.TRIOFORGE_PREVIEW_EXALT === "1" ? withEffects(chosen) : chosen;
+function exaltPreviewResults() {
+  const plan = exaltResults({ usingFixture, hasEffects: existsSync(join(chosen, "effects.json")) });
+  if (plan.use === "refuse") fail(plan.message);
+  return plan.use === "given" ? chosen : withEffects(chosen);
+}
+
+const results = process.env.TRIOFORGE_PREVIEW_EXALT === "1" ? exaltPreviewResults() : chosen;
 
 // 1. build (the generator is run as a module, so the package folder goes on the path)
 const build = spawnSync(

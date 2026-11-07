@@ -4,7 +4,7 @@
 //
 // A test without @once runs in the four views of playwright.config.mjs (1280 and 360 px wide, light and dark). The pictures at the end are only taken when $TRIOFORGE_PICTURES names a folder.
 
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as plain } from "@playwright/test";
 import { PLACES, itemInfo, planKit } from "../pipeline/trioforge/site/static/ui/exalt-plan.js";
@@ -101,7 +101,9 @@ test("the files are fetched once, however often the section is opened", async ({
 // ---- results made without the effects layer ------------------------------------------------------------------------------------------------------------------
 
 test.describe("a page made from results that have no effects files", () => {
-  test.use({ baseURL: ORIGIN }); // (the first preview: the fixture results as they are)
+  test.use({ baseURL: ORIGIN }); // (the first preview: the results as they are)
+  // (real results have the effects files, so the first preview has the section and there is nothing to check here: the fixture is the results that were made without them)
+  test.skip(existsSync(resolve(RESULTS, "effects.json")), "these results have the effects files");
 
   test("has no section, and asks for nothing of it", async ({ page, watch }) => {
     const asked = [];
@@ -152,7 +154,8 @@ test("the plan, the lists and the carry list are what the files say, in tables w
   await expect(first).toContainText(/\d+(\.\d)?%? .*(faster casts|more spell damage|more healing|lower mana cost)/);
   await expect(first).toContainText("Opens at +1");
   await expect(first).toContainText(/touches \d+% of what your .+ casts at 30\+/);
-  await expect(page.locator("#exalt-focus tbody tr").first().locator(".exalt-dot")).toHaveCount(1);
+  // (one dot for each item that carries the effect: the donor of the row, and the others after "Also:")
+  await expect(page.locator("#exalt-focus tbody tr").first().locator(".exalt-dot")).toHaveCount(1 + (entry.focus[0].o ?? []).length);
   await expect(page.locator("#exalt-focus tbody tr").first()).toContainText(/Vendor|Quest or crafted|Drop|Raid drop|No known source/);
   expect(watch.problems()).toEqual([]);
 });
@@ -210,12 +213,12 @@ test("another role shows its own lists and its own plan, as the files have them"
 
 test("a kit that is not the one the files were made for gets its plan made again in the browser, and the lists stay", async ({ page, request, watch }) => {
   const data = await files(request);
-  const shard = await loadShard(request, "strict", "own");
   const table = itemTable();
   await open(page, TRIO);
   await openSection(page);
   await openSwitches(page);
   const controls = await readControls(page);
+  const shard = await loadShard(request, controls.ev, controls.buffs); // (the shard of the evidence level and buffs the page is made from: the fixture's are strict and own, a release's wiki)
   const listBefore = await page.locator("#exalt-lists").innerText();
   const tiers = await optionValues(page, "#sw-tier");
   const lowest = tiers.map(Number).sort((a, b) => a - b)[0];
@@ -243,12 +246,12 @@ test("a kit that is not the one the files were made for gets its plan made again
 
 test("another race gets the plan the matcher makes of its kit", async ({ page, request, watch }) => {
   const data = await files(request);
-  const shard = await loadShard(request, "strict", "own");
   const table = itemTable();
   await open(page, TRIO);
   await openSection(page);
   await openSwitches(page);
   const controls = await readControls(page);
+  const shard = await loadShard(request, controls.ev, controls.buffs); // (the shard of the evidence level and buffs the page is made from: the fixture's are strict and own, a release's wiki)
   const races = await optionValues(page, "#sw-race");
   const other = races.find((race) => race !== controls.race);
   await page.locator("#sw-race").selectOption(other);

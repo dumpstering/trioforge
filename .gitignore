@@ -5,6 +5,10 @@ __pycache__/
 .pytest_cache/
 sources/**/raw/
 dist/
+# the previews (npm run preview, and the two the browser tests start) each build into a folder of their own: site/dist is only for what
+# `python -m trioforge.site.build --out site/dist` writes (the `dist/` line above)
+site/dist-preview/
+site/dist-e2e/
 site/dist-exalt/
 # the marker beside a build folder (site/dist.trioforge-build): it says the folder may be replaced, and is not part of it
 *.trioforge-build

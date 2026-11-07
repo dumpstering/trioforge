@@ -155,7 +155,7 @@ test("a slider at x2 asks the visitor first, then gives Python's answer for the 
   await expect(page.locator("#solve")).toContainText(c.F);
   await expect(page.locator("#solve")).toContainText(`Kit value ${grouped(c.value)}`);
   await expect(page.locator("#solve button")).toHaveText("Back to the precomputed answer");
-  await expect(page.locator("#announce")).toHaveText(/^Weights armor class x2\. Solved for your settings\. Showing .+\. Kit value 19,069\.$/);
+  await expect(page.locator("#announce")).toHaveText(new RegExp(String.raw`^Weights armor class x2\. Solved for your settings\. Showing .+\. Kit value ${grouped(c.value)}\.$`)); // (the value is the reference's, as in the line above)
   expect(queryOf(page)).toMatchObject({ buffs: "own", w: "21111" });
   await expect(page.locator(".engine-consent")).toHaveCount(0);
   // a second answer comes from the same worker, with nothing downloaded again

@@ -258,6 +258,51 @@ def test_a_release_without_effects_files_passes_the_reader_check(tmp_path):
     reader_check(results)
 
 
+def test_an_unreadable_item_table_is_refused_by_the_reader_check_with_a_message_of_its_own(tmp_path):
+    results = copy_results(tmp_path)
+    (results / "items.json").unlink()
+    with pytest.raises(ReleaseRefused, match=r"the site's reader cannot read the item table: .*items\.json"):
+        reader_check(results)
+
+
+def test_an_item_table_that_is_not_json_is_refused_by_the_reader_check_with_a_message_of_its_own(tmp_path):
+    results = copy_results(tmp_path)
+    (results / "items.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(ReleaseRefused, match=r"the site's reader cannot read the item table: .*items\.json"):
+        reader_check(results)
+
+
+@pytest.mark.parametrize(
+    ("change", "kind"),
+    [
+        (lambda d: [], "TypeError"),  # (a list, not a mapping)
+        (lambda d: {k: v for k, v in d.items() if k != "items"}, "KeyError"),
+        (lambda d: dict(d, items=[{"name": "no key"}]), "KeyError"),
+        (lambda d: dict(d, items=[7]), r"(TypeError|AttributeError|KeyError)"),
+    ],
+)
+def test_an_item_table_of_the_wrong_shape_is_refused_by_the_reader_check_and_does_not_crash_it(tmp_path, change, kind):
+    results = copy_results(tmp_path)
+    path = results / "items.json"
+    path.write_text(json.dumps(change(json.loads(path.read_text(encoding="utf-8")))), encoding="utf-8")
+    with pytest.raises(ReleaseRefused, match=rf"the site's reader refuses the effects files: malformed .*\({kind}: "):
+        reader_check(results)
+
+
+def test_the_reader_check_keeps_the_first_refusal(tmp_path):
+    results = copy_results(tmp_path)
+    (results / "items.json").write_text("{not json", encoding="utf-8")
+    check = release.ExaltReaderCheck(results)
+    trio = data.load_trio(results / "pal-mnk-ber")
+    check(trio)
+    first = check.error
+    (results / "items.json").write_text("[]", encoding="utf-8")
+    check(trio)
+    assert check.error == first and first
+    with pytest.raises(ReleaseRefused, match="cannot read the item table"):
+        check.result()
+
+
 def noise(count: int) -> list[str]:
     """Text that does not compress: a file made of it is over its gzip budget when it is long enough."""
     import random
