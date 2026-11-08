@@ -10,6 +10,7 @@ operations the browser does, so both always print the same digit. Negative numbe
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import math
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -199,6 +200,7 @@ class RaceOption:
     name: str
     legal: bool  # can a new character start as one of the trio's classes in this race?
     best: bool
+    tied: bool = False  # a legal race within TIE_BAND of the best one, on a page that says the races are tied: the dropdown marks it like the best race
 
 
 def race_options(codes: list[str] | tuple[str, ...], *, trio: tuple[str, ...], best: str) -> list[RaceOption]:
@@ -209,6 +211,28 @@ def race_options(codes: list[str] | tuple[str, ...], *, trio: tuple[str, ...], b
         primaries = set(races_module.legal_primaries(code, data=table))
         options.append(RaceOption(code, races_module.RACE_NAMES[code], bool(primaries & set(trio)), code == best))
     return sorted(options, key=lambda o: (not o.best, not o.legal, o.name))
+
+
+#: races within this share of the best race's F are tied with it: the model scores no racial but the Iksar's AC, so a gap this small is not a ranking
+TIE_BAND = 0.005
+
+
+def tied_races(rows: Sequence[tuple[str, bool, float]], best: str) -> list[str]:
+    """The race codes tied with ``best``. ``rows`` are (code, legal, F) of every race in the default view. Tied are the legal races other than ``best`` whose F is at least
+    ``F(best) * (1 - TIE_BAND)``, by F descending and then by code. Nothing is tied when the best F is zero or below (a band of a share has no meaning there)."""
+    best_f = next(f for code, _, f in rows if code == best)
+    if best_f <= 0:
+        return []
+    floor = best_f * (1 - TIE_BAND)
+    tied = [(code, f) for code, legal, f in rows if legal and code != best and f >= floor]
+    return [code for code, _ in sorted(tied, key=lambda row: (-row[1], row[0]))]
+
+
+def join_names(names: Sequence[str]) -> str:
+    """Names with commas and a final "and": "A", "A and B", "A, B and C"."""
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
 
 
 # ---- the trio page --------------------------------------------------------------------------------------------------------------
@@ -326,6 +350,9 @@ class TrioPage:
     best_name: str
     runner_up_name: str
     margin: str
+    tied_names: tuple[str, ...]  # the names of the legal races within :data:`TIE_BAND` of the best race, best value first: when there are any, the line says they are tied and gives no margin
+    tied_text: str  # ``tied_names`` as a sentence part ("Dwarf and Ogre"), empty when there are none
+    tie_band: str  # :data:`TIE_BAND` as the line words it ("0.5%")
     flips: str
     races: tuple[RaceOption, ...]
     roles: tuple[RoleOption, ...]
@@ -709,6 +736,14 @@ def trio_page(
     name = trio_name(meta.trio)
     race_opts = race_options(shard.races, trio=meta.trio, best=race)
     race_names = {o.code: o.name for o in race_opts}
+    default_value: dict[str, float] = {}  # the F of each race in the default view, at its best setup (what the rows of defaults.json say, and what build.check_defaults holds the answer to)
+    for code in shard.races:
+        values = [sc.value for sc in (shard.scenario(code, role, tier, st) for st in shard.setups_for(role)) if sc is not None]
+        if values:
+            default_value[code] = max(values)
+    tied = tied_races([(o.code, o.legal, default_value[o.code]) for o in race_opts if o.code in default_value], race)
+    tied_names = tuple(race_names[code] for code in tied)
+    race_opts = [dataclasses.replace(o, tied=True) if o.code in tied else o for o in race_opts]
     role_setups = {r: shard.setups_for(r) for r in shard.roles}  # what the default level offers, which the page shows first
     # The page code shows the choices of whichever evidence level is picked next, and a level can have a setup the default level
     # has not (the shield setup, while the strict pool has no shield): every setup of any level gets a choice in the page, and
@@ -730,6 +765,9 @@ def trio_page(
         best_name=race_names[race],
         runner_up_name=race_names[defaults.runner_up],
         margin=fmt_signed(display_int(defaults.margin)),
+        tied_names=tied_names,
+        tied_text=join_names(tied_names),
+        tie_band=f"{TIE_BAND * 100:g}%",
         flips=flip_text(defaults.flips),
         flips_more=flips_more(defaults.flips),
         races=tuple(race_opts),
