@@ -44,7 +44,9 @@
 //
 // With `canonical: true` the answer is the kit of Python's `solve_canonical` (placement and tie stage). That is for tests and for checking a precomputed
 // scenario. A browser's answer is `canonical: false`: placement only. Each of the two stages has the whole `budgetMs` to itself, as each solve of Python
-// has its time limit, so that a canonical call can take about twice `budgetMs`.
+// has its time limit, so that a canonical call can take about three times `budgetMs` (the first stage, the proof below, the tie stage). The tie stage is cut down when the band of kits it chooses
+// from wears one set of items, which a cheaper proof shows (`itemsAreSettled`): it then looks only for the buffs, with the items fixed, or for nothing at all where the
+// scenario has no optional buff. The answer is the same either way, and `tieShortcut: false` (a test hook) runs the whole tie stage always.
 //
 // Where the worn items stand (`place_canonically` in solve.py). Only the two hands make the place of an item matter to the value (the weapon index of what is in
 // them, the shield bonus of an off-hand shield), so the kit is placed by a rule that looks at the items alone. Among the arrangements of the worn items
@@ -58,7 +60,7 @@
 //
 // Progress (`onProgress`) is told as `{phase: "solving", stage, elapsedMs, ...}`. The events of the first stage (`stage` "solve") carry the model's
 // `objective` (its constant included), and the solver's `bound`, `gap` and `nodes`. The tie stage minimizes a rank, whose objective, bound and gap are not
-// values of the kit: its events (`stage` "tie") carry the first stage's `objective`, which is the value they keep, and `nodes`.
+// values of the kit: its events (`stage` "tie") carry the first stage's `objective`, which is the value they keep, and `nodes`. So do the events of the proof of the tie stage's shortcut (`stage` "proof").
 //
 // Exactness. A model value more than 1e-6 relative above the evaluator's value of its own kit is an ExactnessError at any status: the model and the
 // evaluator disagree, which is a bug and never a rounding. A model value below the evaluator's is not an error: a kit from a time limit or from the tie
@@ -137,11 +139,13 @@ const COPIES_FOR_BOTH_HANDS = 2;
 const SETUP_SET = new Set(CONSTANTS.setups);
 const SESSION_KEYS = new Set(["highs", "profile", "setup", "buffset", "monkBins", "options", "now"]);
 const SESSION_OPTION_KEYS = new Set(["any_rule", "haste_assumed"]);
-const SOLVE_KEYS = new Set(["scenario", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "cutoff"]);
-const TRUTHFUL_KEYS = new Set(["name", "items", "options", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "bound", "needTime"]);
+const SOLVE_KEYS = new Set(["scenario", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "cutoff", "tieShortcut"]);
+const TRUTHFUL_KEYS = new Set(["name", "items", "options", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "bound", "needTime", "tieShortcut"]);
 /** The two stages of a solve, as the progress events name them. */
 const STAGE_SOLVE = "solve";
 const STAGE_TIE = "tie";
+/** The proof that the items of the band are settled (`itemsAreSettled`): its events are the tie stage's in kind (the first stage's objective, no bound or gap). */
+const STAGE_PROOF = "proof";
 /** The options of HiGHS that a call may not set: the budget is the time limit, and the build has one thread. */
 const REFUSED_HIGHS_OPTIONS = new Set(["time_limit", "threads"]);
 /** The largest number the solver takes for an option that is infinite by default (its options take no infinity), and treats as none: the value an option is put back to. */
@@ -682,12 +686,12 @@ function progressCallbacks(session, model, onProgress, { startedAt, stage, shown
   return {
     [types.mipImprovingSolution](event) {
       const value = finiteOrNull(event.data.objective_function_value);
-      if (stage === STAGE_TIE) report({ objective: shown });
+      if (stage === STAGE_TIE || stage === STAGE_PROOF) report({ objective: shown });
       else if (value !== null) report({ objective: value + model.const });
     },
     [types.mipLogging](event) {
       const fields = {};
-      if (stage === STAGE_TIE) {
+      if (stage === STAGE_TIE || stage === STAGE_PROOF) {
         fields.objective = shown;
       } else {
         const bound = finiteOrNull(event.data.mip_dual_bound);
@@ -902,13 +906,123 @@ function answerOf(session, scenario, found, extra) {
 }
 
 /**
+ * Whether the band of the tie stage holds one set of worn items (`{settled, nodes}`, the nodes of the proof): no other set of items (copies counted), whatever buffs are chosen, has a model value of at least
+ * `best - 1e-7 max(1, |best|)`. The tie stage chooses among the kits of that band, and it is a hard program (the rank is a dense objective that the relaxation bounds badly);
+ * this is the cheaper way to learn that the items at least are settled: the program of the scenario with one more row that excludes every kit that wears the first stage's
+ * items, and a cutoff at the bottom of the band, which is a proof of the kind the levels' cutoff runs are ("no kit is worth that much": ended optimal below the cutoff, or
+ * infeasible). Any answer but a proof (another set of items in the band, a stop at the time limit) is "no", and the tie stage runs as it always did.
+ *
+ * What a yes lets the tie stage do. Every kit of the band wears the first stage's items, so what is left to choose is the buffs, and where the items stand. Where they stand is
+ * the solver's to choose in the tie stage, as it always was (an off-hand shield goes into the softcap term of the armor class, so a buff can make one place worth more than
+ * another): the columns of the items are not fixed, which would fix the places too. The tie stage keeps one row for each item, `sum of its columns = N*_i`, which is exactly
+ * what was proven (the copies of each item) and no more, and looks for the least rank: every kit of the band satisfies the rows, so the optimum of the whole tie stage is
+ * the optimum of this one, in the places too. With no optional buff there is nothing left to choose but the places, which the canonical placement undoes (`placeHands`
+ * depends on the set of worn items alone), and the kit of the first stage is the tie stage's.
+ *
+ * The row that excludes the kits. A worn set is `N_i` copies of each item `i` (the sum of its columns, in every group). `N != N*` is `sum over the items i with N*_i = 0
+ * of N_i + sum over the other items of (more_i + fewer_i) >= 1`, where `more_i` may be 1 only if `N_i >= N*_i + 1` (the row `N_i >= (N*_i + 1) more_i`) and `fewer_i` only if
+ * `N_i <= N*_i - 1` (`N_i + (reach_i - N*_i + 1) fewer_i <= reach_i`, `reach_i` the most the columns of `i` can hold). A kit whose set differs makes at least one term of the
+ * sum 1, and each added binary can be 1 only where it is true, so the kits that the row leaves out are exactly the ones that wear the set of the first stage's kit, whatever
+ * buffs they choose, and no other. (Rows that said `N_i >= N*_i` for `more_i` and `N_i <= N*_i` for `fewer_i` would leave out the kits that wear more or less than the first
+ * stage's, which makes "yes" the answer for want of looking: tests-js/engine-tie-shortcut.test.mjs holds the shortcut to the whole tie stage on pools with tied items, where
+ * that mistake shows.)
+ */
+function itemsAreSettled(session, scenario, first, { deadline, startedAt, highsOptions, onProgress }) {
+  const { model } = scenario;
+  const columns = model.c.length;
+  const best = first.value.modelF;
+  const cutoff = best - TIE_TOLERANCE * Math.max(1, Math.abs(best));
+  const byItem = new Map();
+  for (const [column, , key, tier] of model.item_cols) {
+    const name = ident(key, tier);
+    if (!byItem.has(name)) byItem.set(name, []);
+    byItem.get(name).push(column);
+  }
+  const c = [...model.c];
+  const col_lb = [...model.col_lb];
+  const col_ub = [...model.col_ub];
+  const integrality = [...model.integrality];
+  const col_names = [...model.col_names];
+  const A = { start: [...model.A.start], index: [...model.A.index], value: [...model.A.value] };
+  const row_lb = [...model.row_lb];
+  const row_ub = [...model.row_ub];
+  const row_names = [...model.row_names];
+  const addBinary = (name) => {
+    c.push(0);
+    col_lb.push(0);
+    col_ub.push(1);
+    integrality.push(1);
+    col_names.push(name);
+    return c.length - 1;
+  };
+  const addRow = (name, terms, lb, ub) => {
+    for (const [column, value] of terms) {
+      A.index.push(column);
+      A.value.push(value);
+    }
+    A.start.push(A.index.length);
+    row_lb.push(lb);
+    row_ub.push(ub);
+    row_names.push(name);
+  };
+  const differs = []; // the terms of the row that says the worn items are not the first stage's
+  for (const [name, own] of byItem) {
+    const worn = Math.round(own.reduce((sum, column) => sum + first.x[column], 0));
+    if (worn === 0) {
+      for (const column of own) differs.push([column, 1]);
+      continue;
+    }
+    const reach = own.reduce((sum, column) => sum + col_ub[column], 0);
+    if (reach > worn) {
+      const more = addBinary(`tie.more[${name}]`); // 1 only if the item is worn more often than the kit wears it
+      addRow(`tie.more.row[${name}]`, [...own.map((column) => [column, 1]), [more, -(worn + 1)]], 0, null);
+      differs.push([more, 1]);
+    }
+    const fewer = addBinary(`tie.fewer[${name}]`); // 1 only if the item is worn less often
+    addRow(`tie.fewer.row[${name}]`, [...own.map((column) => [column, 1]), [fewer, reach - worn + 1]], null, reach);
+    differs.push([fewer, 1]);
+  }
+  addRow("tie.other", differs, 1, null);
+  const other = { ...model, c, col_lb, col_ub, integrality, col_names, A, row_lb, row_ub, row_names };
+  const solver = createSolver(session, other);
+  try {
+    const found = run(session, solver, other, {
+      deadline,
+      start: null,
+      highsOptions: { ...highsOptions, objective_bound: -(cutoff - model.const) }, // (the program is a maximum and the solver minimizes the negative)
+      onProgress,
+      startedAt,
+      stage: STAGE_PROOF,
+      shown: best,
+    });
+    if (found.status === "infeasible") return { settled: true, nodes: found.nodes };
+    if (found.status !== "optimal") return { settled: false, nodes: found.nodes };
+    if (found.x === null) return { settled: true, nodes: found.nodes };
+    let value = model.const;
+    for (let column = 0; column < columns; column += 1) value += model.c[column] * found.x[column];
+    return { settled: value < cutoff, nodes: found.nodes }; // (a kit worth less than the cutoff is what the solver came across, not a kit of the band)
+  } finally {
+    solver.dispose();
+  }
+}
+
+/**
  * The second stage (`solve_canonical` in solve.py): once the best value is known, solve again with the extra row `F >= best - 1e-7 max(1, |best|)` and
  * the objective "minimize the total rank" (`tieRanks`), on a model of its own so that the scenario's solver is left as it was. Returns the kit of the
  * second stage, or null when it did not end optimal.
  */
-function tieStage(session, scenario, first, { deadline, highsOptions, onProgress, startedAt }) {
+function tieStage(session, scenario, first, { deadline, allowance, highsOptions, onProgress, startedAt, shortcut }) {
   const { highs } = session;
   const { model } = scenario;
+  let settled = false; // the items are the first stage's in every kit of the band: the tie stage keeps the copies of each item as they are
+  let proofNodes = 0;
+  if (shortcut) {
+    const proof = itemsAreSettled(session, scenario, first, { deadline, startedAt, highsOptions, onProgress });
+    settled = proof.settled;
+    proofNodes = proof.nodes;
+    if (settled && model.buff_cols.length === 0) return { ...first, nodes: proofNodes }; // (a band of one set of items and no buff has nothing to choose but the places)
+    deadline = session.now() + allowance; // (the proof was a stage of its own: the tie stage has its whole allowance still)
+  }
   const best = first.value.modelF;
   const tolerance = TIE_TOLERANCE * Math.max(1, Math.abs(best));
   const cost = new Array(model.c.length).fill(0);
@@ -929,11 +1043,29 @@ function tieStage(session, scenario, first, { deadline, highsOptions, onProgress
       value: [...model.A.value, ...live.map((column) => model.c[column])],
     },
   };
+  if (settled) {
+    // one row for each item that the kit wears, `sum of its columns = the copies the kit wears`: what the proof proved, and not where the copies stand
+    const copies = new Map();
+    for (const [column, , key, tier] of model.item_cols) {
+      const name = ident(key, tier);
+      if (!copies.has(name)) copies.set(name, []);
+      copies.get(name).push(column);
+    }
+    for (const columns of copies.values()) {
+      const worn = Math.round(columns.reduce((sum, column) => sum + first.x[column], 0));
+      if (worn === 0) continue;
+      tie.row_lb.push(worn);
+      tie.row_ub.push(worn);
+      tie.A.index.push(...columns);
+      tie.A.value.push(...columns.map(() => 1));
+      tie.A.start.push(tie.A.index.length);
+    }
+  }
   const solver = createSolver(session, tie);
   try {
     const found = run(session, solver, tie, { deadline, start: { colValue: first.x }, highsOptions, onProgress, startedAt, stage: STAGE_TIE, shown: best });
     if (found.status !== "optimal" || found.x === null) return null;
-    return { ...found, value: valueOf(session, scenario, found.x) };
+    return { ...found, nodes: found.nodes + proofNodes, value: valueOf(session, scenario, found.x) };
   } finally {
     solver.dispose();
   }
@@ -946,7 +1078,7 @@ function tieStage(session, scenario, first, { deadline, highsOptions, onProgress
  * `budgetMs` the whole time of the call (required: a number from 0), `deadline` a moment on the clock of the session by which the first stage must end
  * if that is earlier than the end of the budget, `start` a kit to begin from (`{kit, buffs}`, say an answer), `canonical` whether to run the tie stage
  * (default false), `highsOptions` single options of the solver for this call (a test hook: `mip_max_nodes`, say; never `threads` or `time_limit`),
- * `onProgress` a function that gets `{phase: "solving", stage, elapsedMs, objective?, bound?, gap?, nodes?}` (`stage` is "solve" or "tie", see the head of
+ * `onProgress` a function that gets `{phase: "solving", stage, elapsedMs, objective?, bound?, gap?, nodes?}` (`stage` is "solve", "proof" or "tie", see the head of
  * this file). A SolveError for a request that is not understood, a solver status that is no answer, and an ExactnessError for a model that overstates its
  * own kit.
  */
@@ -956,7 +1088,8 @@ export function solve(session, request) {
   for (const key of Object.keys(request)) {
     if (!SOLVE_KEYS.has(key)) throw fail(`the request has an option (${show(key)}) that solve does not read (it reads ${[...SOLVE_KEYS].join(", ")})`);
   }
-  const { budgetMs, deadline, canonical = false, highsOptions, onProgress, start: given, cutoff } = request;
+  const { budgetMs, deadline, canonical = false, highsOptions, onProgress, start: given, cutoff, tieShortcut = true } = request;
+  if (typeof tieShortcut !== "boolean") throw fail("tieShortcut is true or false");
   if (cutoff !== undefined && (typeof cutoff !== "number" || !Number.isFinite(cutoff))) throw fail("cutoff is a value of the model (the constant included) that a kit must reach, a number");
   if (typeof budgetMs !== "number" || !Number.isFinite(budgetMs) || budgetMs < 0) throw fail("budgetMs is the time of the call in milliseconds, a number from 0");
   if (deadline !== undefined && (typeof deadline !== "number" || !Number.isFinite(deadline))) throw fail("deadline is a moment on the clock of the session, in milliseconds");
@@ -996,7 +1129,7 @@ export function solve(session, request) {
   let answer = answerOf(session, scenario, found, {});
   let used = found;
 
-  // the second stage has a budget of its own, as in Python, where each solve is given its time limit (a canonical call can take about twice `budgetMs`);
+  // the second stage has a budget of its own, as in Python, where each solve is given its time limit (a canonical call can take about three times `budgetMs`: the first stage, the proof of `itemsAreSettled`, the tie stage);
   // a program with no column has one kit, and so nothing to separate: it is canonical as it stands
   if (canonical && found.status === "optimal" && scenario.solver === null) {
     answer.canonical = true;
@@ -1004,7 +1137,7 @@ export function solve(session, request) {
   } else if (canonical && found.status === "optimal" && !(cutoff !== undefined && found.value !== undefined && found.value.modelF < cutoff)) {
     // (with a cutoff, a kit worth less than it is what the solver came across, not the best there is: there is nothing to separate)
     const tied = session.now();
-    const second = tieStage(session, scenario, found, { deadline: tied + budgetMs, highsOptions, onProgress, startedAt });
+    const second = tieStage(session, scenario, found, { deadline: tied + budgetMs, allowance: budgetMs, highsOptions, onProgress, startedAt, shortcut: tieShortcut });
     const tieMs = session.now() - tied;
     if (second !== null && second.value.F.equals(found.value.F)) {
       // the band is a net for float noise, not a licence to lose value: the kit is accepted only if it is exactly as good
@@ -1052,18 +1185,19 @@ export function solveScenario(session, request) {
   for (const key of Object.keys(request)) {
     if (!TRUTHFUL_KEYS.has(key)) throw fail(`the request has an option (${show(key)}) that solveScenario does not read (it reads ${[...TRUTHFUL_KEYS].join(", ")})`);
   }
-  const { name, items, budgetMs, deadline, canonical = false, start, highsOptions, onProgress, bound = true, needTime = false } = request;
+  const { name, items, budgetMs, deadline, canonical = false, start, highsOptions, onProgress, bound = true, needTime = false, tieShortcut = true } = request;
   const options = request.options === undefined || request.options === null ? {} : request.options;
   if (typeof budgetMs !== "number" || !Number.isFinite(budgetMs) || budgetMs < 0) throw fail("budgetMs is the time of the call in milliseconds, a number from 0");
   if (typeof bound !== "boolean") throw fail("bound is true or false");
   if (typeof needTime !== "boolean") throw fail("needTime is true or false");
+  if (typeof tieShortcut !== "boolean") throw fail("tieShortcut is true or false");
   if (!isRecord(options)) throw fail("the options are an object, the builder's");
   const opts = readOptions(options);
   if (opts.hasteFloor !== null && opts.hasteAssumed === null) throw fail("haste_floor without haste_assumed: the levels set both");
   // the call ends by its deadline if it has one (the budget is then what was left of it when the call was made), else `budgetMs` from now: one look at the clock, and none if there is a deadline
   const callEnd = deadline !== undefined ? deadline : session.now() + budgetMs;
   const left = () => Math.max(0, callEnd - session.now());
-  const call = { deadline, canonical, highsOptions, onProgress };
+  const call = { deadline, canonical, highsOptions, onProgress, tieShortcut };
   const finish = (answer, more) => Object.assign(answer, more);
   const profile = profileOf(session.profile);
   const scoresWeapons = session.setup !== null && session.setup !== "stick" && profile.weights.DMG.sign() !== 0;
@@ -1240,6 +1374,7 @@ function solveProgram(session, scenarioName, items, options, made, { left, call,
     budgetMs: remaining,
     deadline: call.deadline,
     canonical: call.canonical,
+    tieShortcut: call.tieShortcut,
     highsOptions: call.highsOptions,
     onProgress: call.onProgress,
     start,

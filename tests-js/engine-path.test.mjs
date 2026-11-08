@@ -662,15 +662,19 @@ describe("the budget", () => {
     try {
       const got = farmPath(session, c.owned(), c.candidates(), { steps: 1, budgetMs: 5000, canonical: true });
       expect(got.steps).toHaveLength(1);
-      expect(log.limits).toHaveLength(4); // Equip now and the step, two stages each
+      // Equip now and the step, three stages each: the first stage, the proof that the band of the tie stage wears one set of items (a stage of its own), and the tie stage (which
+      // follows the proof whenever the scenario has an optional buff, settled band or not)
+      expect(log.limits).toHaveLength(6);
       expect(log.limits[0].limitMs).toBe(5000);
-      expect(log.limits[1].limitMs).toBe(5000); // the tie stage of Equip now: the allowance of its first stage, not what the first stage left
-      expect(log.limits[2].limitMs).toBe(5000 - 600); // the step has what is left of the path after the two stages of Equip now
-      expect(log.limits[3].limitMs).toBe(5000 - 600); // and its tie stage the same
+      expect(log.limits[1].limitMs).toBe(5000); // the proof of Equip now: the allowance of its first stage, not what the first stage left
+      expect(log.limits[2].limitMs).toBe(5000); // and its tie stage the same: the proof before it has not used it up
+      expect(log.limits[3].limitMs).toBe(5000 - 900); // the step has what is left of the path after the three stages of Equip now
+      expect(log.limits[4].limitMs).toBe(5000 - 900); // and its proof and its tie stage the same
+      expect(log.limits[5].limitMs).toBe(5000 - 900);
       const alone = onClock(c, doc, (read, move) => ({ before: () => move(read() + 300) }));
       try {
         equipNow(alone.session, c.owned(), { budgetMs: 1000, canonical: true });
-        expect(alone.log.limits.map((limit) => limit.limitMs)).toEqual([1000, 1000]);
+        expect(alone.log.limits.map((limit) => limit.limitMs)).toEqual([1000, 1000, 1000]);
       } finally {
         closeSession(alone.session);
       }

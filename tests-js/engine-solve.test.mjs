@@ -919,7 +919,8 @@ describe("the time of a call", () => {
     const { session, log, set, clock } = ticking({ hooks: (read, move) => ({ before: () => move(read() + 400) }) });
     try {
       setScenario(session, "s", c.poolOf(equip), deepFreeze(clone(equip.options)));
-      const answer = solve(session, { scenario: "s", budgetMs: 1000, canonical: true });
+      // (the whole tie stage, `tieShortcut: false`: the stages of the shortcut have their own test, in engine-tie-shortcut)
+      const answer = solve(session, { scenario: "s", budgetMs: 1000, canonical: true, tieShortcut: false });
       expect(answer.tieStage).toBe("applied");
       expect(log.limits).toHaveLength(2);
       expect(log.limits[0].limitMs).toBeGreaterThan(1000 - 4 * TICK);
@@ -940,7 +941,7 @@ describe("the time of a call", () => {
       solve(session, { scenario: "s", budgetMs: 1000, deadline: 300 });
       solve(session, { scenario: "s", budgetMs: 200, deadline: 1000 });
       solve(session, { scenario: "s", budgetMs: 1000, deadline: -5 });
-      solve(session, { scenario: "s", budgetMs: 1000, canonical: true, deadline: 300 });
+      solve(session, { scenario: "s", budgetMs: 1000, canonical: true, deadline: 300, tieShortcut: false });
       expect(log.limits.map((limit) => limit.limitMs)).toEqual([300, 200, 0, 300, 1000]);
       for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, "300", null, {}, [300]]) {
         expect(() => solve(session, { scenario: "s", budgetMs: 100, deadline: bad }), String(bad)).toThrow(SolveError);
@@ -966,7 +967,8 @@ describe("the time of a call", () => {
       const first = solve(plain, { scenario: "s", budgetMs: BUDGET_MS });
       setScenario(session, "s", c.poolOf(equip), options);
       const events = [];
-      const answer = solve(session, { scenario: "s", budgetMs: BUDGET_MS, canonical: true, onProgress: (event) => events.push(event) });
+      // (the tie stage's own events are what is held here: `tieShortcut: false`, since a band of one kit is not searched by the tie stage)
+      const answer = solve(session, { scenario: "s", budgetMs: BUDGET_MS, canonical: true, tieShortcut: false, onProgress: (event) => events.push(event) });
       expect(answer.tieStage).toBe("applied");
       const model = session.scenarios.get("s").model;
       const solving = events.filter((event) => event.stage === "solve");

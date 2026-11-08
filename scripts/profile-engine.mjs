@@ -64,7 +64,7 @@ export function viewList(results) {
 }
 
 /** The ids of a fixed-stride sample of `n` views, then the views of the default views of `defaults` trios (spread over the trios). */
-function chooseIds(results, views, { sample, defaults, directory }) {
+export function chooseIds(results, views, { sample, defaults, directory }) {
   const ids = new Set();
   const stride = Math.max(1, Math.floor(views.count / Math.max(1, sample)));
   // (an offset that is not a multiple of the number of races, so that the stride does not keep to one race)
@@ -86,7 +86,7 @@ function chooseIds(results, views, { sample, defaults, directory }) {
 // ---- solving and counting --------------------------------------------------------------------------------------------------------------------
 
 /** A loaded solver whose models count their runs: `runs` is told {kind, ms, ints, columns, rows} for each (kind: "lp" a relaxation, "mip" a first stage, "tie" the tie stage). */
-function countingHighs(highs, runs) {
+export function countingHighs(highs, runs) {
   const make = highs.createModel;
   const maximize = highs.constants.objectiveSense.maximize;
   highs.createModel = function createModel(data, ...rest) {
