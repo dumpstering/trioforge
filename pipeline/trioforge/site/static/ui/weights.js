@@ -38,7 +38,7 @@
 import { DATA_FILE, EngineFault, fetchBytes, sameOriginUrl, sha256Hex } from "../engine/download.js";
 import { MANIFEST_PATH, fetchTextWithin, parseManifest } from "../engine/manifest.js";
 import { BEST_KIT, LIMITS, PROTOCOL_VERSION, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "../engine/protocol.js";
-import { MAX_DIFFICULTY, arrivalTier } from "../engine/tiers.js";
+import { MAX_DIFFICULTY, arrivalTier, wornHaste } from "../engine/tiers.js";
 
 /** The pause after the last change before a request is sent, and the time a solve may take (the phone gate's). */
 const PAUSE_MS = 300;
@@ -334,6 +334,7 @@ export function initWeights(app, words) {
           evidence: record.evidence,
           deity: record.deity,
           source: record.source,
+          haste: record.stats?.HASTE, // (the worn haste at +0, for the chip of a row: an item of an answer is in no shard that says it)
         });
       }
       return records;
@@ -344,11 +345,13 @@ export function initWeights(app, words) {
     return recordsPromise;
   }
 
-  /** An item of the kit in the shape the page draws a shard's items in (shard.js), from its record in the item table. */
-  function itemOf(records, ident) {
+  /** An item of the kit in the shape the page draws a shard's items in (shard.js), from its record in the item table; `haste` is its worn haste at the tier of the answer (0 for none). */
+  function itemOf(records, ident, tier) {
     const key = ident.slice(0, ident.lastIndexOf("@"));
     const record = records.get(key);
-    if (record === undefined) return { key, name: `Unknown item (${key})`, rule: "fixed0", arrival: 0, source: "", evidence: "unknown", deity: [] };
+    if (record === undefined) return { key, name: `Unknown item (${key})`, rule: "fixed0", arrival: 0, source: "", evidence: "unknown", deity: [], haste: 0 };
+    const base = Number.isSafeInteger(record.haste) ? record.haste : 0;
+    const step = Number.isSafeInteger(app.hastePerTier) ? app.hastePerTier : 0;
     const rule = typeof record.tier_rule === "string" ? record.tier_rule : "drop";
     const deity = Array.isArray(record.deity) ? record.deity.filter((name) => typeof name === "string") : typeof record.deity === "string" ? [record.deity] : [];
     return {
@@ -359,6 +362,7 @@ export function initWeights(app, words) {
       source: sourceText(record),
       evidence: typeof record.evidence?.level === "string" ? record.evidence.level : "unknown",
       deity,
+      haste: wornHaste(base, tier, step),
     };
   }
 
@@ -429,7 +433,7 @@ export function initWeights(app, words) {
 
   /** The answer, in the rows of Wear this and in the answer area. When the page cannot draw it now (another view is on its way) it is kept for `release()`. */
   function show(one, result, records) {
-    const items = result.kit.map((ident) => (ident === null ? null : itemOf(records, ident)));
+    const items = result.kit.map((ident) => (ident === null ? null : itemOf(records, ident, one.settings.tier)));
     if (app.drawSolved({ items, tier: one.settings.tier, hasteAssumed: result.hasteAssumed, value: result.value, kind: one.kind }) === false) {
       one.parked = () => show(one, result, records);
       return;

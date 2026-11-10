@@ -26,6 +26,8 @@
 {% for group in book.groups %}
 <section aria-labelledby="group-{{ group.key }}">
 <h2 id="group-{{ group.key }}">{{ group.title }}</h2>
+{% if group.key == "tier" %}<p id="tier-progress">An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier.</p>
+{% endif %}
 {% for rule in group.rules %}
 <article class="rule" id="{{ rule.id }}">
 <h3>{{ rule.title }}</h3>

@@ -1,4 +1,4 @@
-<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="strict" data-base="/data/pal-mnk-ber/" data-release="data-2026-10-14" data-groups="AC MANA ATK+HASTE SV regen" data-items="/item/">
+<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="strict" data-base="/data/pal-mnk-ber/" data-release="data-2026-10-14" data-haste-tier="1" data-groups="AC MANA ATK+HASTE SV regen" data-items="/item/">
 <div class="page-head">
 <h1>Paladin / Monk / Berserker: best gear (<span data-rules="level.current">level 50</span>)</h1>
 <p id="best-race" class="best-race"><span class="art art-race-ogre" aria-hidden="true"></span>Best race for this trio: <strong>Ogre</strong> <span class="margin" data-rules="roles.balanced roles.templates">(+813 over Troll)</span>, judged in the <span id="best-race-view">Balanced view at <span data-rules="tier.stat_rule">+4</span> with your own buffs</span>.</p>
@@ -6,6 +6,23 @@
 <summary>How the best race was judged, and what could change it</summary>
 <p id="best-race-unscored" class="note">Racial abilities other than the Iksar's natural AC are not scored yet, so races close in value may differ in play.</p>
 <p id="best-race-rules" class="note">How the score works: <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<div id="race-gets" data-rules="roles.balanced roles.templates ac.softcap.past_cap_rate hp.pools_counted mana.pools_counted end.formula haste.cap_pct_with_monk stats.str_to_atk resist.cap regen.gear_caps naked.rule">
+<p id="race-gets-intro" class="note">In the Balanced view at +4 with your own buffs, the runner-up is compared with the best race, Ogre. This section describes that view; the switches do not change it. Each race is judged with its own best kit, so the differences include item choices as well as the race. Values are in hit-point equivalents.</p>
+<ul class="race-cards"><li>
+<p><strong>Ogre</strong> best race</p>
+<dl>
+<dt>Value</dt><dd>10,720</dd><dt>Racial abilities</dt><dd><ul><li><dfn>Increased Consumption Rate</dfn> (not scored): Barbarians, Halflings, Ogres, and Trolls all consume food and drink slightly faster than other races.</li><li><dfn>Infravision</dfn> (not scored): Slightly improved night vision, not as good as the Dark Elf&#39;s Ultravision.</li><li><dfn>Frontal Stun Immunity</dfn> (not scored): Ogres cannot be stunned from the front, which gives them a great advantage over other races.</li><li><dfn>Slam</dfn> (not scored)</li></ul></dd>
+</dl>
+</li><li>
+<p><strong>Troll</strong> runner-up</p>
+<dl>
+<dt>Value</dt><dd>9,908</dd><dt>Against Ogre</dt><dd>−813 (−7.58%)</dd>
+<dt>Its best kit against Ogre's best kit</dt><dd>−80 HP, −40 attack, −10 AC</dd><dt>Base stats</dt><dd>−22 STR, −13 STA, +13 AGI, −8 INT, −7 WIS, +5 DEX, +3 CHA</dd><dt>Racial abilities</dt><dd><ul><li><dfn>Increased Consumption Rate</dfn> (not scored)</li><li><dfn>Increased HP Regeneration</dfn> (not scored): Both Iksar and Trolls have higher HP regeneration rates (per tick)</li><li><dfn>Infravision</dfn> (not scored)</li><li><dfn>Slam</dfn> (not scored)</li><li><dfn>-20 Fire Resist</dfn> (not scored)</li></ul></dd>
+</dl>
+</li></ul>
+<p class="note">How the starting stats are made: <a href="/rules/#naked.rule">Naked stat formula</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
+<p id="race-credit" class="note">Racial abilities: <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a> (<a href="/sources/#races-box">pages and revisions</a>)</p>
+</div>
 <p id="best-race-note" class="note">Could change if an open test goes the other way: Iksar, if Iksar AC stacks inside the cap (test B17). <a href="/rules/#open-tests">See the open tests</a></p>
 </details>
 </div>
@@ -254,9 +271,9 @@
 </tbody>
 </table>
 <p id="kit-rules" class="rules">Tiers: <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.arrival">Tier at which items arrive, by source</a> <span class="seal seal-developer"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-developer"></use></svg><span>Developer</span></span> &middot; <a href="/rules/#tier.exp_needed">Experience needed for tier N</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
-<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown. &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing. <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#regen.per_tier">Regen per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.weight_pct">Weight reduction per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.weapon_damage_pct">Weapon damage per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown. An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier. &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing. <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#regen.per_tier">Regen per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.weight_pct">Weight reduction per tier</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span> &middot; <a href="/rules/#tier.weapon_damage_pct">Weapon damage per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
 <p id="why-note" class="note" hidden>The &ldquo;lost without it&rdquo; lines and the next best items are worked out for the default view only: the best race at the default role, tier, buffs and weapons. The stats are those of the view shown.</p></section>
-
+<details class="expander" id="common"><summary>Get these first</summary><div id="common-body"></div></details>
 <section class="why" id="why" aria-labelledby="why-h">
 <h2 id="why-h">Why this kit</h2>
 <p data-rules="roles.templates" class="kit-line"><span class="art art-coin" aria-hidden="true"></span>Kit value <strong id="kit-value">10,720</strong> hit-point equivalents; the gear adds <strong id="kit-gain">+7,770</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
@@ -299,7 +316,7 @@
 <th scope="row" role="rowheader">Haste</th>
 <td role="cell"><span data-f="t-haste">57%</span></td>
 <td role="cell">85%</td>
-<td role="cell"><a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></td>
+<td role="cell"><a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="row-note">Only the highest worn haste counts.</span></td>
 </tr>
 <tr role="row" data-rules="stats.str_to_atk">
 <th scope="row" role="rowheader">Attack</th>
@@ -477,7 +494,7 @@
 <p id="robust-na" class="note" data-rules="tier.stat_rule" hidden>Robustness checks cover the default race at +4 and +10 only.</p>
 </details>
 <details class="expander exalt" id="exalt" data-effects="/data/effects.json" data-exalt="/data/pal-mnk-ber/exalt.json">
-<summary>Effects to exalt: a planning aid</summary>
+<summary>Exalt plan: effects to move onto this kit</summary>
 <p class="note">A planning aid, not a measured best-in-slot: it names the focus, click, worn and proc effects worth putting on the items of a kit, and where an effect can come from. It needs scripts to show.</p>
 <p id="exalt-status" class="note" hidden></p>
 <div id="exalt-body"></div>

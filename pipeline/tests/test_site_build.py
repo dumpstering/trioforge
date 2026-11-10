@@ -1283,6 +1283,45 @@ def test_the_rules_page_shows_the_settled_mana_curve_with_its_source_and_no_open
     assert "https://github.com/EQEmu/Server" in [a.get("href") for a in node.find_all("a")]
 
 
+#: the note the site says wherever it explains tiers or says that an item is shown at its tier (rules page, item pages, trio page)
+TIER_PROGRESS_NOTE = "An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier."
+
+
+def test_the_rules_page_shows_the_weight_rule_as_settled_by_in_game_readings_with_no_public_page_as_its_source(site):
+    out, _ = site
+    html = page(out, PAGES["rules"])
+    node = html.by_id("tier.weight_pct")
+    text = node.text()
+    assert "Measured" in text and "Maintainer's private observation" in text and "2026-11-09" in text
+    assert "Value: 9" in text and "percent of the base weight per tier" in text
+    assert "Player reports" not in text and "Open" not in text
+    assert node.find_all("a") == []  # no address is a source of it any more
+    assert "xm2514" not in node.text() and "eqlwiki.com" not in node.text()
+    assert "progress toward the next tier" in text.lower() and "The rounding of the last tenth of a stone is not settled." in text
+    # the other rules that cite the two public pages keep them
+    hrefs = [a.get("href") for a in html.by_id("tier.weapon_damage_pct").find_all("a")]
+    assert "https://eqlwiki.com/index.php/Item_Upgrade_System" in hrefs
+    # the rule's own anchor still works from the item and trio pages
+    assert html.by_id("tier.weight_floor").find_all("a")
+
+
+def test_the_rules_page_says_that_stats_and_weight_change_between_tiers_and_that_items_are_shown_at_a_tier(site):
+    out, _ = site
+    html = page(out, PAGES["rules"])
+    note = html.by_id("tier-progress")
+    assert note.text() == TIER_PROGRESS_NOTE
+    section = next(s for s in html.find_all("section") if s.get("aria-labelledby") == "group-tier")
+    assert note in section.find_all("p")  # under the heading of the tiers, with the rules that are about them
+    assert [n for n in html.iter() if n.tag == "p" and n.text() == TIER_PROGRESS_NOTE] == [note]  # said once on the page
+
+
+def test_the_trio_page_says_it_under_the_stats_of_the_kit(site):
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    line = html.by_id("kit-stats-rules").text()
+    assert "Each item's stats are at the tier shown." in line and TIER_PROGRESS_NOTE in line
+
+
 def wiki_link(row):
     """The link to the wiki revision in a row of the table of revisions (the title of the row is a link to the page of the item as well, so it is not the first link)."""
     return next(a for a in row.find_all("a") if a.get("href").startswith("https://eqlwiki.com/"))
@@ -1422,6 +1461,21 @@ def test_the_page_budgets_hold(site):
     assert summary.sizes["largest_runnerup"] == max(p.stat().st_size for p in runnerups)
     assert summary.sizes["largest_runnerup_gzip"] == max(gz(p.read_bytes()) for p in runnerups)
     assert summary.sizes["first_view_gzip"] == first_load + largest  # the weight of a first switch, the shard counted gzipped
+
+
+def test_the_section_get_these_first_is_a_closed_summary_and_an_empty_container_directly_below_wear_this(site):
+    # the trio page has little room under its size limit: the section is a summary and an empty container, which the page script fills (static/trio.js: paintCommon).
+    # It is below the answer, never above it: docs/DECISIONS.md says "Wear this" and its first row are on the first screen of a phone.
+    out, _ = site
+    html = read(out, PAGES["trio"])
+    block = '<details class="expander" id="common"><summary>Get these first</summary><div id="common-body"></div></details>'
+    assert html.count(block) == 1
+    assert len(block.encode("utf-8")) < 250
+    start = html.index(block)
+    answer = html.index('<section class="answer" aria-labelledby="wear-h">')
+    assert answer < start and html.rindex("<section", 0, start) == answer  # the last section that opens before it is Wear this ...
+    assert html[:start].rstrip().endswith("</section>")  # ... and it has closed, with nothing between it and the block
+    assert html[start + len(block) :].lstrip().startswith('<section class="why"')  # and Why this kit follows it
 
 
 def test_the_budget_check_reports_each_limit_that_is_broken():
@@ -2027,6 +2081,11 @@ def text_nodes(node):
             yield from text_nodes(child)
 
 
+def links_a_rule(node) -> bool:
+    """Is the text of this node the text of a link to a rule?"""
+    return any(a.tag == "a" and (a.get("href") or "").startswith("/rules/#") for a in [node, *node.ancestors()])
+
+
 def not_a_figure(node) -> str | None:
     """Why the digits of a text are not a figure of the model, or None when they are one."""
     for n in [node, *node.ancestors()]:
@@ -2040,6 +2099,10 @@ def not_a_figure(node) -> str | None:
             return "a date: how old the data is"
         if n.get("data-n") == "count":
             return "a count of things on the page itself (picks that hold, notes not shown)"
+        if n.tag == "ul" and n.parent is not None and n.parent.tag == "dd" and any(a.get("id") == "race-gets" for a in n.ancestors()) and not links_a_rule(node):
+            return "a racial ability as the wiki words it (+5 Magic Resist, Sense Heading (50)): the page says it is not scored, so it is the wiki's figure and not the model's; a figure that is the text of a rule's link is still checked"
+        if n.get("id") == "race-credit":
+            return "the name of the licence in the credit line under the section on the races (CC BY-SA 4.0), which the footer holds too"
     return None
 
 

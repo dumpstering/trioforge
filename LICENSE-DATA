@@ -29,6 +29,9 @@ Attribution
 
 Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, tier-scaled
 
+Racial abilities adapted from the race pages of eqlwiki.com (https://eqlwiki.com/) by the eqlwiki contributors, licensed CC BY-SA 4.0; changes: parsed from each page's Racial(s) list, each name given the first sentence of the page's section of that name where there is one, strings sanitized.
+(These are the data of derived/racials.json and the two race pages kept in fixtures/wiki-races; the NOTICE file says the same.)
+
 Attribution URI: https://eqlwiki.com/
 Attribution URI (EQL Tools): https://eqltools.com/sources
 

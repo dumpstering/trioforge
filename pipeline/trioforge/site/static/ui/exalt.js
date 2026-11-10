@@ -1,4 +1,4 @@
-// The section Effects to exalt of a trio page: the code the page loads when the section is opened or scrolled into view, and not before.
+// The section Effects to exalt of a trio page, and the hints under Wear this: the code the page loads once it has shown (when the browser is idle), or when the section is opened or scrolled into view, and not in the first load.
 //
 //   initExalt(section, env) -> {ready(), destroy()}
 //
@@ -11,6 +11,9 @@
 //   equipKit(), onEquipKit(callback)      the kit of Equip now in the Upgrade section, `{kit: [{key, name, tier} | null], record(key), defaults}`, or null; and when it changes
 //   words                                 the page's own words: {slotLabel(index), raceName(code), roleLabel(code), tierLabel(tier), itemHref(key)}
 //   announce(text), onUpdated(), reload() a live region, what to do when the files are of another release than the page's, and a reload
+//   kitRows()                             the rows of Wear this (22, in the order of the places of a kit): under each one that the plan gives an effect, one short line says which effect to put on
+//                                         it and from which donor item (the exalt hints); `view().pending` is true while the kit drawn is a stand-in for one that is being worked out (no line is shown then)
+//   background                            true when the page loads the section before the visitor has asked for it: a failure is then not announced while the section is closed
 //
 // What it shows (the spec of the feature, 2026-10-22): the exalt plan for a kit (which effect to put on which item of the kit), the effects that have no room, the ranked lists (foci, clicks that must
 // be equipped, worn effects, procs) with a plain meaning, what a focus touches of the spells of the class that gains most, the tier a socket opens at, the best donor with the others and how hard
@@ -19,8 +22,9 @@
 //
 // The lists do not depend on the kit. The plan does: for the kit the files were made for it is the plan in the file; for any other kit (another race, tier, setup or buffs, an answer of the
 // optimizer, the kit of Equip now) it is made again in the browser by exalt-plan.js, the port of effects/plan.py that a test holds to Python's plans. The item list of the site (the one the optimizer's
-// worker reads, named by engine-manifest.json) is fetched for that, once, only when a plan has to be made again for a kit of Wear this, since the donors are described in effects.json and the
-// kit of Equip now brings its own records.
+// worker reads, named by engine-manifest.json) is fetched for that, once, only when a plan has to be made again for a kit of Wear this (since the donors are described in effects.json and the
+// kit of Equip now brings its own records). With the section closed only the hints under Wear this are made, so that item list is then read when the browser is idle and not in the handler of a
+// control; the section's own plan and lists are drawn when it is open.
 //
 // Everything is text (textContent, never markup). The styles are a constructed stylesheet made here: the section adds nothing to the stylesheet every page loads.
 
@@ -96,6 +100,20 @@ const STYLE = `
 .exalt-table summary{cursor:pointer;color:var(--win-link);min-height:1.5rem}
 .exalt-noroom{margin:.4rem 0}
 .exalt-ceiling{display:block;font-size:.85rem;color:var(--win-muted)}
+.exalt h4{margin:.8rem 0 .3rem}
+.exalt-donors{margin:.2rem 0 .8rem;padding-inline-start:1.2rem}
+.exalt-donors li{margin:.15rem 0}
+.exalt-hints{display:block;margin:.25rem 0 0}
+.exalt-hint{display:block;margin:.1rem 0;font-size:.85rem;color:var(--win-muted)}
+.exalt-hint-plan{margin-inline-start:.4rem;white-space:nowrap}
+.exalt-eff{display:inline}
+.exalt-effbtn{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dotted currentColor;border-radius:0;padding:0;min-height:1.5rem;cursor:help;text-align:start}
+.exalt-effbtn:focus-visible{outline:2px solid var(--frame-focus);outline-offset:2px}
+.exalt-hint .exalt-effbtn{color:var(--win-text)}
+.exalt-tip{display:block;margin:.25rem 0;padding:.4rem .6rem;border:1px solid var(--win-border);background:var(--win-head);color:var(--win-text);font-size:.85rem;font-weight:400;box-sizing:border-box;width:0;min-width:100%;overflow-wrap:anywhere;white-space:normal;text-transform:none;letter-spacing:normal}
+.exalt-tip[hidden]{display:none}
+html.exalt-tip-open{overflow-anchor:none}
+.exalt-tip-note{display:block;margin-top:.2rem;color:var(--win-muted)}
 `;
 
 const el = (doc, tag, attributes = {}, ...children) => {
@@ -113,7 +131,7 @@ const slotWords = (slots) => slots.map((slot) => SLOT_WORDS[slot] ?? slot.toLowe
 const percent = (n) => `${Number.isInteger(n) ? n : Math.round(n * 10) / 10}%`;
 
 /** What a focus does, from its row: "15% faster casts: all spells with a cast time of 2 s or more, up to spell level 44 (weaker above)". */
-function focusMeaning(effect) {
+export function focusMeaning(effect) {
   const f = effect.f;
   const how = FOCUS_WORDS[f.kind] ?? "a focus";
   const amount = f.lo === f.hi ? percent(f.lo) : `${f.lo} to ${percent(f.hi)}`;
@@ -121,14 +139,14 @@ function focusMeaning(effect) {
 }
 
 /** The loss above a focus's highest spell level (the "tier ceiling" note), or "". */
-function focusCeiling(effect, cap) {
+export function focusCeiling(effect, cap) {
   const f = effect.f;
   if (!f.pen || f.max === null || f.max === undefined || f.max >= cap) return "";
   return `Spells up to level ${f.max} get all of it; each level above loses ${f.pen}% of it.`;
 }
 
 /** What a click, worn effect or proc does, composed from the spell data of its row. */
-function meaning(effect) {
+export function meaning(effect) {
   const m = effect.m;
   const n = m === null || m === undefined ? "" : String(Math.round(m * 10) / 10);
   const by = {
@@ -200,6 +218,9 @@ export function initExalt(section, env) {
   let counter = 0;
   const offs = [];
   let skeleton = null;
+  let stale = true; // the section has not been drawn for the view shown (it is drawn when it is open)
+  let wear = null; // the plan for the kit drawn in Wear this, made once for a view: {view, entry, promise}
+  const tips = new Set(); // the popups of the effect names that are on the page
 
   const sheet = Array.isArray(doc.adoptedStyleSheets) ? cssSheet(win) : null;
   if (sheet) doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
@@ -210,7 +231,7 @@ export function initExalt(section, env) {
 
   /** The line under the summary (it is not a live region: the page has two, and a failure or a newer release is said through the page's #announce, once). */
   function say(text, retry = null, spoken = false) {
-    if (spoken && text) env.announce?.(text);
+    if (spoken && text && (!env.background || section.open)) env.announce?.(text); // (a closed section that the page loaded ahead of time says it where it will be seen, not aloud)
     if (!statusLine) return;
     statusLine.replaceChildren();
     statusLine.hidden = !text;
@@ -319,6 +340,77 @@ export function initExalt(section, env) {
     return [button, reason];
   }
 
+  // ---- what an effect does, on hover, on focus and on a tap ---------------------------------------------------------------------------
+
+  /**
+   * The name of an effect as a button that shows what it does (the words of the lists below: focusMeaning and its ceiling for a focus, meaning for the rest, and the reason of an unverified
+   * row). The text is in the page from the start, hidden, and is the description of the button (aria-describedby: the tooltip pattern, so no aria-expanded), so that a screen reader has it on arriving at the name; it is shown while
+   * the pointer is over the name, while the name has the focus, and after a tap or a click, until a second one, Escape, or a tap elsewhere. The title attribute is not used.
+   */
+  function effectNode(effect) {
+    counter += 1;
+    const id = `exalt-tip-${counter}`;
+    const isFocus = effect.k === "focus" && effect.f;
+    const notes = [];
+    const ceiling = isFocus ? focusCeiling(effect, effectsDoc.cap ?? 50) : "";
+    if (ceiling) notes.push(ceiling);
+    if (effect.x && effect.x.length > 0) notes.push(`Unverified: ${effect.x.map((code) => UNVERIFIED_WHY[code] ?? "It rests on an assumption.").join(" ")}`);
+    const tip = el(doc, "span", { id, class: "exalt-tip", role: "tooltip", hidden: true }, el(doc, "span", { class: "exalt-tip-text", text: isFocus ? focusMeaning(effect) : meaning(effect) }), notes.map((text) => el(doc, "span", { class: "exalt-tip-note", text })));
+    const button = el(doc, "button", { type: "button", class: "exalt-name exalt-effbtn", "aria-describedby": id, text: effect.n });
+    const wrap = el(doc, "span", { class: "exalt-eff" }, button, tip);
+    const state = { hover: false, focus: false, pin: false, off: false }; // off: closed by a second tap or by Escape, until the next hover, focus or tap
+    const isOpen = () => !state.off && (state.hover || state.focus || state.pin);
+    const sync = () => {
+      const open = isOpen();
+      tip.hidden = !open;
+      // the tooltip pattern: the name is described by the text (aria-describedby, which reads it from the hidden text as well), and the open text is kept out of the page's reading order so it is not read a second time
+      if (open) tip.setAttribute("aria-hidden", "true");
+      else tip.removeAttribute("aria-hidden");
+      markTips();
+    };
+    wrap.addEventListener("mouseenter", () => ((state.hover = true), (state.off = false), sync()));
+    wrap.addEventListener("mouseleave", () => ((state.hover = false), sync()));
+    button.addEventListener("focus", () => ((state.focus = true), (state.off = false), sync()));
+    button.addEventListener("blur", () => ((state.focus = false), (state.pin = false), sync()));
+    button.addEventListener("click", () => {
+      if (isOpen() && state.pin) [state.pin, state.off] = [false, true];
+      else [state.pin, state.off] = [true, false];
+      sync();
+    });
+    tips.add({
+      wrap,
+      isOpen,
+      escape() {
+        if (isOpen()) [state.pin, state.off] = [false, true];
+        sync();
+      },
+      outside(target) {
+        if (wrap.contains(target)) return;
+        Object.assign(state, { hover: false, focus: false, pin: false, off: false });
+        sync();
+      },
+    });
+    return wrap;
+  }
+
+  /** The text is in the flow and moves what is below it: while one is open the browser must not scroll the page to keep that in place, which would move the name from under the pointer and close the text again. */
+  function markTips() {
+    for (const tip of [...tips]) if (!tip.wrap.isConnected) tips.delete(tip);
+    doc.documentElement.classList.toggle("exalt-tip-open", [...tips].some((tip) => tip.isOpen()));
+  }
+
+  const onPointerDown = (event) => {
+    for (const tip of [...tips]) {
+      if (tip.wrap.isConnected) tip.outside(event.target);
+      else tips.delete(tip);
+    }
+  };
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") for (const tip of tips) if (tip.wrap.isConnected) tip.escape();
+  };
+  doc.addEventListener("pointerdown", onPointerDown, true);
+  doc.addEventListener("keydown", onKeyDown);
+
   // ---- the plan ---------------------------------------------------------------------------------------------------------------
 
   function kitLabel(view, rematched, fromEquip) {
@@ -348,7 +440,7 @@ export function initExalt(section, env) {
       return el(
         doc,
         "tr",
-        {},
+        { id: `exalt-row-${row.e}` },
         el(
           doc,
           "th",
@@ -361,7 +453,7 @@ export function initExalt(section, env) {
           doc,
           "td",
           {},
-          el(doc, "span", { class: "exalt-name", text: effect.n }),
+          effectNode(effect),
           " ",
           el(doc, "span", { class: "exalt-chip", text: KIND_ONE[row.k] }),
           marks,
@@ -382,8 +474,55 @@ export function initExalt(section, env) {
 
   function noRoomLine(plan) {
     if (plan.noroom.length === 0) return el(doc, "p", { class: "exalt-noroom note", text: "Every recommended effect has a place in this kit." });
-    const parts = plan.noroom.map((row) => `${byId.get(row.e).n} (${NO_ROOM_WHY[row.w] ?? row.w})`);
-    return el(doc, "p", { class: "exalt-noroom note", id: "exalt-noroom" }, el(doc, "strong", { text: `No room for ${plan.noroom.length}: ` }), `${parts.join("; ")}.`);
+    const parts = plan.noroom.map((row) => [effectNode(byId.get(row.e)), ` (${NO_ROOM_WHY[row.w] ?? row.w})`]);
+    return el(doc, "p", { class: "exalt-noroom note", id: "exalt-noroom" }, el(doc, "strong", { text: `No room for ${plan.noroom.length}: ` }), parts.flatMap((part, index) => [index ? "; " : null, part]), ".");
+  }
+
+  /** The items of the kit drawn in Wear this, as the page shows them: {key (null where the page has no address for the item), name}. */
+  function drawnItems() {
+    const rows = typeof env.kitRows === "function" ? env.kitRows() : [];
+    return rows.map((row) => {
+      const name = row.querySelector('[data-f="name"]');
+      const href = name?.querySelector("a")?.getAttribute("href") ?? "";
+      const found = /^\/item\/([^/]+)\/$/.exec(href);
+      return { key: found ? found[1] : null, name: name?.textContent ?? "" };
+    });
+  }
+
+  /** The donor items of a plan that the kit does not have, once each, in the order of the plan: [{key, effect, need}] (`need` is the tier the donor has to be levelled to, or 0). */
+  function donorsToFarm(plan, members) {
+    const found = new Map();
+    for (const row of plan.rows) {
+      if (row.d === row.h) continue;
+      const effect = byId.get(row.e);
+      if (!effect) continue;
+      const name = itemName(row.d, null);
+      if (members.some((member) => (member.key !== null && member.key !== undefined ? member.key === row.d : member.name === name))) continue;
+      const entry = found.get(row.d) ?? { key: row.d, effect, need: 0 };
+      entry.need = Math.max(entry.need, row.u ? SLOT_TIER[row.k] : 0);
+      found.set(row.d, entry);
+    }
+    return [...found.values()];
+  }
+
+  /** "Donor items to farm": a short list at the top of the plan, or nothing when the kit has every donor. */
+  function donorList(plan, kit, members) {
+    const donors = donorsToFarm(plan, members);
+    if (donors.length === 0) return [];
+    const items = donors.map(({ key, effect, need }) => {
+      const [text, dot] = accessOf(effect, key);
+      return el(doc, "li", {}, nameNode(key, itemName(key, kit), donorInfo.get(key)?.page ?? false), `: `, el(doc, "span", { class: `exalt-dot ${dot}`, "aria-hidden": "true" }), `${text}, ${need ? `needs +${need}` : "no level needed"}`);
+    });
+    return [el(doc, "h4", { id: "exalt-donors-h", text: "Donor items to farm" }), el(doc, "ul", { id: "exalt-donors", class: "exalt-donors" }, ...items)];
+  }
+
+  /**
+   * What the plan box holds for a plan: the donor list, the table and the no-room line. The donors "already in the kit" are those of the kit the plan was made for: the kit of Equip now,
+   * the kit drawn in Wear this, or (`members` given) another one when the plan on show is not for the kit that is drawn.
+   */
+  function planBoxContent(plan, kit, fromEquip, members = null) {
+    members ??= fromEquip ? (kit ?? []).filter(Boolean).map((item) => ({ key: item.key, name: item.name })) : drawnItems();
+    return [...donorList(plan, kit, members), planTable(plan, kit, fromEquip), noRoomLine(plan)];
   }
 
   async function planFor(view, entry, kitSpec) {
@@ -398,11 +537,24 @@ export function initExalt(section, env) {
       const kit = equip.kit.map((it, index) => (it ? { place: PLACES[index], key: it.key, tier: it.tier } : null)).filter(Boolean);
       return { plan: planKit({ ...common, kit, items: hostInfo, tier: 0 }), rematched: true };
     }
-    if (view.exact && view.race === exaltDoc.race && view.tier === exaltDoc.tier) return { plan: { rows: entry.plan, noroom: entry.noroom }, rematched: false };
-    hostTable ??= await loadTable();
-    const kit = (view.kit ?? []).map((it, index) => (it ? { place: PLACES[index], key: it.key } : null)).filter(Boolean);
-    const items = (key) => hostTable.get(key) ?? donorInfo.get(key) ?? null;
-    return { plan: planKit({ ...common, kit, items, tier: view.tier }), rematched: true };
+    return wearPlan(view, entry);
+  }
+
+  /** The plan for the kit drawn in Wear this, made once for a view (the table of the plan and the hints under the places of the kit both ask for it). A failure is not kept. */
+  function wearPlan(view, entry) {
+    if (wear !== null && wear.view === view && wear.entry === entry) return wear.promise;
+    const promise = (async () => {
+      if (view.exact && view.race === exaltDoc.race && view.tier === exaltDoc.tier) return { plan: { rows: entry.plan, noroom: entry.noroom }, rematched: false };
+      hostTable ??= await loadTable();
+      const kit = (view.kit ?? []).map((it, index) => (it ? { place: PLACES[index], key: it.key } : null)).filter(Boolean);
+      const items = (key) => hostTable.get(key) ?? donorInfo.get(key) ?? null;
+      return { plan: planKit({ options: entry, effects: byId, mass: effectsDoc.mass ?? {}, classes: exaltDoc.classes, kit, items, tier: view.tier }), rematched: true };
+    })();
+    wear = { view, entry, promise };
+    promise.catch(() => {
+      if (wear !== null && wear.promise === promise) wear = null;
+    });
+    return promise;
   }
 
   // ---- the lists --------------------------------------------------------------------------------------------------------------------
@@ -494,9 +646,19 @@ export function initExalt(section, env) {
     env.announce?.("Couldn't show the effects for this view.");
   }
 
+  /**
+   * The view changed (or the kit of Equip now, or the section was opened). The hints under the places of Wear this are made every time; the section itself (its plan, its lists, and the
+   * item table a plan for another kit needs) is drawn only while it is open, and when it is opened next if anything changed meanwhile.
+   */
   async function refresh() {
     if (exaltDoc === null) return;
     const mine = ++stamp;
+    hint(mine);
+    if (!section.open) {
+      stale = true;
+      return;
+    }
+    stale = false;
     try {
       await draw(mine);
     } catch (error) {
@@ -532,6 +694,12 @@ export function initExalt(section, env) {
       skeleton.shownRole = view.role;
     }
     const fromEquip = source === "equip";
+    if (!fromEquip && view.pending) {
+      // the kit drawn stands in for one that is being worked out: no plan is made for it (and no item list is read); the plan comes with the kit
+      skeleton.planLead.textContent = "Waiting for the kit to be worked out.";
+      skeleton.planBox.replaceChildren();
+      return;
+    }
     if (!fromEquip && !view.exact && !view.kit) {
       // the address asks for a view that has not been drawn yet: there is no kit to match the plan to, and the plan of the file is for another one
       skeleton.planLead.textContent = "Waiting for the view to load.";
@@ -546,15 +714,98 @@ export function initExalt(section, env) {
       if (error instanceof Updated) throw error;
       // the lists stand; the plan shown is the one the site worked out for its own default kit, and the line says so
       skeleton.planLead.textContent = "Couldn't load the item list to match this kit, so this is the plan for the kit the site worked out.";
-      skeleton.planBox.replaceChildren(planTable({ rows: entry.plan, noroom: entry.noroom }, null, false), noRoomLine({ noroom: entry.noroom }));
+      // (that plan is for the default kit, of which the file names the items that carry an effect: those are what the donor list can leave out, not the items of the kit the visitor changed to)
+      const made = entry.plan.map((row) => ({ key: row.h, name: itemName(row.h, null) }));
+      skeleton.planBox.replaceChildren(...planBoxContent({ rows: entry.plan, noroom: entry.noroom }, null, false, made));
       return;
     }
     if (mine !== stamp) return;
     const kit = fromEquip ? equipKit().kit : view.kit; // (null for the answer the page was made with: the names of its items are in the file)
-    const table = planTable(result.plan, kit, fromEquip);
-    const line = noRoomLine(result.plan);
+    const content = planBoxContent(result.plan, kit, fromEquip);
     skeleton.planLead.textContent = `For ${kitLabel(view, result.rematched, fromEquip)}.`;
-    skeleton.planBox.replaceChildren(table, line);
+    skeleton.planBox.replaceChildren(...content);
+  }
+
+  // ---- the hints under the places of Wear this -------------------------------------------------------------------------------------------
+
+  /** Resolves when the browser is idle (requestIdleCallback; a short timeout where the browser has none). */
+  const whenIdle = () => new Promise((resolve) => (typeof win.requestIdleCallback === "function" ? win.requestIdleCallback(() => resolve(), { timeout: 4000 }) : win.setTimeout(resolve, 300)));
+
+  /** Take the lines off the places of Wear this. */
+  function clearHints() {
+    const rows = typeof env.kitRows === "function" ? env.kitRows() : [];
+    for (const row of rows) for (const box of row.querySelectorAll(".exalt-hints")) box.remove();
+    markTips(); // (a line taken off with its text open must not leave the page with scrolling held)
+  }
+
+  /**
+   * Open the section and go to the row of the plan that the line is about. The line is for the kit drawn in Wear this: a section that shows the plan for the kit of Equip now is
+   * switched to Wear this first (its rows belong to another kit), and the plan is drawn again before the row is looked for (a closed section has not drawn it).
+   */
+  async function toPlan(event, effect) {
+    event.preventDefault();
+    section.open = true;
+    source = "wear";
+    await refresh();
+    const target = doc.getElementById(`exalt-row-${effect.id}`) ?? doc.getElementById("exalt-plan-h") ?? section;
+    target.setAttribute("tabindex", "-1");
+    target.scrollIntoView?.({ block: "center" });
+    target.focus?.();
+  }
+
+  function hintLine(row, effect, kit) {
+    const need = SLOT_TIER[row.k];
+    const [access] = accessOf(effect, row.d);
+    const link = el(doc, "a", { class: "exalt-hint-plan", href: `#exalt-row-${row.e}`, "aria-label": `In the plan: ${effect.n}`, text: "In the plan" });
+    link.addEventListener("click", (event) => toPlan(event, effect));
+    return el(doc, "span", { class: "exalt-hint" }, "Exalt: ", effectNode(effect), ` (${row.k}, +${need}) from ${itemName(row.d, kit)} (${access}); ${row.u ? "level both to" : "level this item to"} +${need} `, link);
+  }
+
+  /**
+   * The lines under the places of the kit drawn in Wear this: one for each effect the plan puts on a place, unless it is on the item already. They are taken off at once when the view
+   * changes, and drawn again only for the kit that is drawn (not while it is being worked out, for a role with no plan, or when the plan cannot be made).
+   */
+  async function hint(mine) {
+    clearHints();
+    const view = env.view();
+    if (exaltDoc === null || view.pending) return;
+    const entry = exaltDoc.roles[view.role];
+    if (!entry || typeof entry !== "object" || (!view.exact && !view.kit)) return;
+    // A plan for the default kit is in the file. For any other kit the matcher needs the item list of the site (some 1.9 MB, 190 KB gzipped): it is read once per page and not while the
+    // visitor's control is being handled, so with the section closed (nobody asked for the plan) it waits until the browser is idle. An open section's own draw reads it at once, and this
+    // takes the same promise.
+    if (!section.open && hostTable === null && !(view.exact && view.race === exaltDoc.race && view.tier === exaltDoc.tier) && !(wear !== null && wear.view === view && wear.entry === entry)) {
+      await whenIdle();
+      if (mine !== stamp) return;
+    }
+    let result;
+    try {
+      result = await wearPlan(view, entry);
+    } catch {
+      return; // (the table stays as the page drew it; the section's own table says what went wrong)
+    }
+    if (mine !== stamp) return;
+    try {
+      const rows = env.kitRows();
+      const groups = new Map();
+      for (const row of result.plan.rows) {
+        const index = PLACES.indexOf(row.p);
+        if (row.d === row.h || !rows[index] || (view.kit && view.kit[index]?.key !== row.h)) continue;
+        const effect = byId.get(row.e);
+        if (!effect) throw new Failure("a plan row of an effect the shared file lacks");
+        groups.set(index, [...(groups.get(index) ?? []), hintLine(row, effect, view.kit)]);
+      }
+      for (const [index, lines] of groups) {
+        const cell = rows[index].cells?.[1] ?? rows[index].querySelector("td");
+        if (!cell) continue;
+        const box = el(doc, "span", { class: "exalt-hints" }, ...lines);
+        const more = cell.querySelector('[data-f="more"]');
+        if (more) cell.insertBefore(box, more);
+        else cell.append(box);
+      }
+    } catch {
+      clearHints();
+    }
   }
 
   // ---- starting --------------------------------------------------------------------------------------------------------------------
@@ -573,7 +824,14 @@ export function initExalt(section, env) {
     say("");
     skeleton = build();
     offs.push(env.onView(() => refresh()), onEquipKit(() => refresh()));
+    section.addEventListener("toggle", onToggle);
+    offs.push(() => section.removeEventListener("toggle", onToggle));
     await refresh();
+  }
+
+  /** The section was opened: draw what changed while it was closed (or was never drawn). */
+  function onToggle() {
+    if (section.open && stale && skeleton !== null) refresh();
   }
 
   let ready = start();
@@ -581,6 +839,9 @@ export function initExalt(section, env) {
     ready: () => ready,
     destroy() {
       for (const off of offs) off();
+      doc.removeEventListener("pointerdown", onPointerDown, true);
+      doc.removeEventListener("keydown", onKeyDown);
+      clearHints();
     },
   };
 }

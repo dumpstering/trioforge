@@ -467,14 +467,13 @@
       "title": "Weight reduction per tier",
       "value": 9,
       "unit": "percent of the base weight per tier",
-      "seal": "player",
+      "seal": "measured",
       "source": [
-        {"kind": "url", "ref": "https://xm2514-svg.github.io/sites/item-upgrades/"},
-        {"kind": "url", "ref": "https://eqlwiki.com/index.php/Item_Upgrade_System"}
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
       ],
-      "date": "2026-10-22",
+      "date": "2026-11-09",
       "status": "active",
-      "notes": "In tenths of a stone, w at tier n becomes max(floor, w - w*9*n//100), with no minimum step. Player client reads: 1.9 stone weighs 1.8 at +1, 1.0 weighs 0.7 at +4, 0.2 stays 0.2 at +5. The floor is tier.weight_floor."
+      "notes": "In tenths of a stone, the weight w at tier n becomes the larger of the floor and w minus nine percent of w for each tier (the amount taken off rounded down), with no minimum step. Weights read in game on several items fit it. Progress toward the next tier lowers the weight further in proportion, so an item part of the way to its next tier weighs less than it does at its tier; the site shows every item exactly at a tier. The floor is tier.weight_floor. The rounding of the last tenth of a stone is not settled."
     },
     {
       "id": "tier.weapon_damage_pct",

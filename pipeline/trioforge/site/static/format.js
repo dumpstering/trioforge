@@ -42,3 +42,20 @@ export const EN_DASH = "–";
 export function deityText(names) {
   return names && names.length > 0 ? "Needs deity: " + names.join(" or ") : "";
 }
+
+/** The stat of worn haste in the text of a row's stats, as the generator words it among the others ("AGI +5, Haste +19%, Weight 0.1"). */
+const HASTE_STAT = /(?:^|, )Haste \+([0-9]+)%(?:,|$)/;
+
+/**
+ * The chip of a row whose item has worn haste ("Haste 19%"), made from the stats the row says, which are the generator's own text (view.py: `item_stat_text`), so that the chip
+ * and the panel under it never disagree. Nothing for an item with no haste, a place left empty, or text that is no stats (`stats` may be null).
+ */
+export function hasteChip(stats) {
+  const found = typeof stats === "string" ? HASTE_STAT.exec(stats) : null;
+  return found === null ? "" : "Haste " + found[1] + "%";
+}
+
+/** The chip for a worn haste given as a number (an item of an answer of the optimizer, whose row has no stats text): nothing unless it is a whole number above zero. */
+export function hasteWords(percent) {
+  return Number.isSafeInteger(percent) && percent > 0 ? "Haste " + percent + "%" : "";
+}

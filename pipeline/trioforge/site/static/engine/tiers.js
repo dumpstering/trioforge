@@ -31,6 +31,14 @@ export const MAX_DIFFICULTY = 4;
 /** The tier of the mode `ready4`. */
 export const READY_TIER = 4;
 
+/**
+ * The worn haste of an item at a tier: a flat `perTier` (the rule `haste.worn_per_tier`) for each tier when its base haste is above zero; a piece with none, or that slows, stays as it is. The one
+ * place this rule is written: `atTier` (items.js) calls it, and so does the chip of a row of Wear this that an answer of the optimizer fills (ui/weights.js).
+ */
+export function wornHaste(base, tier, perTier) {
+  return base > 0 ? base + tier * perTier : base;
+}
+
 function whole(value, name, low, high) {
   if (typeof value !== "number" || !Number.isInteger(value)) throw new TierError(`${name} must be a whole number from ${low} to ${high}`);
   if (value < low || value > high) throw new TierError(`${name} must be a whole number from ${low} to ${high}, not ${value}`);

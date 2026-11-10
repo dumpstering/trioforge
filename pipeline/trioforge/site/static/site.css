@@ -934,6 +934,25 @@ tbody th {
   font-size: 0.85rem;
 }
 
+/* the worn haste of the item of a row, beside its name where it is seen without opening Stats (a chip in the gold of the item window; hidden, with no text, for an item with none) */
+.kit-haste {
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--win-border);
+  border-radius: 0.7rem;
+  color: var(--win-gold);
+  font-size: 0.8rem;
+  line-height: 1.2rem;
+}
+
+/* a short note in the rule cell of a row of the totals (the haste row says which worn haste counts) */
+.row-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+}
+
 /* what each row of Wear this says of its item (the stats at the tier shown, and what each stat is worth in the default kit): a details element beside the name, closed, whose
    summary is the button; it works without script, and the page does not move when the code starts (the summary is there from the first paint) */
 /* the cell of the name holds the button at its right edge, out of the flow: the row is as tall with it as without, and nothing moves when the page code starts. The open panel
@@ -1151,6 +1170,63 @@ details.expander > :last-child {
   overflow-wrap: anywhere;
 }
 
+/* Get these first (trio.js: paintCommon): a details element below Wear this whose body the page code fills; the summary and the empty body are in the page, so nothing moves when it is filled.
+   Without script there is nothing to show in it, and no section. */
+#common-body > p {
+  margin-top: 0.8rem;
+}
+
+#common-body h3 {
+  margin: 0.9rem 0 0.2rem;
+  font-size: 1rem;
+}
+
+.common-n,
+.common-miss {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.common-how {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media (scripting: none) {
+  #common {
+    display: none;
+  }
+}
+
+/* What the summary says when it is filled ("Get these first: 11 items every role wears, 2 most roles wear") is a line that wraps on a phone (two lines in the widest font the page names, Verdana, up to
+   about 600 px, and three below about 340 px), and the summary is made again whenever a shard comes or is waited for. Its room is kept from the start, in lines (1lh, with the rem it is in the
+   browsers that lack that unit), so that filling it, and emptying it while a shard loads, move nothing under it. The summary has the padding of an expander (0.6rem above and below), and an open one
+   a border of 1px under it, which the room counts. Wider than 40rem the words are one line and nothing is kept. */
+@media (max-width: 40rem) {
+  #common > summary {
+    min-height: 4.15rem;
+    min-height: calc(2lh + 1.2rem);
+  }
+
+  #common[open] > summary {
+    min-height: calc(4.15rem + 1px);
+    min-height: calc(2lh + 1.2rem + 1px);
+  }
+}
+
+@media (max-width: 21.5rem) {
+  #common > summary {
+    min-height: 5.62rem;
+    min-height: calc(3lh + 1.2rem);
+  }
+
+  #common[open] > summary {
+    min-height: calc(5.62rem + 1px);
+    min-height: calc(3lh + 1.2rem + 1px);
+  }
+}
+
 dl.pairs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
@@ -1167,6 +1243,73 @@ dl.pairs dd {
   margin: 0;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+/* what each race gets you (the expander "How the best race was judged"): a card for each race the page names, a description list in it. The terms stand over their
+   definitions on a phone and beside them from 40rem. (The markup carries no class but the list's: it is repeated for every race, and a page names up to eight.) */
+.race-cards {
+  list-style: none;
+  margin: 0.6rem 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.race-cards > li {
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--tint);
+  padding: 0.5rem 0.7rem;
+}
+
+.race-cards > li > p {
+  margin: 0 0 0.2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.race-cards > li > p strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.race-cards dfn {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.race-cards dl {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.race-cards dt {
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.race-cards dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.race-cards dd ul {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+}
+
+@media (min-width: 40rem) {
+  .race-cards dl {
+    display: grid;
+    grid-template-columns: 9.5rem 1fr;
+    gap: 0.3rem 0.8rem;
+  }
+
+  .race-cards dt {
+    margin-top: 0;
+  }
 }
 
 /* ---- the other pages ---- */
@@ -1907,6 +2050,7 @@ main .shared > h2:not(.sr-only) {
 .kit .reach,
 .kit .deity,
 .kit .kit-why,
+.totals .row-note,
 .kit .muted,
 .totals .muted,
 .kit .delta,

@@ -25,7 +25,7 @@ function start() {
   bindThemeToggle(document, getStorage(window));
   keepHistory(document);
   const page = document.getElementById("main")?.dataset.page;
-  if (page === "trio") initTrio({ document, window, fetch: window.fetch.bind(window), kit });
+  if (page === "trio") initTrio({ document, window, fetch: window.fetch.bind(window), kit, exaltAhead: true });
   if (page === "home") initPicker(document);
 }
 

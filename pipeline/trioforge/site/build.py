@@ -258,7 +258,7 @@ LIMITS = {
     "first_load_gzip": 60 * 1024,
     "shard": 200 * 1024,
     "shard_gzip": 50 * 1024,
-    # the section Effects to exalt fetches the shared effects file and the file of the trio when it is opened (they are the layer's own budgets, effects/files.py: a test holds them equal)
+    # the section Effects to exalt fetches the shared effects file and the file of the trio once the page has shown, when the browser is idle (the hints under Wear this need them; they are the layer's own budgets, effects/files.py: a test holds them equal)
     "effects": 200 * 1024,
     "effects_gzip": 50 * 1024,
     "exalt_gzip": 20 * 1024,
@@ -327,7 +327,7 @@ FAVICON = _favicon()
 REPORT_VIEW = ("race", "role", "tier", "setup", "buffs")
 
 _SHARD_FILE = re.compile(r"data/[^/]+/(?:strict|wiki)-(?:own|group)\.json")
-#: the files of the section Effects to exalt, fetched when it is opened: the shared one, and one for each trio
+#: the files of the section Effects to exalt, fetched once the page has shown (when the browser is idle), and not in the first load: the shared one, and one for each trio
 _EFFECTS_FILE = re.compile(r"data/effects\.json")
 _EXALT_FILE = re.compile(r"data/[^/]+/exalt\.json")
 #: the file of a role's runner-ups (the page fetches it whole, the first time the runner-ups of a view of that role open)
@@ -652,7 +652,7 @@ def check_weights_chunk(meta: Mapping[str, Any]) -> None:
 
 
 #: The files of the code of the section Effects to exalt, by the names esbuild's metafile gives its inputs: the section and the matcher of the plan. The page script loads them by a dynamic
-#: import when the section is opened or scrolled into view: no output that a page loads by itself holds them.
+#: import, once the page has shown or when the section is opened: no output that a page loads in its first load holds them.
 EXALT_INPUTS = ("ui/exalt.js", "ui/exalt-plan.js")
 
 
@@ -670,7 +670,7 @@ def check_exalt_chunk(meta: Mapping[str, Any]) -> None:
         if mine:
             raise BuildError(
                 f"the page script {Path(output).name} holds {sorted(mine)[0]}, the code of the section Effects to exalt: a static import of it puts it into the page script, which the budget "
-                f"of the first load counts as if it were not there (it is loaded by a dynamic import, when the section is opened)"
+                f"of the first load counts as if it were not there (it is loaded by a dynamic import, once the page has shown)"
             )
     if not found:
         raise BuildError("esbuild's account of the bundle has no page script (app.js)")
@@ -1199,7 +1199,7 @@ def check_budgets(
         zipped = _gzip_size(content_bytes)
         if zipped > LIMITS["shard_gzip"]:
             problems.append(f"runner-up file {name} is {zipped / 1024:.1f} KB gzip (limit {LIMITS['shard_gzip'] // 1024} KB)")
-    # the files of the section Effects to exalt (the page fetches both when the section is opened, and nothing before): their size is the weight of the section
+    # the files of the section Effects to exalt (the page fetches both once it has shown, when the browser is idle, and not in the first load): their size is the weight of the section
     shared = {name: content_bytes for name, content_bytes in files.items() if _EFFECTS_FILE.fullmatch(name)}
     exalts = {name: content_bytes for name, content_bytes in files.items() if _EXALT_FILE.fullmatch(name)}
     sizes["effects"] = max((len(content_bytes) for content_bytes in shared.values()), default=0)
@@ -1758,6 +1758,14 @@ class SiteBuild:
     partial: tuple[str, ...] = ()
 
 
+def race_page_rows(races: content.Racials) -> list[SimpleNamespace]:
+    """The rows of the sources page's table of race pages: the page, the revision and its address, and the race."""
+    return [
+        SimpleNamespace(code=page.race, title=page.title, revid=page.revid, url=page.url)
+        for page in races.pages
+    ]
+
+
 def build(
     *,
     results: Path,
@@ -1766,6 +1774,7 @@ def build(
     site_url: str = DEFAULT_SITE_URL,
     rules: Path | None = None,
     sources_manifest: Path | None = None,
+    racials: Path | None = None,
     changelog: Path | None = None,
     headers: Path | None = None,
     owner: str | None = None,
@@ -1776,6 +1785,7 @@ def build(
     results, out = Path(results), Path(out)
     rules = Path(rules) if rules else REPO_ROOT / "rules" / "rules.json"
     sources_manifest = Path(sources_manifest) if sources_manifest else REPO_ROOT / "derived" / "sources-manifest.json"
+    racials = Path(racials) if racials else REPO_ROOT / "derived" / "racials.json"
     changelog = Path(changelog) if changelog else REPO_ROOT / "docs" / "CHANGELOG.md"
     headers = Path(headers) if headers else REPO_ROOT / "site" / "_headers"
     site_url = site_url.rstrip("/")
@@ -1797,6 +1807,7 @@ def build(
         check_scopes(trios, scopes)  # a run of any tiers is a full one, so what an indexable site is made of is checked here
     book = content.load_rulebook(rules)
     manifest = content.load_manifest(sources_manifest)
+    races = content.load_racials(racials)  # (the racial abilities of each race, read from the race pages of the wiki: shown, never scored)
     blocks = content.load_changelog(changelog)
     meta = trios[0].meta
     lastmod = _calendar_date(meta.data_date, "the data date")  # the date of every page in the sitemap
@@ -1877,7 +1888,7 @@ def build(
             wearers.setdefault(key, []).append((trio.meta.slug, view.trio_name(trio.meta.trio)))
         caps = view.trio_caps(trio.meta.trio, trio.meta.level, rules_obj)
         try:
-            page = view.trio_page(trio, book, caps, with_page, vecs, exalt)
+            page = view.trio_page(trio, book, caps, with_page, vecs, exalt, races)
         except ValueError as error:  # (an item the page can show has no page of its own: one line, naming the trio and the item)
             raise BuildError(str(error)) from None
         path = f"/trio/{trio.meta.slug}/"
@@ -1933,6 +1944,9 @@ def build(
         subject="the sources page",
         manifest=manifest,
         revisions=revisions,
+        race_pages=race_page_rows(races),
+        racials_date=races.date,
+        racials_input=races.input,
         eqlt_rows=eqlt_rows,
         eqlt_name=content.EQLT_NAME,
         eqlt_site=content.EQLT_SITE,
@@ -2175,6 +2189,7 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
     )
     parser.add_argument("--rules", type=Path, help="the rules file (default rules/rules.json)")
     parser.add_argument("--sources-manifest", type=Path, help="the catalog's sources-manifest.json (default derived/)")
+    parser.add_argument("--racials", type=Path, help="the racial abilities of the races, derived/racials.json (default derived/)")
     parser.add_argument("--changelog", type=Path, help="the changelog (default docs/CHANGELOG.md)")
     parser.add_argument("--headers", type=Path, help="the headers file (default site/_headers)")
     options = parser.parse_args(argv)
@@ -2186,6 +2201,7 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
             site_url=options.site_url,
             rules=options.rules,
             sources_manifest=options.sources_manifest,
+            racials=options.racials,
             changelog=options.changelog,
             headers=options.headers,
             owner=options.owner,
@@ -2231,7 +2247,7 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
     )
     if sizes["exalt_files"]:
         print(
-            f"effects to exalt (fetched when the section is opened): the shared file {_kb(sizes['effects'])} raw (limit {LIMITS['effects'] // 1024} KB), {_kb(sizes['effects_gzip'])} gzip "
+            f"effects to exalt (fetched once the page has shown): the shared file {_kb(sizes['effects'])} raw (limit {LIMITS['effects'] // 1024} KB), {_kb(sizes['effects_gzip'])} gzip "
             f"(limit {LIMITS['effects_gzip'] // 1024} KB); {sizes['exalt_files']} trio files, the largest {_kb(sizes['largest_exalt'])} raw, {_kb(sizes['largest_exalt_gzip'])} gzip (limit {LIMITS['exalt_gzip'] // 1024} KB)"
         )
     print(f"first view with its data (first load + the largest shard): {_kb(sizes['first_view_gzip'])} gzip")

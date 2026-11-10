@@ -76,7 +76,7 @@ def test_the_trio_page_has_the_section_closed_with_the_addresses_of_its_two_file
     (section,) = page.find_all("details", id_="exalt")
     assert section.get("data-effects") == "/data/effects.json" and section.get("data-exalt") == "/data/pal-mnk-ber/exalt.json"
     assert not section.has("open")
-    assert "planning aid" in section.find_all("summary")[0].text() and "planning aid" in section.text()
+    assert "Exalt plan: effects to move onto this kit" in section.find_all("summary")[0].text() and "planning aid" in section.text()
     assert page.find_all("div", id_="exalt-body") and page.find_all("p", id_="exalt-status")[0].has("hidden")
 
 

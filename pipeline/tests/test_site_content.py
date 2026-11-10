@@ -214,6 +214,23 @@ def render_trio(page, book):
     )  # fmt: skip
 
 
+def test_the_section_get_these_first_is_in_the_page_of_a_trio_of_two_roles_or_more_and_not_in_the_page_of_one():
+    """A trio with one role has nothing to compare: its page is built without the section, so that nobody opens a disclosure that would have nothing in it."""
+    from site_helpers import parse
+
+    results = data.load_trio(REPO / "fixtures" / "site" / "results" / "pal-mnk-ber")
+    book = content.load_rulebook(REPO / "rules" / "rules.json")
+    page = view.trio_page(results, book, view.trio_caps(results.meta.trio, results.meta.level, rules_module.load()))
+    assert [role.code for role in page.roles] == ["balanced", "tank", "melee"]
+    for roles in (page.roles, page.roles[:2]):
+        html = render_trio(dataclasses.replace(page, roles=roles), book)
+        assert html.count('<details class="expander" id="common"><summary>Get these first</summary><div id="common-body"></div></details>') == 1, len(roles)
+    one = render_trio(dataclasses.replace(page, roles=page.roles[:1]), book)
+    assert 'id="common"' not in one and 'id="common-body"' not in one and "Get these first" not in one
+    assert parse(one).by_id("wear-h") is not None and parse(one).by_id("why") is not None  # (the rest of the page is there, and the sections that were on either side of it are still next to each other)
+    assert one.index('id="why"') > one.index('id="wear-h"')
+
+
 def test_every_hook_the_browser_code_writes_is_in_the_generated_page():
     """The browser code skips an element it cannot find, so a renamed hook would fail silently: check them here."""
     from types import SimpleNamespace

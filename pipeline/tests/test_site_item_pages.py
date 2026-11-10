@@ -233,6 +233,16 @@ def test_the_stat_rules_are_linked_with_their_seals_under_the_table(built):
     assert "estimated" in rules.text()  # (said once: every figure is worked out)
 
 
+def test_the_item_page_says_that_stats_and_weight_change_between_tiers_and_that_the_table_is_at_whole_tiers(built):
+    note = "An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier."
+    html = item_html(built.out, "w90008")
+    section = html.by_id("stats-h").parent
+    assert html.by_id("tier-progress").text() == note
+    assert [p.get("id") for p in section.find_all("p")] == ["tier-rules", "tier-progress"]  # under the table, right after the rules its figures follow
+    assert html.find("main").text().count(note) == 1
+    assert html.by_id("tier-rules").text().count("estimated") == 1  # (the old line is as it was)
+
+
 def test_the_table_of_tiers_scrolls_inside_its_own_region_and_is_reachable_by_keyboard(built):
     html = item_html(built.out, "w90001")
     region = html.by_id("tiers").parent

@@ -26,6 +26,7 @@
 
 import { BundleError, readBundle } from "./profile.js";
 import { Rational, RationalError } from "./rational.js";
+import { wornHaste } from "./tiers.js";
 
 /** A record that is not what the item table writes, or a tier or rate that is not allowed. */
 export class ItemError extends Error {
@@ -251,7 +252,7 @@ export function atTier(item, tier, rules, options) {
     }
   }
   const hasteBase = rawStats.HASTE === undefined || rawStats.HASTE === null ? 0 : amount(rawStats.HASTE, "stat HASTE", label);
-  const haste = hasteBase > 0 ? hasteBase + n * rule.hastePerTier : hasteBase;
+  const haste = wornHaste(hasteBase, n, rule.hastePerTier);
 
   // resists
   const rawSv = sv === undefined ? ITEM_DEFAULTS.sv : sv;

@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test as plain } from "@playwright/test";
 import { PLACES, itemInfo, planKit } from "../pipeline/trioforge/site/static/ui/exalt-plan.js";
+import { focusMeaning, meaning } from "../pipeline/trioforge/site/static/ui/exalt.js";
 import { EXALT_ORIGIN, ORIGIN } from "../playwright.config.mjs";
 import { DATA, ROOT, TRIO, axe, expect, loadShard, open, openSwitches, optionValues, readControls, test } from "./support.mjs";
 
@@ -62,16 +63,17 @@ function expectedPlan({ effects, exalt }, shard, table, { race, role, tier }) {
   return { plan, rows: plan.rows.map((row) => ({ slot: row.p, host: names.get(row.h), effect: byId.get(row.e).n })), names };
 }
 
-// ---- nothing before the section is opened ---------------------------------------------------------------------------------------------------------------------
+// ---- the code and the files come after the page has shown, without the section being opened ----------------------------------------------------------------------
 
-test("nothing of the section is asked for before it is opened, and its files come when it is @once", async ({ page, watch }) => {
+test("the section's code and its two files are fetched once after the page has shown, without it being opened, and opening it asks for nothing more @once", async ({ page, watch }) => {
   const asked = [];
   page.on("request", (request) => asked.push(new URL(request.url()).pathname));
   await open(page, TRIO);
-  await page.waitForTimeout(800); // (time for anything the page would fetch by itself)
-  expect(asked.filter((path) => /effects\.json|exalt\.json|\/assets\/exalt-/.test(path))).toEqual([]);
+  await expect(page.locator("#kit-body .exalt-hint").first()).toBeVisible(); // (the page loaded them by itself, when it was idle)
   await expect(summary(page)).toHaveAttribute("aria-expanded", "false");
   await expect(section(page)).not.toHaveAttribute("open", "");
+  expect(asked.filter((path) => path === EFFECTS || path === EXALT).sort()).toEqual([EXALT, EFFECTS].sort());
+  expect(asked.filter((path) => /\/assets\/exalt-/.test(path))).toHaveLength(1);
   await summary(page).focus();
   await page.keyboard.press("Enter"); // a keyboard opens it
   await expect(summary(page)).toHaveAttribute("aria-expanded", "true");
@@ -84,17 +86,175 @@ test("nothing of the section is asked for before it is opened, and its files com
   expect(watch.violations()).toEqual([]);
 });
 
-test("the files are fetched once, however often the section is opened", async ({ page, watch }) => {
+test("for a view that is not the default one, the section's files are asked for only after the view's own data @once", async ({ page, watch }) => {
   await open(page, TRIO);
+  const controls = await readControls(page);
+  const tiers = (await optionValues(page, "#sw-tier")).map(Number);
+  const other = tiers.find((tier) => tier !== controls.tier);
+  expect(other).toBeDefined();
+  const asked = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+  await open(page, `${TRIO}?tier=${other}`);
+  await expect(page.locator("#kit-body .exalt-hint").first().or(page.locator("#kit-caption"))).toBeVisible();
+  await expect.poll(() => asked.filter((path) => path === EFFECTS || path === EXALT).length).toBe(2);
+  const shard = asked.findIndex((path) => /^\/data\/[a-z]{3}-[a-z]{3}-[a-z]{3}\/[a-z]+-(?:own|group)\.json$/.test(path));
+  const first = asked.findIndex((path) => path === EFFECTS || path === EXALT || /\/assets\/exalt-/.test(path));
+  expect(shard, "the data of the view was asked for").toBeGreaterThanOrEqual(0);
+  expect(first, "and the section's files and code only after it").toBeGreaterThan(shard);
+  expect(watch.problems()).toEqual([]);
+});
+
+test("a change of the view with the section closed draws nothing of the section, and asks for the item table once, when idle, not for each change", async ({ page, watch }) => {
+  await open(page, TRIO);
+  await expect(page.locator("#kit-body .exalt-hint").first()).toBeVisible();
+  const controls = await readControls(page);
+  const tiers = (await optionValues(page, "#sw-tier")).map(Number);
+  const other = tiers.filter((tier) => tier !== controls.tier).sort((a, b) => b - a)[0];
+  expect(other).toBeDefined();
+  const asked = [];
+  page.on("request", (request) => asked.push(new URL(request.url()).pathname));
+  await openSwitches(page);
+  await page.locator("#sw-tier").selectOption(String(other));
+  await expect(page.locator('#kit-caption [data-f="v-tier"]')).toContainText(`+${other}`); // (the new view is drawn)
+  await expect.poll(() => asked.filter((path) => /\/assets\/engine\/data\/items-/.test(path)).length).toBe(1);
+  await page.locator("#sw-tier").selectOption(String(controls.tier));
+  await page.locator("#sw-tier").selectOption(String(other));
+  await page.waitForTimeout(600);
+  expect(asked.filter((path) => /\/assets\/engine\/data\/items-/.test(path)), "the item table is read once for the page").toHaveLength(1);
+  expect(asked.filter((path) => path === EFFECTS || path === EXALT), "the section's files are not asked for again").toEqual([]);
+  await expect(page.locator("#exalt-plan-table")).toHaveCount(0); // (the section is closed: its plan and lists are not drawn)
+  await expect(page.locator("#exalt-lists > *")).toHaveCount(0);
+  expect(watch.problems()).toEqual([]);
+});
+
+test("the files are fetched once, however often the section is opened", async ({ page, watch }) => {
   let count = 0;
   page.on("request", (request) => {
     if (/exalt\.json|effects\.json/.test(request.url())) count += 1;
   });
+  await open(page, TRIO);
   await openSection(page);
   await summary(page).click();
   await summary(page).click();
   await expect(page.locator("#exalt-plan-table")).toBeVisible();
   expect(count).toBe(2);
+  expect(watch.problems()).toEqual([]);
+});
+
+// ---- the lines under the places of Wear this, and what an effect does ----------------------------------------------------------------------------------------------
+
+test("a line under a place of Wear this says which effect to exalt onto it, without the section being opened", async ({ page, request, watch }) => {
+  const { exalt } = await files(request);
+  await open(page, TRIO);
+  const role = (await readControls(page)).role;
+  const lines = page.locator("#kit-body .exalt-hint");
+  await expect(lines.first()).toBeVisible();
+  await expect(section(page)).not.toHaveAttribute("open", "");
+  const want = exalt.roles[role].plan.filter((row) => row.d !== row.h);
+  expect(want.length).toBeGreaterThan(0);
+  await expect(lines).toHaveCount(want.length);
+  for (const text of await lines.allInnerTexts()) expect(text).toMatch(/^Exalt: .+ \((focus|click|worn|proc), \+[1-4]\) from .+ \(.+\); level (both|this item) to \+[1-4]/);
+  // a line is in the cell of the item it is about (the places are in the order of the kit)
+  for (const row of want) {
+    const cell = page.locator("#kit-body tr").nth(PLACES.indexOf(row.p)).locator("td").nth(0);
+    await expect(cell.locator(".exalt-hint")).not.toHaveCount(0);
+  }
+  // it is a secondary line: smaller than the item's own text
+  const styles = await lines.first().evaluate((node) => ({ size: parseFloat(getComputedStyle(node).fontSize), body: parseFloat(getComputedStyle(node.closest("td")).fontSize) }));
+  expect(styles.size).toBeLessThan(styles.body);
+  // the link of a line opens the section at the plan row of the effect
+  await lines.first().locator("a.exalt-hint-plan").click();
+  await expect(summary(page)).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#exalt-plan-table")).toBeVisible();
+  expect(watch.problems()).toEqual([]);
+});
+
+test("the lines follow the kit: another role has its own, and a tier with no open socket has none", async ({ page, request, watch }) => {
+  const { effects, exalt } = await files(request);
+  const byId = new Map(effects.effects.map((row) => [row.id, row]));
+  await open(page, TRIO);
+  await expect(page.locator("#kit-body .exalt-hint").first()).toBeVisible();
+  await openSwitches(page);
+  const current = (await readControls(page)).role;
+  const other = Object.keys(exalt.roles).find((role) => role !== current);
+  await page.locator(`input[name="role"][value="${other}"]`).setChecked(true, { force: true });
+  const names = exalt.roles[other].plan.filter((row) => row.d !== row.h).map((row) => byId.get(row.e).n).sort();
+  await expect.poll(async () => (await page.locator("#kit-body .exalt-hint .exalt-effbtn").allTextContents()).sort()).toEqual(names);
+  const tiers = (await optionValues(page, "#sw-tier")).map(Number).sort((a, b) => a - b);
+  await page.locator("#sw-tier").selectOption(String(tiers[0]));
+  if (tiers[0] === 0) await expect(page.locator("#kit-body .exalt-hint")).toHaveCount(0);
+  expect(watch.problems()).toEqual([]);
+});
+
+test("an effect name shows what the effect does on hover, on keyboard focus and on a tap, and Escape or a tap elsewhere closes it", async ({ page, request, watch }, testInfo) => {
+  const { effects, exalt } = await files(request);
+  const byId = new Map(effects.effects.map((row) => [row.id, row]));
+  await open(page, TRIO);
+  const role = (await readControls(page)).role;
+  const first = exalt.roles[role].plan.find((row) => row.d !== row.h);
+  const effect = byId.get(first.e);
+  const words = effect.k === "focus" && effect.f ? focusMeaning(effect) : meaning(effect);
+  const line = page.locator("#kit-body tr").nth(PLACES.indexOf(first.p)).locator(".exalt-hint").first();
+  await expect(line).toBeVisible();
+  const name = line.locator("button.exalt-effbtn");
+  const tip = line.locator(".exalt-tip");
+  await expect(name).toHaveText(effect.n);
+  await expect(tip).toBeHidden();
+  await expect(name).not.toHaveAttribute("aria-expanded"); // (a tooltip trigger is not a disclosure: nothing like "collapsed" is read with the name)
+  await expect(name).toHaveAttribute("aria-describedby", await tip.getAttribute("id"));
+  // the mouse
+  await name.hover();
+  await expect(tip).toBeVisible();
+  await expect(tip.locator(".exalt-tip-text")).toHaveText(words);
+  await expect(tip).toHaveAttribute("aria-hidden", "true"); // (the description is read once, with the name, not again as text beside it)
+  // it stays while the pointer stays: the text must not change the layout around the name (a table column that grows with it would move the name from under the pointer, and the text would flicker)
+  const top = (await name.boundingBox()).y;
+  for (let i = 0; i < 6; i += 1) {
+    await page.waitForTimeout(100);
+    await expect(tip).toBeVisible();
+    expect((await name.boundingBox()).y).toBe(top);
+  }
+  await page.mouse.move(0, 0);
+  await expect(tip).toBeHidden();
+  // the keyboard
+  await name.focus();
+  await expect(tip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(tip).toBeHidden();
+  await expect(name).toBeFocused();
+  await page.keyboard.press("Enter"); // (Enter on a button is a click: it shows the text again)
+  await expect(tip).toBeVisible();
+  await name.blur();
+  await expect(tip).toBeHidden();
+  // a tap, and a tap elsewhere
+  await name.click();
+  await expect(tip).toBeVisible();
+  const box = await tip.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+  await axe(page, testInfo); // (with the text open, in the colours of the theme of this project)
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, "no sideways scroll with the text open").toBeLessThanOrEqual(0);
+  await page.locator("h1").click({ position: { x: 2, y: 2 } });
+  await expect(tip).toBeHidden();
+  expect(watch.problems()).toEqual([]);
+});
+
+test("the effect names of the table of the plan show what they do as well", async ({ page, request, watch }, testInfo) => {
+  const { effects, exalt } = await files(request);
+  const byId = new Map(effects.effects.map((row) => [row.id, row]));
+  await open(page, TRIO);
+  await openSection(page);
+  const role = (await readControls(page)).role;
+  const effect = byId.get(exalt.roles[role].plan[0].e);
+  const cell = page.locator("#exalt-plan-table tbody tr").first().locator("td");
+  await cell.locator("button.exalt-name").focus();
+  await expect(cell.locator(".exalt-tip")).toBeVisible();
+  await expect(cell.locator(".exalt-tip-text")).toHaveText(effect.k === "focus" && effect.f ? focusMeaning(effect) : meaning(effect));
+  await axe(page, testInfo);
+  await page.keyboard.press("Escape");
+  await expect(cell.locator(".exalt-tip")).toBeHidden();
   expect(watch.problems()).toEqual([]);
 });
 

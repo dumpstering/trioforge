@@ -93,7 +93,7 @@ def test_delay_and_the_listed_bonus_still_do_not_change():
 def test_the_weight_rule_is_nine_percent_with_the_floor_unchanged():
     assert RULES.get("tier.weight_pct") == 9 and RULES.get("tier.weight_floor") == 0.1
     rule = next(r for r in json.loads(rules_module.RULES_PATH.read_text(encoding="utf-8"))["rules"] if r["id"] == "tier.weight_pct")
-    assert (rule["status"], rule["date"]) == ("active", "2026-10-22")
+    assert (rule["status"], rule["date"]) == ("active", "2026-11-09")  # (was 2026-10-22: in-game readings now back the rule)
 
 
 @pytest.mark.parametrize(

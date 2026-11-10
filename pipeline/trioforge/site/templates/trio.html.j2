@@ -5,14 +5,15 @@
 <th scope="row" role="rowheader">{% if row.icon %}<span class="art art-{{ row.icon }}" aria-hidden="true"></span>{% endif %}{{ row.slot }}</th>
 <td role="cell"><span class="name" data-f="name">{% if row.href %}<a href="{{ row.href }}">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</span> <span class="deity" data-f="deity"{% if not row.deity %} hidden{% endif %}>{{ row.deity }}</span>
 {%- if page.kit_stats %}
-<details class="kit-more" data-f="more"{% if row.empty %} hidden{% endif %}><summary>Stats</summary><p class="kit-stats" data-f="stats">{{ row.stats }}</p>{% if page.kit_why %}<p class="kit-why" data-f="why">{{ row.why }}</p>{% endif %}</details>{% endif %}</td>
+{% if row.haste %}<span class="kit-haste">{{ row.haste }}</span>
+{% endif %}<details class="kit-more" data-f="more"{% if row.empty %} hidden{% endif %}><summary>Stats</summary><p class="kit-stats" data-f="stats">{{ row.stats }}</p>{% if page.kit_why %}<p class="kit-why" data-f="why">{{ row.why }}</p>{% endif %}</details>{% endif %}</td>
 <td role="cell"><span data-f="tier">{{ row.tier }}</span></td>
 <td role="cell"><span data-f="arrival">{{ row.arrival }}</span> <span class="reach" data-f="reach">{{ row.reach }}</span></td>
 <td role="cell"><span data-f="source">{{ row.source }}</span></td>
 </tr>
 {%- endmacro %}
 {% block main %}
-<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="{{ page.default.ev }}" data-base="{{ page.data_base }}" data-release="{{ page.release }}" data-groups="{{ page.weight_groups|join(' ') }}"{% if page.items_base %} data-items="{{ page.items_base }}"{% endif %}>
+<main id="main" tabindex="-1" class="wrap trio" data-page="trio" data-ev="{{ page.default.ev }}" data-base="{{ page.data_base }}" data-release="{{ page.release }}" data-haste-tier="{{ page.haste_per_tier }}" data-groups="{{ page.weight_groups|join(' ') }}"{% if page.items_base %} data-items="{{ page.items_base }}"{% endif %}>
 <div class="page-head">
 <h1>{{ page.name }}: best gear (<span data-rules="level.current">level {{ page.level }}</span>)</h1>
 <p id="best-race" class="best-race">{% if page.race_picture %}<span class="art art-{{ page.race_picture }}" aria-hidden="true"></span>{% endif %}Best race for this trio: <strong>{{ page.best_name }}</strong>{% if page.tied_names %}, tied with {{ page.tied_text }} <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">(within {{ page.tie_band }})</span>{% else %} <span class="margin" data-rules="{{ page.margin_rules|map(attribute='id')|join(' ') }}">({{ page.margin }} over {{ page.runner_up_name }})</span>{% endif %}, judged in the <span id="best-race-view">{{ page.verdict_role }} view at <span data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> with {{ page.assume_buffs }}</span>.</p>
@@ -20,6 +21,31 @@
 <summary>How the best race was judged{% if page.flips %}, and what could change it{% endif %}</summary>
 <p id="best-race-unscored" class="note">Racial abilities other than the Iksar's natural AC are not scored yet, so races close in value may differ in play.</p>
 <p id="best-race-rules" class="note">How the score works: {{ rule_links(page.margin_rules) }}</p>
+{% if page.race_cards %}
+<div id="race-gets" data-rules="{{ page.race_rules|map(attribute='id')|join(' ') }}">
+<p id="race-gets-intro" class="note">{{ page.race_intro }}</p>
+<ul class="race-cards">
+{%- for card in page.race_cards %}
+<li>
+<p><strong>{{ card.name }}</strong> {{ card.tag }}</p>
+<dl>
+<dt>Value</dt><dd>{{ card.value }}</dd>
+{%- if card.versus %}
+<dt>Against {{ page.best_name }}</dt><dd>{{ card.versus }}</dd>
+<dt>Its best kit against {{ page.best_name }}'s best kit</dt><dd>{{ card.totals }}</dd>{% if card.weapons %}
+<dt>Weapons</dt><dd>{{ card.weapons }}</dd>{% endif %}
+<dt>Base stats</dt><dd>{{ card.stats }}</dd>
+{%- endif %}
+<dt>Racial abilities</dt><dd>{% if card.racials %}<ul>{% for r in card.racials %}<li><dfn>{{ r.name }}</dfn> ({% if r.scored %}<a href="/rules/#{{ r.rule.id }}">scored, {{ r.scored_text }}</a> {{ rule_seal(r.rule) }}{% else %}not scored{% endif %}){% if r.text %}: {{ r.text }}{% endif %}</li>{% endfor %}</ul>{% else %}none listed on the wiki page{% endif %}</dd>
+</dl>
+</li>
+{%- endfor %}
+</ul>
+{% if page.race_more %}<p id="race-more" class="note">{{ page.race_more }}</p>
+{% endif %}<p class="note">How the starting stats are made: {{ rule_link(page.naked_rule) }}</p>
+<p id="race-credit" class="note">Racial abilities: <a href="{{ page.racials_site }}" rel="noopener noreferrer">eqlwiki</a>, <a href="{{ page.racials_licence_url }}" rel="noopener noreferrer">{{ page.racials_licence_name }}</a> (<a href="{{ page.racials_pages }}">pages and revisions</a>)</p>
+</div>
+{% endif %}
 {% if page.flips %}
 <p id="best-race-note" class="note">Could change if an open test goes the other way: {{ page.flips }}{% if page.flips_more %}; <span data-n="count">+{{ page.flips_more }} more</span>{% endif %}. <a href="/rules/#open-tests">See the open tests</a></p>
 {% endif %}
@@ -123,10 +149,11 @@
 </tbody>
 </table>
 <p id="kit-rules" class="rules">Tiers: {{ rule_links(page.tier_rules) }}</p>
-{% if page.kit_stats %}<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown.{% if page.kit_why %} &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing.{% endif %} {{ rule_links(page.stat_rules) }}</p>
+{% if page.kit_stats %}<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown. An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier.{% if page.kit_why %} &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing.{% endif %} {{ rule_links(page.stat_rules) }}</p>
 {% if page.kit_why %}<p id="why-note" class="note" hidden>The &ldquo;lost without it&rdquo; lines and the next best items are worked out for the default view only: the best race at the default role, tier, buffs and weapons. The stats are those of the view shown.</p>{% endif %}{% endif %}
 </section>
-
+{% if page.roles|length > 1 %}<details class="expander" id="common"><summary>Get these first</summary><div id="common-body"></div></details>
+{% endif %}
 <section class="why" id="why" aria-labelledby="why-h">
 <h2 id="why-h">Why this kit</h2>
 <p data-rules="roles.templates" class="kit-line">{% if art.has("coin") %}<span class="art art-coin" aria-hidden="true"></span>{% endif %}Kit value <strong id="kit-value">{{ page.value }}</strong> hit-point equivalents; the gear adds <strong id="kit-gain">{{ page.gain }}</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#{{ page.roles_rule.id }}">How roles weigh stats</a> {{ rule_seal(page.roles_rule) }}</p>
@@ -146,7 +173,7 @@
 <th scope="row" role="rowheader">{{ row.label }}</th>
 <td role="cell"><span data-f="t-{{ row.field }}">{{ row.value }}</span></td>
 <td role="cell"{% if row.cap_rules %} data-rules="{% for text, ref in row.cap_rules %}{{ ref.id }}{% if not loop.last %} {% endif %}{% endfor %}"{% endif %}>{{ row.cap }}{% if row.cap_rules %} <span class="cap-rules">({% for text, ref in row.cap_rules %}<a href="/rules/#{{ ref.id }}">{{ text }}</a>{% if not loop.last %}, {% endif %}{% endfor %}) {{ seal(row.cap_seal.seal, row.cap_seal.seal_icon, row.cap_seal.seal_label) }}</span>{% endif %}</td>
-<td role="cell"><a href="/rules/#{{ row.rule.id }}">{{ row.rule.title }}</a> {{ rule_seal(row.rule) }}</td>
+<td role="cell"><a href="/rules/#{{ row.rule.id }}">{{ row.rule.title }}</a> {{ rule_seal(row.rule) }}{% if row.note %} <span class="row-note">{{ row.note }}</span>{% endif %}</td>
 </tr>
 {% endfor %}
 </tbody>
@@ -209,7 +236,7 @@
 {%- if page.exalt_files %}
 
 <details class="expander exalt" id="exalt" data-effects="{{ page.exalt_files[0] }}" data-exalt="{{ page.exalt_files[1] }}">
-<summary>Effects to exalt: a planning aid</summary>
+<summary>Exalt plan: effects to move onto this kit</summary>
 <p class="note">A planning aid, not a measured best-in-slot: it names the focus, click, worn and proc effects worth putting on the items of a kit, and where an effect can come from. It needs scripts to show.</p>
 <p id="exalt-status" class="note" hidden></p>
 <div id="exalt-body"></div>

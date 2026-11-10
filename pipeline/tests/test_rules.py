@@ -177,7 +177,7 @@ EXPECTED_SOURCES = {
     "resist.cap": [JUDGMENT],
     "tier.stat_rule": [WIKI_UPGRADES],
     "tier.weight_floor": [WIKI_UPGRADES],
-    "tier.weight_pct": [CLIENT_READS, WIKI_UPGRADES_INDEX],
+    "tier.weight_pct": [PRIVATE_MEASURED],  # settled by in-game readings; the two public pages did not support the formula
     "tier.weapon_damage_pct": [CLIENT_READS, WIKI_UPGRADES_INDEX],
     "tier.accuracy_pct": [("public-text", "patch notes 2026-09-22")],
     "tier.socket_open": [WIKI_UPGRADES, ("public-text", "developer demo")],
@@ -1104,6 +1104,34 @@ def test_alternative_sources_match_the_expected_sources(raw):
         if "alternatives" in rule
     }
     assert actual == EXPECTED_ALTERNATIVE_SOURCES
+
+
+def test_the_weight_rule_is_settled_by_in_game_readings_and_cites_no_public_page(raw):
+    rule = rules_by_id(raw)["tier.weight_pct"]
+    # the formula and its value are unchanged; only the evidence behind them is
+    assert (rule["value"], rule["unit"], rule["status"]) == (9, "percent of the base weight per tier", "active")
+    assert (rule["seal"], rule["date"]) == ("measured", "2026-11-09")
+    assert "test" not in rule and "alternatives" not in rule
+    # the form mana.wis_bands uses for a rule settled by an in-game reading: the fixed private label, nothing a page could be checked against
+    assert [(x["kind"], x["ref"]) for x in rule["source"]] == [PRIVATE_MEASURED]
+    cited = {x["ref"] for x in rule["source"]}
+    assert not cited & {CLIENT_READS[1], WIKI_UPGRADES[1], WIKI_UPGRADES_INDEX[1]}
+    # the two public pages are no source of the rule and are not named in its notes either
+    for address in ("xm2514", "eqlwiki.com", "https://"):
+        assert address not in rule["notes"], address
+    # a private source keeps every digit out of the notes (the loader checks it too), so the formula is said in words
+    assert not any(ch.isnumeric() for ch in rule["notes"])
+    notes = rule["notes"]
+    assert "no minimum step" in notes and "nine percent" in notes and "rounded down" in notes
+    assert "progress toward the next tier" in notes.lower() and "in proportion" in notes
+    assert "The rounding of the last tenth of a stone is not settled." in notes
+    assert "Weights read in game on several items fit it." in notes  # no item is named: which items were read stays private
+    assert load().seal("tier.weight_pct") == "measured"  # and the loader takes the file as it is
+
+
+def test_the_weight_floor_still_cites_the_wiki_page_that_lists_it(raw):
+    # tier.weight_pct dropped the wiki page as a source of the formula; the 0.1 floor is its own rule and keeps it
+    assert [(x["kind"], x["ref"]) for x in rules_by_id(raw)["tier.weight_floor"]["source"]] == [WIKI_UPGRADES]
 
 
 def test_weapon_damage_is_ten_percent_with_the_wiki_figure_as_its_alternative(raw):

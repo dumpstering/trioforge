@@ -22,6 +22,12 @@
 // What the section needs of the page it is given when it starts: the view the page shows (`view`, and `onView`, which says when that changed), and the words of the kit (`words`:
 // the code of the section is not allowed to import format.js, which the page script imports: the build would then load a shared chunk with the page).
 //
+// The section Get these first (a closed details below Wear this, with its summary and an empty container in the page) is drawn by `paintCommon` from the shard of the view the page shows: the items that
+// the best kits of the roles have in common at that race and tier (ui/common-items.js works that out). It is drawn by the path that draws Wear this, so it follows the race, the tier and the shard, and
+// not the role or the weapons (it is not drawn again for those); it is emptied, never left holding the list of another shard, while a shard it has not got is loading; and it says nothing when a shard
+// does not load (it is closed again, with its summary as the page has it). The baked answer has no shard behind it, and nothing is fetched for the section before it is asked for: opening it loads the
+// shard of the default view, unless a change of view has loaded one and drawn the section already.
+//
 // The sliders and the buff choices. The Buffs assumption offers the own buffs, the common group buffs and the full raid, and an Enchanter in the group; the Weights assumption has a slider for each weight
 // group of the trio's bundle (its names are the `data-groups` of the page), with the positions x0.5, x1 and x2. The shards answer the own buffs and the common group buffs with every slider at x1 (the
 // precomputed answers: `view.exact`); every other combination is worked out by the optimizer in the visitor's browser, for the view the page shows, and its kit takes the place of the shard's
@@ -38,8 +44,9 @@
 // weapon switch and tier switch, which move the haste of the page's own answer, are not part of it; `words.raceName`, `words.viewText` and `words.setupText`).
 
 import { getStorage } from "./theme.js";
-import { DASH, EMPTY_NAME, EN_DASH, arrivalText, deityText, displayInt, fmtInt, fmtSigned, reachText, tierLabel } from "./format.js";
+import { DASH, EMPTY_NAME, EN_DASH, arrivalText, deityText, displayInt, fmtInt, fmtSigned, hasteChip, hasteWords, reachText, tierLabel } from "./format.js";
 import { parseRobust, parseRunnerups, parseShard } from "./shard.js";
+import { commonItems } from "./ui/common-items.js";
 
 const SWITCHES = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], #buffs-ench';
 const EXTRAS = ["runnerups", "robust"];
@@ -75,6 +82,10 @@ const ITEM_KEY = /^(?:w[1-9][0-9]{0,14}|r[a-z0-9][a-z0-9-]{0,99})$/;
 /** What a row says of an item whose stats the page does not have for the view (an item of the optimizer's answer that no shard of this page lists). */
 const STATS_ON_PAGE = "Its stats at this tier are on the page of the item.";
 const STATS_MISSING = "Its stats are not on this page.";
+/** The section Get these first: its summary as the page is made with it, and the line under it. */
+const COMMON_SUMMARY = "Get these first";
+const COMMON_LOADING = "Loading…";
+const COMMON_NOTE = "The items each role's best kit has in common at this race and tier. Exalt advice differs by role: see Wear this. Each role uses its own best weapon setup.";
 
 /** A data file of another release than the page's: the site was published again while the page was open. */
 class DataUpdated extends Error {}
@@ -118,6 +129,7 @@ export function initTrio(env = {}) {
     env.loadWeights ?? (() => import("./ui/weights.js")),
     env.loadExalt ?? (() => import("./ui/exalt.js")),
   );
+  app.exaltAhead = env.exaltAhead === true; // the page's own script asks for the section's code and files to be loaded once the page has shown (tests of the older kind do not)
   app.start();
   return app;
 }
@@ -136,6 +148,8 @@ class TrioApp {
     this.loadExalt = loadExalt; // gives the module of the section Effects to exalt (tests give another)
     this.exalt = null; // what the module made of the section, once it was loaded
     this.wakingExalt = false;
+    this.exaltAhead = false;
+    this.common = null; // what the section Get these first was drawn from: {shard, race, tier}, or null when it holds nothing
     this.exaltShown = null; // what the section is told of the view: {role, race, tier, exact, kit}, the kit drawn in Wear this (set when the page is started; `kit` is null while the page shows the answer it was made with, whose items the files name)
     this.exaltWatchers = new Set();
     this.equipKit = null; // the kit of Equip now in the Upgrade section ({kit, record, defaults}), or null
@@ -151,9 +165,11 @@ class TrioApp {
     this.waking = false; // is the module being loaded?
     this.told = false; // has the visitor been told that it could not be loaded (and not that it has been since)?
     this.base = root.dataset.base;
+    this.hastePerTier = Number(root.dataset.hasteTier); // the step of worn haste a tier (the rule's, as the build read it), for the chip of an item of an answer of the optimizer
     this.release = root.dataset.release ?? null; // the data release the page was built for
     this.reportBase = null; // the address of the link that reports a problem, as the build wrote it
     this.shards = new Map(); // "strict-own" -> Promise<Shard>
+    this.settled = new Set(); // the names of the shards that have loaded (a name in `shards` may be a request still on its way)
     this.extraData = new Map(); // "runnerups/balanced" | "robust" -> Promise<parsed>
     this.pending = new Set();
     this.dirty = { runnerups: false, robust: false };
@@ -338,14 +354,16 @@ class TrioApp {
     this.bindUpgrade();
     this.enhanceKit();
     this.bindExalt();
+    this.bindCommon();
   }
 
-  // ---- the section Effects to exalt: its code and its two files come when it is opened or scrolled into view --------------------------------------------------------------
+  // ---- the section Effects to exalt: its code and its two files come once the page has shown (when the page's script asks for it), or when the section is opened or scrolled into view --------------------------------------------------------------
 
   /**
    * The section is a details element the page is made with (closed), whose summary gets aria-expanded here. Its code (ui/exalt.js and the matcher it uses) is a chunk of its own, and its
-   * two files are fetched by that code: nothing of it is asked for until the section is opened or its summary comes near the window, so the first load and the first view are what they were
-   * without it. The section is told which kit Wear this draws (`exaltShown`) and which kit Equip now draws in the Upgrade section (`equipKit`), whenever they change.
+   * two files are fetched by that code. The page's own script (`exaltAhead`) has it loaded when the browser is idle after the first view is drawn, because the hints under the places of Wear
+   * need it; otherwise nothing of it is asked for until the section is opened or its summary comes near the window. Either way the first load and the first view are what they were without it,
+   * and the code and each file are fetched once. The section is told which kit Wear this draws (`exaltShown`) and which kit Equip now draws in the Upgrade section (`equipKit`), whenever they change.
    */
   bindExalt() {
     const section = this.q("#exalt");
@@ -356,6 +374,11 @@ class TrioApp {
       summary?.setAttribute("aria-expanded", String(section.open));
       if (section.open) this.wakeExalt(section);
     });
+    if (this.exaltAhead) {
+      // after the first view is drawn, and when the browser is idle: the lines under the places of Wear this need the section's code and its two files
+      const idle = typeof this.win.requestIdleCallback === "function" ? (run) => this.win.requestIdleCallback(run, { timeout: 4000 }) : (run) => this.win.setTimeout(run, 300);
+      idle(() => this.whenIdle().then(() => this.wakeExalt(section, true)));
+    }
     if (section.open) this.wakeExalt(section);
     else if (typeof this.win.IntersectionObserver === "function") {
       const watcher = new this.win.IntersectionObserver(
@@ -370,7 +393,7 @@ class TrioApp {
     }
   }
 
-  wakeExalt(section) {
+  wakeExalt(section, background = false) {
     if (this.wakingExalt || this.exalt !== null) return;
     const { effects, exalt } = section.dataset;
     if (!EXALT_FILES.test(effects ?? "") || !EXALT_FILES.test(exalt ?? "")) return;
@@ -410,6 +433,8 @@ class TrioApp {
             announce: (text) => this.announce(text),
             onUpdated: () => this.dataUpdated(),
             reload: () => this.reload(),
+            kitRows: () => this.rows,
+            background,
           });
           return this.exalt.ready();
         })
@@ -426,7 +451,7 @@ class TrioApp {
   }
 
   /** Tell the section what Wear this draws: the kit, the view it is of, and whether it is the kit the section's files were made for (the files have the plan for that kit). */
-  setExaltView(scenario, exact) {
+  setExaltView(scenario, exact, pending = false) {
     const d = this.config.defaults;
     // the files' plan is for the default race's kit at the default tier, in the default view (evidence, buffs, weights) and the role's best setup; the role may be any the file has
     this.exaltShown = {
@@ -435,6 +460,7 @@ class TrioApp {
       tier: scenario.tier,
       exact: exact && this.displayed.race === d.race && scenario.tier === d.tier && this.displayed.ev === d.ev && this.displayed.buffs === d.buffs && this.displayed.weights === this.own,
       kit: scenario.kit.map((item) => (item ? { key: item.key, name: item.name } : null)),
+      pending, // the kit drawn stands in for one the optimizer is working out: no hint is shown for it
     };
     for (const watcher of [...this.exaltWatchers]) {
       try {
@@ -541,10 +567,23 @@ class TrioApp {
       const item = scenario.kit[index] ?? null;
       const stats = field(panel, "stats");
       const why = field(panel, "why");
+      let chip = row.querySelector(".kit-haste");
       let text = "";
+      let haste = "";
       if (item) {
         const known = baked ? this.bakedKit[index].stats : this.statsOf(item, scenario.tier);
         text = known ?? (this.itemHref(item.key) !== null ? STATS_ON_PAGE : STATS_MISSING);
+        haste = hasteChip(known) || hasteWords(item.haste); // (the worn haste the row's own stats say, beside the name, so that it is seen without opening them; an item of an answer of the optimizer that no shard lists has its haste at the answer's tier in `haste`)
+      }
+      if (!chip && haste !== "") {
+        // the page is made with a chip only in a row that has worn haste: another view that has some in a row that had none is given one, where the page puts it (before the panel)
+        chip = this.doc.createElement("span");
+        chip.className = "kit-haste";
+        panel.before(chip);
+      }
+      if (chip) {
+        chip.textContent = haste;
+        chip.hidden = haste === "";
       }
       if (stats) stats.textContent = text;
       if (why) {
@@ -809,6 +848,7 @@ class TrioApp {
         .then((shard) => {
           this.sameRelease(shard);
           this.indexStats(shard);
+          this.settled.add(key);
           return shard;
         });
       promise.catch(() => {
@@ -848,7 +888,10 @@ class TrioApp {
     let shard;
     try {
       // a retry keeps its button (and the focus on it) while the view loads again
-      if (!this.shards.has(desired.ev + "-" + buffs)) this.setStatus("Loading this view…", this.focusAfterRetry ? this.retries.get(this.q("#status")) : undefined);
+      if (!this.settled.has(desired.ev + "-" + buffs)) {
+        this.clearCommon(); // (a shard is coming, or is on its way from an earlier request: the section holds nothing of the one that is leaving)
+        this.setStatus("Loading this view…", this.focusAfterRetry ? this.retries.get(this.q("#status")) : undefined);
+      }
       shard = await this.loadShard(desired.ev, buffs);
     } catch (error) {
       if (token === this.token) this.fail(desired, { url, announce, force, notice }, error);
@@ -910,6 +953,8 @@ class TrioApp {
     this.setControls(this.displayed);
     this.applying = 0;
     this.weights?.release(); // (an answer for the view still shown that waited for this one is drawn now)
+    const common = this.q("#common");
+    if (common) common.open = false; // (the section was emptied for the shard that did not come: closed, with its summary, and no word of it)
     if (error instanceof DataUpdated) {
       // the same file would come again: the way out is the page that goes with the data
       this.setStatus(UPDATED + " " + this.revertNote(desired), () => this.reload(), "Reload");
@@ -1113,7 +1158,7 @@ class TrioApp {
     this.paintAssumptions(this.displayed);
 
     this.paintKit(s, this.isBaked(view));
-    this.setExaltView(s, view.exact === true && s.setup === view.best);
+    this.setExaltView(s, view.exact === true && s.setup === view.best, view.exact !== true);
     this.paintTotals(s);
     this.paintWeapons(view);
     for (const watcher of [...this.viewWatchers]) {
@@ -1123,6 +1168,115 @@ class TrioApp {
         // a bug in the Upgrade section is the section's, not the view's
       }
     }
+    this.paintCommon(view.shard, s.race, s.tier);
+  }
+
+  // ---- the section Get these first --------------------------------------------------------------------------------------------
+
+  /** The section draws itself when it is opened (and whenever the page draws a view). */
+  bindCommon() {
+    const box = this.q("#common");
+    if (!box) return;
+    box.addEventListener("toggle", () => box.open && this.showCommon(box));
+    if (box.open) this.showCommon(box); // (opened before this code ran: no toggle will come for it)
+  }
+
+  /**
+   * The section was opened. A view is loading: that view draws it. It holds what it says already: nothing to do. The page shows a view: the section is drawn from its shard. The page still shows the baked answer, which has
+   * no shard behind it: the shard of that view is loaded now (the body says "Loading…" meanwhile), and the section is drawn from it, unless a change of view has come first. A shard that does not load is
+   * not said: the section is closed again, empty (unless a change of view has come first: the section is then that view's).
+   */
+  showCommon(box) {
+    if (this.applying !== 0 || this.common !== null) return; // (a view is loading, or the section holds what it says already: opened again, it is as it was)
+    if (this.shown !== null) {
+      this.paintCommon(this.shown.shard, this.shown.scenario.race, this.shown.scenario.tier);
+      return;
+    }
+    const d = this.config.defaults;
+    const current = () => this.shown === null && this.applying === 0;
+    this.q("#common-body")?.replaceChildren(this.makeCommon("p", COMMON_LOADING, "note"));
+    this.track(
+      this.loadShard(d.ev, d.buffs === "own" ? "own" : "group").then(
+        (shard) => (current() ? this.paintCommon(shard, d.race, d.tier) : undefined),
+        () => {
+          if (!current()) return;
+          this.clearCommon();
+          box.open = false;
+        },
+      ),
+    );
+  }
+
+  /** An element of the section: its tag, its text (as text) and its class. */
+  makeCommon(tag, text, className) {
+    const node = this.doc.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /** The section holds nothing and says only what the page is made with. (A section that is hidden stays hidden, and one that is open stays open: both are not for this to undo.) */
+  clearCommon() {
+    this.common = null;
+    this.q("#common-body")?.replaceChildren();
+    const summary = this.q("#common > summary");
+    if (summary) summary.textContent = COMMON_SUMMARY;
+  }
+
+  /**
+   * Draw the section from a shard, for a race and a tier: not again for the same three (a change of role or weapons draws the same words), and never throwing (it is not the view's business). Hidden when
+   * nothing is in common or the trio has fewer than two roles; the summary then says how many items each group has.
+   */
+  paintCommon(shard, race, tier) {
+    const box = this.q("#common");
+    const body = this.q("#common-body");
+    const had = this.common;
+    if (!box || !body || (had !== null && had.shard === shard && had.race === race && had.tier === tier)) return;
+    this.clearCommon();
+    try {
+      const found = commonItems(shard, race, tier);
+      const groups = [
+        ["every", "Every role", found.every],
+        ["most", "Most roles", found.most],
+      ].filter(([, , list]) => list.length > 0);
+      this.common = { shard, race, tier };
+      box.hidden = groups.length === 0;
+      if (groups.length === 0) return;
+      const [n, m] = [found.every.length, found.most.length];
+      const count = (k, noun) => k + " " + (noun ? (k === 1 ? "item " : "items ") : "");
+      box.querySelector("summary").textContent = COMMON_SUMMARY + ": " + [n ? count(n, true) + "every role wears" : "", m ? count(m, n === 0) + "most roles wear" : ""].filter(Boolean).join(", ");
+      const make = (tag, text, className) => this.makeCommon(tag, text, className);
+      const parts = [make("p", COMMON_NOTE, "note")];
+      for (const [code, heading, list] of groups) {
+        const ul = make("ul", undefined, "plain");
+        ul.setAttribute("data-group", code);
+        ul.append(...list.map((entry) => this.commonRow(entry, tier, make)));
+        parts.push(make("h3", heading), ul);
+      }
+      body.replaceChildren(...parts);
+    } catch {
+      this.clearCommon(); // (what could not be drawn is left out, with no word of it)
+    }
+  }
+
+  /** A row of the section: the item's name (a link where the kit rows link it), 2x when the roles that wear it wear two, what it needs and which roles lack it, then its slot and how it is had, in the words of the kit rows. */
+  commonRow({ item, place, copies, missing }, tier, make) {
+    const li = make("li");
+    const href = this.itemHref(item.key);
+    const name = make(href === null ? "span" : "a", item.name, href === null ? "common-name" : undefined);
+    if (href !== null) name.setAttribute("href", href);
+    li.append(name);
+    const lack = missing.map((code) => this.roleLabel(code).replace(/ \(.*/, "")); // (the label without its gloss: "Caster (healing or nuking)" is "Caster" here)
+    const reach = reachText(item.arrival, tier);
+    for (const [text, className] of [
+      [copies > 1 ? copies + "x" : "", "common-n"],
+      [deityText(item.deity), "deity"],
+      [lack.length > 0 ? "not " + (lack.length > 1 ? lack.slice(0, -1).join(", ") + " or " : "") + lack.at(-1) : "", "common-miss"],
+    ]) {
+      if (text !== "") li.append(" ", make("span", text, className));
+    }
+    li.append(make("span", "Slot: " + this.slotLabel(place) + ". Arrives at: " + arrivalText(item.arrival) + (reach === "" ? "" : ", " + reach) + ". Source: " + item.source, "common-how"));
+    return li;
   }
 
   /** The lines that say what is assumed: the buffs, the weapons and the weights, in the Assumes panel and in the line of the switches. */

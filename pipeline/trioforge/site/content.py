@@ -1,4 +1,4 @@
-"""The inputs of the pages other than the trio page: the rules file, the sources manifest and the changelog.
+"""The inputs of the pages other than the trio page: the rules file, the sources manifest, the racial abilities and the changelog.
 
 Nothing here writes HTML. Each loader returns plain data the templates loop over, and every piece of text stays text:
 the changelog's Markdown is read by a small reader that knows headings, bullets, paragraphs, ``**bold**``, ``code`` and
@@ -21,12 +21,16 @@ __all__ = [
     "ChangelogBlock",
     "Manifest",
     "PRIVATE_LABEL",
+    "RacePageRef",
+    "Racial",
+    "Racials",
     "RuleBook",
     "RuleView",
     "SEALS",
     "eqlt_item_url",
     "load_changelog",
     "load_manifest",
+    "load_racials",
     "load_rulebook",
     "parse_markdown",
     "wiki_url",
@@ -236,6 +240,107 @@ def load_manifest(path: str | Path) -> Manifest:
         return Manifest(document["attribution"], document["license"], inputs, items, eqlt)
     except (KeyError, TypeError, AttributeError):
         raise ContentError(f"{path.name}: not a sources manifest (items with a title and a revision, provenance, attribution)") from None
+
+
+# ---- the racial abilities ---------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RacePageRef:
+    """A race page of the wiki that the racials were read from: the race, the page title, the revision and that revision's address."""
+
+    race: str
+    title: str
+    revid: int
+    url: str
+
+
+@dataclass(frozen=True)
+class Racial:
+    """One racial ability of a race as its wiki page words it: the name, the page's first sentence about it (or the name when the page says no more), and where it was read."""
+
+    race: str
+    name: str
+    description: str
+    source: str
+    revid: int
+
+
+@dataclass(frozen=True)
+class Racials:
+    """``derived/racials.json``: the race pages read and the racial abilities of each race. Nothing of it is scored."""
+
+    license: str
+    attribution: str
+    input: str  # the address of the category the pages were pulled from
+    date: str  # the day the pages were fetched
+    pages: tuple[RacePageRef, ...]
+    rows: tuple[Racial, ...]
+
+    def of(self, race: str) -> tuple[Racial, ...]:
+        """The racials of a race in the page's order (none for a race with no page, or a page that lists none)."""
+        return tuple(row for row in self.rows if row.race == race)
+
+    def page(self, race: str) -> RacePageRef | None:
+        return next((page for page in self.pages if page.race == race), None)
+
+
+def _text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def load_racials(path: str | Path) -> Racials:
+    """Read ``derived/racials.json`` (:mod:`trioforge.sources.racials` writes it) and check it is what the writer makes: the licence, the pages, and a row that comes from the page of its race."""
+    from trioforge.data import races as races_module
+
+    path = Path(path)
+    try:
+        document = load_strict(path)
+    except FileNotFoundError:
+        raise ContentError(
+            f"{path.name} was not found at {path}: write it with python -m trioforge.sources.racials, or give --racials"
+        ) from None
+    except (JsonFileError, OSError) as error:
+        raise ContentError(f"{path.name}: {error}") from None
+
+    def bad(what: str) -> ContentError:
+        return ContentError(f"{path.name}: not a file of racial abilities ({what})")
+
+    if not isinstance(document, dict) or not all(key in document for key in ("provenance", "license", "attribution", "pages", "racials")):
+        raise bad("provenance, licence, attribution, pages and racials are needed")
+    if document["license"] != "CC BY-SA 4.0":
+        raise bad("the licence must be CC BY-SA 4.0")
+    if not _text(document["attribution"]):
+        raise bad("the attribution is empty")
+    inputs = document["provenance"].get("inputs") if isinstance(document["provenance"], dict) else None
+    if not isinstance(inputs, list) or len(inputs) != 1 or not isinstance(inputs[0], dict) or not _text(inputs[0].get("date")) or not _text(inputs[0].get("file")):
+        raise bad("provenance must name the pull it was read from, with its date")
+    if not isinstance(document["pages"], list) or not isinstance(document["racials"], list):
+        raise bad("pages and racials must be lists")
+    pages: dict[str, RacePageRef] = {}
+    for entry in document["pages"]:
+        if not isinstance(entry, dict) or set(entry) != {"race", "title", "revid", "url"}:
+            raise bad("a page is a race, a title, a revision and an address")
+        race, title, revid, url = entry["race"], entry["title"], entry["revid"], entry["url"]
+        if not isinstance(race, str) or race not in races_module.RACE_NAMES or race in pages or not _text(title) or type(revid) is not int or revid < 0:  # (a race is looked up as a key: a list cannot be one)
+            raise bad(f"page of {race!r}")
+        if url != wiki_url(title, revid):
+            raise bad(f"the address of the page of {race} is not that of its revision")
+        pages[race] = RacePageRef(race, title, revid, url)
+    rows: list[Racial] = []
+    seen: set[tuple[str, str]] = set()
+    for entry in document["racials"]:
+        if not isinstance(entry, dict) or set(entry) != {"race", "name", "description", "source", "revid"}:
+            raise bad("a racial is a race, a name, a description, a source and a revision")
+        race, name, description = entry["race"], entry["name"], entry["description"]
+        page = pages.get(race) if isinstance(race, str) else None
+        if page is None or not _text(name) or not _text(description) or (race, name) in seen:
+            raise bad(f"racial {name!r} of {race!r}")
+        if entry["source"] != page.url or entry["revid"] != page.revid:
+            raise bad(f"racial {name!r} of {race} does not come from the page of its race")
+        seen.add((race, name))
+        rows.append(Racial(race, name, description, entry["source"], entry["revid"]))
+    return Racials(document["license"], document["attribution"], inputs[0]["file"], inputs[0]["date"], tuple(pages.values()), tuple(rows))
 
 
 #: the slug of a page of an item at EQ Legends Tools (small letters, digits and hyphens)

@@ -20,6 +20,22 @@
 </tbody>
 </table>
 </details>
+<h2>Racial abilities</h2>
+<p>The racial abilities that the trio pages name beside a race (a race's racials, and the wiki's first sentence about each) are adapted from the race pages of <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki.com</a> by the eqlwiki contributors, under <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a>. TrioForge's derived data from them is licensed the same way. Changes: the list of racials of each page is read for names, each name is given the first sentence of the page's own section of that name where it has one, and the text is cleaned. The pages were fetched on {{ racials_date }}. They are shown to inform: only the Iksar's natural armour class is scored.</p>
+<details class="expander" id="races-box">
+<summary>Race pages and revisions used ({{ race_pages|length }})</summary>
+<table class="revisions" id="races">
+<caption>The wiki page and revision each race's racial abilities were read from</caption>
+<thead>
+<tr><th scope="col">Wiki page</th><th scope="col">Revision</th><th scope="col">Race</th></tr>
+</thead>
+<tbody>
+{% for row in race_pages %}
+<tr><th scope="row">{{ row.title }}</th><td><a href="{{ row.url }}" rel="noopener noreferrer">{{ row.revid }}</a></td><td><code>{{ row.code }}</code></td></tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
 <h2>Other sources</h2>
 <ul>
 {% if manifest.eqlt %}
@@ -53,6 +69,7 @@
 {% for file, date in manifest.inputs %}
 <li><code>{{ file }}</code>, {{ date }}</li>
 {% endfor %}
+<li><code>{{ racials_input }}</code>, {{ racials_date }}</li>
 </ul>
 </main>
 {% endblock %}

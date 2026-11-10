@@ -31,6 +31,7 @@ in view), so the page itself is never wider than the window; the region is named
 {% if page.rows %}
 {{ tier_table("tiers", "Stats of " ~ page.name ~ " at each tier, +0 to +10", page.tiers, page.rows) }}
 <p id="tier-rules" class="rules">Worked out from the +0 figures by these rules; none is estimated: {{ rule_links(page.rules) }}</p>
+<p id="tier-progress" class="rules">An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier.</p>
 {% else %}
 <p id="no-stats">No stat or weight is listed for this item.</p>
 {% endif %}
