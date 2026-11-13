@@ -563,6 +563,19 @@
       "status": "active"
     },
     {
+      "id": "tier.void_mote",
+      "title": "Void-touched mote",
+      "value": 1,
+      "unit": "whole tier per mote",
+      "seal": "measured",
+      "source": [
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
+      ],
+      "date": "2026-11-10",
+      "status": "active",
+      "notes": "A void-touched mote raises any one item by one whole tier, at any tier, up to the top tier, with no limit on the motes one item takes. Read in game. The order in which the site spends motes is greedy: each step is the mote, or the shortest run of motes on one item that gains anything, that adds the most kit value per mote to the kit as it stands."
+    },
+    {
       "id": "tier.negatives_scale",
       "title": "Negative stats scale with tier",
       "value": false,

@@ -148,18 +148,22 @@ def read_sitemap(out) -> str:
 # ---- the second round of art: the plains, the hyena people, the icon of an item, the footer and the credit --------------------------------------------------------------
 
 
-def test_the_item_pages_carry_the_icon_of_their_slot_beside_the_name_and_none_when_the_slot_has_none(site):  # noqa: F811
+def test_the_item_pages_carry_the_icon_of_their_item_or_else_of_their_slot_beside_the_name_and_none_when_there_is_none(site):  # noqa: F811
+    import json
+
+    from trioforge.export import browser
     from trioforge.site import view
 
     out, _ = site
     names = {name: group for group, name in view.SLOT_NAMES.items()}
+    records = {browser.record_key(r): r for r in json.loads((REPO / "fixtures" / "site" / "results" / "items.json").read_text(encoding="utf-8"))["items"]}
     pages = sorted((out / "item").glob("*/index.html"))
     assert pages
     seen_icon = seen_none = False
     for path in pages:
         html = parse(path.read_text(encoding="utf-8"))
         slot = next(n for n in html.find_all("dt") if n.text() in ("Slot", "Slots")).parent.find("dd").text()
-        want = art.item_icon([names[s] for s in slot.split(", ")])
+        want = art.own_icon(records[path.parent.name]) or art.item_icon([names[s] for s in slot.split(", ")])  # (the picture of what the item is, else that of its slot)
         heading = html.find("h1")
         spans = heading.find_all("span")
         assert [sorted(s.classes) for s in spans] == ([["art", f"art-{want}"]] if want else []), (path.parent.name, slot)
@@ -169,7 +173,7 @@ def test_the_item_pages_carry_the_icon_of_their_slot_beside_the_name_and_none_wh
             seen_icon = True
         else:
             seen_none = True
-    assert seen_icon and seen_none, "the fixture's items should show both a slot with an icon and one without"
+    assert seen_icon, "the fixture's items should show an icon"  # (the hands have a picture now, so that every item of the fixture has one: the case of none is in test_site_art)
 
 
 def test_the_home_page_has_the_plains_above_the_list_and_the_404_page_the_hyena_people_beside_the_village(site):  # noqa: F811

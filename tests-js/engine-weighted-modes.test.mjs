@@ -404,8 +404,12 @@ describe("the five modes share one function for the weights", () => {
     expect(scenario).not.toMatch(/\bweightsOverride\s*\(/);
     expect(scenario).not.toMatch(/\bweightsAreOwn\s*\(/);
     expect(scenario).not.toMatch(/from "\.\/weights\.js"/);
-    expect(bestkit).toMatch(/export function viewProfile\b/);
-    expect((bestkit.match(/\bweightsOverride\(/g) ?? []).length, "one place composes the weights").toBe(1);
+    // (viewProfile is made in view.js, a file of its own that the evaluator of the page shares for the order of motes; bestkit.js tells it on as it always has)
+    const view = SOURCE("view.js");
+    expect(view).toMatch(/export function viewProfile\b/);
+    expect(bestkit).toMatch(/export \{[^}]*\bviewProfile\b[^}]*\};/);
+    expect(bestkit).not.toMatch(/\bweightsOverride\(/);
+    expect((view.match(/\bweightsOverride\(/g) ?? []).length, "one place composes the weights").toBe(1);
   });
 });
 

@@ -217,7 +217,8 @@ def test_the_data_files_are_the_browser_format_of_the_results(site, results):
     credit = build.credit_of(results.meta)
     table = json.loads((RESULTS / "items.json").read_text(encoding="utf-8"))  # (the shard carries the stats of its items at each of its tiers: the build makes them from the item table)
     vecs = view_module.tier_vecs({r.get("key") or f"w{r['id']}": r for r in table["items"]}, table["defaults"], rules_module.load())
-    assert read(out, "data/pal-mnk-ber/wiki-group.json") == data.site_shard_json(shard, credit, lambda key, tier: view_module.item_stat_text(vecs(key, tier)))
+    icons = build.item_icons(table, {})  # (the pictures of the items: the rule on the fixture's records, built without the item catalog)
+    assert read(out, "data/pal-mnk-ber/wiki-group.json") == data.site_shard_json(shard, credit, lambda key, tier: view_module.item_stat_text(vecs(key, tier)), icons)
     for role in results.runnerups.roles():
         assert read(out, f"data/pal-mnk-ber/runnerups/{role}.json") == data.site_runnerups_json(results.runnerups, role, credit)
     assert read(out, "data/pal-mnk-ber/robust.json") == data.site_robust_json(results.robust, credit)
@@ -2382,7 +2383,7 @@ def test_license_data_has_the_attribution_and_the_licence_sentence_of_the_site()
 def test_every_data_file_carries_the_release_the_licence_and_the_attribution(site):
     out, _ = site
     files = sorted((out / "data").rglob("*.json"))
-    assert len(files) == 4 + 3 + 1  # four shards, three runner-up files (one for each role, every tier in it), the robust file
+    assert len(files) == 4 + 3 + 1 + 1  # four shards, three runner-up files (one for each role, every tier in it), the robust file, the list of the pictures of the items
     for path in files:
         document = json.loads(path.read_text(encoding="utf-8"))
         assert list(document)[:4] == ["v", "release", "license", "attribution"], path.name
@@ -2415,14 +2416,18 @@ def test_the_art_in_the_pages_is_decoration_and_at_most_three_things_move_on_any
     assert page(out, PAGES["about"]).find_all("span", cls="art-dwarf") == []  # a page that is not unfinished has no dwarf under construction
 
 
-def test_the_rows_of_the_kit_have_the_icon_of_their_place_and_the_roles_their_crest(site):
+def test_the_rows_of_the_kit_have_the_icon_of_their_item_or_their_place_and_the_roles_their_crest(site):
     out, _ = site
     trio = page(out, PAGES["trio"])
     rows = trio.by_id("kit").find_all("tr")
     icons = {row.find("th").text(skip_hidden=False): [sorted(n.classes) for n in row.find("th").find_all("span")] for row in rows if row.find("th")}
-    assert icons["Head"] == [["art", "art-icon-helm"]] and icons["Wrist 2"] == [["art", "art-icon-wrist"]] and icons["Main hand"] == [["art", "art-icon-sword"]]
+    assert icons["Head"] == [["art", "art-icon-helm"]] and icons["Wrist 2"] == [["art", "art-icon-wrist"]]
     assert icons["Arms"] == [["art", "art-icon-arms"]] and icons["Back"] == [["art", "art-icon-back"]]
-    assert all(icons[slot] == [] for slot in ("Hands", "Any slot 1", "Any slot 2", "Off hand"))
+    # the weapons of the fixture's default kit have a picture of their own (a pike, by its head word, in the main hand, a mallet in the off hand), and the hands one of their place
+    assert icons["Main hand"] == [["art", "art-icon-spear"]] and icons["Off hand"] == [["art", "art-icon-hammer-1h"]] and icons["Hands"] == [["art", "art-icon-hands-leather"]]
+    assert icons["Range"] == [["art", "art-icon-pouch"]]  # (a filled row of the range of an item with no picture of its own: the pouch)
+    assert icons["Any slot 1"] == [["art", "art-icon-ring"]]  # (a ring in an any row: what its page heading has, the place's picture, and not the pouch: it fits no held place)
+    assert icons["Any slot 2"] == []  # (an empty held row: none, as it was)
     crests = {radio.get("value"): [sorted(n.classes) for n in trio.find("label", **{"for": radio.get("id")}).find_all("span")] for radio in trio.find_all("input", type="radio") if radio.get("name") == "role"}
     assert crests["tank"] == [["art", "art-crest-tank"]] and crests["melee"] == [["art", "art-crest-damage"]] and crests["balanced"] == [] and crests.get("caster", []) == []
 
@@ -2462,17 +2467,17 @@ def test_the_icon_of_every_page_is_the_emblem_as_a_png_address(site):
     assert build.FAVICON.startswith("data:image/png;base64,")
 
 
-def test_the_art_of_the_site_stays_under_200_kb_and_the_build_refuses_more(site):
+def test_the_art_of_the_site_stays_under_215_kb_and_the_build_refuses_more(site):
     out, summary = site
     total = sum(p.stat().st_size for p in (out / "assets").glob("*.png"))
-    assert 0 < total <= build.LIMITS["art"] == 200 * 1024  # (was 120 KB: the set pieces raised it, DECISIONS.md; what a phone fetches stays under 120 KB, tests-e2e/art-phone.spec.mjs)
+    assert 0 < total <= build.LIMITS["art"] == 215 * 1024  # (was 120 KB: the set pieces raised it to 200, the icons of the items to 210 and the held things to 215, DECISIONS.md; what a phone fetches stays under 120 KB, tests-e2e/art-phone.spec.mjs)
     assert summary.sizes["art"] == total
     page_name = "trio/pal-mnk-ber/index.html"
     files = {page_name: b"<html></html>", "assets/app-AAAAAAAA.js": b"let a=1;", "assets/boot-BBBBBBBB.js": b"let b=2;", "assets/tile-AAAAAAAA.png": b"x" * build.LIMITS["art"]}
     kwargs = dict(trio_pages=[page_name], first_load_assets={page_name: ["assets/app-AAAAAAAA.js", "assets/boot-BBBBBBBB.js"]})
-    assert build.check_budgets(files, **kwargs)["art"] == 200 * 1024  # at the limit is within it
+    assert build.check_budgets(files, **kwargs)["art"] == 215 * 1024  # at the limit is within it
     files["assets/coin-BBBBBBBB.png"] = b"x"
-    with pytest.raises(build.BudgetError, match=r"the art is 200\.0 KB in all \(limit 200 KB\)"):
+    with pytest.raises(build.BudgetError, match=r"the art is 215\.0 KB in all \(limit 215 KB\)"):
         build.check_budgets(files, **kwargs)
 
 
@@ -3382,7 +3387,7 @@ def test_the_command_line_builds_and_reports_sizes(tmp_path):
     env = dict(os.environ, PYTHONPATH=str(REPO / "pipeline"))
     done = subprocess.run(
         [sys.executable, "-m", "trioforge.site.build", "--results", str(RESULTS), "--out", str(out), "--noindex",
-         "--sources-manifest", str(MANIFEST), "--changelog", str(changelog)],
+         "--sources-manifest", str(MANIFEST), "--changelog", str(changelog), "--no-item-catalog"],
         capture_output=True, text=True, env=env, cwd=REPO, check=False,
     )  # fmt: skip
     assert done.returncode == 0, done.stderr
@@ -4024,7 +4029,7 @@ def test_the_command_line_reports_the_sizes_of_the_data_files(tmp_path):
     env = dict(os.environ, PYTHONPATH=str(REPO / "pipeline"))
     done = subprocess.run(
         [sys.executable, "-m", "trioforge.site.build", "--results", str(RESULTS), "--out", str(tmp_path / "dist"), "--noindex",
-         "--sources-manifest", str(MANIFEST), "--changelog", str(make_changelog(tmp_path))],
+         "--sources-manifest", str(MANIFEST), "--changelog", str(make_changelog(tmp_path)), "--no-item-catalog"],
         capture_output=True, text=True, env=env, cwd=REPO, check=False,
     )  # fmt: skip
     assert done.returncode == 0, done.stderr
@@ -4043,7 +4048,7 @@ def test_the_command_line_reports_the_engine_sizes(tmp_path):
     env = dict(os.environ, PYTHONPATH=str(REPO / "pipeline"))
     done = subprocess.run(
         [sys.executable, "-m", "trioforge.site.build", "--results", str(RESULTS), "--out", str(tmp_path / "dist"), "--noindex",
-         "--sources-manifest", str(MANIFEST), "--changelog", str(make_changelog(tmp_path))],
+         "--sources-manifest", str(MANIFEST), "--changelog", str(make_changelog(tmp_path)), "--no-item-catalog"],
         capture_output=True, text=True, env=env, cwd=REPO, check=False,
     )  # fmt: skip
     assert done.returncode == 0, done.stderr
@@ -4488,17 +4493,20 @@ def test_the_upgrade_section_says_the_level_of_the_page_and_keeps_an_empty_place
     results = section.by_id("upgrade-results")
     assert results.tag == "div" and results.children == [] and set(results.attrs) == {"id"}  # empty: the code of the section makes the answer, from text
     siblings = element_children(section)
-    assert siblings[siblings.index(section.by_id("upgrade-owned")) + 1] is results and siblings[-1] is results  # directly under the list of the gear, at the end
+    box = section.by_id("upgrade-motes-open").parent  # the box that opens Spend your motes (the panel is made under it by the code of the section)
+    assert siblings[siblings.index(section.by_id("upgrade-owned")) + 1] is results and siblings[-2] is results and siblings[-1] is box  # directly under the list of the gear, then the box, at the end
 
 
 def test_every_control_of_the_upgrade_section_has_a_label_and_waits_for_the_page_code(site):
     out, _ = site
     _, section = upgrade_section(out)
     controls = {n.get("id"): n for n in section.iter() if n.tag in ("input", "select", "button")}
-    assert list(controls) == ["upgrade-file", "upgrade-pick", "upgrade-tier", "upgrade-add", "upgrade-clear"]
-    for ident in ("upgrade-file", "upgrade-pick", "upgrade-tier"):
+    assert list(controls) == ["upgrade-file", "upgrade-pick", "upgrade-tier", "upgrade-add", "upgrade-clear", "upgrade-motes-open"]
+    for ident in ("upgrade-file", "upgrade-pick", "upgrade-tier", "upgrade-motes-open"):
         assert section.find("label", **{"for": ident}).text(), ident  # a visible label for each field
         assert controls[ident].has("disabled") and controls[ident].has("data-wake"), ident  # the page code enables these, and a focus on one wakes the section
+    assert controls["upgrade-motes-open"].get("type") == "checkbox" and not controls["upgrade-motes-open"].has("checked")  # the box that opens Spend your motes: off
+    assert section.find("label", **{"for": "upgrade-motes-open"}).text() == "Spend motes"
     assert controls["upgrade-add"].has("disabled") and not controls["upgrade-add"].has("data-wake")  # the section enables it when the item list is in
     assert controls["upgrade-clear"].has("hidden") and controls["upgrade-clear"].text() == "Clear"
     assert controls["upgrade-clear"].get("aria-label") == "Clear all gear"  # the name starts with the word on the button

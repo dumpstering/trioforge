@@ -30,6 +30,12 @@ catalog file).
   :func:`trioforge.model.roles.weights_override`'s: Equip now (``upgrade.equip_now``), a farm path of three steps (``upgrade.farm_path``, with its start: Equip now), the best 2 and 3 sets (``upgrade.best_sets``) and Every slot (``upgrade.every_slot``) from the kit of Equip now. The candidates are those of
   the worker: the items of the evidence level that the precompute offers (:func:`trioforge.precompute.grid.select_items`, deity-locked ones too), each at the tier of the tier mode.
   Every value is that of the kit at the haste it counts, whatever the weights; each answer says it. The browser tests hold the worker to every number of it.
+* ``fixtures/site/mote-orders.json``: the order in which to spend void-touched motes on a fixed kit (:func:`trioforge.motes.mote_order`), as Python's reference works it out: each step is
+  the one mote (one whole tier on one worn item below +10) that adds the most exact kit value, the kit valued as the Upgrade tab values it (the haste the kit counts, the optional buffs
+  the kit was made with held fixed), ties to the earlier place, ending at +10 everywhere, at the motes asked for, or at a best gain of zero. The cases are the kits of the Equip now
+  scenarios with a limit of motes, the three small kits in full, the same kits under drawn weights, a kit with every item at one tier (as a published best kit is), the kit the baked trio page
+  of the fixture shows, the kit Equip now finds for the gear of the browser test, one a tier from the top and one at the top. Each says its scenario, weights, kit, buffs and limit, and the steps: the place, the item, its tiers, the exact gain and kit value after the step and the stats that moved.
+  The browser's port (``static/engine/motes.js``, through ``kitvalue.js``) is held to every number (``tests-js/motes.test.mjs``).
 * ``fixtures/site/weapon-rate.json``: best kits of whole-pool views at the weapon tier rate 5 and 10 percent (``at_tier(weapon_pct=)``), and with no rate (``rules``: the rule
   ``tier.weapon_damage_pct``, 10), as the best-kit answers are made. At +0 no weapon has grown and the two rates give one answer.
 
@@ -62,6 +68,7 @@ KIT_VALUES = REPO / "fixtures" / "site" / "kit-values.json"
 BEST_KIT = REPO / "fixtures" / "site" / "best-kit.json"
 WEIGHTED = REPO / "fixtures" / "site" / "weighted.json"
 WEAPON_RATE = REPO / "fixtures" / "site" / "weapon-rate.json"
+MOTE_ORDERS = REPO / "fixtures" / "site" / "mote-orders.json"
 UPGRADE_VIEW = REPO / "fixtures" / "site" / "upgrade-view.json"
 SLUG = "pal-mnk-ber"
 TRIO = ("PAL", "MNK", "BER")
@@ -873,10 +880,155 @@ def upgrade_view_text(document: dict[str, Any] | None = None) -> str:
     return json.dumps(upgrade_view_answers() if document is None else document, indent=1, ensure_ascii=False) + "\n"
 
 
+# ---- the mote order --------------------------------------------------------------------------------------------------------------------------
+
+#: how many motes the long orders are cut at (a full order of an Equip now kit has a hundred steps and more, each with twenty evaluations)
+MOTE_LIMIT = 40
+WEIGHTED_MOTE_LIMIT = 30
+PUBLISHED_TIER = 4
+
+
+def _exact_moved(moved: Any) -> list[list[str]]:
+    return [[name, _exact_text(amount)] for name, amount in moved]
+
+
+#: invented items for the runs, which no shard shows: a dagger of damage five (its damage rises every second tier), an ear of 25 haste and a neck of 20 (the haste that counts is the best worn one,
+#: so the ear is worth a mote only once it passes the neck: six motes from +0 when the neck is at +10). Their keys are not a catalog key, and their names are made up.
+MOTE_EXTRAS: list[dict[str, Any]] = [
+    {"key": "w91001", "name": "Prop Dagger of the Plateau", "slots": ["PRIMARY", "SECONDARY"], "stats": {}, "weapon": ("1H Piercing", 5, 20, None)},
+    {"key": "w91002", "name": "Prop Earloop of the Overtake", "slots": ["EAR"], "stats": {"HASTE": 25}},
+    {"key": "w91003", "name": "Prop Neckchain of the Overtake", "slots": ["NECK"], "stats": {"HASTE": 20}},
+]
+
+
+def mote_extra_catalog() -> list[dict[str, Any]]:
+    """The catalog items of :data:`MOTE_EXTRAS` (the Python reference works from these) in the form of the catalog."""
+    from test_precompute import make_item, weapon
+
+    return [
+        make_item(item["key"], item["name"], item["slots"], stats=item["stats"], weight=1.0, weapon=None if "weapon" not in item else weapon(*item["weapon"]), level="wiki", tier_rule="drop")
+        for item in MOTE_EXTRAS
+    ]
+
+
+def mote_extra_records() -> list[dict[str, Any]]:
+    """The same items as records of the item table, which the browser tests add to the fixture's table (the table the page and the worker have does not hold them)."""
+    from trioforge.export import browser
+    from trioforge.model.tables import load
+
+    document = {"version": VERSION, "license": "CC BY-SA 4.0", "attribution": "invented", "provenance": {}, "items": mote_extra_catalog()}
+    return browser.items(document, load().rules)["items"]
+
+
+def mote_cases() -> list[dict[str, Any]]:
+    """The cases of :func:`mote_orders`: for each, the scenario, the weights, the kit as idents, the optional buffs the kit is valued with, the limit of motes (``null``: to
+    the end) and the order."""
+    from trioforge import motes, upgrade
+    from trioforge.export import browser
+    from trioforge.model import items as item_module
+
+    world = _world()
+    catalog = {key: browser.item_to_catalog(record, world.table["defaults"]) for key, record in world.records.items()}
+    catalog.update({item["key"]: item for item in mote_extra_catalog()})
+    equip = answers()["cases"]
+    small = []
+    for case in KIT_ONLY:
+        scenario = case["scenario"]
+        solution = upgrade.equip_now(_profile(world, scenario), _owned(world, case["owned"]), scenario["setup"], world.buffsets[scenario["buffs"]], canonical=True)
+        assert solution.status == "optimal" and solution.breakdown is not None
+        small.append({"kit": _kit_idents(solution.kit), "buffs": list(solution.buffs)})
+
+    def retier(kit: list[str | None], tier: int) -> list[str | None]:
+        return [None if ident is None else f"{ident.rsplit('@', 1)[0]}@{tier}" for ident in kit]
+
+    cases: list[dict[str, Any]] = []
+
+    def add(name: str, scenario: Mapping[str, Any], kit: list[str | None], buffs: list[int], limit: int | None, weights: Mapping[str, Any] | None = None) -> None:
+        profile = _composed(_profile(world, scenario), weights)
+        worn = [None if ident is None else item_module.at_tier(catalog[ident.rsplit("@", 1)[0]], int(ident.rsplit("@", 1)[1]), world.rules) for ident in kit]
+        order = motes.mote_order(profile, worn, catalog, world.rules, scenario["setup"], world.buffsets[scenario["buffs"]], buffs, limit)
+        cases.append(
+            {
+                "name": name, "scenario": dict(scenario), **({"weights": weights} if weights is not None else {}), "kit": kit, "buffs": buffs, "motes": limit,
+                "start": _exact_text(order.start), "ending": order.ending, "left": order.left, "spent": order.spent, "nextRun": order.next_run,
+                "steps": [
+                    {
+                        "index": s.index, "place": s.place, "key": s.key, "from": s.from_tier, "to": s.to_tier, "motes": s.motes, "spent": s.spent, "gain": _exact_text(s.gain),
+                        "F": _exact_text(s.F), "moved": _exact_moved(s.moved),
+                    }
+                    for s in order.steps
+                ],
+            }
+        )  # fmt: skip
+
+    for case, answer in zip(CASES, equip, strict=True):
+        add(f"Equip now's kit, {MOTE_LIMIT} motes: {case['name']}", case["scenario"], answer["kit"], answer["buffs"], MOTE_LIMIT)
+    for case, kit in zip(KIT_ONLY, small, strict=True):
+        add(f"the whole order of a small kit: {case['name']}", case["scenario"], kit["kit"], kit["buffs"], None)
+    # the hoop of haste of the second small kit is worn under the raid's 70 spell haste, which leaves 15 of the cap: it counts in full at +0, so its motes add nothing but the
+    # agility it gives, and with no weight on armor class or endurance (nothing else reads agility) they add nothing at all: the order ends with the motes it could still spend
+    add(f"a hoop past the haste cap, no weight on armor class or endurance: {KIT_ONLY[1]['name']}", KIT_ONLY[1]["scenario"], small[1]["kit"], small[1]["buffs"], None,
+        {"multipliers": {}, "custom": {"AC": 0, "END": 0}})  # fmt: skip
+    for index, (case, answer) in enumerate(zip(CASES, equip, strict=True)):
+        weights = draw_weights(f"{WEIGHTED_SEED}:{index}:0")
+        add(f"under drawn weights, {WEIGHTED_MOTE_LIMIT} motes: {case['name']}", case["scenario"], answer["kit"], answer["buffs"], WEIGHTED_MOTE_LIMIT, weights)
+    # the kit the fixture's baked trio page shows (its default view, the published row of the shard): the kit a visitor sees in Wear this, at the tier of the view, valued under the view with the
+    # best optional buffs for it (the optimum of Python's solve with the kit as the owned set, which the page's own exact search finds too)
+    baked = json.loads((TRIO_FOLDER / "defaults.json").read_text(encoding="utf-8"))
+    view = baked["view"]
+    shard = json.loads((TRIO_FOLDER / f"{view['evidence']}-{view['buffs']}.json").read_text(encoding="utf-8"))
+    row = next(r for r in shard["scenarios"] if r[:4] == [baked["race"], view["role"], view["tier"], baked["setup"]])
+    page_scenario = {"race": baked["race"], "role": view["role"], "buffs": view["buffs"], "evidence": view["evidence"], "setup": baked["setup"]}
+    page_kit = [None if index < 0 else f"{shard['items'][index][0]}@{view['tier']}" for index in shard["kits"][row[4]]]
+    held = _owned(world, [(ident.rsplit("@", 1)[0], view["tier"], 1) for ident in page_kit if ident is not None])
+    best = upgrade.equip_now(_profile(world, page_scenario), held, page_scenario["setup"], world.buffsets[page_scenario["buffs"]], canonical=True)
+    add("the best kit of the fixture's baked page, as Wear this shows it", page_scenario, page_kit, list(best.buffs), None)
+    # the kit Equip now finds for the gear that the browser test gives the page (the dump fixtures/dumps/site-small.txt, in the page's default view): the kit the panel is given
+    gear = upgrade.equip_now(_profile(world, UPGRADE_VIEW_SCENARIO), _owned(world, UPGRADE_VIEW_OWNED), UPGRADE_VIEW_SCENARIO["setup"], world.buffsets[UPGRADE_VIEW_SCENARIO["buffs"]], canonical=True)
+    assert gear.status == "optimal" and gear.breakdown is not None
+    add("the kit Equip now finds for the gear of the browser test", UPGRADE_VIEW_SCENARIO, _kit_idents(gear.kit), list(gear.buffs), MOTE_LIMIT)
+    # runs: the damage of the dagger rises every second tier, so its motes come in twos (after the head piece, which gains at every tier); the ear passes the neck's haste only at +6, so its first
+    # run is six motes, then one at a time; and with few motes the run that does not fit is said, not taken
+    ogre = CASES[0]["scenario"]
+    ogre_buffs = equip[0]["buffs"]
+
+    def placed(**tiers: tuple[str, int]) -> list[str | None]:
+        order_of = {"HEAD": 0, "EAR": 2, "NECK": 4, "PRIMARY": 20}  # (the places of the kit by index)
+        kit: list[str | None] = [None] * 22
+        for place, (key, tier) in tiers.items():
+            kit[order_of[place]] = f"{key}@{tier}"
+        return kit
+
+    add("a dagger of damage five, whose damage rises every second tier, and a head piece", ogre, placed(PRIMARY=("w91001", 0), HEAD=("w90001", 4)), ogre_buffs, None)
+    overtake = placed(EAR=("w91002", 0), NECK=("w91003", 10))
+    add("an ear of 25 haste behind a neck of 20 haste at +10", ogre, overtake, ogre_buffs, None)
+    add("the same, with eight motes", ogre, overtake, ogre_buffs, 8)
+    add("the same, with three motes: the run of six does not fit", ogre, overtake, ogre_buffs, 3)
+    add("a head piece, the ear and the neck, with three motes: the head piece takes them, the run of six does not fit", ogre, placed(HEAD=("w90001", 4), EAR=("w91002", 0), NECK=("w91003", 10)), ogre_buffs, 3)
+    first, second, third = equip
+    add(f"a published-style kit, every item at +{PUBLISHED_TIER}: {CASES[0]['name']}", CASES[0]["scenario"], retier(first["kit"], PUBLISHED_TIER), first["buffs"], WEIGHTED_MOTE_LIMIT)
+    add(f"every item a tier from the top: {CASES[1]['name']}", CASES[1]["scenario"], retier(second["kit"], 9), second["buffs"], None)
+    add(f"every item at the top: {CASES[2]['name']}", CASES[2]["scenario"], retier(third["kit"], 10), third["buffs"], None)
+    return cases
+
+
+def mote_orders() -> dict[str, Any]:
+    """The mote orders of Python's reference (see the head of this file), with every ending in them."""
+    cases = mote_cases()
+    endings = {case["ending"] for case in cases}
+    if endings != {"top", "motes", "no-gain"}:
+        raise SystemExit(f"the mote orders end in {sorted(endings)}, not in each of top, motes and no-gain: change the cases")
+    return {"trio": SLUG, "level": LEVEL, "extra": mote_extra_records(), "cases": cases}
+
+
+def mote_orders_text(document: dict[str, Any] | None = None) -> str:
+    return json.dumps(mote_orders() if document is None else document, indent=1, ensure_ascii=False) + "\n"
+
+
 def write_all() -> None:
     texts_made = {
         **texts(), EQUIP_NOW: equip_now_text(), KIT_VALUES: kit_values_text(), BEST_KIT: best_kit_text(), WEIGHTED: weighted_text(),
-        WEAPON_RATE: weapon_rate_text(), UPGRADE_VIEW: upgrade_view_text(),
+        WEAPON_RATE: weapon_rate_text(), UPGRADE_VIEW: upgrade_view_text(), MOTE_ORDERS: mote_orders_text(),
     }  # fmt: skip
     for path, text in texts_made.items():
         path.write_text(text, encoding="utf-8", newline="\n")

@@ -1125,7 +1125,7 @@ NEVER_READ_RULES = {
     "naked.cap", "naked.rule", "hp.pools_counted", "hp.sta_curve", "mana.pools_counted", "mana.base_l50", "mana.per_stat_l50", "end.formula",
     "ac.sheet.item_mult", "ac.sheet.defense_div", "ac.sheet.spell_ac_div", "ac.sheet.agi_div", "ac.softcap.past_cap_rate", "stats.knee", "stats.hard_cap",
     "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "packrat.pct_per_rank", "tier.accuracy_pct",
-    "tier.socket_open", "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "roles.balanced",
+    "tier.socket_open", "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "tier.void_mote", "roles.balanced",
         "effects.focus_value", "effects.spell_weight", "effects.cast_categories", "effects.cast_mass_full", "effects.late_level", "effects.click_relevance",
         "effects.dispel_relevance", "effects.gap_categories", "effects.own_compare", "effects.instant_categories", "effects.instant_bonus", "effects.proc_value",
         "effects.score_shape", "effects.haste_buff", "effects.near_best", "effects.access_cost", "effects.raid_zones", "effects.one_off_spas",

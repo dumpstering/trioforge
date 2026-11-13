@@ -483,7 +483,7 @@ class KitRow:
     reach: str
     source: str
     href: str | None = None  # the page of the item, where it has one: the name is a link to it; plain text where it has none
-    icon: str | None = None  # the art of the place (art.SLOT_ICONS), for the picture beside its name: None where the place has none or the art is not part of the site
+    icon: str | None = None  # the art for the picture beside the name: that of the item where it has one of its own (``art.own_icon``), else that of its worn place, or the pouch in a held place (``art.row_icon``); an empty row has its place's (none for a held one); None where there is none or the art is not part of the site
     stats: str = ""  # the stats of the item at the tier shown (:func:`item_stat_text`); empty for an empty place or when the page was given no figures
     why: str = ""  # what each of its stats is worth in this kit, and the next best item for the place (:func:`why_text`); empty when the results have none
     haste: str = ""  # the worn haste of the item at the tier shown, as the chip beside its name says it (:func:`haste_chip`); empty for an item with none, an empty place, or a page given no figures
@@ -783,13 +783,18 @@ def tier_vecs(records: Mapping[str, Mapping[str, Any]], defaults: Mapping[str, A
 
 def kit_rows(
     scenario: data.Scenario, pages: Collection[str] | None = None, vecs: Callable[[str, int], Any] | None = None, why: data.Why | None = None,
-    runner_view: data.RunnerUpView | None = None,
+    runner_view: data.RunnerUpView | None = None, icons: Mapping[str, str] | None = None,
 ) -> tuple[KitRow, ...]:
     """The 22 rows of "Wear this". ``pages`` are the keys of the items that have a page of their own (:func:`trioforge.site.build.item_page_keys`): the name of such an item links to
     its page, and that of any other (a disputed or a hidden item has no page) stays plain text, as it does when no pages are given.
 
     ``vecs`` gives the item of a key at a tier as the model sees it (``at_tier``): with it each row has its ``stats``. ``why`` (the why of the default kit) and ``runner_view`` (the
-    runner-ups of the view) give each row its ``why`` line; the caller gives them only for the view they were made for."""
+    runner-ups of the view) give each row its ``why`` line; the caller gives them only for the view they were made for.
+
+    ``icons`` (an item's key to the picture of what it is: :func:`trioforge.site.art.own_icon`) gives a row the picture of its item (:func:`trioforge.site.art.row_icon`): in a worn place the item's own,
+    else the place's, and never a picture of the held things (which stay on a held row); in the main hand, the off hand and the range the item's own and else the pouch; in an any row the item's own, else the
+    pouch if it fits a held place, else what its page heading shows; an empty row has the picture of its place (none for a held one). Given no ``icons``, no item has a picture of its own known: a row with an
+    item has the place's (the pouch in a held place that it fits) and an empty row its place's."""
     rows = []
     for index, (label, group, item) in enumerate(zip(SLOT_LABELS, data.SLOT_INSTANCES, scenario.kit, strict=True)):
         icon = art.slot_icon(group)
@@ -810,7 +815,7 @@ def kit_rows(
                 reach=reach_text(item.arrival, scenario.tier),
                 source=item.source,
                 href=item_href(item.key) if pages is not None and item.key in pages else None,
-                icon=icon,
+                icon=art.row_icon(None if icons is None else icons.get(item.key), group, item.slots),
                 stats=item_stat_text(vec) if vec is not None else "",
                 haste=haste_chip(vec) if vec is not None else "",
                 why=why_text(place, vec, swaps) if vec is not None and place is not None else "",
@@ -935,6 +940,7 @@ def trio_page(
     vecs: Callable[[str, int], Any] | None = None,
     exalt: data.Exalt | None = None,
     racials: content.Racials | None = None,
+    icons: Mapping[str, str] | None = None,
 ) -> TrioPage:
     """The trio page with its default answer baked in. The answer is the view ``defaults.json`` names: its role, tier,
     evidence level (the wiki level: no item is strict in a release) and buffs, the best race there and that race's best setup. The page words no evidence level and offers no
@@ -952,7 +958,9 @@ def trio_page(
     opened (:data:`EXALT_EFFECTS` and :data:`EXALT_TRIO` are the addresses it fetches); a trio without one, or results without the layer, have no section.
 
     ``racials`` are the racial abilities of the races (:func:`trioforge.site.content.load_racials`): the page then has the section "What each race gets you" for the races it names. They
-    are shown and never scored, but for the ones :data:`SCORED_RACIALS` says the model scores; a page given none has no section."""
+    are shown and never scored, but for the ones :data:`SCORED_RACIALS` says the model scores; a page given none has no section.
+
+    ``icons`` are the pictures of the items (an item's key to its asset: :func:`kit_rows`); the rows of the page given none have the pictures of their places."""
     meta = results.meta
     if pages is not None:
         unlinked = sorted(item.key for item in data.used_items(results) if item.key not in pages)
@@ -1038,7 +1046,7 @@ def trio_page(
         assume_haste=haste_text(scenario.haste_assumed),
         summary_assumes=f"{SETUP_PHRASES[setup]}, {BUFF_PHRASES[defaults.buffs]}",
         runnerups_assumes=f"{BUFF_PHRASES[defaults.buffs]}, the role's best weapon setup and the role's own weights",
-        rows=kit_rows(scenario, pages, vecs, defaults.why, runner_view),
+        rows=kit_rows(scenario, pages, vecs, defaults.why, runner_view, icons),
         value=fmt_int(value),
         gain=fmt_signed(gain),
         totals=totals,
@@ -1191,7 +1199,7 @@ class ItemPage:
     wiki_title: str | None  # the credit to the wiki page the item was read from; all three are None for an item that has no wiki page (its page has no credit)
     wiki_revid: int | None
     wiki_href: str | None
-    icon: str | None = None  # the icon of the item's slot (``art.item_icon``), drawn beside its name, or None when its slot has none
+    icon: str | None = None  # the icon of what the item is (``art.own_icon``), else that of its slot (``art.item_icon``), drawn beside its name, or None when there is none
     origin_name: str | None = None  # the site the item's stats and drops were read from when it is not the wiki (EQ Legends Tools), and the address of the item's page there; both None otherwise
     origin_href: str | None = None
 
@@ -1357,6 +1365,7 @@ def item_page(
     wiki: tuple[str, int] | None,
     wearers: Sequence[tuple[str, str]] = (),
     origin: str | None = None,
+    own_icon: str | None = None,
 ) -> ItemPage:
     """The page of one item, from its record in the item table of the results (``defaults`` is the table's own; ``rules`` the rules object ``at_tier`` reads, ``book`` the rules as the
     pages show them). ``wiki`` is the title and the revision of the wiki page the item was read from, ``wearers`` the ``(slug, name)`` of every trio whose default answer wears it.
@@ -1399,7 +1408,7 @@ def item_page(
         wiki_title=title,
         wiki_revid=revid,
         wiki_href=None if wiki is None else wiki_url(title, revid),
-        icon=art.item_icon(record["slots"]),
+        icon=own_icon or art.item_icon(record["slots"]),
         origin_name=None if origin is None else EQLT_NAME,
         origin_href=None if origin is None else eqlt_item_url(origin),
     )

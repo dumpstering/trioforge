@@ -1041,7 +1041,9 @@ def test_an_unknown_critical_chunk_makes_the_file_malformed():
 
 def test_the_pictures_of_the_site_pass():
     pictures = sorted((REPO / "pipeline" / "trioforge" / "site" / "static").rglob("*.png"))
-    assert len(pictures) >= 40
+    assert len(pictures) >= 28  # (it was 40 while fifteen icons were fifteen files: they are the cells of one sheet now, 28 files in all; the fourteen pictures of the held things are cells of that sheet, not files)
+    sheet = json.loads((REPO / "pipeline" / "trioforge" / "site" / "static" / "art" / "manifest.json").read_text(encoding="utf-8"))["assets"]["icons"]["cells"]
+    assert len(sheet) >= 69  # (the cells the release reads in the one sheet: the 55 that were there and the fourteen of the held things)
     for picture in pictures:
         assert picture.read_bytes().startswith(release.PNG_SIGNATURE)
         release.check_no_local_paths(None, {picture.name: picture.read_bytes()})  # (every one parses: none is refused as malformed)

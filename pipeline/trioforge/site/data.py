@@ -88,6 +88,10 @@ __all__ = [
     "Credit",
     "EFFECTS_NAME",
     "EXALT_NAME",
+    "ICONS_NAME",
+    "ICON_DIGITS",
+    "ICON_NAME",
+    "ItemIcons",
     "Exalt",
     "exalt_slugs",
     "Defaults",
@@ -131,7 +135,10 @@ __all__ = [
     "load_exalt",
     "load_items",
     "load_trio",
+    "check_icon_names",
+    "icon_table",
     "site_effects_json",
+    "site_icons_json",
     "site_exalt_json",
     "site_robust_json",
     "site_runnerups_json",
@@ -1857,6 +1864,81 @@ def site_exalt_json(exalt: Exalt, slug: str, items_doc: Mapping[str, Any], credi
 #              exactly that view
 
 
+#: the characters that stand for an icon in a data file (a name's place in the list of the file's ``icons``), and the one that stands for none: the ten digits, the consonants in both cases (no vowel and no y,
+#: so that a string of codes, an ``ic``, cannot spell a word: the privacy scan of a built site flagged a run of letters that did), 22 plain ASCII punctuation characters and the backtick, 73 in all. The thirteen
+#: pictures of the held things and the pouch made 69 names in the list of the item table. None of the characters is one that a JSON string, a page or a quote would change (one byte each in a file), and there is no
+#: colon, slash or backslash, since a string of the characters of a file could then read as a path to the release scan. The browser reads with the same string (``shard.js``, held to this by a test), and a file
+#: that names more icons than there are characters is a ``BuildError``.
+ICON_DIGITS = "0123456789bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ!#$%()*+,.;=?@[]^_{|}~`"
+NO_ICON_DIGIT = "-"
+#: the file that tells the browser the picture of every item of the item table, for the rows it draws from the optimizer's answers (:func:`site_icons_json`)
+ICONS_NAME = "item-icons.json"
+
+
+#: what the name of an icon is, for the browser (shard.js ICON_NAME and its length): the class of the span that draws it is ``art-`` and this, so a name is letters, digits and hyphens and nothing else
+ICON_NAME = re.compile(r"icon-[a-z0-9]+(?:-[a-z0-9]+)*")
+ICON_NAME_MAX = 48
+
+
+def check_icon_names(names: Iterable[Any]) -> None:
+    """Refuse (a ``ValueError`` that names the icon) a name that the browser would refuse: the build fails before a file is written that no page could read."""
+    for name in names:
+        if not (isinstance(name, str) and len(name) <= ICON_NAME_MAX and ICON_NAME.fullmatch(name)):
+            raise ValueError(f"the icon {name!r} is not a name the browser reads (icon- and letters, digits and hyphens, {ICON_NAME_MAX} characters at most)")
+
+
+@dataclass(frozen=True)
+class ItemIcons:
+    """The pictures of the pages: ``of_item``, the picture of what an item is (its key to the asset, for the items that have one), and ``of_place``, the picture a filled row of each of the 22 places of a kit
+    shows for an item that has none of its own (:func:`trioforge.site.art.fallback_icon`: a worn place's own picture, the pouch for a held place; None for a place that has none). A row shows an item's own
+    picture, else the place's (:func:`trioforge.site.art.row_icon`); an empty row is not drawn from this (the browser knows which places are held). All come from ``art`` and the rule there; the data files only
+    carry them."""
+
+    of_item: Mapping[str, str]
+    of_place: tuple[str | None, ...]
+    #: the picture each item has where the place it stands in does not decide (:func:`trioforge.site.art.item_picture`: its own, else the pouch if it fits a held place, else its page heading's): what an any
+    #: row draws and what the data files' ``ic`` say. None (a test that has no places for its items): the pictures of ``of_item``.
+    of_row: Mapping[str, str] | None = None
+
+    def picture_of(self, key: str) -> str | None:
+        """The picture the data files say of an item (its character in ``ic``): the one it has by its places, else its own."""
+        return (self.of_item if self.of_row is None else self.of_row).get(key)
+
+    def __post_init__(self) -> None:
+        if len(self.of_place) != len(SLOT_INSTANCES):
+            raise ValueError(f"the pictures of the places are one for each of the {len(SLOT_INSTANCES)} places of a kit")
+
+    def names(self) -> set[str]:
+        """Every icon the pictures name."""
+        return {*self.of_item.values(), *(self.of_row or {}).values(), *(name for name in self.of_place if name is not None)}
+
+
+def icon_table(icons: Iterable[str | None]) -> tuple[list[str], str]:
+    """The names of the icons in a list (each once, in the order they first appear) and a text with one character for each entry: the character of the name's place in that list
+    (:data:`ICON_DIGITS`), or ``-`` for an entry with no icon. A file may name as many icons as there are characters (:data:`ICON_DIGITS`) and no more; a ``ValueError`` says so."""
+    names: list[str] = []
+    text: list[str] = []
+    for icon in icons:
+        if icon is None:
+            text.append(NO_ICON_DIGIT)
+            continue
+        if icon not in names:
+            if len(names) == len(ICON_DIGITS):
+                raise ValueError(f"a data file names at most {len(ICON_DIGITS)} icons")  # (and the build says so as one line: BuildError)
+            names.append(icon)
+        text.append(ICON_DIGITS[names.index(icon)])
+    return names, "".join(text)
+
+
+def _icon_fields(keys: Sequence[str], icons: ItemIcons) -> dict[str, Any]:
+    """The three fields that carry the pictures: ``icons`` (the names), ``ic`` (a character for each item, as the file lists them: its own picture) and ``pl`` (a character for each of the 22 places: the
+    picture of a filled row of it for an item that has none of its own, which in a held place is the pouch)."""
+    count = len(keys)
+    names, text = icon_table([*(icons.picture_of(key) for key in keys), *icons.of_place])
+    check_icon_names(names)
+    return {"icons": names, "ic": text[:count], "pl": text[count:]}
+
+
 def _item_row(item: Item) -> list[Any]:
     return [item.key, item.name, item.tier_rule, item.arrival, item.source, item.evidence, list(item.deity or ())]
 
@@ -1870,11 +1952,13 @@ def _credited(credit: Credit) -> dict[str, Any]:
     return {"release": credit.release, "license": credit.license, "attribution": credit.attribution}
 
 
-def site_shard_json(shard: Shard, credit: Credit, lines: Callable[[str, int], str] | None = None) -> str:
+def site_shard_json(shard: Shard, credit: Credit, lines: Callable[[str, int], str] | None = None, icons: ItemIcons | None = None) -> str:
     """The shard as the browser fetches it. Kits and totals are deduplicated, items numbered by first use.
 
     ``lines`` (an item key and a tier to the stats of that item at that tier, as a row of Wear this says them) adds ``stat_tiers`` (the tiers of the shard) and, as the last
-    entry of each item, its stats at each of them, so that the page can show the stats of any view the shard answers."""
+    entry of each item, its stats at each of them, so that the page can show the stats of any view the shard answers. ``icons`` adds the pictures the rows draw: ``icons`` (the names of those
+    the items and the places use), ``ic`` (one character for each item, in the order of ``items``: its own picture) and ``pl`` (one for each
+    of the 22 places), each a place in ``icons`` or ``-``."""
     item_index: dict[str, int] = {}
     items: list[Item] = []
     kit_index: dict[tuple[int, ...], int] = {}
@@ -1913,8 +1997,23 @@ def site_shard_json(shard: Shard, credit: Credit, lines: Callable[[str, int], st
         "kits": kits,
         "totals": [_totals_row(t) for t in totals],
         "rows": rows,
+        **({} if icons is None else _icon_fields([item.key for item in items], icons)),
     }
     return render(document, per_line=("items", "kits", "totals", "rows"))
+
+
+def site_icons_json(items: BrowserFile, icons: ItemIcons, credit: Credit) -> str:
+    """The list of icons the browser reads for the rows it draws from the optimizer's answers, whose items may be any of the item table: ``icons`` (the names), ``ic`` (one character for
+    each item of the table, in the table's order) and ``pl`` (one for each place), as a shard has them, and ``items``, the SHA-256 of the table's file, which the browser compares with the one the
+    manifest of the optimizer lists before it reads a character as an item's picture: the list is for that table and no other."""
+    records = items.document["items"]
+    document = {
+        "v": BROWSER_VERSION,
+        **_credited(credit),
+        "items": hashlib.sha256(items.raw).hexdigest(),
+        **_icon_fields([_record_key_of(record) for record in records], icons),
+    }
+    return render(document)
 
 
 def site_runnerups_json(runnerups: RunnerUps, role: str, credit: Credit) -> str:

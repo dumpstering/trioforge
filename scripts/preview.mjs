@@ -11,6 +11,7 @@
 //   TRIOFORGE_PREVIEW_PORT        the port to serve on (default 8788)
 //   TRIOFORGE_SOURCES_MANIFEST    a sources manifest other than the default (derived/, or the fixture's for the fixture)
 //   TRIOFORGE_PYTHON              the Python that runs the build (default: the one in .venv, else python3 or python)
+//   TRIOFORGE_NO_ITEM_CATALOG=1   build without the item catalog (--no-item-catalog), for results that were not made from derived/catalog.json (the fixture is always built so)
 //   TRIOFORGE_PREVIEW_DIST        the folder the site is built into (default site/dist-preview), so that two previews can run side by side
 //   TRIOFORGE_PREVIEW_EXALT=1     for the section Effects to exalt of a trio page, which needs the two files of the effects layer (effects.json and the exalt.json of each trio):
 //                                 results that have them (a release's do) are built as they are; the fixture results, made before the layer, are copied under build/ and given
@@ -101,6 +102,9 @@ const build = spawnSync(
     DIST,
     "--noindex",
     ...(manifest ? ["--sources-manifest", manifest] : []),
+    // the pictures of the armor and the instruments are made from the catalog the results were made from, and the build stops when derived/catalog.json is not it: the synthetic fixture was not made
+    // from it, so its previews are built without (and say so); real results are built as a release is, with the catalog
+    ...(usingFixture || process.env.TRIOFORGE_NO_ITEM_CATALOG === "1" ? ["--no-item-catalog"] : []),
   ],
   {
     cwd: ROOT,

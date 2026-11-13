@@ -208,5 +208,8 @@
   ["ELF","melee",4,"dw",53,11184.5,8163.75,25,66],
   ["ELF","melee",10,"2h",54,13810.25,10789.5,26,85],
   ["ELF","melee",10,"dw",55,13764.5,10743.75,26,85]
- ]
+ ],
+ "icons": ["icon-helm","icon-face","icon-ear","icon-neck","icon-shoulders","icon-arms","icon-back","icon-wrist","icon-hands-leather","icon-ring","icon-chest","icon-legs","icon-feet","icon-waist","icon-bow","icon-dagger","icon-shield","icon-hammer-2h","icon-spear","icon-hammer-1h","icon-pouch"],
+ "ic": "0122345677899bcdfg9hjklm0356fnd78b51246c",
+ "pl": "0122345677899bcdfn--nn"
 }

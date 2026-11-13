@@ -178,9 +178,18 @@ def test_the_stylesheet_and_the_templates_stay_inside_the_policy():
 
 def test_the_art_is_shown_at_whole_scales_with_pixels_not_smoothed():
     art_css = (ART / "art.css").read_text(encoding="utf-8")
-    for rule in re.findall(r"\.art-[a-z0-9-]+\{[^}]*\}", art_css):
+    shared: set[str] = set()  # the classes of a sheet's cells that one rule draws (a list of them): that rule is pixelated and at a whole scale, and each cell's own rule only says where it is
+    for rules in re.findall(r"((?:\.art-[a-z0-9-]+,)+\.art-[a-z0-9-]+)\{[^}]*\}", art_css):
+        shared.update(rules.split(","))
+    for selector, rule in re.findall(r"(\.art-[a-z0-9-]+)(\{[^}]*\})", art_css):
+        if selector in shared and rule.startswith("{--art-cx:"):
+            assert re.fullmatch(r"\{--art-cx:\d+;--art-cy:\d+\}", rule), rule  # a cell's place: whole numbers of cells
+            continue
         assert "image-rendering:crisp-edges;image-rendering:pixelated" in rule, rule
         assert not re.search(r"(?<![-\w])\d*\.\d+(?:px)?\*", rule), f"a fractional scale in {rule}"
+    shared_rule = re.search(r"((?:\.art-[a-z0-9-]+,)+\.art-[a-z0-9-]+)(\{[^}]*\})", art_css)
+    assert shared_rule and "image-rendering:crisp-edges;image-rendering:pixelated" in shared_rule.group(2) and not re.search(r"(?<![-\w])\d*\.\d+(?:px)?\*", shared_rule.group(2))
+    assert len(shared) == len(committed()["icons"]["cells"]) and shared_rule.group(1).split(",") == [f".art-{name}" for name in committed()["icons"]["cells"]]
     scales = {int(entry.get("scale", 2)) for entry in committed().values() if entry["kind"] != "tile"}
     assert scales <= {1, 2, 3, 4}
     assert re.search(r"--art-m:\s*2\b", CSS) and not re.search(r"--art-m:\s*\d*\.\d", CSS)  # the big-screen multiplier is a whole number too

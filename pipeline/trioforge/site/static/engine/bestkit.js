@@ -49,20 +49,14 @@
 import { CONSTANTS } from "./evaluate.js";
 import { ITEM_DEFAULTS, atTier } from "./items.js";
 import { usableBy } from "./path.js";
-import { ChoiceError, assembleProfile } from "./profile.js";
 import { WEAPON_TIER_RATES } from "./protocol.js";
 import { prune } from "./prune.js";
 import { closeSession, createSession, solveScenario } from "./solve.js";
 import { MAX_TIER } from "./tiers.js";
-import { WeightsError, weightsOverride } from "./weights.js";
+import { BestKitError, viewProfile, weightsAreOwn } from "./view.js";
 
-/** A choice of the visitor that the data does not have, or weights the bundle's rules refuse. */
-export class BestKitError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "BestKitError";
-  }
-}
+// (made in view.js, which the evaluator of a kit in the page shares, and told here as they always were)
+export { BestKitError, viewProfile, weightsAreOwn };
 
 const defaultNow = () => performance.now();
 const STRICT = ["strict"];
@@ -95,15 +89,6 @@ export function poolRecords(records, trio, { evidence, deity = null }) {
   return found;
 }
 
-/** Whether the weights of a request are the role's own: none, or every slider at x1, no custom weight and no regen window. */
-export function weightsAreOwn(weights) {
-  if (weights === undefined || weights === null) return true;
-  const { multipliers, custom, regenT } = weights;
-  if (multipliers !== undefined && multipliers !== null && Object.values(multipliers).some((position) => position !== 1)) return false;
-  if (custom !== undefined && custom !== null && Object.keys(custom).length > 0) return false;
-  return regenT === undefined || regenT === null;
-}
-
 /**
  * What a session is kept by, for the weights of a request: null for weights that are the role's own (they change nothing), else a text that is the same for the weights that
  * compose the same profile (the order of the tables, a slider at x1, an empty table or a window of null do not count), and another for any others. A key for weights that
@@ -114,39 +99,6 @@ export function weightsKey(weights) {
   const { multipliers, custom, regenT } = weights;
   const table = (values) => Object.keys(values ?? {}).sort().map((name) => [name, values[name]]);
   return JSON.stringify([table(multipliers).filter(([, position]) => position !== 1), table(custom), regenT ?? null]);
-}
-
-/**
- * The profile of a view: the bundle's for the choices (a race, a role, a buff set, an evidence level, perhaps a deity, and a weapon setup the role plays at the level), with the
- * weights of a request composed on the role's own when they are not the role's own. The one function for every mode of the worker. A BestKitError for a choice the bundle does not
- * have (the choices are checked first, and `assembleProfile` says so with a ChoiceError) and for weights its rules refuse (a slider group there is not, at x1 as at x2). Whatever
- * else goes wrong is not the asker's: it is an error of the bundle itself (rules of weights the engine cannot use, a profile it cannot give for choices it has).
- */
-export function viewProfile(bundle, scenario, weights) {
-  const { race, role, buffs, evidence, deity } = scenario;
-  if (typeof evidence !== "string") throw new BestKitError("The scenario names no evidence level."); // (assembleProfile alone would take none, and the pool would be another)
-  let profile;
-  try {
-    profile = assembleProfile(bundle, { race, role, buffs, evidence, deity });
-  } catch (error) {
-    if (error instanceof ChoiceError) throw new BestKitError(error.message); // (a BundleError that is not a choice is the bundle's own fault, and goes on as it is)
-    throw error;
-  }
-  if (!profile.setups.includes(scenario.setup)) throw new BestKitError("This weapon setup is not one of the role's setups at this evidence level.");
-  if (weights === undefined || weights === null) return profile;
-  let composed;
-  try {
-    composed = weightsOverride(bundle, profile.weights, {
-      multipliers: weights.multipliers,
-      custom: weights.custom,
-      regenT: weights.regenT,
-      manaReachable: profile.pools.MANA.length > 0,
-    });
-  } catch (error) {
-    if (error instanceof WeightsError) throw new BestKitError(error.message);
-    throw error;
-  }
-  return weightsAreOwn(weights) ? profile : Object.freeze({ ...profile, weights: composed });
 }
 
 /** The options `atTier` takes for a weapon tier rate (`WEAPON_TIER_RATES` of protocol.js: 5 and 10, the rule's own): none for none, else the rate; a BestKitError for any other. */

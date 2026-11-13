@@ -49,6 +49,13 @@
 // that makes a call in 0.1 ms, a few seconds on a slow one), and the answer is then a lower bound ("at least"). The whole search is in the order of the ranking, so a longer limit
 // finds at least what a shorter one does.
 //
+//   moteWalkOf({bundle, records, race, role, buffs, evidence, deity, weights, setup, chosen, motes, places}) -> the walk of the order of motes (engine/motes.js): `places` as above, `setup` the weapon
+//       setup of the view, `chosen` the ids of the optional buffs the kit is valued with, `motes` the limit (null for every one), `weights` the view's (as a request carries them: none for the role's own). The order is of the kit as
+//       it stands, with that profile, setup and those buffs held fixed. A MoteError for an item of the kit that the item table lacks, a RangeError for a place that is not one of the 22
+//       or has two items.
+//   bestBuffsOfKit({bundle, records, race, role, buffs, evidence, deity, weights, setup, places, searchLimit}) -> {buffs, exact, F}: the best choice of the optional buffs for a kit as the page
+//       shows it (the setup and the weights of the view given, not read from the hands), searched as valueOfKit searches them
+//
 //   loadKitBundle({manifest, trio, level, fetchImpl, base, stallMs, bodyMs}) -> the parsed bundle of the trio and the level
 //
 // The bundle is fetched as the worker fetches it (scenario.js): the manifest of the trio at the address the main manifest (`manifest`, as parseManifest gives it) lists for the trio, then
@@ -64,8 +71,10 @@ import { SLOT_INSTANCES, evaluateTruthful } from "./evaluate.js";
 import { atTier } from "./items.js";
 import { ManifestReleaseError, fetchTextWithin, parseTrioManifest, trioManifestPath } from "./manifest.js";
 import { allowedInHand, readItem } from "./model.js";
+import { MoteError, createMoteWalk } from "./motes.js";
 import { assembleProfile, readBundle } from "./profile.js";
 import { LIMITS, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "./protocol.js";
+import { viewProfile } from "./view.js";
 
 const PLACES = SLOT_INSTANCES.length;
 const ANY = "ANY";
@@ -311,6 +320,51 @@ export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity
     exact: found.exact,
     evaluations: found.evaluations,
   };
+}
+
+/**
+ * The profile, the kit and the evaluator's options of a kit that the page shows under its view (what `moteWalkOf` and `bestBuffsOfKit` start from): the profile is the view's (`viewProfile`,
+ * with the weights), the setup is given, and every item is made at its tier by `itemAt`, which remembers what it made.
+ */
+function viewKit({ bundle, records, race, role, buffs, evidence, deity = null, weights, setup, places }) {
+  if (!(records instanceof Map)) throw new TypeError("records is the item table's Map from a key to a record");
+  if (!Array.isArray(places)) throw new TypeError("places is a list of {slotIndex, key, tier}");
+  const entry = bundleOf(bundle);
+  const read = entry.read;
+  const profile = viewProfile(read, { race, role, buffs, evidence, deity, setup }, weights);
+  const made = new Map();
+  const itemAt = (key, tier) => {
+    const name = `${key}@${tier}`;
+    let item = made.get(name);
+    if (item === undefined) {
+      const record = records.get(key);
+      if (record === undefined) throw new MoteError(`an item of the kit (${key}) is not in the item table`);
+      item = atTier(record, tier, read);
+      made.set(name, item);
+    }
+    return item;
+  };
+  const kit = new Array(PLACES).fill(null);
+  const seen = new Set();
+  for (const { slotIndex, key, tier } of [...places].sort((a, b) => a.slotIndex - b.slotIndex)) {
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= PLACES) throw new RangeError(`place ${slotIndex} is not one of the ${PLACES} places of a kit`);
+    if (seen.has(slotIndex)) throw new RangeError(`place ${slotIndex} has two items`);
+    seen.add(slotIndex);
+    kit[slotIndex] = itemAt(key, tier);
+  }
+  return { entry, profile, kit, itemAt, options: { setup, monkBins: read.monk_bins === null ? undefined : read.monk_bins }, buffset: buffsetOf(entry, buffs) };
+}
+
+export function moteWalkOf({ chosen = [], motes = null, ...view }) {
+  const { profile, kit, itemAt, options, buffset } = viewKit(view);
+  return createMoteWalk({ profile, kit, itemAt, setup: options.setup, monkBins: options.monkBins, buffset, buffs: chosen, motes });
+}
+
+export function bestBuffsOfKit({ searchLimit = BUFF_SEARCH_LIMIT, ...view }) {
+  if (!Number.isInteger(searchLimit) || searchLimit < 1) throw new RangeError("searchLimit is the most calls to the evaluator, a whole number from 1");
+  const { profile, kit, options, buffset } = viewKit(view);
+  const found = bestBuffs(profile, kit, options, buffset, searchLimit);
+  return { buffs: found.chosen, exact: found.exact, F: found.F.toString() };
 }
 
 const fault = (message) => new EngineFault("engine-load", message);

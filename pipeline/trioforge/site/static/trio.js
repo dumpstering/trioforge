@@ -45,7 +45,7 @@
 
 import { getStorage } from "./theme.js";
 import { DASH, EMPTY_NAME, EN_DASH, arrivalText, deityText, displayInt, fmtInt, fmtSigned, hasteChip, hasteWords, reachText, tierLabel } from "./format.js";
-import { parseRobust, parseRunnerups, parseShard } from "./shard.js";
+import { parseIcons, parseRobust, parseRunnerups, parseShard } from "./shard.js";
 import { commonItems } from "./ui/common-items.js";
 
 const SWITCHES = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], #buffs-ench';
@@ -109,6 +109,47 @@ function setName(row, text, href) {
   link.setAttribute("href", href);
   link.textContent = text;
   node.replaceChildren(link);
+}
+
+const ARMOR_PICTURE = /^icon-(helm|chest|arms|legs|feet|hands)(?:-(?:cloth|leather|chain|plate))?$/;
+
+/** The pictures that belong to a held row (the generator's thirteen pictures of the held things and the pouch; a test holds this to the generator's list): on a worn row an item has the place's picture instead. */
+const HELD_PICTURE = /^icon-(idol|stone|horn|lantern|cup|scroll|rod|whip|claw|pick|polearm|charm|fishing-pole|pouch)$/;
+
+/**
+ * Where the held places begin among the 22 places of a kit: the range, the two any slots, the main hand and the off hand are the last five (site/data.py SLOT_INSTANCES; a test holds this number to it). A
+ * held place holds whatever fits, so a row of it shows the item's own picture, else the pouch the file says for the place, and an empty one none.
+ */
+const HELD_FROM = 17;
+
+/** The part of the body a picture of armor, or the picture of the place of a part, is of (`icon-chest-plate` and `icon-chest`: `chest`), or null for any other picture. */
+function armorPart(name) {
+  return typeof name === "string" ? (ARMOR_PICTURE.exec(name)?.[1] ?? null) : null;
+}
+
+/**
+ * The picture beside the name of a place: the span the page is made with first in the cell of the place (`art art-icon-chest`, empty, hidden from a screen reader, no style of its own), drawn
+ * again for the item the row shows. `name` is an icon of the file the item or the place came from (shard.js checks the name), or null for no picture; it is left alone where undefined (no file said).
+ */
+function setIcon(row, name) {
+  if (name === undefined) return;
+  const cell = row.querySelector("th");
+  if (!cell) return;
+  const first = cell.firstElementChild;
+  const mark = first !== null && first.tagName === "SPAN" && first.classList.contains("art") ? first : null;
+  if (name === null) {
+    mark?.remove();
+    return;
+  }
+  const wanted = "art art-" + name;
+  if (mark !== null) {
+    if (mark.className !== wanted) mark.className = wanted;
+    return;
+  }
+  const span = cell.ownerDocument.createElement("span");
+  span.className = wanted;
+  span.setAttribute("aria-hidden", "true");
+  cell.insertBefore(span, cell.firstChild);
 }
 
 export function initTrio(env = {}) {
@@ -181,6 +222,7 @@ class TrioApp {
     // what the page was built with in the panel of each row (the stats and the why line of the default view), kept to be put back when the view comes back to it
     this.bakedKit = this.rows.map((row) => ({ stats: field(row, "stats")?.textContent ?? "", why: field(row, "why")?.textContent ?? null }));
     this.statIndex = new Map(); // item key -> {tier: text of its stats}, from every shard that was loaded: the stats of an item the optimizer's answer names
+    this.places = null; // the picture of each of the 22 places (names or null: the pouch in a held place), from the first shard that has them: what a row shows for an item with no picture of its own
     this.openRows = new Set(); // the rows whose panel (stats and why) is open
     this.toggles = []; // the button of each row's panel, and the one that opens them all
     this.toggleAll = null;
@@ -848,6 +890,7 @@ class TrioApp {
         .then((shard) => {
           this.sameRelease(shard);
           this.indexStats(shard);
+          this.places ??= shard.places;
           this.settled.add(key);
           return shard;
         });
@@ -1315,9 +1358,34 @@ class TrioApp {
     return this.linkItems && typeof key === "string" && ITEM_KEY.test(key) ? ITEM_BASE + key + "/" : null;
   }
 
+  /**
+   * The picture beside a place for the item in it, the rule of `art.row_icon` (the generator's, held to this by the tests); `item.icon` is the item's character in the file (its own picture, else the pouch if
+   * it fits a held place, else the picture of its page heading): in a worn place the item's own picture, else the place's, whatever other places the item fits, but never a picture of the held things, which
+   * stay on a held row (the place's picture instead), and a picture of armor stays in the place of its own part (a chest picture is never on the legs row); in the main hand, the off hand and the range the
+   * item's character, else the pouch the file gives the place, so that no filled row of them is without a picture and no sword or bow stands in; in an any row (the file has no picture for it: it takes
+   * whatever fits) the item's character and nothing else, so a robe has its heading's picture, an item that fits a held place the pouch, and an item the file does not know none. An empty worn place has the
+   * picture of its place, an empty held place none. With no shard loaded yet, nothing is said (undefined) and the row keeps the page's.
+   */
+  rowIcon(item, index) {
+    if (this.places === null) return undefined;
+    const place = this.places[index] ?? null;
+    const own = item !== null && typeof item.icon === "string" ? item.icon : null;
+    if (index >= HELD_FROM) return item === null ? null : (own ?? place);
+    if (place === null) return own;
+    if (own === null || HELD_PICTURE.test(own)) return place;
+    const part = armorPart(own);
+    return part !== null && part !== armorPart(place) ? place : own;
+  }
+
+  /** The pictures a file names beside its items (shard.js `parseIcons`), for the code of the Upgrade and Weights sections, which may not import it (a chunk may not import what the page script does). */
+  readIcons(document, count) {
+    return parseIcons(document, count);
+  }
+
   paintKit(scenario, baked = false) {
     this.rows.forEach((row, index) => {
       const item = scenario.kit[index] ?? null;
+      setIcon(row, this.rowIcon(item, index));
       if (!item) {
         setName(row, EMPTY_NAME, null);
         setField(row, "deity", "");

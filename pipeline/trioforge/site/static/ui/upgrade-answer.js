@@ -157,6 +157,7 @@ function spareText(entry, elsewhere) {
 export function createUpgradeAnswer(root, env) {
   const { gear, records, trio, level, view, onView, words, clientPath, announce, onUpdated, reload } = env;
   const onEquipKit = typeof env.onEquipKit === "function" ? env.onEquipKit : null; // told the kit of Equip now whenever it is drawn, and null when there is none (the section Effects to exalt matches a plan to it)
+  const onGear = typeof env.onGear === "function" ? env.onGear : null; // told the same for the panel Spend your motes (motes.js), which also needs the request the kit was worked out for
   const doc = env.doc ?? root.ownerDocument;
   const win = env.win ?? doc.defaultView;
   const loadEngine = env.loadEngine ?? ((url) => import(url));
@@ -308,6 +309,20 @@ export function createUpgradeAnswer(root, env) {
     }
   }
 
+  /**
+   * Tell the panel Spend your motes the kit of Equip now as `{request, kit, buffs}` (the request it was worked out for: its view and weights; the kit as idents; the optional buffs it was found with), or that there is
+   * none: null, with whether another is on its way (a change was made, and a new answer is being worked out) or nothing is coming (the list of the gear is empty, or no kit was found).
+   */
+  function tellGear(source, pending = false) {
+    if (onGear === null) return;
+    try {
+      onGear(source, pending);
+    } catch {
+      // a fault in the panel is its own, not the answer's
+    }
+  }
+  const gearOf = (ctx) => (ctx.equip ? { request: ctx.request, kit: [...ctx.equip.kit], buffs: [...ctx.equip.buffs] } : null);
+
   /** Nothing of an answer on the page. */
   function reset() {
     publishEquip(null);
@@ -381,6 +396,7 @@ export function createUpgradeAnswer(root, env) {
     ctx.drawn = true;
     ctx.equip = step.kit === null ? null : { kit: [...step.kit], buffs: [...(step.buffs ?? [])] }; // (what Every slot starts from; none when no kit was found)
     publishEquip(step.kit === null || filledOf(step.kit) === 0 ? null : step.kit);
+    tellGear(gearOf(ctx), false);
     share.show(step.kit !== null && filledOf(step.kit) > 0);
     if (more !== null) more.hidden = false;
     ctx.equipSaid = step.kit === null ? `Equip now: ${step.label}.` : `Equip now is ready: ${filledOf(step.kit)} of ${PLACES} places filled.`;
@@ -784,6 +800,7 @@ export function createUpgradeAnswer(root, env) {
     ctx.owned = gear.owned();
     if (ctx.equipStep !== undefined) drawEquipRows(ctx.equipStep, ctx.owned);
     for (const exp of expanders) exp.redraw?.();
+    tellGear(gearOf(ctx), ctx.equip === undefined); // (the kit that stands again, or the one that is still being worked out)
     pumpMore();
   }
 
@@ -1101,6 +1118,7 @@ export function createUpgradeAnswer(root, env) {
     sentKey = viewKey();
     keepFocus(() => {
       reset();
+      tellGear(null, true); // (the kit of the old answer is gone, and the new one is being worked out)
       // the client is there already (a later request) and the visitor has agreed: Stop takes the place, and the focus, of the button of the line of a fault that went with the old answer
       if (client !== null && client.consentState?.() !== "unknown") showRunning(ctx);
     });
@@ -1152,6 +1170,7 @@ export function createUpgradeAnswer(root, env) {
       reset();
       hideMore();
     });
+    tellGear(null, false); // (nothing is coming: the list is empty)
   }
 
   /**
@@ -1161,6 +1180,7 @@ export function createUpgradeAnswer(root, env) {
   function schedule() {
     clearTimeout(timer);
     epoch += 1;
+    tellGear(null, true); // (the kit that is shown was worked out for what has changed: the panel drops its order now, and waits for the new answer)
     timer = setTimeout(() => send(false), pauseMs);
   }
 

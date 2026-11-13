@@ -20,6 +20,9 @@ sources manifest and the changelog, and writes a folder Cloudflare Pages can ser
 * ``data/<trio>/<evidence>-<buffs>.json``, ``data/<trio>/runnerups/<role>.json`` (one file for each role, with every tier of the run in it:
   the page reads the tier from it) and ``robust.json``: what the page code fetches when a switch changes, in the compact format of
   :mod:`trioforge.site.data` (the results files themselves are never published);
+* ``data/item-icons.json``: the picture of every item of the item table (a character for each, in the table's order, and the SHA-256 of the table's file), which the page code reads for the
+  rows it draws from an answer of the optimizer, whose items may be any of the table; a shard carries the same for its own items (:func:`item_icons`: the rule is
+  :func:`trioforge.site.itemicon.icon_name`, and the categories of the armor come from the catalog the results were made from, which the build reads from ``derived/``);
 * ``assets/``: the stylesheet and the page code, bundled by esbuild into content-hashed files. The code of the Upgrade section (the parser of the
   inventory dump, the matcher, the readers of the item table and the picker) is a chunk of its own, ``upgrade-input-<HASH>.js``, which the page code
   imports the first time the section is used and which no page loads by itself: the budget of a first load counts the page code and the stylesheet only,
@@ -108,7 +111,7 @@ import jinja2
 from trioforge import rules as rules_module
 from trioforge import scope as tier_scope
 from trioforge.classes import CLASS_CODES, CLASS_NAMES
-from trioforge.site import art, content, data, view
+from trioforge.site import art, content, data, itemicon, view
 
 __all__ = [
     "ASSET_CACHE",
@@ -170,6 +173,8 @@ __all__ = [
 ]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+#: the catalog the results were made from (the file whose SHA-256 the fingerprint of the item table is made from): the pictures of armor are read from its fashion categories
+DEFAULT_CATALOG = REPO_ROOT / "derived" / "catalog.json"
 SITE_DIR = Path(__file__).resolve().parent
 TEMPLATES = SITE_DIR / "templates"
 STATIC = SITE_DIR / "static"
@@ -258,6 +263,10 @@ LIMITS = {
     "first_load_gzip": 60 * 1024,
     "shard": 200 * 1024,
     "shard_gzip": 50 * 1024,
+    # the list of the pictures of the items (data/item-icons.json: a character for each item of the item table, fetched with the table when an answer of the optimizer is drawn): 7.9 KB raw and
+    # 3.3 KB gzipped for the 6820 items of the release, and it grows with the number of items and nothing else
+    "icons": 16 * 1024,
+    "icons_gzip": 6 * 1024,
     # the section Effects to exalt fetches the shared effects file and the file of the trio once the page has shown, when the browser is idle (the hints under Wear this need them; they are the layer's own budgets, effects/files.py: a test holds them equal)
     "effects": 200 * 1024,
     "effects_gzip": 50 * 1024,
@@ -1199,6 +1208,14 @@ def check_budgets(
         zipped = _gzip_size(content_bytes)
         if zipped > LIMITS["shard_gzip"]:
             problems.append(f"runner-up file {name} is {zipped / 1024:.1f} KB gzip (limit {LIMITS['shard_gzip'] // 1024} KB)")
+    # the list of the pictures of the items, which the page fetches when it draws an answer of the optimizer
+    icons = files.get(f"data/{data.ICONS_NAME}")
+    sizes["icons"] = len(icons) if icons is not None else 0
+    sizes["icons_gzip"] = _gzip_size(icons) if icons is not None else 0
+    if icons is not None and len(icons) > LIMITS["icons"]:
+        problems.append(f"the list of icons is {len(icons) / 1024:.1f} KB (limit {LIMITS['icons'] // 1024} KB)")
+    if icons is not None and sizes["icons_gzip"] > LIMITS["icons_gzip"]:
+        problems.append(f"the list of icons is {sizes['icons_gzip'] / 1024:.1f} KB gzip (limit {LIMITS['icons_gzip'] // 1024} KB)")
     # the files of the section Effects to exalt (the page fetches both once it has shown, when the browser is idle, and not in the first load): their size is the weight of the section
     shared = {name: content_bytes for name, content_bytes in files.items() if _EFFECTS_FILE.fullmatch(name)}
     exalts = {name: content_bytes for name, content_bytes in files.items() if _EXALT_FILE.fullmatch(name)}
@@ -1322,6 +1339,76 @@ def _record_key(record: Mapping[str, Any]) -> Any:
     return record["key"] if record.get("key") is not None else f"w{record['id']}"
 
 
+def load_icon_extras(table: Mapping[str, Any], catalog: Path) -> dict[str, dict[str, Any]]:
+    """What the catalog says of each item of the item table that the item table does not: its ``categories`` and its ``instrument_mods``, which the rule of the pictures reads
+    (:func:`trioforge.site.itemicon.icon_name`; the table's records have no categories).
+
+    The catalog is the one the results were made from: the table's fingerprint (``inputs``) is made of the SHA-256 of that file and of the levels of the items
+    (:func:`trioforge.export.browser.inputs_fingerprint`), and a catalog that does not give the table's own, or that is not there, is a :class:`BuildError`: a build that went on without it
+    would drop every picture of an armor and of an instrument with only a warning. (The one way to build without it is to say so: ``--no-item-catalog``, which a release does not use.)
+    Returns the extras by item key."""
+    from trioforge.export import browser  # (here and not at the top: the exporter pulls in the solver, which importing this module for a stylesheet or a list of files must not need)
+
+    try:
+        raw = catalog.read_bytes()
+    except OSError as error:
+        raise BuildError(f"the catalog {catalog.name} cannot be read ({error.strerror or error}); the pictures of the armor and the instruments are made from it (or build with --no-item-catalog)") from None
+    if browser.inputs_fingerprint(hashlib.sha256(raw).hexdigest(), table) != table.get("inputs"):
+        raise BuildError(
+            f"the catalog {catalog.name} is not the one the results were made from (the fingerprint of the item table says another): give the catalog of the precompute that made them "
+            "(--catalog), or build without the pictures of the armor and the instruments (--no-item-catalog), which a release does not"
+        )
+    try:
+        listed = {item["key"]: item for item in json.loads(raw)["items"]}
+    except (ValueError, KeyError, TypeError):
+        raise BuildError(f"the catalog {catalog.name} is not a catalog (a list of items, each with its key)") from None
+    extras: dict[str, dict[str, Any]] = {}
+    for record in table["items"]:
+        key = _record_key(record)
+        if key not in listed:
+            raise BuildError(f"the catalog {catalog.name} has no item {key}, which the item table (made from it) has")
+        extras[key] = {"categories": listed[key].get("categories"), "instrument_mods": listed[key].get("instrument_mods")}
+    return extras
+
+
+def item_icons(table: Mapping[str, Any], extras: Mapping[str, Mapping[str, Any]]) -> data.ItemIcons:
+    """The pictures of what each item of the item table is, by key (:func:`trioforge.site.art.own_icon`: the rule, from the record and what the catalog adds) and the picture of each place of a kit for a
+    filled row (:func:`trioforge.site.art.fallback_icon`: a worn place's own, the pouch for the main hand, the off hand and the range, none for an any row) and the picture each item has by its places
+    (:func:`trioforge.site.art.item_picture`: what an any row draws): all that a row of the kit and the data files say, from the one place (a row needs the item's picture and its place,
+    :func:`trioforge.site.art.row_icon`, and nothing more)."""
+    own: dict[str, str] = {}
+    by_places: dict[str, str] = {}
+    for record in table["items"]:
+        key = _record_key(record)
+        icon = art.own_icon({**record, **extras.get(key, {})})
+        if icon is not None:
+            own[key] = icon
+        picture = art.item_picture(icon, record.get("slots") or ())  # (what an any row draws and the data files say: the pouch only for an item that fits a held place)
+        if picture is not None:
+            by_places[key] = picture
+    return data.ItemIcons(own, tuple(art.fallback_icon(group) for group in data.SLOT_INSTANCES), by_places)
+
+
+def check_icons(icons: data.ItemIcons) -> None:
+    """Every icon name the build writes is a name the browser reads (:data:`trioforge.site.data.ICON_NAME`), and a data file can name 62 of them: a :class:`BuildError` says so, not a traceback and not a
+    file that no page could read."""
+    try:
+        names = icons.names()
+        data.check_icon_names(sorted(names))
+        data.icon_table(sorted(names))
+    except ValueError as error:
+        raise BuildError(str(error)) from None
+
+
+def check_armor_pictures(table: Mapping[str, Any], icons: data.ItemIcons) -> None:
+    """A build made from the catalog has pictures of armor: the table has pieces of armor, and the catalog's fashion categories gave some of them the picture of their material. None at all is the
+    wrong catalog or a catalog without categories, and the build stops rather than publish pages that have lost them."""
+    armor = {f"icon-{stem}-{material}" for stem in itemicon.ARMOR_PARTS.values() for material in itemicon.MATERIALS.values()}
+    wearers = [r for r in table["items"] if len(r["slots"]) == 1 and r["slots"][0] in itemicon.ARMOR_PARTS and not r.get("weapon")]
+    if wearers and not armor & set(icons.of_item.values()):
+        raise BuildError(f"the catalog gave no picture to any of the {len(wearers)} pieces of armor of the item table (is it the catalog with the fashion categories?); build with --no-item-catalog to leave them out")
+
+
 def item_page_keys(table: Mapping[str, Any]) -> list[str]:
     """The keys of the items that get a page, sorted: every wearable (it lists a slot of a place of a kit) whose evidence level in ``table``, the item table of the results (its
     ``items``; the release's own levels, and never a private flag), is ``strict`` or ``wiki``. A disputed or a hidden item gets none. The list feeds :func:`site_files` (``item_pages``),
@@ -1424,6 +1511,7 @@ def site_files(
             raise BuildError(f"{asset} belongs to the data of a trio or to the item table, which the list makes itself")
     names += list(assets)
     names.append(f"{ENGINE_DATA_DIR}/items-{HASH_PLACEHOLDER}.json")
+    names.append(f"data/{data.ICONS_NAME}")  # (the pictures of the items of the item table, for the rows the page draws from an answer)
     trios = list(trios)
     if any(trio.exalt for trio in trios):
         names.append(f"data/{data.EFFECTS_NAME}")  # (the one file of the effects that the trios with an exalt file share)
@@ -1756,6 +1844,7 @@ class SiteBuild:
     sizes: dict[str, int]
     out: Path
     partial: tuple[str, ...] = ()
+    icon_note: str | None = None  # said when the build was made without the item catalog (``without_item_catalog``): the pictures of the armor and the instruments are then left out
 
 
 def race_page_rows(races: content.Racials) -> list[SimpleNamespace]:
@@ -1779,15 +1868,23 @@ def build(
     headers: Path | None = None,
     owner: str | None = None,
     scopes: Mapping[str, Sequence[int]] | None = None,
+    catalog: Path | None = None,
+    without_item_catalog: bool = False,
 ) -> SiteBuild:
     """Build the site (see the module docstring). ``scopes`` names, by slug, the tiers an indexable build needs a trio to have, where they are not
-    those of a full run of it (:func:`check_scopes`); a preview needs none. The command line gives none."""
+    those of a full run of it (:func:`check_scopes`); a preview needs none. The command line gives none. ``catalog`` is the catalog the results were made from, for the pictures of
+    the armor and the instruments (:func:`load_icon_extras`): ``derived/catalog.json`` unless one is given, and it must be the catalog the results were made from, or the build stops (a
+    :class:`BuildError`). ``without_item_catalog`` is the one way to build without it (the command line's ``--no-item-catalog``): the pictures of the armor and the instruments are then left out,
+    the build says so, and a release is never built with it."""
     results, out = Path(results), Path(out)
     rules = Path(rules) if rules else REPO_ROOT / "rules" / "rules.json"
     sources_manifest = Path(sources_manifest) if sources_manifest else REPO_ROOT / "derived" / "sources-manifest.json"
     racials = Path(racials) if racials else REPO_ROOT / "derived" / "racials.json"
     changelog = Path(changelog) if changelog else REPO_ROOT / "docs" / "CHANGELOG.md"
     headers = Path(headers) if headers else REPO_ROOT / "site" / "_headers"
+    if without_item_catalog and catalog is not None:
+        raise BuildError("--catalog and --no-item-catalog ask for opposite things: the pictures of the armor from a catalog, and none")
+    catalog = Path(catalog) if catalog else DEFAULT_CATALOG
     site_url = site_url.rstrip("/")
 
     # 1. read and check every input before anything is made
@@ -1834,6 +1931,16 @@ def build(
     keys = item_page_keys(table)  # the items that get a page: the strict and wiki wearables of the item table, the release's own levels
     with_page = frozenset(keys)
     records = {_record_key(record): record for record in table["items"]}
+    icon_note = None
+    if without_item_catalog:
+        extras: Mapping[str, Mapping[str, Any]] = {}
+        icon_note = "built without the item catalog (--no-item-catalog): no piece of armor has the picture of its material and no instrument is told by the catalog; a release is not built this way"
+    else:
+        extras = load_icon_extras(table, catalog)
+    icons = item_icons(table, extras)  # (the pictures of the pages, the shards and the list of the browser: one rule, one call)
+    check_icons(icons)
+    if not without_item_catalog:
+        check_armor_pictures(table, icons)
     # a page credits the wiki page its item was read from, so an item that has one needs its entry in the manifest; an item that has none (an r key) has nothing to credit
     uncredited = sorted(key for key in keys if view.has_wiki_page(records[key]) and key not in manifest.items)
     if uncredited:
@@ -1888,7 +1995,7 @@ def build(
             wearers.setdefault(key, []).append((trio.meta.slug, view.trio_name(trio.meta.trio)))
         caps = view.trio_caps(trio.meta.trio, trio.meta.level, rules_obj)
         try:
-            page = view.trio_page(trio, book, caps, with_page, vecs, exalt, races)
+            page = view.trio_page(trio, book, caps, with_page, vecs, exalt, races, icons.of_item)
         except ValueError as error:  # (an item the page can show has no page of its own: one line, naming the trio and the item)
             raise BuildError(str(error)) from None
         path = f"/trio/{trio.meta.slug}/"
@@ -1906,13 +2013,20 @@ def build(
         trio_files.append(name)
         live.append(SimpleNamespace(slug=trio.meta.slug, name=page.name, level=trio.meta.level))
         for shard in trio.shards.values():
-            files[f"data/{trio.meta.slug}/{shard.evidence}-{shard.buffs}.json"] = data.site_shard_json(shard, credit, stat_lines).encode("utf-8")
+            try:
+                files[f"data/{trio.meta.slug}/{shard.evidence}-{shard.buffs}.json"] = data.site_shard_json(shard, credit, stat_lines, icons).encode("utf-8")
+            except ValueError as error:  # (a name or a number of icons that a data file cannot hold: said as a refusal)
+                raise BuildError(f"{trio.meta.slug}: {error}") from None
         for role in trio.runnerups.roles():  # a file for each role, with every tier of the run in it
             name = f"data/{trio.meta.slug}/runnerups/{role}.json"
             files[name] = data.site_runnerups_json(trio.runnerups, role, credit).encode("utf-8")
         files[f"data/{trio.meta.slug}/robust.json"] = data.site_robust_json(trio.robust, credit).encode("utf-8")
         if exalt is not None and exalt.has(trio.meta.slug):
             files[f"data/{trio.meta.slug}/{data.EXALT_NAME}"] = data.site_exalt_json(exalt, trio.meta.slug, table, credit).encode("utf-8")
+    try:
+        files[f"data/{data.ICONS_NAME}"] = data.site_icons_json(items, icons, credit).encode("utf-8")
+    except ValueError as error:
+        raise BuildError(str(error)) from None
     if exalt is not None and exalt.trios:
         files[f"data/{data.EFFECTS_NAME}"] = data.site_effects_json(exalt, table, credit, with_page, rules_obj.get("effects.late_level")).encode("utf-8")
 
@@ -1962,6 +2076,7 @@ def build(
                 wiki=manifest.items[key] if view.has_wiki_page(records[key]) else None,
                 wearers=wearers.get(key, ()),
                 origin=manifest.eqlt[key][1] if key in manifest.eqlt else None,
+                own_icon=icons.of_item.get(key),
             )
             for key in keys
         ]
@@ -2045,7 +2160,7 @@ def build(
 
     # 4. write
     _write(out, files)
-    return SiteBuild(tuple(sorted(pages)), len(files), sizes, out, partial)
+    return SiteBuild(tuple(sorted(pages)), len(files), sizes, out, partial, icon_note)
 
 
 def marker_path(out: Path) -> Path:
@@ -2192,6 +2307,15 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
     parser.add_argument("--racials", type=Path, help="the racial abilities of the races, derived/racials.json (default derived/)")
     parser.add_argument("--changelog", type=Path, help="the changelog (default docs/CHANGELOG.md)")
     parser.add_argument("--headers", type=Path, help="the headers file (default site/_headers)")
+    catalogs = parser.add_mutually_exclusive_group()
+    catalogs.add_argument(
+        "--catalog", type=Path,
+        help="the catalog the results were made from, for the pictures of the armor and the instruments (default derived/catalog.json); the build stops when it is not the one the results were made from",
+    )
+    catalogs.add_argument(
+        "--no-item-catalog", action="store_true",
+        help="build without the catalog: no piece of armor has the picture of its material and no instrument is told by the catalog (the build says so; a release is not built this way)",
+    )
     options = parser.parse_args(argv)
     try:
         result = build(
@@ -2206,6 +2330,8 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
             headers=options.headers,
             owner=options.owner,
             scopes=scopes,
+            **({"catalog": options.catalog} if options.catalog is not None else {}),
+            **({"without_item_catalog": True} if options.no_item_catalog else {}),
         )
     except (BuildError, data.ResultsError, content.ContentError, rules_module.RulesError, OSError) as error:
         line = "; ".join(part.strip() for part in str(error).splitlines() if part.strip())
@@ -2213,6 +2339,8 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
         return 2
     sizes = result.sizes
     print(f"built {len(result.pages)} pages, {result.files} files into {result.out}{' (noindex)' if options.noindex else ''}")
+    if result.icon_note:
+        print(f"warning: {result.icon_note}")
     for slug in result.partial:
         print(f"warning: {slug} was built from a partial precompute run (a narrowed grid): its page has only the races and roles that were run")
     print(f"trio page HTML: {_kb(sizes['trio_html'])} raw (limit {LIMITS['trio_html'] // 1024} KB)")
@@ -2250,6 +2378,7 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
             f"effects to exalt (fetched once the page has shown): the shared file {_kb(sizes['effects'])} raw (limit {LIMITS['effects'] // 1024} KB), {_kb(sizes['effects_gzip'])} gzip "
             f"(limit {LIMITS['effects_gzip'] // 1024} KB); {sizes['exalt_files']} trio files, the largest {_kb(sizes['largest_exalt'])} raw, {_kb(sizes['largest_exalt_gzip'])} gzip (limit {LIMITS['exalt_gzip'] // 1024} KB)"
         )
+    print(f"list of the pictures of the items (fetched with an answer of the optimizer): {_kb(sizes['icons'])} raw (limit {LIMITS['icons'] // 1024} KB), {_kb(sizes['icons_gzip'])} gzip (limit {LIMITS['icons_gzip'] // 1024} KB)")
     print(f"first view with its data (first load + the largest shard): {_kb(sizes['first_view_gzip'])} gzip")
     print(f"files: {sizes['files']:,} (limit {LIMITS['files']:,}; Cloudflare Pages takes 20,000)")
     print(

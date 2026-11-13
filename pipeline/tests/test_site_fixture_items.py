@@ -50,6 +50,8 @@ UPGRADE_TESTS = (
     "engine-kitvalue-worker.test.mjs",
     "engine-manifest-kitvalue.test.mjs",
     "kitdecode.test.mjs",
+    "motes.test.mjs",
+    "upgrade-motes.test.mjs",
 )
 SCANNED = (
     REPO / "fixtures" / "site",
@@ -203,6 +205,7 @@ def test_the_scan_covers_the_fixture_its_end_to_end_specs_and_the_generator_of_i
         "fixtures/site/equip-now.json",
         "fixtures/site/kit-values.json",
         "fixtures/site/upgrade-view.json",
+        "fixtures/site/mote-orders.json",
         "fixtures/site/sources-manifest.json",
         "tests-e2e/engine.spec.mjs",
         "pipeline/tests/engine_fixture.py",

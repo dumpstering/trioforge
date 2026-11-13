@@ -10,6 +10,36 @@ function fail(message) {
 
 const EVIDENCE = ["strict", "wiki"];
 
+/** The characters that stand for an icon in a file (a name's place in the file's `icons`), and the one that stands for none (site/data.py: ICON_DIGITS and NO_ICON_DIGIT). */
+const ICON_DIGITS = "0123456789bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ!#$%()*+,.;=?@[]^_{|}~`";
+const NO_ICON = "-";
+/** What the name of an icon is: the class of the span that draws it is `art-` and this, so nothing a file holds may be more than letters, digits and hyphens. */
+const ICON_NAME = /^icon-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * The pictures a file carries beside its items (the generator's rule says which an item has; this only reads what it wrote): `icons` (the names, at most as many as there are characters), `ic` (a character
+ * for each of the `count` items, in the order of the file: the picture the item has where its place does not decide, which is its own, else the pouch if it fits a held place, else the picture of its page
+ * heading) and `pl` (a character for each of the 22 places of a kit: the picture a filled row of it shows for an item with none, which is the place's own in a worn place, the pouch in the range, the main hand
+ * and the off hand, and none in an any row, where the item's character decides). Each character is a place in `icons` or `-`. Returns `{items, places}` (a name or null for each), or null where the file names no pictures at all; a file that names some and is not what the generator writes is refused as a
+ * whole.
+ */
+export function parseIcons(document, count) {
+  const { icons, ic, pl } = document;
+  if (icons === undefined && ic === undefined && pl === undefined) return null;
+  if (!Array.isArray(icons) || icons.length > ICON_DIGITS.length || typeof ic !== "string" || typeof pl !== "string") fail("bad icons");
+  if (!icons.every((name) => typeof name === "string" && name.length <= 48 && ICON_NAME.test(name))) fail("bad icons");
+  const items = Array.from(ic);
+  const places = Array.from(pl);
+  if (items.length !== count || places.length !== KIT_SIZE) fail("bad icons");
+  const name = (char) => {
+    if (char === NO_ICON) return null;
+    const at = ICON_DIGITS.indexOf(char);
+    if (at < 0 || at >= icons.length) fail("bad icons");
+    return icons[at];
+  };
+  return { items: items.map(name), places: places.map(name) };
+}
+
 /**
  * An item of the file. A shard that carries the stats (`stat_tiers`, the tiers of the shard) ends each item with the text of its stats at each of them, as a row of Wear this says
  * them; the item then has `stats`, a text for each tier. The text is the generator's own: the page only shows it.
@@ -53,6 +83,14 @@ export class Shard {
     this.buffs = document.buffs;
     const statTiers = statTiersOf(document);
     this.items = items.map((entry) => itemOf(entry, statTiers));
+    // the pictures of the items and of the places of a kit, where the file has them: a row draws an item's own picture (`icon`), else the picture of its place (the pouch in a held place)
+    const pictures = parseIcons(document, items.length);
+    this.places = pictures === null ? null : pictures.places;
+    if (pictures !== null) {
+      this.items.forEach((item, index) => {
+        item.icon = pictures.items[index];
+      });
+    }
     // Whatever the page draws from the file is checked here, before it draws, so that a file that is not what the generator writes is
     // refused as a whole (the page says it could not load the view) and never fails half way through a draw. Every kit and every row of
     // totals is checked, whether a row names it or not.

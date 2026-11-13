@@ -1,7 +1,7 @@
 {#- The Upgrade section of a trio page: the gear the visitor has, read from a file of /outputfile inventory or typed in. The controls are in the page, switched off until
 the page code enables them (the `data-wake` ones), so that a first focus or click on one can load the code of the section (static/ui/upgrade-input.js), which no page loads
 by itself. Everything the code shows later (the list of the gear, the notes, the choices, and under them the answer: Equip now, the Next step and the steps after it, and under
-those the expanders for the best sets, Every slot and the tier mode, in #upgrade-results, which is empty here) is made by the code, from text only. The section has no live region: the page has two (#status and #announce), and what the section says
+those the expanders for the best sets, Every slot and the tier mode, in #upgrade-results, which is empty here, and, after it, the box that opens the panel Spend your motes, which the code puts under the box) is made by the code, from text only. The section has no live region: the page has two (#status and #announce), and what the section says
 is said through the second. `data-level` is the level the page is for, which a request to the optimizer names. -#}
 <section class="upgrade" id="upgrade" aria-labelledby="upgrade-h" data-trio="{{ page.slug }}" data-level="{{ page.level }}">
 <h2 id="upgrade-h" tabindex="-1">Upgrade from the gear you have</h2>
@@ -45,4 +45,5 @@ is said through the second. `data-level` is the level the page is for, which a r
 <p id="upgrade-empty" class="note">Nothing yet: read your file or add an item.</p>
 <ul id="upgrade-owned" class="plain owned" aria-labelledby="upgrade-owned-h"></ul>
 <div id="upgrade-results"></div>
+<span class="opt"><input type="checkbox" id="upgrade-motes-open" data-wake disabled><label for="upgrade-motes-open">Spend motes</label></span>
 </section>

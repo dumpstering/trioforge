@@ -40,6 +40,8 @@ import { MANIFEST_PATH, fetchTextWithin, parseManifest } from "../engine/manifes
 import { BEST_KIT, LIMITS, PROTOCOL_VERSION, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "../engine/protocol.js";
 import { MAX_DIFFICULTY, arrivalTier, wornHaste } from "../engine/tiers.js";
 
+/** The list of the pictures of the items of the item table (site/data.py: ICONS_NAME), at a fixed address like the shared file of the effects. */
+const ICONS_PATH = "/data/item-icons.json";
 /** The pause after the last change before a request is sent, and the time a solve may take (the phone gate's). */
 const PAUSE_MS = 300;
 const BUDGET_MS = 60_000;
@@ -296,6 +298,22 @@ export function initWeights(app, words) {
     return clientPromise;
   }
 
+  /**
+   * The pictures of the items of the table (`{items, places}`: a name or null for each item, in the order of the table, and for each place), from the list of the site, or null: the list is for the
+   * table whose SHA-256 it says and the release of the page, and a list that is not, that could not be had or that is not what the generator writes costs the items' own pictures and nothing else (an
+   * item of an answer is then known by none of its own: a worn place still shows the place's picture, and a held place the pouch).
+   */
+  async function pictures(digest, count) {
+    try {
+      const list = await app.loadJson(ICONS_PATH);
+      if (list === null || typeof list !== "object" || list.items !== digest) return null;
+      if (app.release !== null && app.release !== undefined && list.release !== app.release) return null;
+      return app.readIcons(list, count) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   /** The item table of the site, by the path, size and SHA-256 the manifest lists: a Map from the key of an item to its record. */
   function getRecords() {
     recordsPromise ??= (async () => {
@@ -324,11 +342,15 @@ export function initWeights(app, words) {
       if (table === null || typeof table !== "object" || !Array.isArray(table.items) || table.data_release !== listed.dataRelease) {
         throw sorry("It is not of the release the site lists.");
       }
+      const icons = await pictures(file.sha256, table.items.length);
       // only what a row of Wear this shows is kept of a record (the table is some two megabytes, and the rest of it is not needed once the rows are drawn)
       const records = new Map();
+      let at = -1;
       for (const record of table.items) {
+        at += 1;
         if (record === null || typeof record !== "object") continue;
         records.set(typeof record.key === "string" ? record.key : `w${record.id}`, {
+          icon: icons === null ? null : icons.items[at], // (the picture of what the item is, from the list of the site: the same as its shard's and its page's)
           name: record.name,
           tier_rule: record.tier_rule,
           evidence: record.evidence,
@@ -363,6 +385,7 @@ export function initWeights(app, words) {
       evidence: typeof record.evidence?.level === "string" ? record.evidence.level : "unknown",
       deity,
       haste: wornHaste(base, tier, step),
+      icon: typeof record.icon === "string" ? record.icon : null,
     };
   }
 

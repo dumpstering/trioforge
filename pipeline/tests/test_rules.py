@@ -86,6 +86,7 @@ EXPECTED_IDS = (
     "tier.arrival",
     "tier.max_fresh_drop",
     "tier.exp_needed",
+    "tier.void_mote",
     "tier.negatives_scale",
     "monk.weight_curve",
     "monk.bonus_placement",
@@ -184,6 +185,7 @@ EXPECTED_SOURCES = {
     "tier.arrival": [("public-text", "developer hotfix notes 2026-07-29 and developer stream 2026-06-10")],
     "tier.max_fresh_drop": [("public-text", "developer hotfix notes 2026-07-29"), PRIVATE_MEASURED],
     "tier.exp_needed": [("url", "https://eqlwiki.com/Mote_Guide")],
+    "tier.void_mote": [PRIVATE_MEASURED],  # read in game by the maintainer
     "tier.negatives_scale": [PRIVATE_MEASURED],
     "monk.weight_curve": [TOOLS_COMBAT],
     "monk.bonus_placement": [TOOLS_COMBAT],
@@ -1127,6 +1129,23 @@ def test_the_weight_rule_is_settled_by_in_game_readings_and_cites_no_public_page
     assert "The rounding of the last tenth of a stone is not settled." in notes
     assert "Weights read in game on several items fit it." in notes  # no item is named: which items were read stays private
     assert load().seal("tier.weight_pct") == "measured"  # and the loader takes the file as it is
+
+
+def test_the_void_mote_rule_says_a_mote_raises_one_item_one_whole_tier_at_any_tier(raw):
+    rule = rules_by_id(raw)["tier.void_mote"]
+    assert (rule["seal"], rule["date"], rule["status"]) == ("measured", "2026-11-10", "active")
+    assert (rule["value"], rule["unit"]) == (1, "whole tier per mote")
+    assert "test" not in rule and "alternatives" not in rule
+    # the form tier.weight_pct has: the one fixed private label as the source, and notes without a digit (the loader checks that too)
+    assert [(x["kind"], x["ref"]) for x in rule["source"]] == [PRIVATE_MEASURED]
+    notes = rule["notes"]
+    assert not any(ch.isnumeric() for ch in notes)
+    for words in ("one whole tier", "any tier", "top tier", "no limit"):
+        assert words in notes, words
+    assert raw["version"] == "2026-10-13"  # the rules file's version label is not bumped: the results were made under it
+    assert load().seal("tier.void_mote") == "measured"  # and the loader takes the file as it is
+    ids = [r["id"] for r in raw["rules"]]
+    assert ids.index("tier.void_mote") == ids.index("tier.exp_needed") + 1  # in the tier group, after the experience a tier needs
 
 
 def test_the_weight_floor_still_cites_the_wiki_page_that_lists_it(raw):

@@ -19,21 +19,40 @@ ART = STATIC / "art"
 def test_the_slot_icon_table_names_real_places_and_real_assets():
     assert set(art.SLOT_ICONS) <= set(data.SLOT_INSTANCES)
     listed = json.loads((ART / "manifest.json").read_text(encoding="utf-8"))["assets"]
-    assert set(art.SLOT_ICONS.values()) <= set(listed)
+    cells = {name for entry in listed.values() for name in entry.get("cells", {})}  # (the icons are the cells of one sheet)
+    assert set(art.SLOT_ICONS.values()) <= set(listed) | cells
 
 
-#: the places that have no icon, and why: Hands has an icon that is a near twin of the Shoulders one, Any slot takes whatever fits, and the off hand may hold a shield or a weapon
-NO_ICON = {"HANDS", "ANY", "SECONDARY"}
+#: the places that have no icon of their own, and why: the places that hold something (the main hand, the off hand, the range, the any slots) take whatever fits, a sword and a bow are no more the
+#: picture of a thing that is not one, and so an item in them has a picture only when it has one of its own (the worn places have theirs; Hands had none while its picture was a near twin of the
+#: Shoulders one, and the hands now have four materials of their own and the leather ones are the place's)
+NO_ICON = {"ANY", "SECONDARY", "PRIMARY", "RANGE"}
 
 
 def test_a_place_with_an_icon_gets_it_and_a_place_without_gets_none():
     assert art.slot_icon("ARMS") == "icon-arms" and art.slot_icon("BACK") == "icon-back"
-    assert art.slot_icon("HEAD") == "icon-helm" and art.slot_icon("FINGER") == "icon-ring" and art.slot_icon("RANGE") == "icon-bow" and art.slot_icon("PRIMARY") == "icon-sword"
+    assert art.slot_icon("HEAD") == "icon-helm" and art.slot_icon("FINGER") == "icon-ring"
+    assert art.slot_icon("RANGE") is None and art.slot_icon("PRIMARY") is None  # (a held place: the picture of its item or none, never a sword or a bow that stands in)
+    assert art.slot_icon("HANDS") == "icon-hands-leather"
     assert set(data.SLOT_INSTANCES) - set(art.SLOT_ICONS) == NO_ICON
     for group in sorted(NO_ICON):
         assert art.slot_icon(group) is None, group
     assert art.slot_icon("NOT-A-PLACE") is None
     assert len(set(art.SLOT_ICONS.values())) == len(art.SLOT_ICONS)  # one picture for each kind of place
+
+
+def test_the_held_places_have_no_picture_of_their_own_and_every_worn_place_has_one():
+    assert art.HELD_PLACES == {"PRIMARY", "SECONDARY", "RANGE", "ANY"}
+    assert not set(art.SLOT_ICONS) & art.HELD_PLACES  # (no sword and no bow stands in for the thing in a held place)
+    assert set(data.SLOT_INSTANCES) - art.HELD_PLACES == set(art.SLOT_ICONS)  # (every other place has its picture)
+
+
+def test_the_part_of_the_body_a_picture_is_of():
+    assert art.armor_part("icon-chest-plate") == art.armor_part("icon-chest") == "chest"
+    assert art.armor_part("icon-hands-leather") == art.armor_part("icon-hands-plate") == "hands"
+    assert art.armor_part("icon-helm") == art.armor_part("icon-helm-cloth") == "helm"
+    for other in ("icon-ring", "icon-shield", "icon-sword-1h", "icon-chest-silk", "icon-chests", "icon-chest-plate-x", "chest", "", None, 7):
+        assert art.armor_part(other) is None, other
 
 
 def test_an_icon_whose_asset_is_not_part_of_the_site_is_not_given(monkeypatch):
@@ -44,10 +63,15 @@ def test_an_icon_whose_asset_is_not_part_of_the_site_is_not_given(monkeypatch):
 def test_the_kit_rows_carry_the_icon_of_their_place():
     rows = view.kit_rows(_scenario())
     assert len(rows) == len(view.SLOT_LABELS) == len(data.SLOT_INSTANCES)
-    for row, group in zip(rows, data.SLOT_INSTANCES):
-        assert row.icon == art.SLOT_ICONS.get(group), (row.slot, group)
+    for row, group, item in zip(rows, data.SLOT_INSTANCES, _scenario().kit):
+        if group == "ANY":  # (an any row shows what the item is by its places: the pouch for an item that fits a held place, the picture its page heading has for one that is worn only, none for an empty row)
+            assert row.icon == (None if item is None else art.item_picture(None, item.slots)), (row.slot, group)
+        elif group in art.HELD_PLACES:  # (a held place has no picture of its own: with an item in it and no picture given for the item, the pouch; with none in it, none)
+            assert row.icon == (art.HELD_ICON if item is not None else None), (row.slot, group)
+        else:
+            assert row.icon == art.SLOT_ICONS.get(group), (row.slot, group)
     icons = {row.slot: row.icon for row in rows}
-    assert icons["Head"] == "icon-helm" and icons["Ear 1"] == icons["Ear 2"] == "icon-ear" and icons["Off hand"] is None and icons["Hands"] is None and icons["Arms"] == "icon-arms"
+    assert icons["Head"] == "icon-helm" and icons["Ear 1"] == icons["Ear 2"] == "icon-ear" and icons["Off hand"] == "icon-pouch" and icons["Hands"] == "icon-hands-leather" and icons["Arms"] == "icon-arms"
 
 
 def test_a_role_has_a_crest_only_where_one_fits(monkeypatch):
@@ -165,9 +189,10 @@ def test_the_trio_page_draws_the_race_picture_beside_the_best_race_line_and_noth
 
 
 def test_an_item_gets_the_icon_of_its_slot_only_when_every_slot_it_fits_has_the_same_one():
-    assert art.item_icon(["HEAD"]) == "icon-helm" and art.item_icon(["EAR"]) == "icon-ear" and art.item_icon(["PRIMARY"]) == "icon-sword"
-    assert art.item_icon(["HANDS"]) is None and art.item_icon(["ANY"]) is None and art.item_icon(["SECONDARY"]) is None  # a slot without an icon gives none
-    assert art.item_icon(["PRIMARY", "SECONDARY"]) is None  # one slot has an icon and the other has none: no icon is claimed for the item
+    assert art.item_icon(["HEAD"]) == "icon-helm" and art.item_icon(["EAR"]) == "icon-ear" and art.item_icon(["PRIMARY"]) == "icon-pouch" and art.item_icon(["RANGE"]) == "icon-pouch"
+    assert art.item_icon(["HANDS"]) == "icon-hands-leather"  # (the place of the hands has its picture now)
+    assert art.item_icon(["ANY"]) is None and art.item_icon(["SECONDARY"]) == "icon-pouch"  # (ANY is no place an item lists; a held place gives the pouch to an item that fits held places only)
+    assert art.item_icon(["PRIMARY", "SECONDARY"]) == "icon-pouch"  # two held places: the pouch, the held row's fallback
     assert art.item_icon(["HEAD", "FACE"]) is None  # two slots, two different icons: none is the item's
     assert art.item_icon([]) is None and art.item_icon(["NOT-A-SLOT"]) is None and art.item_icon(["AMMO"]) is None
     assert art.item_icon(["EAR", "EAR"]) == "icon-ear"
@@ -176,3 +201,98 @@ def test_an_item_gets_the_icon_of_its_slot_only_when_every_slot_it_fits_has_the_
 def test_an_item_icon_whose_asset_is_not_part_of_the_site_is_not_given(monkeypatch):
     monkeypatch.setattr(art, "_assets", lambda: frozenset({"emblem"}))
     assert art.item_icon(["HEAD"]) is None
+
+
+# ---- the pouch: the picture of a held row for an item that has none of its own -------------------------------------------------------------------------------
+
+
+def test_the_pouch_is_the_fallback_of_a_held_row_and_no_item_has_it_for_its_own_picture():
+    from trioforge.site import itemicon
+
+    assert art.HELD_ICON == "icon-pouch" and art.has("icon-pouch") and art.held_icon() == "icon-pouch"
+    assert "icon-pouch" not in itemicon.ALL_ICONS  # (the rule never gives an item the pouch: a held row falls back to it)
+    assert "icon-pouch" not in art.SLOT_ICONS.values()  # (and a place does not have it: an empty held row has none)
+    for group in sorted(art.HELD_PLACES - {"ANY"}):
+        assert art.slot_icon(group) is None and art.fallback_icon(group) == "icon-pouch", group
+    assert art.slot_icon("ANY") is None and art.fallback_icon("ANY") is None  # (an any row takes whatever fits: what its item is by its places decides, art.item_picture)
+    for group in sorted(set(data.SLOT_INSTANCES) - art.HELD_PLACES):
+        assert art.fallback_icon(group) == art.slot_icon(group) is not None, group
+    assert art.fallback_icon("NOT-A-PLACE") is None
+
+
+def test_a_filled_held_row_has_the_items_own_picture_else_the_pouch_and_a_worn_row_is_what_it_was():
+    for group in sorted(art.HELD_PLACES - {"ANY"}):
+        assert art.row_icon(None, group) == "icon-pouch", group
+    for group in sorted(art.HELD_PLACES):
+        assert art.row_icon("icon-wand", group) == "icon-wand", group  # (its own, wherever it stands)
+        assert art.row_icon("icon-idol", group) == "icon-idol", group
+        assert art.row_icon("icon-chest-plate", group) == "icon-chest-plate", group  # (a picture of armor is the item's own: the held row shows it as it always did)
+    assert art.row_icon(None, "CHEST") == "icon-chest" and art.row_icon("icon-idol", "CHEST") == "icon-chest"  # (a picture of the held things stays on a held row: the worn row has the place's)
+    assert art.row_icon("icon-chest-plate", "LEGS") == "icon-legs" and art.row_icon(None, "WRIST") == "icon-wrist"  # (a worn row: as before)
+    assert art.row_icon(None, "NOT-A-PLACE") is None and art.row_icon("icon-idol", "NOT-A-PLACE") == "icon-idol"
+
+
+def test_the_pouch_is_not_given_where_it_is_not_part_of_the_site(monkeypatch):
+    monkeypatch.setattr(art, "_assets", lambda: frozenset({"emblem", "icon-wand"}))
+    assert art.held_icon() is None and art.fallback_icon("PRIMARY") is None
+    assert art.row_icon(None, "PRIMARY") is None and art.row_icon("icon-wand", "PRIMARY") == "icon-wand"
+    assert art.item_icon(["PRIMARY"]) is None and art.item_picture(None, ["PRIMARY"]) is None and art.row_icon(None, "ANY", ["PRIMARY"]) is None
+
+
+def test_the_page_of_an_item_has_the_pouch_only_for_an_item_that_fits_held_places_and_no_other():
+    for held in (["PRIMARY"], ["SECONDARY"], ["RANGE"], ["PRIMARY", "SECONDARY"], ["PRIMARY", "RANGE", "SECONDARY"], ["RANGE", "SECONDARY"]):
+        assert art.item_icon(held) == "icon-pouch", held
+    for mixed in (["CHEST", "PRIMARY"], ["BACK", "SECONDARY"], ["NECK", "PRIMARY", "SECONDARY"], ["HANDS", "PRIMARY"], ["PRIMARY", "AMMO"], ["RANGE", "AMMO"], ["PRIMARY", "NOT-A-SLOT"]):
+        assert art.item_icon(mixed) is None, mixed  # (it fits a place that is not held: today's answer, none)
+    assert art.item_icon(["WRIST"]) == "icon-wrist" and art.item_icon(["BACK", "WRIST"]) is None  # (a worn item: as before)
+    assert art.item_icon([]) is None and art.item_icon(["ANY"]) is None and art.item_icon(["AMMO"]) is None
+
+
+# ---- the any rows: the pouch is for an item that fits a held place, and a worn-only item has what its page heading has (the review of 2026-11-13) -----------------------
+
+
+def test_the_picture_an_item_has_by_its_places_is_its_own_else_the_pouch_if_it_fits_a_held_place_else_what_its_page_heading_has():
+    for held in (["PRIMARY"], ["SECONDARY"], ["RANGE"], ["PRIMARY", "SECONDARY"], ["BACK", "SECONDARY"], ["WRIST", "PRIMARY"], ["NECK", "PRIMARY", "SECONDARY"], ["AMMO", "NECK", "PRIMARY"]):
+        assert art.item_picture(None, held) == "icon-pouch", held  # (fits a held place and has no picture of its own: the pouch, whatever else it fits)
+        assert art.item_picture("icon-wand", held) == "icon-wand", held
+    assert art.item_picture(None, ["CHEST"]) == "icon-chest"  # a robe
+    assert art.item_picture(None, ["BACK"]) == "icon-back"  # a cloak
+    assert art.item_picture(None, ["WAIST"]) == "icon-waist"  # a girdle
+    assert art.item_picture(None, ["EAR", "EAR"]) == "icon-ear" and art.item_picture(None, ["WRIST"]) == "icon-wrist"
+    for worn in (["BACK", "WRIST"], ["EAR", "FINGER"], ["HEAD", "FACE", "NECK"], ["AMMO"], ["CHARM"], [], ["NOT-A-SLOT"], ["CHEST", "AMMO"]):
+        assert art.item_picture(None, worn) == art.item_icon(worn), worn  # (the heading's answer, which is none for places of several pictures)
+    assert art.item_picture(None, ["BACK", "WRIST"]) is None and art.item_picture(None, ["AMMO"]) is None
+    assert art.item_picture("icon-chest-plate", ["CHEST"]) == "icon-chest-plate"
+    for worn in (["CHEST"], ["BACK"], ["WAIST"], ["BACK", "WRIST"]):  # (a worn-only item: the picture of its heading, whatever the row)
+        assert art.item_picture(None, worn) == art.item_icon(worn)
+
+
+def test_an_any_row_shows_the_pouch_only_for_an_item_that_fits_a_held_place_and_else_what_the_page_heading_of_the_item_shows():
+    assert art.row_icon(None, "ANY", ["CHEST"]) == "icon-chest"  # a robe
+    assert art.row_icon(None, "ANY", ["BACK"]) == "icon-back"  # a cloak
+    assert art.row_icon(None, "ANY", ["WAIST"]) == "icon-waist"  # a girdle
+    assert art.row_icon(None, "ANY", ["BACK", "WRIST"]) is None  # a thing of two worn places of two pictures: none, as its page heading
+    assert art.row_icon(None, "ANY", ["PRIMARY", "SECONDARY"]) == "icon-pouch" and art.row_icon(None, "ANY", ["RANGE"]) == "icon-pouch"
+    assert art.row_icon(None, "ANY", ["BACK", "SECONDARY"]) == "icon-pouch"  # (it fits a held place: the pouch, though its heading has none)
+    assert art.row_icon("icon-claw", "ANY", ["HANDS", "PRIMARY"]) == "icon-claw" and art.row_icon("icon-chest-plate", "ANY", ["CHEST"]) == "icon-chest-plate"
+    assert art.row_icon(None, "ANY") is None and art.row_icon(None, "ANY", []) is None  # (nothing known of the item: no guess)
+    for slots in (["CHEST"], ["BACK"], ["WAIST"], ["BACK", "WRIST"], ["WRIST"]):
+        assert art.row_icon(None, "ANY", slots) == art.item_icon(slots), slots  # (the any row and the page heading say the same for a worn-only item)
+    for group in ("PRIMARY", "SECONDARY", "RANGE"):
+        assert art.row_icon(None, group, ["PRIMARY"]) == "icon-pouch", group  # (these places hold only what fits them: the pouch)
+
+
+def test_a_picture_of_the_held_things_stays_on_a_held_row_and_a_worn_row_of_the_same_item_has_the_place_s():
+    """Five items fit a held place and a worn one (Tsiraka's Claws: hands and main hand). The claw is the picture of a held row (and of the heading); on the hands row the place's picture is what it was."""
+    from trioforge.site import itemicon
+
+    held_only = {f"icon-{kind}" for kind in itemicon.HELD_WORDS} | {"icon-pouch"}
+    assert art.HELD_ONLY_ICONS == held_only and len(held_only) == 14 and "icon-staff" not in held_only
+    for icon in sorted(held_only):
+        assert art.row_icon(icon, "HANDS", ["HANDS", "PRIMARY"]) == "icon-hands-leather", icon
+        assert art.row_icon(icon, "NECK") == "icon-neck" and art.row_icon(icon, "FINGER") == "icon-ring", icon
+        for group in sorted(art.HELD_PLACES):
+            assert art.row_icon(icon, group, ["HANDS", "PRIMARY"]) == icon, (icon, group)
+    for icon in ("icon-wand", "icon-book", "icon-instrument", "icon-orb", "icon-shield", "icon-fist", "icon-staff"):  # (the pictures the rule gave before stay on a worn row, as at 8f9be10)
+        assert art.row_icon(icon, "HANDS", ["HANDS", "PRIMARY"]) == icon, icon
+    assert art.row_icon("icon-chest-plate", "CHEST") == "icon-chest-plate" and art.row_icon("icon-chest-plate", "LEGS") == "icon-legs"  # (and the armor guard is as it was)

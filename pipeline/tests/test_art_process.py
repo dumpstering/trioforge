@@ -314,7 +314,7 @@ def test_the_command_line_says_what_it_made_and_fails_on_a_bad_manifest(tmp_path
 
 
 def png_pixels(path: Path) -> tuple[int, int, list[tuple[int, int, int, int]]]:
-    """The size and the RGBA pixels of a PNG written by the tool (8 bits, RGBA or RGB, not interlaced), read with the standard library."""
+    """The size and the RGBA pixels of a PNG written by the tool (8 bits, RGBA, RGB or with a palette, not interlaced), read with the standard library."""
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", path.name
     pos, chunks = 8, []
@@ -325,8 +325,10 @@ def png_pixels(path: Path) -> tuple[int, int, list[tuple[int, int, int, int]]]:
     header = dict(chunks)[b"IHDR"]
     width, height = int.from_bytes(header[:4], "big"), int.from_bytes(header[4:8], "big")
     depth, colour, _, _, interlace = header[8:13]
-    assert (depth, interlace) == (8, 0) and colour in (2, 6), f"{path.name}: expected 8-bit RGB or RGBA, not interlaced"
-    step = 4 if colour == 6 else 3
+    assert (depth, interlace) == (8, 0) and colour in (2, 3, 6), f"{path.name}: expected 8-bit RGB, RGBA or indexed, not interlaced"
+    step = {6: 4, 2: 3, 3: 1}[colour]
+    palette = dict(chunks).get(b"PLTE", b"")
+    clear = dict(chunks).get(b"tRNS", b"")  # (an indexed picture: the alpha of each entry, from the first; an entry after the last is whole)
     raw = zlib.decompress(b"".join(body for kind, body in chunks if kind == b"IDAT"))
     stride, rows, previous = width * step, [], bytearray(width * step)
     for y in range(height):
@@ -350,6 +352,10 @@ def png_pixels(path: Path) -> tuple[int, int, list[tuple[int, int, int, int]]]:
     pixels = []
     for line in rows:
         for x in range(width):
+            if colour == 3:
+                entry = line[x]
+                pixels.append((palette[3 * entry], palette[3 * entry + 1], palette[3 * entry + 2], clear[entry] if entry < len(clear) else 255))
+                continue
             r, g, b = line[x * step : x * step + 3]
             pixels.append((r, g, b, line[x * step + 3] if step == 4 else 255))
     return width, height, pixels
@@ -372,11 +378,11 @@ def test_every_committed_asset_has_its_file_and_every_file_has_its_asset():
 
 
 def test_the_art_of_the_site_stays_under_its_one_budget_on_the_wire():
-    """The set pieces and the race pictures raised the budget of the whole build from 120 to 200 KB; it is one constant (``art.BUDGET_BYTES``), which the build and this tool both read. What a phone fetches on one page
-    stays under 120 KB, and the browser test (tests-e2e/art-phone.spec.mjs) holds that."""
+    """The set pieces and the race pictures raised the budget of the whole build from 120 to 200 KB, and the icons of the items (the sheet, and the three pictures drawn again) to 210 KB, and the fourteen pictures of the held things added to the sheet to 215 KB; it is one constant
+    (``art.BUDGET_BYTES``), which the build and this tool both read. What a phone fetches on one page stays under 120 KB, and the browser test (tests-e2e/art-phone.spec.mjs) holds that."""
     from trioforge.site import art, build
 
-    assert art.BUDGET_BYTES == 200 * 1024 and build.LIMITS["art"] == art.BUDGET_BYTES == art_process.BUDGET_BYTES
+    assert art.BUDGET_BYTES == 215 * 1024 and build.LIMITS["art"] == art.BUDGET_BYTES == art_process.BUDGET_BYTES
     total = sum(path.stat().st_size for path in ART.glob("*.png"))
     assert total <= art.BUDGET_BYTES, f"{total} bytes of PNG"
 
@@ -412,10 +418,10 @@ def test_the_manifest_has_the_set_pieces_and_the_characters_exactly_as_picked():
         entry = assets[key]
         assert (entry["source"], entry["size"], entry["kind"], entry["background"], entry.get("crop")) == (source, size, "still", None, "auto"), key
         assert entry["scale"] == 2, key
-    assert "race-kerran" not in assets and not [key for key in assets if "catman" in assets[key]["source"]]  # the cat has a stray animal that no crop of the whole figure leaves out
+    assert "race-kerran" not in assets and not [key for key in assets if "catman" in assets[key].get("source", "")]  # the cat has a stray animal that no crop of the whole figure leaves out
     assert "lost" not in assets  # the 404 page's old picture is replaced by the treetop village
     unused = {"brute-try4.png", "reddragon.png", "campfire.png", "trioforge-hero-trio-v1.png", "trioforge-iksar.png", "trioforge-ogre.png", "trioforge-dwarf.png"}
-    sources = {entry["source"] for entry in assets.values()}
+    sources = {entry["source"] for entry in assets.values() if "source" in entry} | {cell["source"] for entry in assets.values() for cell in entry.get("cells", {}).values()}  # (a sheet has its cells' sources)
     assert not sources & unused and not [name for name in sources if name.startswith("an_adventuring_party")]
     assert committed()["treetop-village"]["use"] and all(entry.get("use") for entry in assets.values())
 
@@ -425,7 +431,8 @@ def test_the_committed_files_name_no_path_of_any_computer():
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"[A-Za-z]:[\\/]|/(?:Users|home)/|\\\\", text), path.name
     for entry in committed().values():
-        assert "/" not in entry["source"] and "\\" not in entry["source"]  # a file name, of a folder that is given on the command line
+        for source in [entry["source"]] if "source" in entry else [cell["source"] for cell in entry["cells"].values()]:  # (a sheet has the sources of its cells)
+            assert "/" not in source and "\\" not in source  # a file name, of a folder that is given on the command line
 
 
 def test_the_stylesheet_of_the_art_agrees_with_the_files_it_names():

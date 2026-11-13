@@ -96,7 +96,7 @@ def test_the_file_list_of_a_build_of_three_trios_is_the_files_the_build_wrote_pa
     assert sorted(listed) == sorted(unhashed(name) for name in three.names)
     assert len(listed) == len(three.names) == three.summary.files  # the count the build reports is the count of the folder
     per_trio = 1 + 4 + len(ROLES) + 1 + 1 + 1  # the page, four shards, a runner-up file for each role, the seals, the bundle and the trio's manifest
-    fixed = 6 + 3 + 1 + (0 if three.noindex else 1)  # six pages; _headers, robots.txt and the manifest; the item table; and a sitemap
+    fixed = 6 + 3 + 1 + 1 + (0 if three.noindex else 1)  # six pages; _headers, robots.txt and the manifest; the item table; the list of the pictures of the items; and a sitemap
     assert len(listed) == len(TRIOS) * per_trio + fixed + len(assets) + len(ITEMS) == len(TRIOS) * per_trio + fixed + len(assets) + 47
 
 
@@ -130,7 +130,7 @@ def test_the_full_grid_of_560_trios_with_the_milestone_trio_at_every_tier_and_25
     assert build.check_file_budget(listed) == len(listed)
     # counted, not guessed: the files of each trio, the item pages, and the files that no trio and no item has
     per_trio = sum(1 + 4 + len(t.roles) + 1 + len(t.levels) + 1 for t in trios)
-    assert len(listed) == per_trio + len(items) + len(assets) + 6 + 3 + 1 + 1  # six pages; _headers, robots.txt and the manifest; the item table; a sitemap
+    assert len(listed) == per_trio + len(items) + len(assets) + 6 + 3 + 1 + 1 + 1  # six pages; _headers, robots.txt and the manifest; the item table; the list of the pictures of the items; a sitemap
     assert 8_000 < len(listed)  # (a count of the real thing: 560 trios of 9, 11 or 12 files each, for one role, three or four, and the item pages)
     assert sum(1 for path in listed if path.startswith("item/")) == 2500
 

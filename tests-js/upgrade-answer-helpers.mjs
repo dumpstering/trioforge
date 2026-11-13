@@ -228,7 +228,7 @@ export const costOf = (from, to, arrival = from) => ({ exp: 2 ** to - 2 ** from,
  * optimizer. `view` is the view of the page, which a test may change with `setView` (the page code tells the section that it changed). The answer speaks through `spoken`, the gear
  * input through `said`. `pauseMs` is the answer's pause before it sends (the default is the section's own).
  */
-export function mountAnswer({ items = table(), engine = fakeEngine(), pauseMs, onUpdated = vi.fn(), reload = vi.fn(), level = 50, announce = true } = {}) {
+export function mountAnswer({ items = table(), engine = fakeEngine(), pauseMs, onUpdated = vi.fn(), reload = vi.fn(), level = 50, announce = true, onGear } = {}) {
   const root = mountPage('<p id="announce" class="sr-only" role="status" aria-live="polite"></p>');
   wake(root);
   root.dataset.level = String(level);
@@ -251,6 +251,7 @@ export function mountAnswer({ items = table(), engine = fakeEngine(), pauseMs, o
     clientPath: CLIENT_PATH,
     loadEngine: engine.loadEngine,
     ...(announce ? { announce: (text) => spoken.push(text) } : {}),
+    ...(onGear === undefined ? {} : { onGear }),
     onUpdated,
     reload,
     doc: document,

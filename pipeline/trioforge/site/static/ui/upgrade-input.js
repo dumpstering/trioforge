@@ -46,6 +46,7 @@ import { readItemTable } from "../engine/items.js";
 import { MANIFEST_PATH, fetchTextWithin, parseManifest } from "../engine/manifest.js";
 import { LIMITS, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "../engine/protocol.js";
 import { createGearPicker } from "./gear-picker.js";
+import { createMotes } from "./motes.js";
 import { createRemember } from "./remember.js";
 import { SECTION_UPDATED, createUpgradeAnswer } from "./upgrade-answer.js";
 
@@ -678,7 +679,7 @@ class Updated extends Error {}
  * the page say so at the top, where the kit would have been. For the gear a visitor asked the device to remember (remember.js) it gives `remember` (`{key, storage, stored}`: the
  * name the gear is kept under, the storage, or null, and what was stored, or null). For the answer (upgrade-answer.js) the page gives `view()` and `onView(callback)` (the view
  * it shows, and a way to be told when that changes), `words` (its own words for a tier, a cost and a place of the kit) and, for tests, `loadEngine(url)`. Returns
- * `{gear, answer, ready(), retry(), readFile(file)}`: `gear` is the gear input once the item list is in (null before, and when it cannot be had), `answer` what draws the answer under it
+ * `{gear, answer, motes, ready(), retry(), readFile(file)}`: `gear` is the gear input once the item list is in (null before, and when it cannot be had), `motes` the panel Spend your motes (motes.js; null when it could not be made), `answer` what draws the answer under it
  * (null when the page gives no view), `ready()` a promise of it that settles when the load that is going on has ended, with the gear input or with null.
  */
 export function initUpgrade(
@@ -726,6 +727,7 @@ export function initUpgrade(
   let held = Array.isArray(files) ? files.slice() : []; // what came before the item list: the last file or files
   let gear = null;
   let answer = null;
+  let motes = null; // the panel Spend your motes, once the item list is in
   let updated = false;
   let loading = null;
   const say = (text) => speak(doc, announce, text);
@@ -888,12 +890,22 @@ export function initUpgrade(
       gear = createGearInput(root, { items: table, trio, doc, win, announce });
       letGo(); // handed over: the gear input has its own handlers now (if it could not be made, these stay, and a file given meanwhile is still kept for the next try)
       if (typeof view === "function" && typeof onView === "function" && words) {
+        // the panel Spend your motes (motes.js): it needs the item list and the page's view, and the evaluator's script, which it fetches itself when it is first used; the answer tells it
+        // the kit of Equip now. It is made before the answer, which calls it, and a panel that cannot be made leaves the rest as it is
+        try {
+          motes = createMotes(root, { records: table.records, listed, trio: String(root.dataset.trio ?? ""), level: Number(root.dataset.level), view, onView, words, announce, doc, win, fetchImpl, base: win.location.href, stallMs, bodyMs, loadEngine, track, reload: reloadPage });
+        } catch {
+          motes?.destroy?.();
+          motes = null;
+          root.querySelector("#upgrade-motes")?.remove();
+        }
         try {
           answer = createUpgradeAnswer(root, {
             gear,
             records: table.records,
             itemDefaults: table.defaults,
             onEquipKit,
+            onGear: motes === null ? undefined : (source, pending) => motes.setGear(source, pending),
             trio: String(root.dataset.trio ?? ""),
             level: Number(root.dataset.level),
             view,
@@ -991,6 +1003,9 @@ export function initUpgrade(
     },
     get answer() {
       return answer;
+    },
+    get motes() {
+      return motes;
     },
     ready: () => loading ?? Promise.resolve(gear),
     retry,

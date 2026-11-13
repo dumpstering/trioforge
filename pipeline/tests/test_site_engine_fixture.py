@@ -21,6 +21,7 @@ from engine_fixture import (
     EQUIP_NOW,
     KIT_ONLY,
     KIT_VALUES,
+    MOTE_ORDERS,
     PATH_STEPS,
     RESULTS,
     SLOT_LIMIT,
@@ -42,6 +43,8 @@ from engine_fixture import (
     equip_now_text,
     kit_values,
     kit_values_text,
+    mote_orders,
+    mote_orders_text,
     texts,
     upgrade_view_answers,
     upgrade_view_text,
@@ -78,6 +81,44 @@ def test_the_committed_equip_now_answers_are_what_the_reference_gives():
 def test_the_committed_kit_values_are_what_the_reference_gives():
     assert KIT_VALUES.is_file(), "fixtures/site/kit-values.json is missing; run pipeline/tests/engine_fixture.py"
     assert KIT_VALUES.read_text(encoding="utf-8") == kit_values_text(), "kit-values.json is stale; run pipeline/tests/engine_fixture.py"
+
+
+def test_the_committed_mote_orders_are_what_the_reference_gives():
+    assert MOTE_ORDERS.is_file(), "fixtures/site/mote-orders.json is missing; run pipeline/tests/engine_fixture.py"
+    assert MOTE_ORDERS.read_text(encoding="utf-8") == mote_orders_text(), "mote-orders.json is stale; run pipeline/tests/engine_fixture.py"
+
+
+def test_the_mote_orders_cover_every_ending_the_limit_the_weights_mixed_tiers_and_the_runs():
+    document = json.loads(MOTE_ORDERS.read_text(encoding="utf-8"))
+    cases = document["cases"]
+    assert {case["ending"] for case in cases} == {"top", "motes", "no-gain"}  # (a kit at the top, a limit, nothing that is left gains)
+    assert any("weights" in case for case in cases) and any(case["motes"] is None for case in cases) and any(case["motes"] is not None for case in cases)
+    assert any(step["motes"] > 1 for case in cases for step in case["steps"]), "a run of more than one mote"
+    assert any(case["ending"] == "motes" and case["nextRun"] is not None for case in cases), "a run that does not fit the motes left"
+    assert any(case["ending"] == "motes" and case["nextRun"] is None for case in cases) and all(case["nextRun"] is None for case in cases if case["ending"] != "motes")
+    assert document["extra"], "the invented items the runs are made of (records of the item table, which the page's table of the fixture does not have)"
+    for case in cases:
+        assert len(case["kit"]) == 22
+        steps = case["steps"]
+        assert [step["index"] for step in steps] == list(range(1, len(steps) + 1))
+        spent = 0
+        for step in steps:
+            spent += step["motes"]
+            assert step["to"] - step["from"] == step["motes"] >= 1 and step["spent"] == spent  # a run of k is one line and spends k motes
+        assert case["spent"] == spent and (case["motes"] is None or spent <= case["motes"])
+        assert (case["ending"] == "motes") == (case["motes"] is not None and case["left"] > 0 and (spent == case["motes"] or case["nextRun"] is not None))
+        assert (case["ending"] == "top") == (case["left"] == 0)
+        tiers = [int(ident.rsplit("@", 1)[1]) if ident else None for ident in case["kit"]]
+        assert case["left"] == sum(10 - t for t in tiers if t is not None) - spent  # every mote is one whole tier of one item
+        if case["nextRun"] is not None:
+            assert case["motes"] - spent < case["nextRun"]  # it did not fit
+        before = Fraction(case["start"])
+        for step in steps:
+            after = Fraction(step["F"])
+            assert Fraction(step["gain"]) == after - before > 0
+            assert all(Fraction(amount) != 0 for _, amount in step["moved"])
+            before = after
+    assert len({tuple(int(i.rsplit("@", 1)[1]) for i in case["kit"] if i) for case in cases}) > 3  # (kits of different tiers, not one tier everywhere)
 
 
 def test_the_kit_values_are_those_of_the_equip_now_kits_under_the_views_that_keep_them_the_best_arrangement_of_their_items():

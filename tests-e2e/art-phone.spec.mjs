@@ -1,5 +1,5 @@
 // What a phone is sent in pictures: the PNG bytes a 390 x 844 window fetches on the home page, a trio page, an item page, the about, sources and changelog pages and the 404 page stay under 120 KB on
-// each page, in the light and in the dark theme (the two themes draw different tiles under the content). The art of the whole build may weigh more (200 KB, `art.BUDGET_BYTES`): what is
+// each page, in the light and in the dark theme (the two themes draw different tiles under the content). The art of the whole build may weigh more (215 KB, `art.BUDGET_BYTES`): what is
 // held here is the phone's share, because a picture that is not shown on a phone (display: none on the element that carries it) is never fetched, and a scene that is shown is at 1x.
 
 import { expect, test } from "@playwright/test";

@@ -2115,6 +2115,20 @@ main .shared > h2:not(.sr-only) {
   border-color: var(--win-border) #05060a #05060a var(--win-border);
 }
 
+/* the cell of a place that has no picture (the off hand and the any slots, for an item that has none of its own) keeps the room a picture takes, drawn clear: a view or an answer that gives
+   the row a picture, or takes it away, then moves nothing, and the names of the places stand in one column whether they have a picture or not. (A browser without :has() leaves the room out:
+   the row is then a little shorter, and the rows below move by the difference when its picture comes or goes.) */
+.kit tbody th:not(:has(> .art))::before {
+  content: "";
+  display: inline-block;
+  box-sizing: content-box;
+  width: calc(32px * var(--art-s, 1) * var(--art-m, 1));
+  height: calc(32px * var(--art-s, 1) * var(--art-m, 1));
+  margin-inline-end: 0.5rem;
+  vertical-align: middle;
+  border: 1px solid transparent;
+}
+
 /* the crest beside a role's choice, and the lost picture of the 404 page */
 .seg-item label .art {
   margin-inline-end: 0.45rem;
@@ -2436,6 +2450,10 @@ details.expander > summary {
 
   /* the slot icons are shown twice their size where there is room (a phone has them at their own size) */
   .kit th .art {
+    --art-s: 2;
+  }
+
+  .kit tbody th:not(:has(> .art))::before {
     --art-s: 2;
   }
 
