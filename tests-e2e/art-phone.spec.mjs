@@ -51,8 +51,9 @@ for (const scheme of ["light", "dark"]) {
         expect(total, `${name}: ${pictures.map((p) => `${p.path.split("/").pop()} ${p.bytes}`).join(", ")}`).toBeLessThanOrEqual(PHONE_BUDGET_BYTES);
         // no character is fetched on a phone: the race picture of the trio page would push the first kit row below the first screen, and the two of the footer are not shown
         expect(pictures.filter((p) => /\/race-/.test(p.path)), `${name}: a race picture was fetched`).toEqual([]);
-        // the scenes that are not shown on a phone are never fetched
-        expect(pictures.filter((p) => /\/(hero-trio|hyenamen|city-gate|campfire)-/.test(p.path)), `${name}: a hidden scene was fetched`).toEqual([]);
+        // the scenes that are not shown on a phone are never fetched (the archway of the home page is shown: it is that page's one picture, at its own size under the words)
+        expect(pictures.filter((p) => /\/(hyenamen|city-gate|campfire)-/.test(p.path)), `${name}: a hidden scene was fetched`).toEqual([]);
+        if (name === "home") expect(pictures.filter((p) => /\/(plains|dragon)-/.test(p.path)), "home: a picture the page no longer has was fetched").toEqual([]);
       });
     }
   });

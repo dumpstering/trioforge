@@ -4,7 +4,8 @@
 // The page of the trio is offered when the build made it (the list is `data-live` on the picker, the same list as the links under it), and a trio that is not built is said to be coming
 // soon, in words, with no link. A link to a page of the site pasted into the box is not read for classes: if it is the page of a trio of the build (in any order of the classes) the link
 // offered is that page with the query and the fragment of the pasted one, so that a shared kit is not lost, and any other address is told to be opened in the address bar. The status line
-// is a live region, so it is replaced only when what it says changes. The picker is hidden in the page until this script runs: a visitor without it has the list of links.
+// is a live region, so it is replaced only when what it says changes; it says nothing while no class is chosen and nothing is amiss (the heading of the picker says to pick three, and the
+// stylesheet gives an empty line no room, but leaves it in the page for a screen reader). The picker is hidden in the page until this script runs: a visitor without it has the list of links.
 // Written for ES2021 and Safari 15.
 
 import { isSafeTarget, trioAddress } from "./canonical.js";
@@ -137,7 +138,8 @@ export function initPicker(doc, options = {}) {
     shown = key;
     status.replaceChildren();
     if (href === null) {
-      status.append(doc.createTextNode(text + note));
+      const words = (text + note).trim();
+      if (words !== "") status.append(doc.createTextNode(words));
       return;
     }
     const link = doc.createElement("a");
@@ -162,7 +164,7 @@ export function initPicker(doc, options = {}) {
     const note = notes.length > 0 ? " " + notes.join(" ") : "";
     if (chosen.length < WANTED) {
       const more = WANTED - chosen.length;
-      say(more === WANTED ? "Pick three classes." : "Pick " + more + " more class" + (more === 1 ? "." : "es."), null, note);
+      say(more === WANTED ? "" : "Pick " + more + " more class" + (more === 1 ? "." : "es."), null, note);
       return;
     }
     // the boxes are in class-id order, which is the order of a trio's address and name

@@ -94,6 +94,11 @@ __all__ = [
     "ItemIcons",
     "Exalt",
     "exalt_slugs",
+    "DONOR_SOURCES_MOST",
+    "DONOR_SOURCE_LIMIT",
+    "check_donor_sources",
+    "donor_access",
+    "donor_keys",
     "Defaults",
     "ENGINE_VERSION",
     "EVIDENCE",
@@ -132,6 +137,7 @@ __all__ = [
     "WhyTerm",
     "engine_name",
     "list_trios",
+    "source_rows",
     "load_exalt",
     "load_items",
     "load_trio",
@@ -1597,6 +1603,10 @@ EXALT_SHARED_GZIP = 50 * 1024
 EXALT_TRIO_GZIP = 20 * 1024
 EXALT_MAX_EFFECTS = 2000
 EXALT_NAME_LIMIT = 160
+#: the longest text that says where a donor comes from (the text of the Source column of a kit row, ``precompute.shards.SOURCE_LIMIT``; a test holds them equal), and the most texts the file carries for a donor
+#: (the others are counted)
+DONOR_SOURCE_LIMIT = 60
+DONOR_SOURCES_MOST = 4
 _EFFECT_ID = re.compile(r"e[0-9]{3,5}(?![\s\S])")
 
 
@@ -1797,14 +1807,68 @@ def exalt_slugs(results_dir: str | Path, slugs: Sequence[str]) -> frozenset[str]
     return frozenset(present)
 
 
-def site_effects_json(exalt: Exalt, items_doc: Mapping[str, Any], credit: Credit, with_page: Collection[str] = (), late: int = 30) -> str:
+def donor_keys(exalt: Exalt) -> list[str]:
+    """The item keys of the donors of the shared effects file, sorted: every item that carries an effect and can be worn (the keys of ``items`` in :func:`site_effects_json`)."""
+    return sorted({key for row in exalt.effects["effects"] for key, _ in row["d"]})
+
+
+def donor_access(exalt: Exalt) -> dict[str, int]:
+    """The access cost of each donor of the shared effects file, which is the word of its lines ("Vendor", "Quest or crafted", "Drop", "Raid drop"; ``effects/donors.py: access_cost``): the cost is
+    the item's own, so it is the same in every effect that lists it (the lowest, were it ever not)."""
+    costs: dict[str, int] = {}
+    for row in exalt.effects["effects"]:
+        for key, cost in row["d"]:
+            costs[key] = min(cost, costs.get(key, cost))
+    return costs
+
+
+def check_donor_sources(sources: Any, donors: Collection[str]) -> dict[str, list[Any]]:
+    """The table of where the donors come from, checked: a mapping of a donor's item key to a list of one to :data:`DONOR_SOURCES_MOST` texts (each the text of the Source column of a kit row for one
+    source of the item, ``precompute.shards.source_texts``: not empty, no longer than :data:`DONOR_SOURCE_LIMIT`, with no control character, and none twice), and, after the texts, optionally one whole number
+    of at least 1: how many more sources the donor has that are not in the list. A donor that has no source has no entry. A key that is no donor of ``donors`` and a list that is none is a ``ValueError``
+    that says which. Returns the table."""
+    if not isinstance(sources, Mapping):
+        raise ValueError("the sources of the donors must be a mapping of an item key to a list of texts")
+    known = set(donors)
+    for key, entry in sources.items():
+        if key not in known:
+            raise ValueError(f"the sources of the donors name {key!r}, which is no donor of the effects file")
+        if not isinstance(entry, list):
+            raise ValueError(f"the sources of the donor {key} must be a list of texts")
+        more = entry[-1] if entry and isinstance(entry[-1], (int, float)) else None
+        texts = entry if more is None else entry[:-1]
+        if more is not None and (isinstance(more, bool) or not isinstance(more, int) or more < 1):
+            raise ValueError(f"the count of the other sources of the donor {key} must be a whole number of at least 1")
+        if not 1 <= len(texts) <= DONOR_SOURCES_MOST:
+            raise ValueError(f"the sources of the donor {key} must be a list of 1 to {DONOR_SOURCES_MOST} texts")
+        for text in texts:
+            if not isinstance(text, str):
+                raise ValueError(f"a source of the donor {key} must be text")
+            if _CONTROL.search(text):
+                raise ValueError(f"a source of the donor {key} has a control character")
+            if not text.strip():
+                raise ValueError(f"a source of the donor {key} must not be empty (a donor with no source has no entry)")
+            if len(text) > DONOR_SOURCE_LIMIT:
+                raise ValueError(f"a source of the donor {key} is longer than {DONOR_SOURCE_LIMIT} characters")
+        if len(set(texts)) != len(texts):
+            raise ValueError(f"the sources of the donor {key} name a text twice")
+    return {key: list(entry) for key, entry in sources.items()}
+
+
+def site_effects_json(
+    exalt: Exalt, items_doc: Mapping[str, Any], credit: Credit, with_page: Collection[str] = (), late: int = 30, sources: Mapping[str, list[Any]] | None = None
+) -> str:
     """The shared file as the browser fetches it: the effects, and what the page needs to say and to match their donors (``items``: for every donor, ``[name, 1 if the item has a page
     of its own else 0, its slots, its classes, 1 if it is a two-hand weapon, the tier it arrives at]``, the slots and classes as words in a text, ``ALL`` for every class), and ``late``, the
-    first spell level that counts as late (the coverage of a focus is the share of the spells of a class from this level up that it touches)."""
+    first spell level that counts as late (the coverage of a focus is the share of the spells of a class from this level up that it touches).
+
+    ``sources`` (an item key to the list of texts of the Source column of a kit row for the sources of the donor, the kind of source that the word of its lines names first, and the count of the others after
+    them when more than :data:`DONOR_SOURCES_MOST` did not fit; for each donor that has a source; :func:`check_donor_sources` holds it to that) is written as ``src``, after ``items``, and only when it has an
+    entry: a file made without it is the file as it was before the key was added."""
     shared = exalt.effects
     records = {_record_key_of(record): record for record in items_doc["items"]}
     every = items_doc["defaults"]["classes"]
-    donors = sorted({key for row in shared["effects"] for key, _ in row["d"]})
+    donors = donor_keys(exalt)
     items: dict[str, list[Any]] = {}
     for key in donors:
         record = records[key]
@@ -1814,6 +1878,7 @@ def site_effects_json(exalt: Exalt, items_doc: Mapping[str, Any], credit: Credit
             record["name"], 1 if key in with_page else 0, " ".join(record["slots"]), " ".join(record.get("classes", every)),
             1 if skill.startswith("2H") else 0, 4 if rule == "drop" else (0 if rule == "fixed0" else None),
         ]  # fmt: skip
+    said = {} if sources is None else check_donor_sources(sources, donors)
     document = {
         "v": BROWSER_VERSION,
         **_credited(credit),
@@ -1822,9 +1887,10 @@ def site_effects_json(exalt: Exalt, items_doc: Mapping[str, Any], credit: Credit
         "late": late,
         "mass": shared["mass"],
         "items": items,
+        **({"src": {key: said[key] for key in sorted(said)}} if said else {}),
         "effects": shared["effects"],
     }
-    return render(document, per_line=("items", "effects"))
+    return render(document, per_line=("items", "src", "effects"))
 
 
 def site_exalt_json(exalt: Exalt, slug: str, items_doc: Mapping[str, Any], credit: Credit) -> str:
@@ -2058,6 +2124,16 @@ def site_robust_json(robust: Robust, credit: Credit) -> str:
         ],
     }
     return render(document, per_line=("views",))
+
+
+def source_rows(results: TrioResults) -> list[Item]:
+    """The item of every row of every shard and of the runner-up tables of this trio, once for each different Source column an item has (a release has one row for an item, the build holds it to that where it
+    reads the Source column: :func:`used_items` keeps the first of each item)."""
+    seen: dict[tuple[str, str], Item] = {}
+    for pool in [*(shard.items for shard in results.shards.values()), results.runnerups.items]:
+        for item in pool:
+            seen.setdefault((item.key, item.source), item)
+    return list(seen.values())
 
 
 def used_items(results: TrioResults) -> list[Item]:

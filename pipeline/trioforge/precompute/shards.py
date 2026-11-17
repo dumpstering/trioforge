@@ -236,6 +236,7 @@ __all__ = [
     "runnerup_texts",
     "shard_doc",
     "source_summary",
+    "source_texts",
     "write_chunk",
     "write_files",
 ]
@@ -292,16 +293,35 @@ def render(doc: Mapping[str, Any]) -> str:
 # ---- small texts of an item ----------------------------------------------------------------------------------------
 
 
-def source_summary(item: Mapping[str, Any], live: Sequence[str] | set[str] | None = None) -> str:
-    """A short text for where an item comes from, at most 60 characters.
+def _drop_text(drop: Mapping[str, Any]) -> str:
+    zone = drop["zone"] or "a drop"
+    return f"{zone} ({drop['npcs'][0]})" if drop["npcs"] else zone
 
-    ``live`` is the set of live sources (zone names, and the kinds ``quest``, ``vendor``, ``craft`` and ``foraged``); when it is
-    None the item's own ``live-source:`` evidence reasons give it. A drop in a live zone comes first, then a live quest, vendor,
-    recipe or foraging; with no live source known the order is drops, quests, vendors, recipes, foraging.
 
-    ``sources.quests`` holds the targets of the quest links (page titles); a quest is shown by the label its link had when the
-    catalog has one for the title (``sources.quest_labels``), else by the title. ``sources.foraged`` (optional) lists the zones
-    an item can be foraged in; the text names the first of them that is live, else the first."""
+def _vendor_text(vendor: Mapping[str, Any]) -> str:
+    return f"vendor: {vendor['zone'] or vendor['npc']}"
+
+
+def _craft_text(recipe: Mapping[str, Any]) -> str:
+    return f"crafted: {recipe['container']}" if recipe["container"] else "crafted"
+
+
+def _forage_text(zone: str) -> str:
+    return f"Foraged in {zone}"
+
+
+def _cut(text: str) -> str:
+    return text if len(text) <= SOURCE_LIMIT else text[: SOURCE_LIMIT - 3] + "..."
+
+
+def source_texts(item: Mapping[str, Any], live: Sequence[str] | set[str] | None = None) -> list[tuple[str, str]]:
+    """Every source of an item, each in the words of the Source column, as ``(kind, text)`` with the kind ``drop``, ``quest``, ``vendor``, ``craft`` or ``forage``, in the order of the column's own choice:
+    the first is the text :func:`source_summary` says, and the others follow in the order it would take them if the ones before were not there. No text is there twice, and each is cut to
+    :data:`SOURCE_LIMIT` characters as the column's is. The words of one source are the ones the column uses (a drop is its zone and the first creature that drops it, a quest the label its link had, a
+    vendor its zone or else its name, a recipe its container, foraging its zone).
+
+    ``live`` is as for :func:`source_summary`: the drops in a live zone come first, then, for each kind that is live (``quest``, ``vendor``, ``craft``, ``foraged``), its sources; then the drops, the quests, the
+    vendors, the recipes and the foraged zones (a live zone first) that are left."""
     if live is None:
         live = {r["code"][len("live-source:"):] for r in item["evidence"]["reasons"] if r["code"].startswith("live-source:")}
     live = set(live)
@@ -311,46 +331,39 @@ def source_summary(item: Mapping[str, Any], live: Sequence[str] | set[str] | Non
     labels: dict[str, str] = {}
     for entry in sources.get("quest_labels") or ():
         labels.setdefault(entry["title"], entry["label"])
+    quest_texts = [("quest", f"quest: {labels.get(title, title)}") for title in quests]
+    vendor_texts = [("vendor", _vendor_text(vendor)) for vendor in vendors]
+    craft_texts = [("craft", _craft_text(recipe)) for recipe in crafted]
+    forage_texts = [("forage", _forage_text(zone)) for zone in sorted(foraged, key=lambda zone: zone not in live)]  # (a live zone first; the sort keeps the order of the rest)
+    ordered = [("drop", _drop_text(drop)) for drop in drops if drop["zone"] in live]
+    for kind, found in (("quest", quest_texts), ("vendor", vendor_texts), ("craft", craft_texts), ("foraged", forage_texts)):
+        if found and kind in live:
+            ordered += found
+    ordered += [("drop", _drop_text(drop)) for drop in drops] + quest_texts + vendor_texts + craft_texts + forage_texts
+    seen: set[str] = set()
+    texts: list[tuple[str, str]] = []
+    for kind, text in ordered:
+        text = _cut(text)
+        if text not in seen:
+            seen.add(text)
+            texts.append((kind, text))
+    return texts
 
-    def drop_text(drop: Mapping[str, Any]) -> str:
-        zone = drop["zone"] or "a drop"
-        return f"{zone} ({drop['npcs'][0]})" if drop["npcs"] else zone
 
-    def vendor_text() -> str:
-        return f"vendor: {vendors[0]['zone'] or vendors[0]['npc']}"
+def source_summary(item: Mapping[str, Any], live: Sequence[str] | set[str] | None = None) -> str:
+    """A short text for where an item comes from, at most 60 characters.
 
-    def craft_text() -> str:
-        return f"crafted: {crafted[0]['container']}" if crafted[0]["container"] else "crafted"
+    ``live`` is the set of live sources (zone names, and the kinds ``quest``, ``vendor``, ``craft`` and ``foraged``); when it is
+    None the item's own ``live-source:`` evidence reasons give it. A drop in a live zone comes first, then a live quest, vendor,
+    recipe or foraging; with no live source known the order is drops, quests, vendors, recipes, foraging.
 
-    def quest_text() -> str:
-        return f"quest: {labels.get(quests[0], quests[0])}"
+    ``sources.quests`` holds the targets of the quest links (page titles); a quest is shown by the label its link had when the
+    catalog has one for the title (``sources.quest_labels``), else by the title. ``sources.foraged`` (optional) lists the zones
+    an item can be foraged in; the text names the first of them that is live, else the first.
 
-    def forage_text() -> str:
-        return f"Foraged in {next((zone for zone in foraged if zone in live), foraged[0])}"
-
-    text = ""
-    live_drops = [drop for drop in drops if drop["zone"] in live]
-    if live_drops:
-        text = drop_text(live_drops[0])
-    elif quests and "quest" in live:
-        text = quest_text()
-    elif vendors and "vendor" in live:
-        text = vendor_text()
-    elif crafted and "craft" in live:
-        text = craft_text()
-    elif foraged and "foraged" in live:
-        text = forage_text()
-    elif drops:
-        text = drop_text(drops[0])
-    elif quests:
-        text = quest_text()
-    elif vendors:
-        text = vendor_text()
-    elif crafted:
-        text = craft_text()
-    elif foraged:
-        text = forage_text()
-    return text if len(text) <= SOURCE_LIMIT else text[: SOURCE_LIMIT - 3] + "..."
+    It is the first of :func:`source_texts`, which says the others as well in the same words (the site's exalt lines name every source of a donor)."""
+    found = source_texts(item, live)
+    return found[0][1] if found else ""
 
 
 def arrival_tier(tier_rule: str, rules: Any) -> int | None:

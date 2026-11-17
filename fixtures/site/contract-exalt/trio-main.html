@@ -5,7 +5,7 @@
 <details class="expander" id="race-why">
 <summary>How the best race was judged, and what could change it</summary>
 <p id="best-race-unscored" class="note">Racial abilities other than the Iksar's natural AC are not scored yet, so races close in value may differ in play.</p>
-<p id="best-race-rules" class="note">How the score works: <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="best-race-rules" class="note">How the score works: <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></p>
 <div id="race-gets" data-rules="roles.balanced roles.templates ac.softcap.past_cap_rate hp.pools_counted mana.pools_counted end.formula haste.cap_pct_with_monk stats.str_to_atk resist.cap regen.gear_caps naked.rule">
 <p id="race-gets-intro" class="note">In the Balanced view at +4 with your own buffs, the runner-up is compared with the best race, Ogre. This section describes that view; the switches do not change it. Each race is judged with its own best kit, so the differences include item choices as well as the race. Values are in hit-point equivalents.</p>
 <ul class="race-cards"><li>
@@ -20,7 +20,7 @@
 <dt>Its best kit against Ogre's best kit</dt><dd>−80 HP, −40 attack, −10 AC</dd><dt>Base stats</dt><dd>−22 STR, −13 STA, +13 AGI, −8 INT, −7 WIS, +5 DEX, +3 CHA</dd><dt>Racial abilities</dt><dd><ul><li><dfn>Increased Consumption Rate</dfn> (not scored)</li><li><dfn>Increased HP Regeneration</dfn> (not scored): Both Iksar and Trolls have higher HP regeneration rates (per tick)</li><li><dfn>Infravision</dfn> (not scored)</li><li><dfn>Slam</dfn> (not scored)</li><li><dfn>-20 Fire Resist</dfn> (not scored)</li></ul></dd>
 </dl>
 </li></ul>
-<p class="note">How the starting stats are made: <a href="/rules/#naked.rule">Naked stat formula</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
+<p class="note">How the starting stats are made: <a href="/rules/#naked.rule">Naked stat formula</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span></p>
 <p id="race-credit" class="note">Racial abilities: <a href="https://eqlwiki.com/" rel="noopener noreferrer">eqlwiki</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/legalcode" rel="noopener noreferrer">CC BY-SA 4.0</a> (<a href="/sources/#races-box">pages and revisions</a>)</p>
 </div>
 <p id="best-race-note" class="note">Could change if an open test goes the other way: Iksar, if Iksar AC stacks inside the cap (test B17). <a href="/rules/#open-tests">See the open tests</a></p>
@@ -63,12 +63,11 @@
 <option value="10" data-label="+10">+10 (endgame)</option>
 </select>
 </div>
-<p class="hint"><span id="role-hint">An equal blend of staying alive and doing damage, for this trio&#39;s classes.</span> <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p class="hint"><span id="role-hint">An equal blend of staying alive and doing damage, for this trio&#39;s classes.</span> <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></p>
 </section>
 
-<section class="assumes" aria-labelledby="assumes-h">
-<h2 id="assumes-h" class="sr-only">Assumptions</h2>
-<span class="assumes-lead">Assumes</span>
+<details class="assumes" id="assumes">
+<summary><span data-f="a-lead">Assumptions</span>: <span data-f="s-assumes">dual wield, your own buffs</span></summary>
 <details class="assume" id="assume-buffs">
 <summary><span class="sum">Buffs: <span data-f="assume-buffs">your own buffs</span> <span class="change">change</span></span></summary>
 <fieldset>
@@ -94,15 +93,16 @@
 <legend>Weights</legend>
 </fieldset>
 </details>
-<span class="assume-fixed" id="assume-aa">AA: <a href="/rules/#ac.softcap.combat_stability_pct">Combat Stability 3</a>, <a href="/rules/#ac.softcap.physical_enhancement_pct">Physical Enhancement</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span>; no deity</span>
-</section>
+<span class="assume-fixed" id="assume-aa">AA: <a href="/rules/#ac.softcap.combat_stability_pct">Combat Stability 3</a>, <a href="/rules/#ac.softcap.physical_enhancement_pct">Physical Enhancement</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span>; no deity</span>
+</details>
 </div>
 <p id="status" class="status quiet" role="status" aria-live="polite"></p>
 <p id="announce" class="sr-only" role="status" aria-live="polite"></p>
 
 <section class="answer" aria-labelledby="wear-h">
 <h2 id="wear-h" tabindex="-1">Wear this</h2>
-<button type="button" id="kit-stats-all" class="btn-quiet kit-toggle-all" aria-expanded="false" aria-controls="kit" disabled>All stats</button><table class="kit" id="kit" role="table">
+<button type="button" id="kit-stats-all" class="btn-quiet kit-toggle-all" aria-expanded="false" aria-controls="kit" disabled>All stats</button><p id="seal-key" class="rules">Seals: <span class="seal seal-developer"><svg aria-hidden="true"><use href="#i-developer"></use></svg>Developer</span>: a developer statement or patch note; <span class="seal seal-model"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span>: our or EQEmu&#39;s formula, or a judgment constant. <a href="/rules/#seals-h">All the seals</a></p>
+<table class="kit" id="kit" role="table">
 <caption id="kit-caption">For <span data-f="v-race">Ogre</span> &middot; <span data-f="v-role">Balanced</span> &middot; <span data-f="v-tier" data-rules="tier.stat_rule">+4</span> &middot; <span data-f="v-setup">Dual wield</span></caption>
 <thead role="rowgroup">
 <tr role="row">
@@ -270,13 +270,13 @@
 </tr>
 </tbody>
 </table>
-<p id="kit-rules" class="rules">Tiers: <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.arrival">Tier at which items arrive, by source</a> <span class="seal seal-developer"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-developer"></use></svg><span>Developer</span></span> &middot; <a href="/rules/#tier.exp_needed">Experience needed for tier N</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
-<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown. An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier. &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing. <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#regen.per_tier">Regen per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#tier.weight_pct">Weight reduction per tier</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span> &middot; <a href="/rules/#tier.weapon_damage_pct">Weapon damage per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="kit-rules" class="rules">Tiers: <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> &middot; <a href="/rules/#tier.arrival">Tier at which items arrive, by source</a> <span class="seal seal-developer" title="a developer statement or patch note"><svg aria-hidden="true"><use href="#i-developer"></use></svg>Developer</span> &middot; <a href="/rules/#tier.exp_needed">Experience needed for tier N</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span></p>
+<p id="kit-stats-rules" class="rules">Each item's stats are at the tier shown. An item's stats and weight change gradually as it progresses toward its next tier. Each item is shown exactly at its tier. &ldquo;Lost without it&rdquo; is the kit value lost if that one stat were taken off that one item, in the hit-point equivalents of the kit value below, with the weapons scored at the haste the kit has, so a stat past a cap loses nothing. <a href="/rules/#tier.stat_rule">Tier stat rule</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> &middot; <a href="/rules/#regen.per_tier">Regen per tier</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> &middot; <a href="/rules/#tier.weight_pct">Weight reduction per tier</a> <span class="seal seal-measured"><svg aria-hidden="true"><use href="#i-measured"></use></svg>Measured</span> &middot; <a href="/rules/#tier.weapon_damage_pct">Weapon damage per tier</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></p>
 <p id="why-note" class="note" hidden>The &ldquo;lost without it&rdquo; lines and the next best items are worked out for the default view only: the best race at the default role, tier, buffs and weapons. The stats are those of the view shown.</p></section>
 <details class="expander" id="common"><summary>Get these first</summary><div id="common-body"></div></details>
 <section class="why" id="why" aria-labelledby="why-h">
 <h2 id="why-h">Why this kit</h2>
-<p data-rules="roles.templates" class="kit-line"><span class="art art-coin" aria-hidden="true"></span>Kit value <strong id="kit-value">10,720</strong> hit-point equivalents; the gear adds <strong id="kit-gain">+7,770</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p data-rules="roles.templates" class="kit-line"><span class="art art-coin" aria-hidden="true"></span>Kit value <strong id="kit-value">10,720</strong> hit-point equivalents; the gear adds <strong id="kit-gain">+7,770</strong>. One point of maximum hit points counts as 1, and the role decides how much everything else is worth. <a href="/rules/#roles.templates">How roles weigh stats</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></p>
 <table class="totals" id="totals" role="table">
 <caption class="sr-only">Totals of this kit against the caps</caption>
 <thead role="rowgroup">
@@ -291,86 +291,86 @@
 <tr role="row" data-rules="ac.softcap.past_cap_rate">
 <th scope="row" role="rowheader">Sheet AC</th>
 <td role="cell"><span data-f="t-ac">666</span></td>
-<td role="cell" data-rules="ac.softcap.past_cap_rate ac.softcap.combat_stability_pct ac.softcap.physical_enhancement_pct">439 softcap <span class="cap-rules">(<a href="/rules/#ac.softcap.past_cap_rate">client AC table</a>, <a href="/rules/#ac.softcap.combat_stability_pct">Combat Stability</a>, <a href="/rules/#ac.softcap.physical_enhancement_pct">Physical Enhancement</a>) <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></span></td>
-<td role="cell"><a href="/rules/#ac.softcap.past_cap_rate">AC rate past the softcap</a> <span class="seal seal-client"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-client"></use></svg><span>Client file</span></span></td>
+<td role="cell" data-rules="ac.softcap.past_cap_rate ac.softcap.combat_stability_pct ac.softcap.physical_enhancement_pct">439 softcap <span class="cap-rules">(<a href="/rules/#ac.softcap.past_cap_rate">client AC table</a>, <a href="/rules/#ac.softcap.combat_stability_pct">Combat Stability</a>, <a href="/rules/#ac.softcap.physical_enhancement_pct">Physical Enhancement</a>) <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></span></td>
+<td role="cell"><a href="/rules/#ac.softcap.past_cap_rate">AC rate past the softcap</a> <span class="seal seal-client"><svg aria-hidden="true"><use href="#i-client"></use></svg>Client file</span></td>
 </tr>
 <tr role="row" data-rules="hp.pools_counted">
 <th scope="row" role="rowheader">Hit points</th>
 <td role="cell"><span data-f="t-hp">2,880</span></td>
 <td role="cell">no cap</td>
-<td role="cell"><a href="/rules/#hp.pools_counted">Class HP pools counted</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span></td>
+<td role="cell"><a href="/rules/#hp.pools_counted">Class HP pools counted</a> <span class="seal seal-measured"><svg aria-hidden="true"><use href="#i-measured"></use></svg>Measured</span></td>
 </tr>
 <tr role="row" data-rules="mana.pools_counted">
 <th scope="row" role="rowheader">Mana</th>
 <td role="cell"><span data-f="t-mana">1,236</span></td>
 <td role="cell">no cap</td>
-<td role="cell"><a href="/rules/#mana.pools_counted">Mana pools counted</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span></td>
+<td role="cell"><a href="/rules/#mana.pools_counted">Mana pools counted</a> <span class="seal seal-measured"><svg aria-hidden="true"><use href="#i-measured"></use></svg>Measured</span></td>
 </tr>
 <tr role="row" data-rules="end.formula">
 <th scope="row" role="rowheader">Endurance</th>
 <td role="cell"><span data-f="t-end">3,094</span></td>
 <td role="cell">no cap</td>
-<td role="cell"><a href="/rules/#end.formula">Endurance formula</a> <span class="seal seal-measured"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-measured"></use></svg><span>Measured</span></span></td>
+<td role="cell"><a href="/rules/#end.formula">Endurance formula</a> <span class="seal seal-measured"><svg aria-hidden="true"><use href="#i-measured"></use></svg>Measured</span></td>
 </tr>
 <tr role="row" data-rules="haste.cap_pct_with_monk">
 <th scope="row" role="rowheader">Haste</th>
 <td role="cell"><span data-f="t-haste">57%</span></td>
 <td role="cell">85%</td>
-<td role="cell"><a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="row-note">Only the highest worn haste counts.</span></td>
+<td role="cell"><a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> <span class="row-note">Only the highest worn haste counts.</span></td>
 </tr>
 <tr role="row" data-rules="stats.str_to_atk">
 <th scope="row" role="rowheader">Attack</th>
 <td role="cell"><span data-f="t-atk">788</span></td>
 <td role="cell">no cap</td>
-<td role="cell"><a href="/rules/#stats.str_to_atk">ATK per STR</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+<td role="cell"><a href="/rules/#stats.str_to_atk">ATK per STR</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></td>
 </tr>
 <tr role="row" data-rules="resist.cap">
 <th scope="row" role="rowheader">Magic resist</th>
 <td role="cell"><span data-f="t-mr">86</span></td>
 <td role="cell">200</td>
-<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></td>
 </tr>
 <tr role="row" data-rules="resist.cap">
 <th scope="row" role="rowheader">Fire resist</th>
 <td role="cell"><span data-f="t-fr">73</span></td>
 <td role="cell">200</td>
-<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></td>
 </tr>
 <tr role="row" data-rules="resist.cap">
 <th scope="row" role="rowheader">Cold resist</th>
 <td role="cell"><span data-f="t-cr">68</span></td>
 <td role="cell">200</td>
-<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></td>
 </tr>
 <tr role="row" data-rules="resist.cap">
 <th scope="row" role="rowheader">Disease resist</th>
 <td role="cell"><span data-f="t-dr">64</span></td>
 <td role="cell">200</td>
-<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></td>
 </tr>
 <tr role="row" data-rules="resist.cap">
 <th scope="row" role="rowheader">Poison resist</th>
 <td role="cell"><span data-f="t-pr">61</span></td>
 <td role="cell">200</td>
-<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></td>
+<td role="cell"><a href="/rules/#resist.cap">Resist cap</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></td>
 </tr>
 <tr role="row" data-rules="regen.gear_caps">
 <th scope="row" role="rowheader">HP regen</th>
 <td role="cell"><span data-f="t-hpreg">14</span></td>
 <td role="cell">30</td>
-<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="open-test">open test B7</span></td>
+<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> <span class="open-test">open test B7</span></td>
 </tr>
 <tr role="row" data-rules="regen.gear_caps">
 <th scope="row" role="rowheader">Mana regen</th>
 <td role="cell"><span data-f="t-manareg">7</span></td>
 <td role="cell">15</td>
-<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="open-test">open test B7</span></td>
+<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> <span class="open-test">open test B7</span></td>
 </tr>
 <tr role="row" data-rules="regen.gear_caps">
 <th scope="row" role="rowheader">Endurance regen</th>
 <td role="cell"><span data-f="t-endreg">8</span></td>
 <td role="cell">15</td>
-<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> <span class="open-test">open test B7</span></td>
+<td role="cell"><a href="/rules/#regen.gear_caps">Regen caps from gear</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> <span class="open-test">open test B7</span></td>
 </tr>
 </tbody>
 </table>
@@ -383,8 +383,8 @@
 <div><dt>Main hand</dt><dd data-f="w-main">Ferryman&#39;s Pike</dd></div>
 <div><dt>Off hand</dt><dd data-f="w-off">Pellbrook Mallet</dd></div>
 </dl>
-<p class="hint"><a href="/rules/#weapons.damage_weight">How weapons are scored</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> <span class="open-test">open test B18</span></p>
-<p id="weapons-haste" class="hint">Scored at <span data-f="w-haste" data-rules="haste.cap_pct_with_monk haste.worn_per_tier">66%</span> haste: <a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-player"></use></svg><span>Player reports</span></span></p>
+<p class="hint"><a href="/rules/#weapons.damage_weight">How weapons are scored</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span> <span class="open-test">open test B18</span></p>
+<p id="weapons-haste" class="hint">Scored at <span data-f="w-haste" data-rules="haste.cap_pct_with_monk haste.worn_per_tier">66%</span> haste: <a href="/rules/#haste.cap_pct_with_monk">Haste cap with a Monk in the trio</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span> &middot; <a href="/rules/#haste.worn_per_tier">Worn haste per tier</a> <span class="seal seal-player"><svg aria-hidden="true"><use href="#i-player"></use></svg>Player reports</span></p>
 <details class="expander" id="other-setups">
 <summary>Other weapon setups for this role</summary>
 <ul id="w-others" class="plain" data-rules="roles.balanced roles.templates">
@@ -398,7 +398,7 @@
 <summary>Runner-ups: the next best choices for each slot</summary>
 <p>Shown for the default assumptions only: your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights. Each figure is the change in kit value if you swapped just that slot; an item that needs a deity can be an improvement.</p>
 <p id="runnerups-loading" class="note" hidden>Loading the runner-ups for this view&hellip;</p>
-<p id="runnerups-rules" class="note">The kit value is scored by <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model"><svg class="icon" aria-hidden="true" focusable="false"><use href="#i-model"></use></svg><span>Model</span></span></p>
+<p id="runnerups-rules" class="note">The kit value is scored by <a href="/rules/#roles.balanced">Balanced role</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span> &middot; <a href="/rules/#roles.templates">Role weight templates</a> <span class="seal seal-model" title="our or EQEmu&#39;s formula, or a judgment constant"><svg aria-hidden="true"><use href="#i-model"></use></svg>Model</span></p>
 <p id="runnerups-na" class="note" hidden>Runner-ups are shown for the default assumptions only (your own buffs, the role&#39;s best weapon setup and the role&#39;s own weights). Change the assumptions back to see them.</p>
 <table class="runnerups" id="runnerups-table">
 <caption class="sr-only">The next best choices for each slot, with the change in kit value</caption>

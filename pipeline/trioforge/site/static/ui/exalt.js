@@ -26,6 +26,13 @@
 // kit of Equip now brings its own records). With the section closed only the hints under Wear this are made, so that item list is then read when the browser is idle and not in the handler of a
 // control; the section's own plan and lists are drawn when it is open.
 //
+// Where a donor comes from (branch exalt-source): the shared effects file may carry `src`, an item key to a list of the texts the Source column of a kit row says of the donor's sources ("Plane of Hate (Innoruuk)",
+// "quest: ..."; the kind of source that the word of the donor's lines names first, then the others, at most four, and after them, when more did not fit, the count of the others; the site build makes them from
+// the catalog with the function that words the column, and a donor with no known source has no entry). The line under a place of Wear this turns the word for how hard the donor is to get ("Drop"), with its brackets
+// as one piece, into a button that opens all the texts beneath the line (a native button with aria-expanded and aria-controls), the note of the ones that did not fit and a link to the item's page; everywhere the
+// section itself names a donor (its plan, its list of donors to farm, its ranked lists) the first text is in plain view beside the donor, with "+N more" as a link to the item's page where there are others. All of
+// it comes from the file already fetched for these lines, so nothing more is asked for, and a donor that has no text says nothing more than it did.
+//
 // Everything is text (textContent, never markup). The styles are a constructed stylesheet made here: the section adds nothing to the stylesheet every page loads.
 
 import { PLACES, SLOT_TIER, itemInfo, planKit } from "./exalt-plan.js";
@@ -38,6 +45,10 @@ const SLOT_WORDS = { PRIMARY: "main hand", SECONDARY: "off hand", ANY: "any slot
 /** How hard a source is to get (effects/donors.py access_cost): the words, and the class of the dot (the dot only decorates the words). */
 const ACCESS = { 1: ["Vendor", "a1"], 2: ["Quest or crafted", "a2"], 3: ["Drop", "a3"], 4: ["Raid drop", "a4"] };
 const NO_SOURCE = ["No known source", "a9"];
+/** The longest text of the table of sources that is drawn (the build writes at most 60 characters: the Source column's own limit), and the most texts of one donor (the build writes at most four): an entry with a
+ * longer text or more texts is the file of another site and is left out. */
+const MAX_SOURCE_TEXT = 200;
+const MOST_SOURCE_TEXTS = 8;
 const KIND_HEAD = {
   focus: "Focus effects",
   click: "Clicks you must equip",
@@ -114,6 +125,19 @@ const STYLE = `
 .exalt-tip[hidden]{display:none}
 html.exalt-tip-open{overflow-anchor:none}
 .exalt-tip-note{display:block;margin-top:.2rem;color:var(--win-muted)}
+.exalt-where{white-space:nowrap}
+.exalt-srcbtn{font:inherit;color:inherit;background:none;border:0;border-bottom:1px dotted currentColor;border-radius:0;padding:0 .1rem;min-height:1.5rem;min-width:1.5rem;cursor:pointer;text-align:start}
+.exalt-hint .exalt-srcbtn{color:var(--win-text)}
+.exalt-srcbtn::after{content:"";display:inline-block;margin-inline-start:.3em;border-inline:.25em solid transparent;border-top:.3em solid currentColor;vertical-align:middle}
+.exalt-srcbtn[aria-expanded="true"]::after{border-top:0;border-bottom:.3em solid currentColor}
+.exalt-srcbtn:focus-visible{outline:2px solid var(--frame-focus);outline-offset:2px}
+.exalt-src{display:grid;grid-template-columns:auto 1fr;column-gap:.4rem;margin:.15rem 0 .25rem .3rem;padding-inline-start:.6rem;border-inline-start:2px solid var(--win-border);font-size:.85rem;color:var(--win-muted);overflow-wrap:anywhere}
+.exalt-src[hidden]{display:none}
+.exalt-src-label{grid-column:1;grid-row:1;font-weight:600;color:var(--win-text)}
+.exalt-src-text,.exalt-src-more,.exalt-src-page{grid-column:2}
+.exalt-src-page{justify-self:start;white-space:nowrap}
+.exalt-more{margin-inline-start:.3rem;white-space:nowrap}
+.exalt-from{overflow-wrap:anywhere}
 `;
 
 const el = (doc, tag, attributes = {}, ...children) => {
@@ -198,6 +222,20 @@ function cssSheet(win) {
   }
 }
 
+/**
+ * The texts of a donor from an entry of the file's `src`: a list of texts, and after them, when the build says there are more sources than it lists, a whole number of at least 1 (a number that is none is no count and
+ * is left out). `{texts, more}`, or null for an entry that is not that (not a list, no text, a text that is not one or is empty, too many): the donor then says nothing more than it did.
+ */
+export function sourceEntry(entry) {
+  if (!Array.isArray(entry)) return null;
+  const counted = typeof entry.at(-1) === "number";
+  const texts = counted ? entry.slice(0, -1) : entry;
+  if (texts.length === 0 || texts.length > MOST_SOURCE_TEXTS) return null;
+  if (!texts.every((text) => typeof text === "string" && text.trim() !== "" && text.length <= MAX_SOURCE_TEXT)) return null;
+  const last = entry.at(-1);
+  return { texts, more: counted && Number.isInteger(last) && last >= 1 ? last : 0 };
+}
+
 class Failure extends Error {}
 class Updated extends Error {}
 
@@ -211,6 +249,7 @@ export function initExalt(section, env) {
   let exaltDoc = null;
   let byId = new Map(); // effect id -> row of effects.json
   let donorInfo = new Map(); // item key -> {name, page, ...itemInfo}
+  let sources = new Map(); // item key -> {texts: the texts of the Source column of a kit row for the donor's sources, more: how many more sources it has}, for a donor that has some (the file's `src`)
   let hostTable = null; // item key -> itemInfo, from the item list of the site (null until a plan for another kit of Wear this needs it)
   let tablePromise = null;
   let source = "wear"; // "wear": the kit drawn in Wear this; "equip": the kit of Equip now
@@ -271,6 +310,14 @@ export function initExalt(section, env) {
       const info = itemInfo({ slots: String(slots).split(" ").filter(Boolean), classes: String(classes).split(" ").filter(Boolean), weapon: { skill: twoHand ? "2H" : "" }, tier_rule: arrival === 4 ? "drop" : arrival === 0 ? "fixed0" : "spell" });
       donorInfo.set(key, { ...info, name: String(name), page: page === 1 });
     }
+    sources = new Map();
+    const table = effectsDoc.src;
+    if (table !== null && typeof table === "object" && !Array.isArray(table)) {
+      for (const [key, entry] of Object.entries(table)) {
+        const found = sourceEntry(entry);
+        if (found !== null) sources.set(key, found);
+      }
+    }
   }
 
   /** The item list of the site, read for the hosts of a kit of Wear this: the path comes from engine-manifest.json and must be the item table's own. */
@@ -319,10 +366,26 @@ export function initExalt(section, env) {
     return href ? el(doc, "a", { href, text }) : doc.createTextNode(text);
   }
 
+  /**
+   * Where a donor comes from, in plain view: the first of the texts of the Source column of a kit row (the one that agrees with the word of the donor's lines), and, where the donor has other sources, "+N more"
+   * as a link to the item's page (a plain word where the donor has no page of its own). `[]` for a donor that has none.
+   */
+  function fromNodes(key, name) {
+    const found = sources.get(key);
+    if (found === undefined) return [];
+    const others = found.texts.length - 1 + found.more;
+    const href = others > 0 && donorInfo.get(key)?.page === true ? words.itemHref(key) : null;
+    const more =
+      others === 0 ? null : href ? el(doc, "a", { class: "exalt-more", href, "aria-label": `+${others} more sources of ${name}, on its item page`, text: `+${others} more` }) : el(doc, "span", { class: "exalt-more", text: `+${others} more` });
+    return [el(doc, "span", { class: "exalt-from", text: found.texts[0] }), more];
+  }
+
   function accessNode(effect, key, kit) {
     const [text, dot] = accessOf(effect, key);
     const info = donorInfo.get(key);
-    return el(doc, "span", {}, nameNode(key, itemName(key, kit), info?.page ?? false), " ", el(doc, "span", { class: "muted" }, el(doc, "span", { class: `exalt-dot ${dot}`, "aria-hidden": "true" }), text));
+    const name = itemName(key, kit);
+    const from = fromNodes(key, name);
+    return el(doc, "span", {}, nameNode(key, name, info?.page ?? false), " ", el(doc, "span", { class: "muted" }, el(doc, "span", { class: `exalt-dot ${dot}`, "aria-hidden": "true" }), text, from.length > 0 ? [" · ", from] : null));
   }
 
   /** The "unverified" mark of a row: a button that opens the reasons, for a keyboard and for a phone alike. */
@@ -511,7 +574,10 @@ export function initExalt(section, env) {
     if (donors.length === 0) return [];
     const items = donors.map(({ key, effect, need }) => {
       const [text, dot] = accessOf(effect, key);
-      return el(doc, "li", {}, nameNode(key, itemName(key, kit), donorInfo.get(key)?.page ?? false), `: `, el(doc, "span", { class: `exalt-dot ${dot}`, "aria-hidden": "true" }), `${text}, ${need ? `needs +${need}` : "no level needed"}`);
+      const tail = need ? `needs +${need}` : "no level needed";
+      const name = itemName(key, kit);
+      const from = fromNodes(key, name);
+      return el(doc, "li", {}, nameNode(key, name, donorInfo.get(key)?.page ?? false), `: `, el(doc, "span", { class: `exalt-dot ${dot}`, "aria-hidden": "true" }), from.length > 0 ? [text, " · ", from, `, ${tail}`] : `${text}, ${tail}`);
     });
     return [el(doc, "h4", { id: "exalt-donors-h", text: "Donor items to farm" }), el(doc, "ul", { id: "exalt-donors", class: "exalt-donors" }, ...items)];
   }
@@ -753,12 +819,46 @@ export function initExalt(section, env) {
     target.focus?.();
   }
 
+  /**
+   * The word for how hard a donor is to get, as a button that opens where the donor comes from beneath the line (the texts of the Source column's words, then the note of the sources that did not fit, then the
+   * link to the item's page): `{unit, panel}`. The unit is the bracket, the button and the bracket as one piece that the page keeps on a line (`white-space: nowrap`: it wraps before it or not at all). The button
+   * is a native one with the disclosure pattern (aria-expanded and aria-controls), and its name starts with the word it shows and says what it opens ("Drop: where Crown of Leaves comes from"); the panel is
+   * a group named by the donor ("Where Crown of Leaves comes from"), so that the texts read as the donor's and not as the next row's Source. Everything is set as text.
+   */
+  function sourceDisclosure(key, name, access, found) {
+    counter += 1;
+    const id = `exalt-src-${counter}`;
+    const href = donorInfo.get(key)?.page === true ? words.itemHref(key) : null;
+    const panel = el(
+      doc,
+      "span",
+      { id, class: "exalt-src", role: "group", "aria-label": `Where ${name} comes from`, hidden: true },
+      el(doc, "span", { class: "exalt-src-label", text: "Where:" }),
+      found.texts.map((text) => el(doc, "span", { class: "exalt-src-text", text })),
+      found.more > 0 ? el(doc, "span", { class: "exalt-src-more", text: `and ${found.more} more${href ? " on the item page" : ""}` }) : null,
+      href ? el(doc, "a", { class: "exalt-src-page", href, "aria-label": `Item page of ${name}`, text: "Item page" }) : null,
+    );
+    const button = el(doc, "button", { type: "button", class: "exalt-srcbtn", "aria-expanded": "false", "aria-controls": id, "aria-label": `${access}: where ${name} comes from`, text: access });
+    button.addEventListener("click", () => {
+      const open = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", String(open));
+      panel.hidden = !open;
+    });
+    return { unit: el(doc, "span", { class: "exalt-where" }, "(", button, ")"), panel };
+  }
+
   function hintLine(row, effect, kit) {
     const need = SLOT_TIER[row.k];
     const [access] = accessOf(effect, row.d);
+    const name = itemName(row.d, kit);
     const link = el(doc, "a", { class: "exalt-hint-plan", href: `#exalt-row-${row.e}`, "aria-label": `In the plan: ${effect.n}`, text: "In the plan" });
     link.addEventListener("click", (event) => toPlan(event, effect));
-    return el(doc, "span", { class: "exalt-hint" }, "Exalt: ", effectNode(effect), ` (${row.k}, +${need}) from ${itemName(row.d, kit)} (${access}); ${row.u ? "level both to" : "level this item to"} +${need} `, link);
+    const found = sources.get(row.d);
+    if (found === undefined) {
+      return el(doc, "span", { class: "exalt-hint" }, "Exalt: ", effectNode(effect), ` (${row.k}, +${need}) from ${name} (${access}); ${row.u ? "level both to" : "level this item to"} +${need} `, link);
+    }
+    const where = sourceDisclosure(row.d, name, access, found);
+    return el(doc, "span", { class: "exalt-hint" }, "Exalt: ", effectNode(effect), ` (${row.k}, +${need}) from ${name} `, where.unit, `; ${row.u ? "level both to" : "level this item to"} +${need} `, link, where.panel);
   }
 
   /**

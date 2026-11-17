@@ -27,6 +27,7 @@ __all__ = [
     "RuleBook",
     "RuleView",
     "SEALS",
+    "SEALS_TO_EXPLAIN",
     "eqlt_item_url",
     "load_changelog",
     "load_manifest",
@@ -44,6 +45,9 @@ SEALS: dict[str, tuple[str, str]] = {
     "player": ("Player reports", "several independent players"),
     "model": ("Model", "our or EQEmu's formula, or a judgment constant"),
 }
+#: the markers whose words say least to a reader who is new here: each carries a title that says what it means, and the trio page has a line (its key) that says both. The words of the other three
+#: (a file of the client, a measurement, what players report) say what they are.
+SEALS_TO_EXPLAIN = ("developer", "model")
 PRIVATE_LABEL = "Maintainer's private observation"
 
 _GROUP_TITLES = {

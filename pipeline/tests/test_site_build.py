@@ -2301,7 +2301,8 @@ def test_the_assumes_line_states_the_aa_defaults_and_no_deity(site):
     assert aa.text() == "AA: Combat Stability 3, Physical Enhancement Model; no deity"  # the seal of the weaker of the two rules after them
     assert [s.text() for s in aa.find_all(cls="seal")] == ["Model"]
     assert [a.get("href") for a in aa.find_all("a")] == ["/rules/#ac.softcap.combat_stability_pct", "/rules/#ac.softcap.physical_enhancement_pct"]
-    assert aa.parent.get("class") == "assumes" and aa.parent.find(cls="assumes-lead").text() == "Assumes"
+    assert aa.parent.tag == "details" and aa.parent.get("id") == "assumes" and aa.parent.get("class") == "assumes"  # (the AA line is inside the folded line of the assumptions, which has the lead in its summary)
+    assert aa.parent.find("summary").find(data_f="a-lead").text() == "Assumptions"
     from trioforge.site import view
 
     assert view.aa_text(3, True) == "Combat Stability 3, Physical Enhancement"
@@ -2452,11 +2453,12 @@ def test_the_footer_has_its_four_badges_and_the_line_about_daybreak_and_no_line_
     for name in [*PAGES.values(), NOT_FOUND]:
         footer = page(out, name).find("footer")
         badges = [(n.classes - {"badge"}, n.text(skip_hidden=False)) for n in footer.find_all("span") + footer.find_all("a") if "badge" in n.classes]
-        assert sorted(text for _, text in badges) == ["Best in Slot", "Data: eqlwiki CC BY-SA", "Made with Notepad", "TrioForge"], name
+        assert sorted(text for _, text in badges) == ["Best in Slot", "Data: eqlwiki CC BY-SA", "Latest changes", "TrioForge"], name  # (the third was "Made with Notepad", a label with no link: it leads to the changelog now)
         assert footer.find_all(cls="not-affiliated")[0].text() == "This site is not affiliated with Daybreak Games"
         assert "800" not in footer.text(skip_hidden=False)
     data_badge = page(out, PAGES["home"]).find("footer").find_all("a", cls="badge")[0]
     assert data_badge.get("href") == "/sources/"  # the data badge leads to the page of the sources
+    assert page(out, PAGES["home"]).find("footer").find_all("a", cls="badge")[1].get("href") == "/changelog/"  # and the third to the changelog
 
 
 def test_the_icon_of_every_page_is_the_emblem_as_a_png_address(site):
@@ -2518,7 +2520,7 @@ def test_the_switches_sit_in_one_panel_behind_a_line_that_says_what_is_shown(sit
     assert button.has("disabled")  # the page code enables it: until then there is nothing to open
     assert button.get("aria-expanded") == "false" and button.get("aria-controls") == "switches"
     assert "Change" in button.get("aria-label")  # the accessible name starts with the words on the button
-    assert panel.find("section", cls="controls") and panel.find("section", cls="assumes") and not panel.has("data-open")
+    assert panel.find("section", cls="controls") and panel.find("details", cls="assumes") and not panel.has("data-open")  # (the assumptions are one folded details element now)
     order = [n.get("id") for n in html.find("main").iter() if n.get("id") in ("view-bar", "switches", "status", "wear-h")]
     assert order == ["view-bar", "switches", "status", "wear-h"]  # what is shown, the switches, the messages, the answer
     assert html.by_id("view-summary").text() == "Showing Ogre · Balanced · +4 dual wield, your own buffs"

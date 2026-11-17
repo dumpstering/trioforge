@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { ROOT, TRIO, axe, expect, madeFrom, open, openSwitches, pick, queryOf, readKit, test } from "./support.mjs";
+import { ROOT, TRIO, axe, expect, madeFrom, open, openAssumptions, openSwitches, pick, queryOf, readKit, test } from "./support.mjs";
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -44,8 +44,9 @@ function observe(page) {
 const answerRows = (page) => readKit(page).then((rows) => rows.map((row) => row.name));
 const positions = (page) => page.evaluate((count) => Array.from({ length: count }, (_, index) => document.querySelector(`input[name="w-${index}"]:checked`)?.value ?? "?").join(""), GROUPS.length);
 
-/** A choice in one of the assumptions, the way a visitor makes it: the assumption is opened (its choices are behind its line), then the choice is clicked. */
+/** A choice in one of the assumptions, the way a visitor makes it: the folded line of the assumptions is opened, then the assumption (its choices are behind its line), then the choice is clicked. */
 async function choose(page, assumption, id) {
+  await openAssumptions(page);
   const details = page.locator(`#assume-${assumption}`);
   if ((await details.getAttribute("open")) === null) await details.locator("summary").click();
   await pick(page, id);

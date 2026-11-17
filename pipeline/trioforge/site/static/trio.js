@@ -58,6 +58,9 @@ const NOT_LOADED_WEIGHTS = "Couldn't load the weights. Reload the page to try ag
 /** The weights in the address (`w`) that this page cannot take: a character for each weight group, h (x0.5), 1 or 2 (x2), and no more or fewer. */
 const BAD_WEIGHTS = "The weights in the address do not fit the sliders of this page, so the role's own weights are shown.";
 const OWN_WEIGHTS = "role's own";
+/** The first word of the folded line of the assumptions: it says so when one of them is not the page's own, without the line being opened. */
+const ASSUMPTIONS = "Assumptions";
+const ASSUMPTIONS_CHANGED = "Assumptions changed";
 /** What the Weights line says of sliders that are moved until the code that knows their words has come. */
 const CUSTOM_WEIGHTS = "custom";
 const POSITIONS = /^[h12]+$/;
@@ -1322,7 +1325,10 @@ class TrioApp {
     return li;
   }
 
-  /** The lines that say what is assumed: the buffs, the weapons and the weights, in the Assumes panel and in the line of the switches. */
+  /**
+   * The lines that say what is assumed: the buffs, the weapons and the weights, in the Assumptions panel, in its folded line and in the line of a phone's switches (the last two say the same
+   * words). The folded line says in its first word when an assumption is not the page's own (the buffs, a setup that is not the role's best, sliders that are not at x1), and the panel is marked.
+   */
   paintAssumptions(shown) {
     const phrase = (list, code) => list.find((entry) => entry.code === code)?.phrase ?? code;
     const weights = this.weightsText(shown.weights);
@@ -1331,7 +1337,10 @@ class TrioApp {
     setField(this.root, "assume-weights", weights);
     const line = [phrase(this.config.setups, shown.setup), this.buffsPhrase(shown.buffs)];
     if (shown.weights !== this.own) line.push(weights);
-    setField(this.root, "s-assumes", line.join(", "));
+    for (const node of this.root.querySelectorAll('[data-f="s-assumes"]')) node.textContent = line.join(", ");
+    const changed = shown.buffs !== this.config.defaults.buffs || shown.weights !== this.own || (shown.best !== undefined && shown.setup !== shown.best);
+    setField(this.root, "a-lead", changed ? ASSUMPTIONS_CHANGED : ASSUMPTIONS);
+    this.q("#assumes")?.toggleAttribute("data-changed", changed);
   }
 
   /**

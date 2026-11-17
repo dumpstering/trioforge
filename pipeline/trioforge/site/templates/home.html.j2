@@ -11,8 +11,10 @@
 {% block main %}
 <main id="main" tabindex="-1" class="wrap home" data-page="home">
 <h1>Best gear for every class trio</h1>
-<p class="lead">Pick three classes and see the one kit to wear: exact answers for EverQuest Legends, with the evidence and the confidence behind every rule. TrioForge is a fan project.</p>
-{{ scene("hero-trio", "Pick three. Wear the best.") }}
+<div class="intro">
+<p class="lead">A trio is the three classes one character combines in EverQuest Legends. Pick three classes and see the one kit to wear: exact answers, with the evidence and the confidence behind every rule. TrioForge is a fan project.</p>
+{{ scene("hero-trio") }}
+</div>
 <section id="picker" hidden aria-labelledby="pick-h" data-live="{{ live|map(attribute='slug')|join(' ') }}">
 <h2 id="pick-h">Pick your three classes</h2>
 <div class="control">
@@ -21,30 +23,26 @@
 <p id="trio-search-hint" class="note">Type three classes in any order, such as <code>pal mnk ber</code> or <code>paladin monk berserker</code>.</p>
 </div>
 <fieldset class="chips">
-<legend>Classes (choose three)</legend>
+<legend class="sr-only">Classes (choose three)</legend>
 {% for cls in classes %}
 <span class="chip"><input type="checkbox" id="class-{{ cls.code }}" value="{{ cls.code }}"><label for="class-{{ cls.code }}">{{ cls.name }}</label></span>
 {% endfor %}
 </fieldset>
-<p id="picker-status" role="status" aria-live="polite">Pick three classes.</p>
+<p id="picker-status" role="status" aria-live="polite"></p>
 </section>
-{{ scene("plains", "The lands where every trio begins.") }}
 <section aria-labelledby="live-h">
-<h2 id="live-h">Trios that are ready</h2>
+<h2 id="live-h">Trios</h2>
 {% if list_open %}
 {{ trio_list(live, "cards") }}
 {% else %}
 <details id="all-trios" class="expander">
-<summary>Show all {{ live|length }} trios</summary>
+<summary>List all {{ live|length }} trios</summary>
 {{ trio_list(live, "plain") }}
 </details>
 {% endif %}
 {% if live|length < trio_total %}
 <p class="soon">{% if art.has("dwarf") %}<span class="art art-dwarf" aria-hidden="true"></span>{% endif %}Every other trio is coming soon.</p>
-{% else %}
-<p>Every trio is ready.</p>
 {% endif %}
 </section>
-{{ scene("dragon", "The best loot, still guarded.") }}
 </main>
 {% endblock %}

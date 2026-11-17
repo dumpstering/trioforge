@@ -20,6 +20,7 @@ import {
   loadShard,
   offeredSetups,
   open,
+  openAssumptions,
   openSwitches,
   optionValues,
   pick,
@@ -116,13 +117,15 @@ test.describe("keyboard", () => {
 
     await page.reload();
     await expect(page.locator("#theme-toggle")).toBeVisible();
-    await openSwitches(page, { keyboard: true }); // on a phone the Change button comes first, then the switches it opens
-    const stops = ["#sw-race", 'input[name="role"]:checked', "#sw-tier", "#assume-buffs > summary", "#assume-weapons > summary"];
+    await openSwitches(page, { keyboard: true, assumptions: false }); // on a phone the Change button comes first, then the switches it opens
+    // the three choices, then the one folded line of the assumptions (Enter opens it), then the three assumptions it holds
+    const stops = ["#sw-race", 'input[name="role"]:checked', "#sw-tier", "#assumes > summary", "#assume-buffs > summary", "#assume-weapons > summary"];
     let limit = 20; // the skip link, the logo, the five links and the theme button come first
     for (const stop of stops) {
       await tabTo(page, stop, limit);
       limit = 6; // after that each switch is only a few presses from the one before
       expect(await focusRingWidth(page), `${stop} shows a focus ring`).toBeGreaterThanOrEqual(2);
+      if (stop === "#assumes > summary") await page.keyboard.press("Enter");
     }
     expect(watch.problems()).toEqual([]);
   });
@@ -131,7 +134,7 @@ test.describe("keyboard", () => {
     await open(page, TRIO);
     const shard = await loadShard(request);
     const start = await arrival(page);
-    await openSwitches(page, { keyboard: true });
+    await openSwitches(page, { keyboard: true, assumptions: false });
     await tabTo(page, "#sw-race");
     const races = await optionValues(page, "#sw-race");
     const at = races.indexOf(start.controls.race);
@@ -152,7 +155,7 @@ test.describe("keyboard", () => {
     await open(page, TRIO);
     const shard = await loadShard(request);
     const start = await arrival(page);
-    await openSwitches(page, { keyboard: true });
+    await openSwitches(page, { keyboard: true, assumptions: false });
     await tabTo(page, 'input[name="role"]:checked');
     const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
     expect(roles.length).toBeGreaterThanOrEqual(3);
@@ -174,7 +177,7 @@ test.describe("keyboard", () => {
     await open(page, TRIO);
     const shard = await loadShard(request);
     const start = await arrival(page);
-    await openSwitches(page, { keyboard: true });
+    await openSwitches(page, { keyboard: true, assumptions: false });
     await tabTo(page, "#sw-tier");
     const tiers = await optionValues(page, "#sw-tier");
     const at = tiers.indexOf(String(start.controls.tier));
@@ -231,7 +234,7 @@ test.describe("keyboard", () => {
     await open(page, TRIO);
     const shard = await loadShard(request);
     const start = await arrival(page);
-    await openSwitches(page, { keyboard: true });
+    await openSwitches(page, { keyboard: true, assumptions: false });
     const setups = await page.$$eval('input[name="setup"]', (radios) => radios.map((r) => r.value));
     const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
     const role = roles.find((r) => shard.setupsFor(r).length < setups.length);
@@ -241,6 +244,8 @@ test.describe("keyboard", () => {
     for (let at = roles.indexOf(start.controls.role); at !== roles.indexOf(role); at = (at + 1) % roles.length) await page.keyboard.press("ArrowRight");
     await expectView(page, shard, { ...start.controls, role, setup: null, announced: "role" });
     // then through its setups
+    await tabTo(page, "#assumes > summary", 6); // (the folded line comes first, then the assumptions it holds)
+    await page.keyboard.press("Enter");
     await tabTo(page, "#assume-weapons > summary", 6);
     await page.keyboard.press("Enter");
     await tabTo(page, '#assume-weapons input[name="setup"]:checked', 3);
@@ -601,6 +606,7 @@ test("when the answers to two choices arrive in the other order, the last choice
   });
   await open(page, TRIO);
   const start = await arrival(page);
+  await openAssumptions(page);
   await page.locator("#assume-buffs > summary").click();
   const slow = page.waitForResponse((r) => r.url().endsWith("/strict-group.json"));
   await pick(page, "buffs-group"); // its answer is slow
@@ -668,6 +674,7 @@ test("the robust core shows its seals for the view they were made for and says i
   // another weapon setup
   const shard = await loadShard(request);
   const other = shard.setupsFor(start.controls.role).find((setup) => setup !== start.controls.setup);
+  await openAssumptions(page);
   await page.locator("#assume-weapons > summary").click();
   await pick(page, `setup-${other}`);
   await missing();
@@ -983,6 +990,7 @@ function serveWithoutShield(page, pattern) {
 
 /** Choose the shield setup as a visitor does. A choice must be a change: a click on the radio button that is checked does nothing. */
 async function chooseShield(page, shard, role) {
+  await openAssumptions(page);
   await page.locator("#assume-weapons > summary").click();
   if ((await readControls(page)).setup === SHIELD) await pick(page, `setup-${shard.setupsFor(role).find((s) => s !== SHIELD)}`);
   await pick(page, `setup-${SHIELD}`);
@@ -1007,6 +1015,7 @@ test("a change of buffs to a data file that lacks the chosen setup shows that fi
   expect(await offeredSetups(page)).toEqual(own.setupsFor(role));
 
   // the other buffs: that file's setups are offered, the chosen one is not among them, and its best is shown with a message
+  await openAssumptions(page);
   await page.locator("#assume-buffs > summary").click();
   await pick(page, "buffs-group");
   await expect(page.locator("#status")).toContainText("is not available for this role");
@@ -1492,6 +1501,7 @@ test("in forced colours the chosen radio button is still drawn differently from 
   await open(page, TRIO);
   await page.emulateMedia({ forcedColors: "active" });
   expect(await page.evaluate(() => matchMedia("(forced-colors: active)").matches), "forced colours are on").toBe(true);
+  await openAssumptions(page);
   await page.locator("#assume-buffs > summary").click();
   // the dot is drawn by the stylesheet: a ring (and a gradient, which forced colours drop). What the browser computes for it
   const dot = (id) =>

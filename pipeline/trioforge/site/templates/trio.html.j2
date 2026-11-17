@@ -94,9 +94,8 @@
 <p class="hint"><span id="role-hint">{{ page.role_hint }}</span> <a href="/rules/#{{ page.roles_rule.id }}">How roles weigh stats</a> {{ rule_seal(page.roles_rule) }}</p>
 </section>
 
-<section class="assumes" aria-labelledby="assumes-h">
-<h2 id="assumes-h" class="sr-only">Assumptions</h2>
-<span class="assumes-lead">Assumes</span>
+<details class="assumes" id="assumes">
+<summary><span data-f="a-lead">Assumptions</span>: <span data-f="s-assumes">{{ page.summary_assumes }}</span></summary>
 <details class="assume" id="assume-buffs">
 <summary><span class="sum">Buffs: <span data-f="assume-buffs">{{ page.assume_buffs }}</span> <span class="change">change</span></span></summary>
 <fieldset>
@@ -123,7 +122,7 @@
 </fieldset>
 </details>
 <span class="assume-fixed" id="assume-aa">AA: {% for label, ref in page.aa %}<a href="/rules/#{{ ref.id }}">{{ label }}</a>{% if not loop.last %}, {% endif %}{% endfor %} {{ seal(page.aa_seal.seal, page.aa_seal.seal_icon, page.aa_seal.seal_label) }}; no deity</span>
-</section>
+</details>
 </div>
 <p id="status" class="status quiet" role="status" aria-live="polite"></p>
 <p id="announce" class="sr-only" role="status" aria-live="polite"></p>
@@ -131,6 +130,7 @@
 <section class="answer" aria-labelledby="wear-h">
 <h2 id="wear-h" tabindex="-1">Wear this</h2>
 {% if page.kit_stats %}<button type="button" id="kit-stats-all" class="btn-quiet kit-toggle-all" aria-expanded="false" aria-controls="kit" disabled>All stats</button>{% endif %}
+<p id="seal-key" class="rules">Seals: {{ seal("developer", "i-developer", "Developer", true) }}: {{ seal_titles["developer"] }}; {{ seal("model", "i-model", "Model", true) }}: {{ seal_titles["model"] }}. <a href="/rules/#seals-h">All the seals</a></p>
 <table class="kit" id="kit" role="table">
 <caption id="kit-caption">For <span data-f="v-race">{{ page.verdict_race }}</span> &middot; <span data-f="v-role">{{ page.verdict_role }}</span> &middot; <span data-f="v-tier" data-rules="tier.stat_rule">{{ page.verdict_tier }}</span> &middot; <span data-f="v-setup">{{ page.verdict_setup }}</span></caption>
 <thead role="rowgroup">

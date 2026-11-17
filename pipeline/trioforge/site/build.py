@@ -386,6 +386,7 @@ def make_env() -> jinja2.Environment:
         keep_trailing_newline=True,
     )
     env.globals["art"] = art  # the pictures a page draws only when the site has them (``art.has("torch")``)
+    env.globals["seal_titles"] = {key: content.SEALS[key][1] for key in content.SEALS_TO_EXPLAIN}  # what the markers whose words say least mean, in the words of the rules page: the title of each, and the key
     return env
 
 
@@ -1339,14 +1340,11 @@ def _record_key(record: Mapping[str, Any]) -> Any:
     return record["key"] if record.get("key") is not None else f"w{record['id']}"
 
 
-def load_icon_extras(table: Mapping[str, Any], catalog: Path) -> dict[str, dict[str, Any]]:
-    """What the catalog says of each item of the item table that the item table does not: its ``categories`` and its ``instrument_mods``, which the rule of the pictures reads
-    (:func:`trioforge.site.itemicon.icon_name`; the table's records have no categories).
-
-    The catalog is the one the results were made from: the table's fingerprint (``inputs``) is made of the SHA-256 of that file and of the levels of the items
-    (:func:`trioforge.export.browser.inputs_fingerprint`), and a catalog that does not give the table's own, or that is not there, is a :class:`BuildError`: a build that went on without it
-    would drop every picture of an armor and of an instrument with only a warning. (The one way to build without it is to say so: ``--no-item-catalog``, which a release does not use.)
-    Returns the extras by item key."""
+def read_catalog(table: Mapping[str, Any], catalog: Path) -> dict[str, Mapping[str, Any]]:
+    """The items of the catalog the results were made from, by key, once the catalog is known to be that one: the table's fingerprint (``inputs``) is made of the SHA-256 of that file and of the
+    levels of the items (:func:`trioforge.export.browser.inputs_fingerprint`), and a catalog that does not give the table's own, or that is not there, is a :class:`BuildError`: a build that
+    went on without it would drop every picture of an armor and of an instrument, and every place a donor of the effects to exalt comes from, with only a warning. (The one way to build without it is
+    to say so: ``--no-item-catalog``, which a release does not use.) It is read once, for the pictures (:func:`icon_extras`) and for the donors (:func:`donor_sources`)."""
     from trioforge.export import browser  # (here and not at the top: the exporter pulls in the solver, which importing this module for a stylesheet or a list of files must not need)
 
     try:
@@ -1359,16 +1357,81 @@ def load_icon_extras(table: Mapping[str, Any], catalog: Path) -> dict[str, dict[
             "(--catalog), or build without the pictures of the armor and the instruments (--no-item-catalog), which a release does not"
         )
     try:
-        listed = {item["key"]: item for item in json.loads(raw)["items"]}
+        return {item["key"]: item for item in json.loads(raw)["items"]}
     except (ValueError, KeyError, TypeError):
         raise BuildError(f"the catalog {catalog.name} is not a catalog (a list of items, each with its key)") from None
+
+
+def icon_extras(table: Mapping[str, Any], listed: Mapping[str, Mapping[str, Any]], name: str = "the catalog") -> dict[str, dict[str, Any]]:
+    """What the catalog (:func:`read_catalog`) says of each item of the item table that the item table does not: its ``categories`` and its ``instrument_mods``, which the rule of the pictures reads
+    (:func:`trioforge.site.itemicon.icon_name`; the table's records have no categories). Returns the extras by item key; ``name`` is what an error calls the catalog."""
     extras: dict[str, dict[str, Any]] = {}
     for record in table["items"]:
         key = _record_key(record)
         if key not in listed:
-            raise BuildError(f"the catalog {catalog.name} has no item {key}, which the item table (made from it) has")
+            raise BuildError(f"{name} has no item {key}, which the item table (made from it) has")
         extras[key] = {"categories": listed[key].get("categories"), "instrument_mods": listed[key].get("instrument_mods")}
     return extras
+
+
+def load_icon_extras(table: Mapping[str, Any], catalog: Path) -> dict[str, dict[str, Any]]:
+    """The extras of the pictures (:func:`icon_extras`) from the catalog the results were made from (:func:`read_catalog`, which is a :class:`BuildError` for a catalog that is not that one)."""
+    return icon_extras(table, read_catalog(table, catalog), f"the catalog {catalog.name}")
+
+
+#: the kinds of source (``precompute.shards.source_texts``) that the word of a donor's lines names, by its access cost (``effects/donors.py: access_cost``: 1 vendor, 2 quest or recipe, 3 drop, 4 drop in a raid
+#: zone; the cheapest route the item has, which is not always the one the Source column shows: a drop in a live zone comes first there): a test holds this equal to that function. A donor whose cost is none
+#: of these (no known source) is left in the Source column's own order.
+WORD_KINDS: dict[int, tuple[str, ...]] = {1: ("vendor",), 2: ("quest", "craft"), 3: ("drop",), 4: ("drop",)}
+
+
+def donor_sources(donors: Iterable[str], listed: Mapping[str, Mapping[str, Any]], access: Mapping[str, int] | None = None) -> dict[str, list[Any]]:
+    """Where each donor of the effects to exalt comes from, in the words of the Source column of a kit row: every source of the catalog item, each worded by
+    :func:`trioforge.precompute.shards.source_texts` (the one function that words the column, so that the same item is worded the same everywhere), for each of ``donors`` that has one; a donor with no
+    known source is left out, and says nothing more than it did.
+
+    The order is the kind of source that the word of the donor's lines names first (``access``: the cost of each donor, which is what the word says; :data:`WORD_KINDS`), so that "Quest or crafted" is
+    followed by a quest or a recipe and "Drop" by a drop, then the others, each kind in the Source column's order. At most ``data.DONOR_SOURCES_MOST`` are kept, and the text the Source column
+    says for the item is always one of them (it takes the last place if it did not fit); after them comes the count of the sources that are not in the list, when there are any. The catalog item that has no
+    source in the form the catalog gives is a :class:`BuildError` that names it."""
+    from trioforge.precompute import shards  # (here and not at the top, for the reason read_catalog gives)
+
+    found: dict[str, list[Any]] = {}
+    for key in donors:
+        item = listed.get(key)
+        if item is None:
+            raise BuildError(f"the catalog has no item {key}, a donor of the effects to exalt")
+        try:
+            sources = shards.source_texts(item)
+        except (KeyError, TypeError, IndexError, AttributeError) as error:
+            raise BuildError(f"the catalog item {key} has no source in the form of the catalog ({type(error).__name__}): is it the catalog the results were made from?") from None
+        if not sources:
+            continue
+        summary = sources[0][1]  # (the text of the Source column)
+        named = WORD_KINDS.get(access.get(key, 0)) if access else None
+        if named:
+            sources = [one for one in sources if one[0] in named] + [one for one in sources if one[0] not in named]
+        texts = [text for _, text in sources]
+        kept = texts[: data.DONOR_SOURCES_MOST]
+        if summary not in kept:
+            kept[-1] = summary
+        found[key] = kept + ([len(texts) - len(kept)] if len(texts) > len(kept) else [])
+    return found
+
+
+def check_source_column(donor_texts: Mapping[str, list[Any]], items: Iterable[Any], donors: Collection[str]) -> None:
+    """Hold the texts of the donors to the Source column the shards show: every donor of ``donors`` that also appears among ``items`` (the items of the shards and runner-up tables, each with its ``key`` and
+    its ``source``, the Source column's text) with a text there must have exactly that text among its texts (a donor that has none is a miss as well), or it is a :class:`BuildError` that names the item. The
+    column and the texts are made from one catalog by one function, so a miss means the shards and the catalog are of two runs."""
+    wanted = set(donors)
+    for item in items:
+        if not item.source or item.key not in wanted:
+            continue
+        texts = [one for one in donor_texts.get(item.key, []) if isinstance(one, str)]
+        if item.source not in texts:
+            raise BuildError(
+                f"the Source column of {item.key} in the shards says {item.source!r}, which is not among the sources the catalog gives that donor of the effects to exalt ({texts or 'none'}): the shards and the catalog are of two runs"
+            )
 
 
 def item_icons(table: Mapping[str, Any], extras: Mapping[str, Mapping[str, Any]]) -> data.ItemIcons:
@@ -1932,11 +1995,21 @@ def build(
     with_page = frozenset(keys)
     records = {_record_key(record): record for record in table["items"]}
     icon_note = None
+    donor_texts: Mapping[str, list[Any]] = {}  # (where each donor of the effects to exalt comes from: made from the catalog, which a build without it has not got)
     if without_item_catalog:
         extras: Mapping[str, Mapping[str, Any]] = {}
-        icon_note = "built without the item catalog (--no-item-catalog): no piece of armor has the picture of its material and no instrument is told by the catalog; a release is not built this way"
+        icon_note = (
+            "built without the item catalog (--no-item-catalog): no piece of armor has the picture of its material and no instrument is told by the catalog"
+            + ("" if exalt is None else ", and the section Effects to exalt cannot say where the donors come from")
+            + "; a release is not built this way"
+        )
     else:
-        extras = load_icon_extras(table, catalog)
+        listed = read_catalog(table, catalog)
+        extras = icon_extras(table, listed, f"the catalog {catalog.name}")
+        if exalt is not None:
+            donor_texts = donor_sources(data.donor_keys(exalt), listed, data.donor_access(exalt))
+            check_source_column(donor_texts, (item for trio in trios for item in data.source_rows(trio)), data.donor_keys(exalt))  # (the Source column of every row of the shards and the runner-up tables)
+        del listed  # (the catalog is large, and nothing below reads it)
     icons = item_icons(table, extras)  # (the pictures of the pages, the shards and the list of the browser: one rule, one call)
     check_icons(icons)
     if not without_item_catalog:
@@ -2028,7 +2101,10 @@ def build(
     except ValueError as error:
         raise BuildError(str(error)) from None
     if exalt is not None and exalt.trios:
-        files[f"data/{data.EFFECTS_NAME}"] = data.site_effects_json(exalt, table, credit, with_page, rules_obj.get("effects.late_level")).encode("utf-8")
+        try:
+            files[f"data/{data.EFFECTS_NAME}"] = data.site_effects_json(exalt, table, credit, with_page, rules_obj.get("effects.late_level"), donor_texts).encode("utf-8")
+        except ValueError as error:  # (a table of the sources of the donors that the file cannot hold: said as a refusal, in one line)
+            raise BuildError(str(error)) from None
 
     pages["index.html"] = render(
         "home.html.j2",

@@ -86,7 +86,7 @@ test("the search says how many classes are left, names a word that is no class, 
   await type(page, "pal mnk xyz");
   await expect(page.locator("#picker-status")).toHaveText("Pick 1 more class. Not a class: xyz.");
   await type(page, "");
-  await expect(page.locator("#picker-status")).toHaveText("Pick three classes.");
+  await expect(page.locator("#picker-status")).toHaveText("");
   await expect(page.locator("#picker-status")).not.toContainText("Not a class");
 });
 
@@ -194,8 +194,8 @@ test("the status line is not replaced while it says the same, so that a screen r
   });
   const changes = () => page.evaluate(() => window.__statusChanges);
   await page.locator("#trio-search").focus();
-  await page.keyboard.type("shadow k"); // eight keys, and the status says "Pick three classes." after each of them
-  await expect(page.locator("#picker-status")).toHaveText("Pick three classes.");
+  await page.keyboard.type("shadow k"); // eight keys, and the status says nothing after each of them
+  await expect(page.locator("#picker-status")).toHaveText("");
   expect(await changes(), "typing the first letters of a class changes nothing it says").toBe(0);
   await page.keyboard.press("Control+A");
   await page.keyboard.type("pal");
@@ -259,7 +259,7 @@ test.describe("without JavaScript", () => {
     const possible = trioCount((await chipClasses(page)).length); // (the chips are in the page whether or not a script shows them)
     const text = await page.locator("main").innerText();
     if (trios.length < possible) expect(text).toContain("Every other trio is coming soon.");
-    else expect(text).toContain("Every trio is ready.");
+    else expect(text).not.toContain("coming soon");
   });
 });
 

@@ -138,7 +138,7 @@ def test_the_picker_is_hidden_until_the_script_runs_and_holds_the_search_the_chi
     boxes = picker.find_all("input", type="checkbox")
     assert [b.get("value") for b in boxes] == list(CLASS_CODES)  # EQ class-id order
     assert picker.by_id("picker-status").get("role") == "status" and picker.by_id("picker-status").get("aria-live") == "polite"
-    assert picker.by_id("picker-status").text() == "Pick three classes."
+    assert picker.by_id("picker-status").text() == "" and picker.by_id("picker-status").children == []  # nothing is said until a class is chosen: the heading says to pick three
 
 
 def test_the_search_box_asks_a_keyboard_not_to_correct_or_complete_what_is_typed(site):  # noqa: F811
@@ -190,7 +190,7 @@ def test_the_list_is_folded_into_an_expander_when_there_are_many_trios_and_every
     html = parse(home_html(many))
     box = html.by_id("all-trios")
     assert box.tag == "details" and box.get("class") == "expander" and not box.has("open")
-    assert box.find("summary").text() == "Show all 560 trios"
+    assert box.find("summary").text() == "List all 560 trios"
     links = box.by_id("live-trios").find_all("a")
     assert [a.get("href") for a in links] == [f"/trio/{slug}/" for slug in many]
     assert html.by_id("picker").get("data-live").split(" ") == many
@@ -203,9 +203,9 @@ def test_the_page_says_coming_soon_while_a_trio_is_missing_and_says_all_are_read
     out, _ = site
     assert "Every other trio is coming soon." in page(out, PAGES["home"]).find("main").text()
     full = parse(home_html(every_trio())).find("main").text()
-    assert "Every trio is ready." in full and "coming soon" not in full.lower()
+    assert "coming soon" not in full.lower() and parse(home_html(every_trio())).by_id("live-h").text() == "Trios"
     almost = parse(home_html(every_trio()[:-1])).find("main").text()
-    assert "Every other trio is coming soon." in almost and "Every trio is ready." not in almost
+    assert "Every other trio is coming soon." in almost and parse(home_html(every_trio()[:-1])).by_id("live-h").text() == "Trios"
 
 
 def test_the_home_page_of_the_full_grid_is_within_the_budget_of_its_page():

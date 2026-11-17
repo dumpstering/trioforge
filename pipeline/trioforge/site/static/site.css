@@ -444,11 +444,12 @@ main {
   font-style: italic;
 }
 
-/* the badges of a fan site's footer: 88 by 31 plates, shown at twice their size (more on a big screen), with the words set over them (the words are text, not part of the picture).
+/* the badges of a fan site's footer: 88 by 31 plates, shown at twice their size (more on a big screen) in a grid of two columns at every width (a phone's columns are narrower than a plate, and the words
+   then wrap inside it), with the words set over them (the words are text, not part of the picture).
    The plate is the border of the badge (border-image, its middle stretched); without it the badge is a framed label that has colours of its own, so that its words keep their contrast. */
 .badges {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, calc(88px * 2 * var(--art-m, 1))));
   justify-content: center;
   gap: 0.5rem 0.75rem;
   margin: 0 0 1rem;
@@ -461,7 +462,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: calc(88px * 2 * var(--art-m, 1));
+  width: 100%;
   min-height: calc(31px * 2 * var(--art-m, 1));
   padding: 0 0.15rem;
   border: 2px solid var(--frame-gold);
@@ -518,6 +519,31 @@ a.badge:hover {
   text-decoration: underline;
 }
 
+/* one row of links that wraps between the links, and has no separator to be left at the start or the end of a line (the gap is the separation) */
+.foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem 1.5rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+
+.foot-links li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* every link is a flex line of its own (the report link has the mail beside its words, and the other two are level with it) and has the height of a target */
+.foot-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-block: 0.35rem;
+}
+
 .report-link {
   display: inline-flex;
   align-items: center;
@@ -562,8 +588,20 @@ a.badge:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.75rem 1.5rem;
-  margin-top: 1rem;
+  gap: 0.6rem 1rem;
+  margin-top: 0.75rem;
+}
+
+/* Race, Role and Tier are one row where there is room for them (the widest set of roles at 1280 px: a select that is no wider than its longest word needs, and the four roles at a narrow padding);
+   a narrower window wraps them, and a phone stacks them (below) */
+@media (min-width: 37.51rem) {
+  #sw-race {
+    width: 15rem;
+  }
+
+  #sw-tier {
+    width: 9.5rem;
+  }
 }
 
 .control {
@@ -622,7 +660,7 @@ select {
   display: flex;
   align-items: center;
   min-height: 2.75rem;
-  padding: 0.4rem 0.9rem;
+  padding: 0.4rem 0.65rem;
   border: 1px solid var(--control);
   border-radius: 0.5rem;
   background: var(--surface);
@@ -656,27 +694,51 @@ select {
   font-size: 0.9rem;
 }
 
+/* the assumptions are one folded line under the three choices (Race, Role and Tier): its summary says what is assumed, and says in its first word when one of them is not the page's own (the
+   page code sets data-changed, and the mark does not move anything). Opened, it holds the three assumptions as they were, one under another, and the AA line. */
 .assumes {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem 0.6rem;
-  margin: 1rem 0 0.6rem;
+  margin: 0.6rem 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
 }
 
-.assumes-lead {
-  color: var(--muted);
-  font-size: 0.9rem;
+.assumes > summary {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+}
+
+.assumes > summary [data-f="a-lead"] {
+  font-weight: 600;
+}
+
+.assumes[data-changed] {
+  box-shadow: inset 0.35rem 0 0 var(--accent-fill);
+}
+
+.assumes[data-changed] > summary [data-f="a-lead"] {
+  color: var(--heading);
+  font-weight: 700;
+}
+
+.assumes[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.assumes > .assume,
+.assumes > .assume-fixed {
+  margin: 0.5rem 0.8rem;
+}
+
+.assumes > .assume-fixed {
+  display: block;
 }
 
 .assume {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--surface);
-}
-
-.assume[open] {
-  flex-basis: 100%;
 }
 
 .assume summary {
@@ -897,10 +959,12 @@ td {
   overflow-wrap: anywhere;
 }
 
+/* a header is a short label: it may break between its words and never inside one (the cells under it break anywhere, and a column is then as narrow as its longest word lets it be) */
 thead th {
   font-size: 0.85rem;
   color: var(--muted);
   border-bottom: 2px solid var(--border);
+  overflow-wrap: normal;
 }
 
 tbody th {
@@ -956,10 +1020,11 @@ tbody th {
 /* what each row of Wear this says of its item (the stats at the tier shown, and what each stat is worth in the default kit): a details element beside the name, closed, whose
    summary is the button; it works without script, and the page does not move when the code starts (the summary is there from the first paint) */
 /* the cell of the name holds the button at its right edge, out of the flow: the row is as tall with it as without, and nothing moves when the page code starts. The open panel
-   is in the flow, under the name. */
+   is in the flow, under the name. The room kept for the button is its width (4.31rem), its inset (0.5rem) and a gap of 0.5rem, so that no word of the cell, the name, the chip of haste, the notes or
+   the open panel, runs under it (the words of the cell wrap before the room, which is padding of the cell). */
 .kit td:nth-child(2) {
   position: relative;
-  padding-inline-end: 4.6rem;
+  padding-inline-end: 5.4rem;
 }
 
 .kit-more {
@@ -987,6 +1052,32 @@ tbody th {
   display: none;
 }
 
+/* where the rows are rows (a phone has cards, below) the cells of a row begin at its top, and the first line of each (the slot's words, the name and the button, the tier, the arrival, the source) is level
+   with the middle of the picture of the place, so that a row, tall or short, has one line along which it is read, and nothing in it moves when the panel of Stats opens under the name and the row grows
+   downwards (a button that is centred in a row is centred in another row once the panel is open: it moved 35 to 77 px). --kit-first is what a cell has above its first line: the padding of a cell,
+   0.55rem, and half of what the picture is taller than a line (the picture is 32 px times --kit-s, which is 2 where the stylesheet doubles the icons, from 56rem, and --art-m, the sheet's own
+   multiplier, and its border of 1 px each side; a line of the table is 1.55 times 0.95rem, 1.4725rem). The button is 1.55rem tall: its middle is the middle of that line. */
+@media (min-width: 37.51rem) {
+  .kit {
+    --kit-s: 1;
+    --kit-first: calc(0.55rem + (32px * var(--kit-s) * var(--art-m, 1) + 2px - 1.4725rem) / 2);
+  }
+
+  .kit tbody th,
+  .kit tbody td {
+    vertical-align: top;
+  }
+
+  .kit tbody td {
+    padding-top: var(--kit-first);
+  }
+
+  .kit-more > summary {
+    top: calc(var(--kit-first) - 0.03875rem);
+  }
+}
+
+
 .kit-more > summary::after {
   content: "";
   display: inline-block;
@@ -1008,6 +1099,14 @@ tbody th {
 /* the button of the title bar that opens or closes every row: placed over the bar, so that it takes no room of its own (and is out of sight until the code that works it has started) */
 .answer {
   position: relative;
+}
+
+/* the key to the markers, between the title bar of the answer and its table (a phone has it under the table: below) */
+@media (min-width: 37.51rem) {
+  main #seal-key {
+    max-width: none; /* (a paragraph is 80ch wide: the key is one line of 1280 px, as long as it needs) */
+    margin-bottom: 0.7rem;
+  }
 }
 
 .btn-quiet.kit-toggle-all {
@@ -1104,7 +1203,7 @@ tbody th {
   vertical-align: baseline;
 }
 
-.icon {
+.seal > svg {
   width: 1em;
   height: 1em;
   flex: none;
@@ -1328,6 +1427,16 @@ dl.pairs dd {
   border-radius: 0.6rem;
   background: var(--surface);
   font-weight: 600;
+}
+
+/* the line under the chips is there for a screen reader before it has anything to say (it is a live region, which must be in the page before its first message) and has no room until it has */
+#picker-status:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 
 .chips {
@@ -2166,6 +2275,28 @@ main .shared > h2:not(.sr-only) {
   border-color: var(--btn-shadow) var(--btn-light) var(--btn-light) var(--btn-shadow);
 }
 
+/* the home page has one scene, the archway, beside its first words (under them on a phone, where the words fill the line): at its own size, a quarter of the room of the 2x picture it was */
+.intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 1.5rem;
+}
+
+.intro .lead {
+  flex: 1 1 20rem;
+  margin-top: 0.4rem;
+}
+
+.intro .shot {
+  flex: none;
+  margin: 0.4rem 0 1rem;
+}
+
+.intro .shot .art {
+  --art-s: 1;
+}
+
 @media (min-width: 120rem) {
   .shot .art {
     --art-s: 3;
@@ -2312,6 +2443,7 @@ select {
 }
 
 details.expander,
+.assumes,
 .assume,
 .cards a,
 .rule,
@@ -2453,6 +2585,11 @@ details.expander > summary {
     --art-s: 2;
   }
 
+  /* (the cells of a row begin where the middle of that picture is: see --kit-first, above; it counts the picture twice its size here as well) */
+  .kit {
+    --kit-s: 2;
+  }
+
   .kit tbody th:not(:has(> .art))::before {
     --art-s: 2;
   }
@@ -2506,8 +2643,8 @@ details.expander > summary {
     margin-bottom: 0.2rem;
   }
 
-  /* the scenes at their own size on a phone (twice it would be wider than the screen), and the three that would stand in the first screen are not shown at all: display: none on the span that carries the
-     picture, so the picture is never fetched, and on its frame; the dragon is below the first screen, and the picture of the 404 page is what the page had at its own size before */
+  /* the scenes at their own size on a phone (twice it would be wider than the screen), and the three that would stand in the first screen of their page are not shown at all: display: none on the span that
+     carries the picture, so the picture is never fetched, and on its frame (the archway of the home page is shown: one picture at its own size under the words, 138 px tall with its frame) */
   .shot .art,
   .lead .art-scholar {
     --art-s: 1;
@@ -2520,12 +2657,8 @@ details.expander > summary {
   }
 
   .art-foot,
-  .shot-plains,
-  .shot-plains .art-plains,
   .shot-hyenamen,
   .shot-hyenamen .art-hyenamen,
-  .shot-hero-trio,
-  .shot-hero-trio .art-hero-trio,
   .shot-city-gate,
   .shot-city-gate .art-city-gate,
   .shot-campfire,
@@ -2553,13 +2686,35 @@ details.expander > summary {
     padding-block: 0.35rem;
   }
 
-  .answer h2 {
+  /* the key to the markers is above the kit in the page, where it is read and tabbed to before the first row, and under the kit on a phone, whose first screen has the heading and the first row and no
+     more (a test holds it): the answer is a column whose parts are in the order of the page but for the key, which is after the table, and the paragraphs of rules after it. A flex container keeps the
+     margin of its first child inside, so the heading has none and the section has the 1rem that the heading had, which collapses with what is above it as it did. */
+  .answer {
+    display: flex;
+    flex-direction: column;
     margin-top: 1rem;
+  }
+
+  .answer h2 {
+    margin-top: 0;
+  }
+
+  .answer > p {
+    order: 2;
+  }
+
+  .answer > #seal-key {
+    order: 1;
   }
 
   .theme-toggle {
     order: 2;
     margin-left: auto;
+  }
+
+  /* a plate of the grid is narrower than the words of the longest badge: they wrap inside it */
+  .site-footer .badge {
+    white-space: normal;
   }
 
   .kit,
@@ -2648,9 +2803,16 @@ details.expander > summary {
     content: "Source ";
   }
 
+  /* the button is at the right edge of the card here (not 0.5rem in from it: the card has a padding of its own), and the room kept for it is its width and a gap of 0.5rem; a name that
+     would have fitted the line before still does (the first row of a phone is held to the first screen) */
   .kit td:nth-child(2) {
     flex: 0 0 100%;
+    padding-inline-end: 4.8rem;
     font-size: 1.05rem;
+  }
+
+  .kit-more > summary {
+    inset-inline-end: 0;
   }
 
   .totals tr {

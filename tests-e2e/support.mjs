@@ -218,21 +218,47 @@ export async function open(page, path, { toggleMs = THEME_TOGGLE_WAIT_MS } = {})
 /**
  * On a narrow screen the switches are folded away behind a Change button, under the line that says what is shown. Open them the way
  * a visitor does: with a click, or with the keyboard (Tab to the button, then Enter). Where they are shown already (a wide window),
- * or no button is offered (the page has no script), there is nothing to do. Returns whether the panel was opened.
+ * or no button is offered (the page has no script), there is nothing to do there. The assumptions (Buffs, Weapons and Weights, and the
+ * AA line) are one folded line under the three choices, whatever the width: they are opened as well, the same way, unless `assumptions`
+ * is false (the tests of that line itself). Returns whether the folded panel of a narrow screen was opened.
  */
-export async function openSwitches(page, { keyboard = false } = {}) {
+export async function openSwitches(page, { keyboard = false, assumptions = true } = {}) {
   const toggle = page.locator("#switches-toggle");
-  if (!(await toggle.isVisible())) return false;
-  if ((await toggle.getAttribute("aria-expanded")) === "true") return false;
-  if (keyboard) {
-    await tabTo(page, "#switches-toggle", 30);
-    await page.keyboard.press("Enter");
-  } else {
-    await toggle.click();
+  let opened = false;
+  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-expanded")) !== "true") {
+    if (keyboard) {
+      await tabTo(page, "#switches-toggle", 30);
+      await page.keyboard.press("Enter");
+    } else {
+      await toggle.click();
+    }
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#switches")).toBeVisible();
+    opened = true;
   }
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#switches")).toBeVisible();
-  return true;
+  const folded = page.locator("details#assumes");
+  if (assumptions && (await folded.count()) > 0 && !(await folded.evaluate((node) => node.open))) {
+    const summary = page.locator("#assumes > summary");
+    if (keyboard) {
+      await summary.focus();
+      await page.keyboard.press("Enter");
+    } else {
+      await summary.click();
+    }
+    await expect(folded).toHaveJSProperty("open", true);
+  }
+  return opened;
+}
+
+/**
+ * Open the folded line of the assumptions (Buffs, Weapons, Weights and the AA line are behind it) the way a visitor does, with a click; nothing is done when it is open already or the page has none.
+ * The switches of a phone must be open first (openSwitches).
+ */
+export async function openAssumptions(page) {
+  const folded = page.locator("details#assumes");
+  if ((await folded.count()) === 0 || (await folded.evaluate((node) => node.open))) return;
+  await folded.locator("> summary").click();
+  await expect(folded).toHaveJSProperty("open", true);
 }
 
 // ---- the data, read independently of the page's own code -----------------------------------------------------------------

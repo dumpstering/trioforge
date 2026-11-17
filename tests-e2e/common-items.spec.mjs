@@ -5,7 +5,7 @@
 // A test without @once runs in the four views of playwright.config.mjs (1280 and 360 px wide, light and dark). What the section must say is worked out here from the data file the page is made from (support.mjs
 // reads it the plain way), never from the page's own code, so the tests run unchanged on the fixture build and on real results.
 
-import { DATA, TRIO, axe, expect, loadShard, open, openSwitches, pick, test } from "./support.mjs";
+import { DATA, TRIO, axe, expect, loadShard, open, openAssumptions, openSwitches, pick, test } from "./support.mjs";
 
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
@@ -190,6 +190,7 @@ test("the summary keeps its height when it is filled and when it is emptied whil
     near(await height(), shut, `${width} px: the summary is as high shut and filled as it was shut and empty`);
     await summary.click();
     if (width <= 600) await page.locator("#switches-toggle").click(); // (on a phone the switches are behind the Change button)
+    await openAssumptions(page);
     await page.locator("#assume-buffs > summary").click();
     await pick(page, "buffs-group"); // another shard, held back: the section is emptied
     await expect(summary).toHaveText("Get these first");

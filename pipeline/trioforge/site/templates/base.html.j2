@@ -1,6 +1,8 @@
 {#- The frame of every page. Autoescape is on for every template (see build.make_env), so nothing here marks text safe. -#}
-{% macro seal(kind, icon, label) -%}
-<span class="seal seal-{{ kind }}"><svg class="icon" aria-hidden="true" focusable="false"><use href="#{{ icon }}"></use></svg><span>{{ label }}</span></span>
+{#- A marker: its picture and its word. The two whose words say least (Developer and Model: `seal_titles`) have a title that says what they mean, in the words of the rules page; the key to them (`keyed`) says it
+    in words beside them, so it has no title. -#}
+{% macro seal(kind, icon, label, keyed=false) -%}
+<span class="seal seal-{{ kind }}"{% if not keyed and kind in seal_titles %} title="{{ seal_titles[kind] }}"{% endif %}><svg aria-hidden="true"><use href="#{{ icon }}"></use></svg>{{ label }}</span>
 {%- endmacro %}
 {% macro rule_seal(ref) -%}
 {{ seal(ref.seal, ref.seal_icon, ref.seal_label) }}{% if ref.open_test %} <span class="open-test">open test {{ ref.open_test }}</span>{% endif %}
@@ -12,10 +14,11 @@
 {%- for ref in refs -%}{{ rule_link(ref) }}{% if not loop.last %} &middot; {% endif %}{%- endfor -%}
 {%- endmacro %}
 {#- A set piece: a scene in a bevelled frame like a window of the late 90s, with an optional caption in text. The picture is a decorative span (a background of the stylesheet, so no inline style and no
-    request but the stylesheet's own); a scene that is not part of the site draws nothing, caption included, and the page is whole without it. -#}
+    request but the stylesheet's own); a scene that is not part of the site draws nothing, caption included, and the page is whole without it. A scene with no caption has nothing to read:
+    its frame is hidden from assistive technology as its picture is. -#}
 {% macro scene(name, caption=none) -%}
 {% if art.has(name) %}
-<figure class="shot shot-{{ name }}"><span class="art art-{{ name }}" aria-hidden="true"></span>{% if caption %}<figcaption>{{ caption }}</figcaption>{% endif %}</figure>
+<figure class="shot shot-{{ name }}"{% if not caption %} aria-hidden="true"{% endif %}><span class="art art-{{ name }}" aria-hidden="true"></span>{% if caption %}<figcaption>{{ caption }}</figcaption>{% endif %}</figure>
 {% endif %}
 {%- endmacro %}
 <!doctype html>
@@ -71,14 +74,18 @@
 <ul class="badges">
 <li><span class="badge badge-plain">TrioForge</span></li>
 <li><a class="badge badge-light" href="/sources/">Data: eqlwiki CC BY-SA</a></li>
-<li><span class="badge badge-scroll">Made with Notepad</span></li>
+<li><a class="badge badge-scroll" href="/changelog/">Latest changes</a></li>
 <li><span class="badge badge-dark">Best in Slot</span></li>
 </ul>
 {% if art.has("race-dwarf") %}<span class="art art-race-dwarf art-foot" aria-hidden="true"></span>{% endif %}
 </div>
 <p>{{ disclaimer }}</p>
 <p>{% for text, address in attribution_parts %}{% if address %}<a href="{{ address }}" rel="noopener noreferrer">{{ text }}</a>{% else %}{{ text }}{% endif %}{% endfor %}. {{ licence_sentence }} <a href="/sources/">Sources and licences</a></p>
-<p>{% if report_url %}<a id="report-link" class="report-link" href="{{ report_url }}" rel="noopener noreferrer">{% if art.has("mail") %}<span class="art art-mail" aria-hidden="true"></span>{% endif %}Report a problem with this page</a>{% else %}{{ reports_not_open }}{% endif %} &middot; <a href="/about/">About</a> &middot; <a href="/changelog/">Changelog</a></p>
+<ul class="foot-links">
+<li>{% if report_url %}<a id="report-link" class="report-link" href="{{ report_url }}" rel="noopener noreferrer">{% if art.has("mail") %}<span class="art art-mail" aria-hidden="true"></span>{% endif %}Report a problem with this page</a>{% else %}{{ reports_not_open }}{% endif %}</li>
+<li><a href="/about/">About</a></li>
+<li><a href="/changelog/">Changelog</a></li>
+</ul>
 <p class="not-affiliated">This site is not affiliated with Daybreak Games</p>
 </div>
 </footer>

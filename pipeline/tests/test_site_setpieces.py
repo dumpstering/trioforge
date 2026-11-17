@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parents[2]
 STATIC = REPO / "pipeline" / "trioforge" / "site" / "static"
 
 #: what each page shows besides the trio page's race picture: the scenes, in the order of the page, and the characters
-SCENES = {"home": ["hero-trio", "plains", "dragon"], "about": ["city-gate"], "changelog": ["campfire"], "notfound": ["treetop-village", "hyenamen"], "sources": [], "rules": []}
+SCENES = {"home": ["hero-trio"], "about": ["city-gate"], "changelog": ["campfire"], "notfound": ["treetop-village", "hyenamen"], "sources": [], "rules": []}
 CAPTIONS = {"treetop-village": "You fell off the platform."}
 
 
@@ -69,14 +69,14 @@ def test_the_pages_without_their_art_are_whole_and_say_the_same_but_for_the_capt
     live = trios_made_of(["pal-mnk-ber"])
     contexts = {"home.html.j2": build.home_context(live), "notfound.html.j2": build.notfound_context(live)}
     with_art = {name: stub_page(name, **extra) for name, extra in contexts.items()}
-    assert "shot-hero-trio" in with_art["home.html.j2"] and "shot-dragon" in with_art["home.html.j2"] and "shot-treetop-village" in with_art["notfound.html.j2"]
+    assert "shot-hero-trio" in with_art["home.html.j2"] and "shot-treetop-village" in with_art["notfound.html.j2"]  # (the home page had the dragon too: its one picture is the archway now)
     monkeypatch.setattr(art, "_assets", lambda: frozenset({"emblem"}))
     for name, extra in contexts.items():
         bare = stub_page(name, **extra)
         assert "shot" not in bare and "figcaption" not in bare and 'class="art art-' not in bare.split("<main", 1)[1], name
         captions = [c for keys in SCENES.values() for c in keys if c in CAPTIONS]
         text = words(with_art[name])
-        for caption in ("Pick three. Wear the best.", "The best loot, still guarded.", "You fell off the platform.", "The lands where every trio begins.", "The locals have not seen this page either."):
+        for caption in ("You fell off the platform.", "The locals have not seen this page either."):  # (the home page's picture has no caption now)
             text = text.replace(caption, "")
         assert " ".join(words(bare).split()) == " ".join(text.split()), name
         assert parse(bare).find("h1").text() == parse(with_art[name]).find("h1").text()
@@ -97,16 +97,19 @@ def test_the_set_pieces_are_drawn_by_the_css_of_the_frame_with_whole_scales_and_
     # 3x from 1920 px (120rem), 2x below it, 4x from a 4K window (150rem, where the stylesheet doubles every scale)
     assert "--art-s: 3" in rule_in_media(css, "min-width: 120rem", ".shot .art") and "--art-s: 2" in rule_in_media(css, "min-width: 150rem", ".shot .art")
     assert css.index("@media (min-width: 120rem)") < css.index("@media (min-width: 150rem) {\n  .shot")
-    # a phone: 1x, and the scenes that would be in its first screen are not shown (display: none on the span that carries the picture and on its frame)
-    phone = " ".join(rule_in_media(css, "max-width: 37.5rem", ".shot-hero-trio .art-hero-trio").split())
-    assert "display: none" in phone
-    for key in ("hero-trio", "city-gate", "campfire"):
+    # a phone: 1x, and the scenes that would be in its first screen are not shown (display: none on the span that carries the picture and on its frame); the archway of the home page is shown (it is
+    # the one picture of that page, at its own size under the words, and no rule hides it or its frame), and the plains and the dragon are not on the page at all
+    for key in ("city-gate", "campfire", "hyenamen"):
         assert "display: none" in rule_in_media(css, "max-width: 37.5rem", f".shot-{key} .art-{key}"), key
         assert "display: none" in rule_in_media(css, "max-width: 37.5rem", f".shot-{key}"), key
+    for key in ("hero-trio", "plains", "dragon"):
+        for selector in (f".shot-{key}", f".shot-{key} .art-{key}"):
+            with pytest.raises(AssertionError, match="has no rule"):
+                rule_in_media(css, "max-width: 37.5rem", selector)
     assert "--art-s: 1" in rule_in_media(css, "max-width: 37.5rem", ".shot .art")
     assert "display: none" in rule_in_media(css, "max-width: 37.5rem", ".best-race .art")  # the race picture would push the first kit row below the first screen of a phone
-    for key in ("dragon", "treetop-village"):
-        assert f".shot-{key}" not in rule_in_media(css, "max-width: 37.5rem", ".shot-hero-trio .art-hero-trio") and f"shot-{key}" not in phone, key
+    # the archway: beside the first words where there is room (a flex row that wraps, so a phone has it under them), at its own size on every window (1x, not the 2x of the other scenes)
+    assert "display: flex" in rule(".intro") and "flex-wrap: wrap" in rule(".intro") and "--art-s: 1" in rule(".intro .shot .art")
 
 
 def rule_in_media(css: str, query: str, selector: str) -> str:
@@ -176,16 +179,16 @@ def test_the_item_pages_carry_the_icon_of_their_item_or_else_of_their_slot_besid
     assert seen_icon, "the fixture's items should show an icon"  # (the hands have a picture now, so that every item of the fixture has one: the case of none is in test_site_art)
 
 
-def test_the_home_page_has_the_plains_above_the_list_and_the_404_page_the_hyena_people_beside_the_village(site):  # noqa: F811
+def test_the_home_page_has_the_archway_beside_its_words_and_no_plains_and_the_404_page_the_hyena_people_beside_the_village(site):  # noqa: F811
     out, _ = site
     home = page(out, PAGES["home"])
     keys = [[c[5:] for c in f.classes if c.startswith("shot-")][0] for f in home.find_all("figure", cls="shot")]
-    assert keys == ["hero-trio", "plains", "dragon"]
+    assert keys == ["hero-trio"]  # (the plains above the list of the trios and the dragon below it are not on the page: the files stay in the art, and the 404 page and the others have their own)
     main = home.find("main")
     order = [n for n in main.iter() if n.tag in ("figure", "section")]
-    plains = next(n for n in order if n.tag == "figure" and "shot-plains" in n.classes)
-    ready = next(n for n in order if n.tag == "section" and n.get("aria-labelledby") == "live-h")
-    assert order.index(plains) < order.index(ready)
+    archway = next(n for n in order if n.tag == "figure" and "shot-hero-trio" in n.classes)
+    picker = next(n for n in order if n.tag == "section" and n.get("id") == "picker")
+    assert order.index(archway) < order.index(picker)
     lost = page(out, NOT_FOUND)
     assert [[c[5:] for c in f.classes if c.startswith("shot-")][0] for f in lost.find_all("figure", cls="shot")] == ["treetop-village", "hyenamen"]
     rows = lost.find_all("div", cls="scene-row")

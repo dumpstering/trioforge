@@ -87,8 +87,8 @@
  },
   "crest-tank": {"source": "trioforge-crest-tank.png", "kind": "still", "size": [32, 32], "background": "#ffffff", "crop": "auto", "scale": 1, "use": "beside the Tank role choice"},
   "crest-damage": {"source": "trioforge-crest-damage.png", "kind": "still", "size": [32, 32], "background": "#ffffff", "crop": "auto", "scale": 1, "use": "beside the Melee and Caster role choice"},
- "hero-trio": {"source": "trioforge-hero-trio-v2.png", "kind": "still", "size": [192, 128], "background": null, "opaque": true, "scale": 2, "use": "the home page, the banner under the heading (not shown on a phone)"},
- "dragon": {"source": "trioforge-dragon.png", "kind": "still", "size": [256, 128], "background": null, "opaque": true, "scale": 2, "use": "the home page, below the list of the trios: a dragon asleep on its gold"},
+ "hero-trio": {"source": "trioforge-hero-trio-v2.png", "kind": "still", "size": [192, 128], "background": null, "opaque": true, "scale": 2, "use": "the home page, the one picture of the page: at its own size beside the first words, and under them on a phone"},
+ "dragon": {"source": "trioforge-dragon.png", "kind": "still", "size": [256, 128], "background": null, "opaque": true, "scale": 2, "use": "no page draws it now: the home page had it below the list of the trios (a dragon asleep on its gold) until the layout polish of 2026-11-16, and the file stays"},
  "city-gate": {"source": "city-gate.png", "kind": "still", "size": [256, 96], "background": null, "opaque": true, "scale": 2, "use": "the about page, under the heading"},
  "campfire": {"source": "trioforge-campfire.png", "kind": "still", "size": [128, 96], "background": null, "opaque": true, "scale": 2, "use": "the changelog page, under the heading"},
  "treetop-village": {"source": "treetop-village.png", "kind": "still", "size": [256, 128], "background": null, "opaque": true, "scale": 2, "use": "the 404 page, in place of the lost picture"},
@@ -99,7 +99,7 @@
  "race-iksar": {"source": "lizardman.png", "kind": "still", "size": [128, 160], "background": null, "crop": "auto", "palette": 255, "scale": 2, "use": "the trio page, beside the best race, when it is the Iksar (the picture is cut off at the shins: it stands on the bottom edge of its box)"},
  "race-gnome": {"source": "trioforge-gnome.png", "kind": "still", "size": [96, 96], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Gnome"},
  "race-woodelf": {"source": "trioforge-ranger.png", "kind": "still", "size": [128, 160], "background": null, "crop": "auto", "scale": 2, "use": "the trio page, beside the best race, when it is the Wood Elf"},
- "plains": {"source": "trioforge-plains.png", "kind": "still", "size": [256, 96], "background": null, "opaque": true, "scale": 2, "use": "the home page, a banner above the list of the trios (not shown on a phone: below the first screen it would still be fetched, so it is hidden)"},
+ "plains": {"source": "trioforge-plains.png", "kind": "still", "size": [256, 96], "background": null, "opaque": true, "scale": 2, "use": "no page draws it now: the home page had it as a banner above the list of the trios until the layout polish of 2026-11-16, and the file stays"},
  "hyenamen": {"source": "hyenamen.png", "kind": "still", "size": [192, 128], "background": null, "opaque": true, "scale": 2, "use": "the 404 page, beside the treetop village (not shown on a phone)"}
  }
 }

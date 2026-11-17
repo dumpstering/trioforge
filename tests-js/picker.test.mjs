@@ -151,7 +151,7 @@ describe("the picker on the page the generator writes", () => {
     expect(document.getElementById("picker").hidden).toBe(false);
     expect(search().value).toBe("");
     expect(chosen()).toEqual([]);
-    expect(say()).toBe("Pick three classes.");
+    expect(say()).toBe(""); // (nothing is said while no class is chosen: the heading of the picker says to pick three)
   });
 
   it("has the chips the classes of the site are, in the order of the site's classes, named as the search reads them", () => {
@@ -227,7 +227,7 @@ describe("the picker on the page the generator writes", () => {
     type("pal mnk");
     expect(say()).toBe("Pick 1 more class.");
     type("");
-    expect(say()).toBe("Pick three classes.");
+    expect(say()).toBe(""); // (nothing is said while no class is chosen: the heading of the picker says to pick three)
     expect(chosen()).toEqual([]);
   });
 
@@ -534,7 +534,7 @@ describe("an address pasted into the box", () => {
     expect(say()).toBe("Pick 1 more class.");
     expect(chosen()).toEqual(["PAL", "MNK"]);
     type("");
-    expect(say()).toBe("Pick three classes.");
+    expect(say()).toBe(""); // (nothing is said while no class is chosen: the heading of the picker says to pick three)
   });
 
   it("names a link to a trio that the build made with the same words as the chips do", () => {

@@ -1549,8 +1549,10 @@ const SETUP_WORDS = { dw: "dual wield", "1h-shield": "1H + shield", "2h": "two-h
 const ROLE_WORDS = { balanced: "Balanced", tank: "Tank", melee: "Melee" };
 const RACE_WORDS = { OGR: "Ogre", TRL: "Troll", IKS: "IKS", HUM: "HUM" }; // (the fixture's shards list three races; the page shows the code of one it does not list)
 const BUFF_WORDS = { own: "your own buffs", group: "common group buffs" };
-/** The assumptions of the page are three disclosures: a choice in them is made once they are open. */
+/** The assumptions of the page are one folded line that holds three disclosures: a choice in them is made once the line and the disclosure are open. */
 async function openAssumes(page) {
+  const folded = page.locator("#assumes");
+  if ((await folded.getAttribute("open")) === null) await folded.locator("> summary").click();
   for (const id of ["assume-buffs", "assume-weapons"]) {
     const node = page.locator(`#${id}`);
     if ((await node.getAttribute("open")) === null) await node.locator("> summary").click();
