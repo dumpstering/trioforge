@@ -1,7 +1,7 @@
 // The sliders of the Weights assumption of a trio page, and the answers for the settings that no shard answers: the code the page loads the first time the Weights assumption is
 // opened, a buff choice the shards lack (the full raid, the Enchanter in the group) is used, or the address asks for one of them or for sliders.
 //
-//   initWeights(app, words) -> {sync(positions), text(positions), settle(view, kind), release()}
+//   initWeights(app, words) -> {sync(positions), text(positions), settle(view, kind), release(), cancel()}
 //
 // `app` is the page script's own object (trio.js), and this code is the part of the page that only the sliders and the answers for the settings that no shard answers use, so it works on that
 // object: what the page is (`doc`, `win`, `root` (the main element of the page), `groups` (the weight groups of the trio's bundle, in its order), `own` (every slider at x1), `displayed` (the
@@ -33,12 +33,26 @@
 // has is taken back by Stop only (a worker costs a start), and otherwise left to end, its answer dropped. A request that comes back cancelled when this code did not take it back (another
 // part of the page cancelled it) is asked for again, once, unless the visitor cancelled it with the Cancel button of the loading panel.
 //
+// The priorities. A choice of priorities (priorities.js, the control the page script draws) is another thing a shard does not answer: the page applies it as any other switch (its `priorities`
+// are part of the view, as `weights` are) and this code works it out the same way, with the weights of the choice in the request: the role's own weight of each stat that is not Normal times its step,
+// as custom weights (priority-weights.js; the sliders' multipliers, if any, are in the request as well and the engine composes both). The role's own weights are in the bundle of the trio, which
+// `loadOwn()` reads by the paths of the manifests (the manifest of the trio names the bundle with its size and SHA-256, checked before a byte is parsed), once; the page waits for them before it shows
+// a view that has priorities, so that the request, and the Upgrade section, have the weights of the choice. While the kit is the optimizer's for a choice, the answer area says so in one line near
+// the kit, with a Reset, and the heading and the kit value say what they say for any other answer.
+//
+// The exchange rates. `showRates()` is what the button under the control asks for: one line, under the control, of what one more point of stamina, strength, WIS or INT, armor class and a resist is worth
+// on the kit that Wear this draws now (the page says which kit: `kitForRates`), in the hit points the kit value is counted in. They are the evaluator's own (engine/kitvalue.js, `ratesOfKit`, the script a
+// shared kit is valued with: fetched by the path, size and SHA-256 of the manifest, checked before it is run) over the bundle and the item table, which the page has not loaded until the visitor asks, so
+// nothing of it is fetched for a page that does not ask. After the first ask the line follows the kit (`ratesChanged`): worked out again when the page draws another, and said to be coming while the
+// optimizer works out the kit of a choice.
+//
 // Everything is text (textContent, never markup). The answer is said once through the page's #announce (`drawSolved`, for an answer; `announce`, for a fault): there is no live region here.
 
-import { DATA_FILE, EngineFault, fetchBytes, sameOriginUrl, sha256Hex } from "../engine/download.js";
-import { MANIFEST_PATH, fetchTextWithin, parseManifest } from "../engine/manifest.js";
+import { DATA_FILE, EngineFault, fetchBytes, importWithin, sameOriginUrl, sha256Hex } from "../engine/download.js";
+import { MANIFEST_PATH, ManifestReleaseError, fetchTextWithin, parseManifest, parseTrioManifest, trioManifestPath } from "../engine/manifest.js";
 import { BEST_KIT, LIMITS, PROTOCOL_VERSION, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "../engine/protocol.js";
 import { MAX_DIFFICULTY, arrivalTier, wornHaste } from "../engine/tiers.js";
+import { allOff as everyStatOff, countedOf, customOf, normalizeOf, ratesText } from "./priority-weights.js";
 
 /** The list of the pictures of the items of the item table (site/data.py: ICONS_NAME), at a fixed address like the shared file of the effects. */
 const ICONS_PATH = "/data/item-icons.json";
@@ -54,6 +68,23 @@ const HEADING = "Solved for your settings";
 const BACK = "Back to the precomputed answer";
 const COULD_NOT = "Couldn't work out the kit for these settings.";
 const UPDATED = "Data updated, reload the page to see this answer.";
+/** The note near the kit for a choice of priorities, and its button. */
+const NOTICE = "Your priorities: re-solved in your browser; no runner-ups or robustness labels for this kit.";
+const RESET = "Reset";
+/** The exchange rates: what the line says while it works, when it cannot, and for a kit that has none to say it of. */
+const RATES_WORKING = "Working out what a point is worth on this kit…";
+const RATES_COULD_NOT = "What a point is worth could not be worked out here.";
+const RATES_NONE = "There is no kit shown to work out what a point is worth on.";
+const RATES_NOT_YET = "No rate for these settings yet: the kit shown is not worked out for them.";
+const NO_OWN = "The data of this trio has no weights for this role.";
+const TRY_AGAIN = "Try again";
+/** How long after the line says something it is said to a screen reader: after the announcement of the change that made it (the page's one live region says that first). */
+const SPEAK_MS = 600;
+const SCRIPT_FILE = Object.freeze({
+  type: /^(?:text|application)\/(?:x-)?(?:java|ecma)script(?:$|[\s;])/i,
+  noun: "The rates evaluator",
+  stalled: "The rates evaluator download stalled",
+});
 /** The three positions of a slider: the character of the address, the words, and the number that multiplies the weights of the group. */
 const POSITIONS = [
   ["h", "x0.5", 0.5],
@@ -73,8 +104,13 @@ const GROUP_WORDS = new Map([
 class Failure extends Error {}
 /** The same, for the item list: its message is the whole sentence the answer area says. */
 class ItemFailure extends Failure {}
-/** The site was released again since the page was made. */
-class Updated extends Error {}
+/** The site was released again since the page was made. It carries the mark `dataUpdated`, which the page script (that cannot share this class: a chunk's code is not the page's) takes for its own DataUpdated. */
+class Updated extends Error {
+  constructor() {
+    super("The site was released again.");
+    this.dataUpdated = true;
+  }
+}
 
 /** Where an item comes from, as the Upgrade section words it: where it drops, the quest, the vendor, a recipe, foraging. */
 function sourceText(record) {
@@ -149,8 +185,8 @@ export function initWeights(app, words) {
 
   /** The button of a solved answer: the settings that have a precomputed answer, the nearest to the visitor's (every slider at x1; the common group buffs for the raid and for the Enchanter's). */
   function back() {
-    const desired = { ...app.desired(app.wantedSetup), weights: own };
-    if (desired.buffs !== "own") desired.buffs = "group";
+    const desired = { ...app.desired(app.wantedSetup), weights: own, priorities: app.ownP };
+    desired.buffs = desired.buffs.replace(/\+haste$/, "") === "own" ? "own" : "group"; // (the haste of a spell is not in a shard: the own buffs with it go back to the own buffs, as the page's own shard choice does)
     app.track(app.apply(desired, { url: true, announce: "back" }));
     wearing?.focus(); // (the button goes with the answer)
   }
@@ -177,10 +213,27 @@ export function initWeights(app, words) {
   const heading = el("h3", { id: "solve-h", hidden: true });
   const line = el("p", { class: "solve-text" });
   const button = el("button", { type: "button", class: "btn", hidden: true });
-  const block = el("div", { id: "solve", class: "status solve", hidden: true }, heading, line, button);
+  const note = el("p", { class: "solve-prio", hidden: true });
+  const noteReset = el("button", { type: "button", id: "solve-prio-reset", class: "btn-quiet", text: RESET });
+  const block = el("div", { id: "solve", class: "status solve", hidden: true }, note, heading, line, button);
   wearing?.after(block, slot); // (the question, which the client puts in the slot, comes after the line that points to it)
   let act = null;
   button.addEventListener("click", () => act?.());
+  noteReset.addEventListener("click", () => {
+    app.choosePriorities(app.ownP);
+    wearing?.focus(); // (the note goes with the choice, and the button with it)
+  });
+
+  /** The note near the kit for a choice of priorities: there while the kit is the optimizer's for one, with a Reset; made once for as long as it stands, so that the focus on the button stays. */
+  function setNote(on) {
+    if (!on) {
+      note.hidden = true;
+      note.replaceChildren();
+      return;
+    }
+    if (note.childNodes.length === 0) note.append(NOTICE, " ", noteReset);
+    note.hidden = false;
+  }
 
   /** The button goes; a button that had the focus hands it to the heading of the answer (a hidden button cannot keep it). */
   function hideButton() {
@@ -212,11 +265,12 @@ export function initWeights(app, words) {
     heading.hidden = true;
     heading.textContent = "";
     line.textContent = "";
+    setNote(false);
     root.classList.remove("solving");
   }
 
   // ---- what is wanted --------------------------------------------------------------------------------------------------------------------
-  let wanted = null; // {key, settings, kind, stopped, attempt, ask, resent, parked}: the latest settings that no shard answers, while there are any
+  let wanted = null; // {key, settings, kind, stopped, over, attempt, ask, resent, parked}: the latest settings that no shard answers, while there are any
   let timer = null;
   let looking = null; // the timer that looks at the answer to the question while the line says that it is awaited
   let client = null;
@@ -224,35 +278,45 @@ export function initWeights(app, words) {
   let manifestPromise = null;
   let recordsPromise = null;
 
-  const keyOf = (settings) => [settings.race, settings.role, settings.tier, settings.setup, settings.ev, settings.buffs, settings.weights].join("|");
+  const keyOf = (settings) => [settings.race, settings.role, settings.tier, settings.setup, settings.ev, settings.buffs, settings.weights, settings.priorities].join("|");
   const nearest = (settings) => app.nearest(settings.buffs);
   /** What the chunk works the answer out for, from the view of the page: the view shown, whether a shard answers it, and the sliders. */
   const settingsOf = (view) => {
     const s = view.scenario;
-    return { race: s.race, role: s.role, tier: s.tier, setup: s.setup, ev: view.state.ev, buffs: view.state.buffs, weights: view.state.weights, exact: view.exact };
+    return { race: s.race, role: s.role, tier: s.tier, setup: s.setup, ev: view.state.ev, buffs: view.state.buffs, weights: view.state.weights, priorities: view.state.priorities, exact: view.exact };
   };
 
   function settle(view, kind) {
-    clearTimeout(timer);
-    timer = null;
     const before = wanted;
     const settings = settingsOf(view);
+    // the settings that are already being worked out (waiting for the pause, with the worker, or waiting for the visitor's answer to the question) are not asked for again: that request is kept, and its
+    // answer is the answer (every step Off for a view with no shard asks for what the request in flight already asks for). The last change is the one the answer is announced with.
+    if (!settings.exact && before !== null && before.key === keyOf(settings) && underway(before)) {
+      before.kind = kind;
+      return;
+    }
+    clearTimeout(timer);
+    timer = null;
     if (settings.exact) {
       wanted = null;
       withdrawUnsent(before);
       clear();
       return;
     }
-    const one = { key: keyOf(settings), settings, kind, stopped: false, attempt: 0, ask: null, resent: false, parked: null };
+    const one = { key: keyOf(settings), settings, kind, stopped: false, over: false, attempt: 0, ask: null, resent: false, parked: null };
     wanted = one;
     withdrawUnsent(before);
     root.classList.add("solving");
+    setNote(settings.priorities !== app.ownP);
     say(WORKING, { label: "Stop", action: () => stop(one) });
     timer = setTimeout(() => {
       timer = null;
       work(one);
     }, PAUSE_MS);
   }
+
+  /** Is the request still to be answered: not stopped, not ended by a fault or an answer drawn, and no answer kept for the page to draw later? */
+  const underway = (one) => !one.stopped && !one.over && one.parked === null;
 
   /** The request of settings nobody wants any more, if it has not reached the worker: it is taken back alone, at no cost. One the worker has is left to end (the worker costs a start). */
   function withdrawUnsent(one) {
@@ -314,34 +378,40 @@ export function initWeights(app, words) {
     }
   }
 
-  /** The item table of the site, by the path, size and SHA-256 the manifest lists: a Map from the key of an item to its record. */
+  /** The item table of the site, by the path, size and SHA-256 the manifest lists, parsed: `{table, file}` (the document, and its entry in the manifest). */
+  async function fetchTable() {
+    const listed = await readManifest();
+    const file = listed.items;
+    const sorry = (message) => new ItemFailure(`Couldn't load the item list. ${message}`);
+    let bytes;
+    try {
+      bytes = await fetchBytes(sameOriginUrl(file.path, win.location.href), file.bytes, fetchImpl, () => {}, STARTUP_STALL_MS, STARTUP_COMPILE_MS, DATA_FILE);
+    } catch (error) {
+      throw sorry(error instanceof EngineFault ? error.message : "It could not be loaded.");
+    }
+    let digest;
+    try {
+      digest = await sha256Hex(bytes);
+    } catch (error) {
+      throw sorry(error instanceof EngineFault ? error.message : "This browser cannot check it, so it will not use it.");
+    }
+    if (digest !== file.sha256) throw sorry("It is not the one the site lists (its checksum differs).");
+    let table;
+    try {
+      table = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    } catch {
+      throw sorry("It is not what the site writes.");
+    }
+    if (table === null || typeof table !== "object" || !Array.isArray(table.items) || table.data_release !== listed.dataRelease) {
+      throw sorry("It is not of the release the site lists.");
+    }
+    return { table, file };
+  }
+
+  /** The item table of the site as a Map from the key of an item to the little of a record that a row of Wear this shows. */
   function getRecords() {
     recordsPromise ??= (async () => {
-      const listed = await readManifest();
-      const file = listed.items;
-      const sorry = (message) => new ItemFailure(`Couldn't load the item list. ${message}`);
-      let bytes;
-      try {
-        bytes = await fetchBytes(sameOriginUrl(file.path, win.location.href), file.bytes, fetchImpl, () => {}, STARTUP_STALL_MS, STARTUP_COMPILE_MS, DATA_FILE);
-      } catch (error) {
-        throw sorry(error instanceof EngineFault ? error.message : "It could not be loaded.");
-      }
-      let digest;
-      try {
-        digest = await sha256Hex(bytes);
-      } catch (error) {
-        throw sorry(error instanceof EngineFault ? error.message : "This browser cannot check it, so it will not use it.");
-      }
-      if (digest !== file.sha256) throw sorry("It is not the one the site lists (its checksum differs).");
-      let table;
-      try {
-        table = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      } catch {
-        throw sorry("It is not what the site writes.");
-      }
-      if (table === null || typeof table !== "object" || !Array.isArray(table.items) || table.data_release !== listed.dataRelease) {
-        throw sorry("It is not of the release the site lists.");
-      }
+      const { table, file } = await fetchTable();
       const icons = await pictures(file.sha256, table.items.length);
       // only what a row of Wear this shows is kept of a record (the table is some two megabytes, and the rest of it is not needed once the rows are drawn)
       const records = new Map();
@@ -389,7 +459,7 @@ export function initWeights(app, words) {
     };
   }
 
-  /** The request for the best kit of the view shown, with the sliders that are not at x1 (the role's own weights when none is). */
+  /** The request for the best kit of the view shown, with the sliders that are not at x1 and the custom weights of the priorities that are not Normal (the role's own weights when there are none). */
   function requestFor(settings) {
     const request = {
       v: PROTOCOL_VERSION,
@@ -401,7 +471,7 @@ export function initWeights(app, words) {
       tier: settings.tier,
       budgetMs: BUDGET_MS,
     };
-    const weights = app.weightsTable(settings.weights);
+    const weights = app.weightsTable(settings.weights, settings.priorities, settings.role);
     if (weights !== null) request.weights = weights;
     return request;
   }
@@ -418,6 +488,8 @@ export function initWeights(app, words) {
     one.parked = null;
     const live = () => wanted === one && one.attempt === attempt && !one.stopped;
     try {
+      // a choice of priorities is made of the role's own weights, which the page has read before it showed the view: never ask for the role's own kit in their place
+      if (one.settings.priorities !== app.ownP && custom(one.settings.role, one.settings.priorities) === null) throw new Failure(NO_OWN);
       const engine = await track(getClient());
       if (!live()) return;
       // while the visitor's answer to the question is awaited nothing is being worked out: no Stop for a request that has not begun, and a line that says what is awaited
@@ -461,9 +533,20 @@ export function initWeights(app, words) {
       one.parked = () => show(one, result, records);
       return;
     }
+    one.over = true;
     root.classList.remove("solving");
     const label = result.label === null || result.label === undefined ? "" : ` (${result.label})`;
     say(`Kit value ${words.fmtInt(words.displayInt(result.value))}${label}. Exact value (F): ${result.F}.`, { title: true, label: BACK, action: back });
+  }
+
+  /** The settings that were wanted are not any more (every step went Off): the request is taken back if it has not reached the worker, an answer that is on its way is not drawn, and the answer area is empty. */
+  function cancel() {
+    clearTimeout(timer);
+    timer = null;
+    const before = wanted;
+    wanted = null;
+    withdrawUnsent(before);
+    clear();
   }
 
   /** The page stayed on the view it showed (the one it was loading could not be had): an answer that waited for the page is drawn now, if it is still for the settings shown. */
@@ -522,14 +605,19 @@ export function initWeights(app, words) {
     stopLooking();
     one.ask?.controller.abort();
     root.classList.remove("solving");
+    setNote(false); // (the table shows the precomputed answer, which is not the browser's)
+    ratesNotYet();
     say(`Stopped. The table shows the precomputed answer for ${nearest(one.settings)}, not for your settings.`, { label: "Try again", action: () => again(one) });
   }
 
   function again(one) {
     if (wanted !== one) return;
     one.stopped = false;
+    one.over = false;
     one.resent = false;
     root.classList.add("solving");
+    setNote(one.settings.priorities !== app.ownP);
+    ratesNotYet();
     say(WORKING, { label: "Stop", action: () => stop(one) });
     work(one);
   }
@@ -567,12 +655,232 @@ export function initWeights(app, words) {
       sentence = `${COULD_NOT} ${detail === "" ? "Something went wrong." : detail}`;
       if (code === "unsupported") label = null;
     }
+    one.over = true;
     root.classList.remove("solving");
+    setNote(false); // (the kit shown is the precomputed one, whatever the sentence says of it)
+    ratesNotYet();
     say(sentence, { label, action });
     app.announce(sentence);
     if (released) app.dataUpdated();
   }
 
+  // ---- the role's own weights, for the priorities ------------------------------------------------------------------------------------------
+  let bundleOnce = null;
+  let owns = null; // the weights of each role of the bundle, a table of numbers by name: a Map from the role
+
+  /** The bundle of the trio and the level: the manifest of the trio at the address the main manifest lists, then the bundle at the path that one lists, its size and SHA-256 checked before it is parsed. */
+  function getBundle() {
+    bundleOnce ??= (async () => {
+      const listed = await readManifest();
+      const what = "The list of files for this trio";
+      const path = trioManifestPath(listed, trio);
+      if (path === undefined || !listed.trios.get(trio).levels.includes(level)) throw new Failure("The site lists no data for this trio and level.");
+      const answer = await fetchTextWithin(fetchImpl, sameOriginUrl(path, win.location.href).href, { credentials: "same-origin", cache: "no-cache" }, STARTUP_STALL_MS, LIMITS.maxTrioManifestBytes);
+      if (answer.state === "timeout") throw new Failure(`${what} did not arrive in time.`);
+      if (answer.state === "status") throw new Failure(`${what} could not be loaded (${answer.status}).`);
+      if (answer.state !== "ok" || typeof answer.text !== "string") throw new Failure(`${what} could not be loaded.`);
+      let files;
+      try {
+        files = parseTrioManifest(JSON.parse(answer.text), listed, trio);
+      } catch (error) {
+        throw error instanceof ManifestReleaseError ? new Updated() : new Failure(`${what} is not what was expected.`);
+      }
+      const file = files.bundles.get(level);
+      let bytes;
+      try {
+        bytes = await fetchBytes(sameOriginUrl(file.path, win.location.href), file.bytes, fetchImpl, () => {}, STARTUP_STALL_MS, STARTUP_COMPILE_MS, DATA_FILE);
+      } catch (error) {
+        throw error instanceof EngineFault ? new Failure(error.message) : new Failure("The data of this trio could not be loaded.");
+      }
+      if ((await sha256Hex(bytes)) !== file.sha256) throw new Failure("The data of this trio is not the one the site lists (its checksum differs).");
+      try {
+        return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      } catch {
+        throw new Failure("The data of this trio is not what the site writes.");
+      }
+    })();
+    bundleOnce.catch(() => {
+      bundleOnce = null;
+    });
+    return bundleOnce;
+  }
+
+  /** Read the role's own weights from the bundle, once (a failure is thrown, and the next ask reads again). */
+  async function loadOwn() {
+    if (owns !== null) return;
+    const bundle = await getBundle();
+    const found = new Map();
+    const roles = bundle !== null && typeof bundle === "object" && bundle.roles !== null && typeof bundle.roles === "object" ? bundle.roles : {};
+    for (const [role, row] of Object.entries(roles)) {
+      const table = row !== null && typeof row === "object" ? row.weights : null;
+      if (table === null || typeof table !== "object") continue;
+      found.set(role, Object.fromEntries(Object.entries(table).filter(([, value]) => typeof value === "number" && Number.isFinite(value))));
+    }
+    if (found.size === 0) throw new Failure("The data of this trio has no weights.");
+    owns = found;
+  }
+
+  /** The custom weights of a choice of priorities for a role, or null while the role's own weights are not read (or the bundle has none for the role). */
+  const custom = (role, priorities) => {
+    const own = owns?.get(role);
+    return own === undefined ? null : customOf(own, priorities);
+  };
+
+  // ---- what the build weighs, for the priorities ------------------------------------------------------------------------------------------
+
+  /** For each stat of the control, whether the role's build weighs it (null while the role's own weights are not read). */
+  const counted = (role) => {
+    const own = owns?.get(role);
+    return own === undefined ? null : countedOf(own);
+  };
+  /** The choice with the steps of the stats the build does not weigh made Normal (as it is while the role's own weights are not read). */
+  const normalize = (role, priorities) => {
+    const own = owns?.get(role);
+    return own === undefined ? priorities : normalizeOf(own, priorities);
+  };
+  /** Whether every stat of the control is Off or not weighed by the build: nothing to optimise (false while the role's own weights are not read). */
+  const allOff = (role, priorities) => {
+    const own = owns?.get(role);
+    return own !== undefined && everyStatOff(own, priorities);
+  };
+
+  // ---- the exchange rates ------------------------------------------------------------------------------------------------------------------------
+  const ratesButton = root.querySelector("#prio-rates-show");
+  const ratesLine = root.querySelector("#prio-rates-text");
+  const ASK = ratesButton.textContent;
+  let ratesOn = false;
+  let ratesRun = 0; // the number of the latest work: the answer of an older one is not drawn
+  let evaluatorOnce = null;
+  let tableInFlight = null;
+  const evaluatorRecords = new Map(); // the records of the items of the kits that were valued, by key: the evaluator reads no other
+
+  /** The evaluator's script, fetched by the path and size of the manifest and run only if it is the one whose SHA-256 the manifest lists (as the shared kit's panel does), then imported. */
+  function getEvaluator() {
+    evaluatorOnce ??= (async () => {
+      const listed = await readManifest();
+      const file = listed.kitvalue;
+      if (file === null || file === undefined) throw new Failure("The site lists no evaluator.");
+      const bytes = await fetchBytes(sameOriginUrl(file.path, win.location.href), file.bytes, fetchImpl, () => {}, STARTUP_STALL_MS, STARTUP_COMPILE_MS, SCRIPT_FILE);
+      if ((await sha256Hex(bytes)) !== file.sha256) throw new Failure("The evaluator is not the one the site lists.");
+      const module = await importWithin(importModule(sameOriginUrl(file.path, win.location.href).href), STARTUP_COMPILE_MS, SCRIPT_FILE.noun);
+      if (typeof module?.ratesOfKit !== "function") throw new Failure("The evaluator's script has no exchange rates.");
+      return module;
+    })();
+    evaluatorOnce.catch(() => {
+      evaluatorOnce = null;
+    });
+    return evaluatorOnce;
+  }
+
+  /** The item table, one fetch for every call that comes while it is on its way, and no copy of it kept afterwards (the browser has the file for the next time). */
+  function sharedTable() {
+    tableInFlight ??= fetchTable().finally(() => {
+      tableInFlight = null;
+    });
+    return tableInFlight;
+  }
+
+  /**
+   * The records the evaluator values a kit with, a Map from the key of an item to its record as the table has it: only the records of the items that kits were valued with, which is all it reads, so
+   * that the table, some two megabytes of records, is not kept for the life of the page. The table, checked against the manifest's SHA-256, is read again only for an item that has not been met.
+   */
+  async function recordsFor(places) {
+    const missing = new Set(places.map((place) => place.key).filter((key) => !evaluatorRecords.has(key)));
+    if (missing.size > 0) {
+      const { table } = await sharedTable();
+      for (const record of table.items) {
+        if (record === null || typeof record !== "object") continue;
+        const key = typeof record.key === "string" ? record.key : `w${record.id}`;
+        if (missing.has(key)) evaluatorRecords.set(key, record);
+      }
+    }
+    return evaluatorRecords;
+  }
+
+  /**
+   * The line says something; `speak` says it through the page's live region (#announce) as well, a moment later (the answer of a change of the view is said first, and the page has one region: a
+   * second text a moment after the first is read after it), and only if the line still says it. The words of the work in progress are not said.
+   */
+  function sayRates(message, { speak = true } = {}) {
+    ratesLine.textContent = message;
+    ratesLine.hidden = false;
+    if (speak) {
+      const run = ratesRun;
+      win.setTimeout(() => {
+        if (run === ratesRun && ratesLine.textContent === message) app.announce(message);
+      }, SPEAK_MS);
+    }
+  }
+
+  function setOpen(open) {
+    ratesOn = open;
+    ratesButton.setAttribute("aria-expanded", String(open));
+  }
+
+  /** What one more point is worth on the kit Wear this draws now, said in the line under the control. */
+  async function workOutRates() {
+    const mine = (ratesRun += 1);
+    sayRates(RATES_WORKING, { speak: false });
+    try {
+      const target = await track(app.kitForRates());
+      if (mine !== ratesRun) return;
+      if (target === null) throw new Failure(RATES_NONE);
+      if (target.pending) {
+        sayRates(RATES_NOT_YET); // (the kit drawn stands in for one the optimizer is working out: it is never valued under the weights of the choice)
+        return;
+      }
+      const [bundle, engine, records] = await track(Promise.all([getBundle(), getEvaluator(), recordsFor(target.places)]));
+      if (mine !== ratesRun) return;
+      const done = engine.ratesOfKit({ bundle, records, ...target.view, deity: null, places: target.places });
+      if (done.rates === null) {
+        sayRates(RATES_NONE);
+        return;
+      }
+      // the weight in effect of a stat, the build's times the step (a step is a custom weight of the request): a stat that is Off is not counted, as one the build does not weigh is not
+      const base = bundle?.roles?.[target.view.role]?.weights ?? {};
+      const set = target.view.weights?.custom ?? {};
+      const weighed = (name) => (set[name] ?? base[name]) > 0;
+      const casting = [...new Set((bundle?.profile_common?.pools?.MANA ?? []).map((pool) => pool?.stat))].filter((stat) => stat === "WIS" || stat === "INT");
+      const pools = (bundle?.profile_common?.pools?.MANA ?? []).map((pool) => pool?.stat);
+      const counted = Number(String(bundle?.constants?.pools_counted ?? "2/1").split("/")[0]); // (the pools the rules count)
+      sayRates(ratesText({ ...done, casting, mana: weighed("MANA"), haste: weighed("HASTE"), steps: target.steps, pools, counted }));
+    } catch (error) {
+      if (mine !== ratesRun) return;
+      if (error?.dataUpdated === true) app.dataUpdated(); // (the site was released again: the same line as everywhere else)
+      setOpen(false); // (the button is there to ask again)
+      ratesButton.textContent = TRY_AGAIN;
+      sayRates(RATES_COULD_NOT);
+    }
+  }
+
+  /** The button of the rates, a disclosure: the first press opens the line and works the rates out, the next closes it and stops following the kit. The focus stays on the button. */
+  function showRates() {
+    if (ratesOn) {
+      ratesRun += 1;
+      setOpen(false);
+      ratesLine.hidden = true;
+      ratesLine.textContent = "";
+      return;
+    }
+    setOpen(true);
+    ratesButton.textContent = ASK;
+    app.track(workOutRates());
+  }
+
+  /** The kit shown is not one that the settings were worked out for (a solve is on its way, or was stopped, or failed): there is no rate to say yet, and none is worked out for the stand-in. */
+  function ratesNotYet() {
+    if (!ratesOn) return;
+    ratesRun += 1;
+    sayRates(RATES_NOT_YET);
+  }
+
+  /** The page drew another kit (`exact`: the shard's, the kit the rates are for) or began to work one out: the line follows. */
+  function ratesChanged(exact) {
+    if (!ratesOn) return;
+    if (exact) app.track(workOutRates());
+    else ratesNotYet();
+  }
+
   sync(app.displayed.weights);
-  return { sync, text, settle, release };
+  return { sync, text, settle, release, cancel, loadOwn, hasOwn: () => owns !== null, custom, counted, normalize, allOff, showRates, ratesChanged };
 }

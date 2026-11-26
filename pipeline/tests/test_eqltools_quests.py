@@ -63,6 +63,34 @@ def test_the_wiki_title_is_kept_when_it_names_the_page_differently(tmp_path):
     assert read_quests(path, minimum=1)["quests"][0]["wiki_title"] == "Quest of Zorblax"
 
 
+@pytest.mark.parametrize(
+    "title,page",
+    [
+        ("Illusion: Zorblax Quest", "Illusion%3A_Zorblax_Quest"),
+        ("Quest:Zorblax Spells", "Quest%3AZorblax_Spells"),
+        ("Teir`Zorb Courier", "Teir%60Zorb_Courier"),
+        ("Azzar's Dreadful Hat", "Azzar%27s_Dreadful_Hat"),
+        ("Zorblax Words - X`Ta Part 1", "Zorblax_Words_-_X%60Ta_Part_1"),
+        ("Zorblax Quest", "zorblax%20quest"),  # (the case is not a difference either)
+    ],
+)
+def test_a_wiki_title_that_only_differs_by_percent_escapes_is_not_a_different_title(tmp_path, title, page):
+    """The source writes the page title as a web address does (``%3A``, ``%60``, ``%27``): decoded, it is the quest's own title, so there is no other title to keep."""
+    path = source_file(tmp_path, [raw_quest(title, t=page)], name="q.json")
+    assert read_quests(path, minimum=1)["quests"][0]["wiki_title"] is None
+
+
+def test_a_wiki_title_that_really_differs_is_kept_decoded(tmp_path):
+    path = source_file(tmp_path, [raw_quest("Zorblax Quest", t="Quest%3AOf_Zorblax%27s_Quuxen"), raw_quest("Plain Quest", t="Plain%20Quest%20(2)")], name="q.json")
+    titles = {quest["title"]: quest["wiki_title"] for quest in read_quests(path, minimum=1)["quests"]}
+    assert titles == {"Zorblax Quest": "Quest:Of Zorblax's Quuxen", "Plain Quest": "Plain Quest (2)"}
+
+
+def test_a_percent_sign_that_is_no_escape_is_left_as_it_is(tmp_path):
+    path = source_file(tmp_path, [raw_quest("100 Percent Zorb", t="100%_Zorb_%ZZ")], name="q.json")
+    assert read_quests(path, minimum=1)["quests"][0]["wiki_title"] == "100% Zorb %ZZ"
+
+
 def test_a_quest_the_source_leaves_blank_stays_with_nulls(tmp_path):
     quest = raw_quest("Zorblax Quest", giver=None, zone=None, era=None, rewards=[], want=[])
     (found,) = read_quests(source_file(tmp_path, [quest], name="q.json"), minimum=1)["quests"]

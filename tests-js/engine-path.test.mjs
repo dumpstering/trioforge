@@ -351,7 +351,7 @@ describe("the budget", () => {
       const got = farmPath(session, c.owned(), c.candidates(), { steps: 3, budgetMs: 5000 });
       expect(got.steps).toHaveLength(3);
       expect(got.stopped).toBe("limit");
-      expect(log.limits).toHaveLength(4); // Equip now and the three steps
+      expect(log.limits).toHaveLength(7); // Equip now, the three steps, and the look for an earlier equal addition of each step (R14: a solve of its own, on the model of the step)
       for (const limit of log.limits) expect(limit.limitMs).toBe(5000);
     } finally {
       closeSession(session);
@@ -579,9 +579,9 @@ describe("the budget", () => {
   });
 
   it("reports a step that ran out of time before the solver had a kit as not found in time, passes it on, and ends the path", () => {
-    // the third solve of the path (Equip now and the first step come before it) ends as if the time had run out before the solver had a solution
+    // the fourth solve of the path (Equip now, the first step and its look for an earlier equal addition come before it: the second step's) ends as if the time had run out before the solver had a solution
     const states = highs.constants.modelStatus;
-    const forced = () => spied.log.runs.length === 3;
+    const forced = () => spied.log.runs.length === 4;
     const spied = spyOn(highs, {
       outcome: (result) => (forced() ? { ...result, modelStatus: states.timeLimit } : result),
       info: (key, value) => (forced() && key === "primal_solution_status" ? highs.constants.solutionStatus.none : value),
@@ -662,19 +662,22 @@ describe("the budget", () => {
     try {
       const got = farmPath(session, c.owned(), c.candidates(), { steps: 1, budgetMs: 5000, canonical: true });
       expect(got.steps).toHaveLength(1);
-      // Equip now and the step, three stages each: the first stage, the proof that the band of the tie stage wears one set of items (a stage of its own), and the tie stage (which
-      // follows the proof whenever the scenario has an optional buff, settled band or not)
-      expect(log.limits).toHaveLength(6);
+      // Equip now and the step, four stages each: the first stage, the proof that the band of the tie stage wears one set of items (a stage of its own), the tie stage (which
+      // follows the proof whenever the scenario has an optional buff, settled band or not) and the last stage's solve that finds nothing more tied (R2: a stage of its own as well)
+      expect(log.limits).toHaveLength(9); // (R14: and the step's look for an earlier equal addition, a solve of its own)
       expect(log.limits[0].limitMs).toBe(5000);
       expect(log.limits[1].limitMs).toBe(5000); // the proof of Equip now: the allowance of its first stage, not what the first stage left
       expect(log.limits[2].limitMs).toBe(5000); // and its tie stage the same: the proof before it has not used it up
-      expect(log.limits[3].limitMs).toBe(5000 - 900); // the step has what is left of the path after the three stages of Equip now
-      expect(log.limits[4].limitMs).toBe(5000 - 900); // and its proof and its tie stage the same
-      expect(log.limits[5].limitMs).toBe(5000 - 900);
+      expect(log.limits[3].limitMs).toBe(5000); // and the solve of the last stage
+      expect(log.limits[4].limitMs).toBe(5000 - 1200); // the step has what is left of the path after the four stages of Equip now
+      expect(log.limits[5].limitMs).toBe(5000 - 1200); // and its proof, its tie stage and the solve of its last stage the same
+      expect(log.limits[6].limitMs).toBe(5000 - 1200);
+      expect(log.limits[7].limitMs).toBe(5000 - 1200);
+      expect(log.limits[8].limitMs).toBe(5000 - 2400); // the look after the step has what is left of the path after the eight stages before it
       const alone = onClock(c, doc, (read, move) => ({ before: () => move(read() + 300) }));
       try {
         equipNow(alone.session, c.owned(), { budgetMs: 1000, canonical: true });
-        expect(alone.log.limits.map((limit) => limit.limitMs)).toEqual([1000, 1000, 1000]);
+        expect(alone.log.limits.map((limit) => limit.limitMs)).toEqual([1000, 1000, 1000, 1000]);
       } finally {
         closeSession(alone.session);
       }
@@ -734,11 +737,50 @@ describe("the kinds of an addition", () => {
     }
   });
 
+  it("takes the first by key of additions worth exactly the same, with the tie stage and without it (R14)", () => {
+    // a (HEAD) and b (NECK) each have a +0 copy and a +2 candidate that adds 10: {a+2, b+0} and {a+0, b+2} tie on value and on total rank, and the canonical order of kits takes b+2 first;
+    // the solver of a plain solve takes whichever it reaches: the step takes the first by key in both, and the second step the other
+    const head = (key, hp, tier = 0) => gear(key, ["HEAD"], { stats: { HP: hp }, tier });
+    const neck = (key, hp, tier = 0) => gear(key, ["NECK"], { stats: { HP: hp }, tier });
+    const chest = (key, hp, tier = 0) => gear(key, ["CHEST"], { stats: { HP: hp }, tier });
+    for (const canonical of [true, false]) {
+      for (const order of [0, 1, 2]) {
+        const session = make();
+        try {
+          const owned = [[head("a", 10), 1], [neck("b", 10), 1], [chest("c", 10), 1]];
+          const candidates = [head("a", 20, 2), neck("b", 20, 2), chest("c", 20, 2)];
+          const rotated = [...candidates.slice(order), ...candidates.slice(0, order)];
+          const got = farmPath(session, owned, rotated, { steps: 3, budgetMs: 60_000, canonical });
+          expect(got.steps.map((step) => [identOf(step.item), step.kind, step.gain.toString()]), `${canonical} ${order}`).toEqual([["a@2", "upgrade", "10/1"], ["b@2", "upgrade", "10/1"], ["c@2", "upgrade", "10/1"]]);
+          const first = got.steps[0].solution.kit.filter((item) => item !== null).map((item) => identOf(item)).sort();
+          expect(first, "the kit of the step is the kit of that addition").toEqual(["a@2", "b@0", "c@0"]);
+          expect(got.steps[0].F.toString()).toBe(got.baseline.F.add(q(10)).toString());
+        } finally {
+          closeSession(session);
+        }
+      }
+    }
+  });
+
+  it("does not take an earlier addition that is worth a hair less (R14)", () => {
+    const head = (key, hp, tier = 0) => gear(key, ["HEAD"], { stats: { HP: hp }, tier });
+    const neck = (key, hp, tier = 0) => gear(key, ["NECK"], { stats: { HP: hp }, tier });
+    for (const canonical of [true, false]) {
+      const session = make();
+      try {
+        const got = farmPath(session, [[head("a", 10), 1], [neck("b", 10), 1]], [head("a", 19, 2), neck("b", 20, 2)], { steps: 1, budgetMs: 60_000, canonical });
+        expect(got.steps.map((step) => identOf(step.item)), String(canonical)).toEqual(["b@2"]);
+      } finally {
+        closeSession(session);
+      }
+    }
+  });
+
   it("reports the last step, which finds nothing to add, as not found when it runs out of time with the kit it began from", () => {
-    // the fifth solve of the path, the fourth step's (Equip now and three steps come before it), ends as if the time had run out: its kit is the one of the
-    // step before, with no gain
+    // the seventh solve of the path, the fourth step's (Equip now, three steps and the looks for an earlier equal addition of the first two come before it: the pool of the third has no candidate
+    // before the one it takes), ends as if the time had run out: its kit is the one of the step before, with no gain
     const states = highs.constants.modelStatus;
-    const spied = spyOn(highs, { outcome: (result) => (spied.log.runs.length === 5 ? { ...result, modelStatus: states.timeLimit } : result) });
+    const spied = spyOn(highs, { outcome: (result) => (spied.log.runs.length === 7 ? { ...result, modelStatus: states.timeLimit } : result) });
     const session = createSession({ highs: spied.highs, profile, setup: "stick", options });
     try {
       const owned = [[ring("ringA", 10, 0), 1]];
@@ -923,7 +965,7 @@ describe("the best sets by hand", () => {
     try {
       for (const k of [2, 3]) bestSets(session, owned(), candidates(), k, { budgetMs: BUDGET_MS });
       farmPath(session, owned(), candidates(), { steps: 1, budgetMs: BUDGET_MS });
-      expect([...session.scenarios.keys()].sort()).toEqual(["best-1", "best-2", "best-3", "equip-now"]);
+      expect([...session.scenarios.keys()].sort()).toEqual(["best-1", "best-1-look", "best-2", "best-3", "equip-now"]); // (R14: and the model of the look for an earlier equal addition, which the path keeps beside its own)
       expect(session.scenarios.get("best-2").solver).not.toBe(session.scenarios.get("best-3").solver);
       const rows = (name) => session.scenarios.get(name).model.row_names;
       expect(rows("best-2")).toContain("new.limit");

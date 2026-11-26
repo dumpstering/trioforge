@@ -8,7 +8,7 @@ import { expectWithin, stopwatch } from "./timing.mjs";
 // the fixtures export (and the fallback with no evidence level), and held to refuse every bundle that is not what the exporter writes.
 
 const BUNDLE = "profiles/pal-mnk-ber-l50.bundle.json";
-const GOOD = { race: "HUM", role: "balanced", buffs: "own" };
+const GOOD = { race: "HUM", role: "tank", buffs: "own" };
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const sampleBundle = () => clone(SAMPLE.read(BUNDLE));
 
@@ -135,14 +135,14 @@ describe("the profile", () => {
   const raw = SAMPLE.read(BUNDLE);
   const bundle = readBundle(raw);
 
-  it("is in the field order of Profile.to_dict(), 27 fields", () => {
+  it("is in the field order of Profile.to_dict(), 29 fields (T8: the stance comes last)", () => {
     const profile = assembleProfile(bundle, GOOD);
     expect(Object.keys(profile)).toEqual([
       "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap", "cs_pct",
-      "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity", "haste_bonus", "nd_pct",
+      "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity", "haste_bonus", "nd_pct", "ranged_factor", "stance",
     ]);
     expect(profile.race).toBe("HUM");
-    expect(profile.role).toBe("balanced");
+    expect(profile.role).toBe("tank");
     expect(profile.deity).toBeNull();
   });
 
@@ -177,9 +177,9 @@ describe("the profile", () => {
     const profile = assembleProfile(mine, GOOD);
     const before = JSON.stringify(profile);
     mine.profile_common.aa.combat_stability = 99;
-    mine.roles.balanced.weights.AC = 99;
+    mine.roles.tank.weights.AC = 99;
     mine.races[0].naked.STR = 99;
-    mine.roles.balanced.setups.push("stick");
+    mine.roles.tank.setups.push("stick");
     expect(JSON.stringify(profile)).toBe(before);
     expect(Object.isFrozen(mine)).toBe(false); // the bundle it was given is left as it was
     expect(Object.isFrozen(mine.races[0].naked)).toBe(false);
@@ -347,7 +347,7 @@ describe("a malformed bundle", () => {
       for (const role of Object.values(bundle.roles)) delete role.setups_by_evidence;
     });
     refused("has a role with no setups at one evidence level", (bundle) => {
-      delete bundle.roles.balanced.setups_by_evidence.wiki;
+      delete bundle.roles.tank.setups_by_evidence.wiki;
     });
     refused("has a buff set with no totals", (bundle) => {
       delete bundle.buffs.raid.buff_totals;
@@ -416,7 +416,7 @@ describe("a malformed bundle", () => {
       expect(readBundle(sampleBundle())).toBeDefined();
       const rows = readBundle(sampleBundle());
       expect(Object.keys(rows.races[0])).toEqual(["code", "name", "legal", "naked", "iksar_ac"]);
-      expect(Object.keys(rows.roles.tank)).toEqual(["weights", "setups", "setups_by_evidence"]);
+      expect(Object.keys(rows.roles.tank)).toEqual(["weights", "setups", "stance", "setups_by_evidence"]);
       expect(Object.keys(rows.buffs.own)).toEqual(["buff_totals", "spell_haste", "set"]);
       expect(rows.profile_common.pools.MANA[0]).toEqual({ cls: "PAL", base: 900, fac: 4.5, stat: "WIS" });
       if (FULL !== null) {
@@ -444,16 +444,16 @@ describe("a malformed bundle", () => {
       ["iksar_ac is text", (b) => (b.races[0].iksar_ac = "0")],
       ["roles is a list", (b) => (b.roles = [])], ["roles is empty", (b) => (b.roles = {})], ["a role is not one of the four", (b) => (b.roles.wizard = b.roles.tank)],
       ["a role is null", (b) => (b.roles.tank = null)],
-      ["weights is a list", (b) => (b.roles.balanced.weights = [])], ["a weight is text", (b) => (b.roles.balanced.weights.AC = "3.75")],
-      ["a weight is negative", (b) => (b.roles.balanced.weights.AC = -1)], ["a weight is null", (b) => (b.roles.balanced.weights.AC = null)],
-      ["a weight is true", (b) => (b.roles.balanced.weights.AC = true)], ["a weight has a name no weight has", (b) => (b.roles.balanced.weights.LUCK = 1)],
-      ["setups is text", (b) => (b.roles.balanced.setups = "2h")], ["setups holds a number", (b) => (b.roles.balanced.setups = ["2h", 4])],
-      ["setups names a setup there is none of", (b) => (b.roles.balanced.setups = ["2h", "bow"])],
-      ["setups repeats one", (b) => (b.roles.balanced.setups = ["2h", "2h"])],
-      ["setups_by_evidence is a list", (b) => (b.roles.balanced.setups_by_evidence = [])],
-      ["setups_by_evidence has a level too many", (b) => (b.roles.balanced.setups_by_evidence.gold = ["2h"])],
-      ["setups_by_evidence holds text", (b) => (b.roles.balanced.setups_by_evidence.wiki = "2h")],
-      ["setups_by_evidence names a setup there is none of", (b) => (b.roles.balanced.setups_by_evidence.wiki = ["bow"])],
+      ["weights is a list", (b) => (b.roles.tank.weights = [])], ["a weight is text", (b) => (b.roles.tank.weights.AC = "3.75")],
+      ["a weight is negative", (b) => (b.roles.tank.weights.AC = -1)], ["a weight is null", (b) => (b.roles.tank.weights.AC = null)],
+      ["a weight is true", (b) => (b.roles.tank.weights.AC = true)], ["a weight has a name no weight has", (b) => (b.roles.tank.weights.LUCK = 1)],
+      ["setups is text", (b) => (b.roles.tank.setups = "2h")], ["setups holds a number", (b) => (b.roles.tank.setups = ["2h", 4])],
+      ["setups names a setup there is none of", (b) => (b.roles.tank.setups = ["2h", "bow"])],
+      ["setups repeats one", (b) => (b.roles.tank.setups = ["2h", "2h"])],
+      ["setups_by_evidence is a list", (b) => (b.roles.tank.setups_by_evidence = [])],
+      ["setups_by_evidence has a level too many", (b) => (b.roles.tank.setups_by_evidence.gold = ["2h"])],
+      ["setups_by_evidence holds text", (b) => (b.roles.tank.setups_by_evidence.wiki = "2h")],
+      ["setups_by_evidence names a setup there is none of", (b) => (b.roles.tank.setups_by_evidence.wiki = ["bow"])],
       ["buffs is a list", (b) => (b.buffs = [])], ["buffs is empty", (b) => (b.buffs = {})], ["a buff set is a number", (b) => (b.buffs.own = 3)],
       ["buff_totals is a list", (b) => (b.buffs.own.buff_totals = [])], ["a buff total is text", (b) => (b.buffs.own.buff_totals.AC = "160")],
       ["a buff total has a name there is none of", (b) => (b.buffs.own.buff_totals.LUCK = 1)],
@@ -496,11 +496,13 @@ describe("a malformed bundle", () => {
 
   describe("with an empty list of setups", () => {
     refused("for a role", (bundle) => {
-      bundle.roles.balanced.setups = [];
-    }, /roles\.balanced\.setups must not be empty/);
-    refused("for a role at an evidence level", (bundle) => {
-      bundle.roles.tank.setups_by_evidence.strict = [];
-    }, /roles\.tank\.setups_by_evidence\.strict must not be empty/);
+      bundle.roles.tank.setups = [];
+    }, /roles\.tank\.setups must not be empty/);
+    // (a list may be empty at one evidence level, where the pool has nothing the role plays: the Ranged role plays the bow and nothing else; tests-js/ranged-round2.test.mjs reads one.
+    // A role that no level offers is no role.)
+    refused("for a role at every evidence level", (bundle) => {
+      for (const level of Object.keys(bundle.roles.tank.setups_by_evidence)) bundle.roles.tank.setups_by_evidence[level] = [];
+    }, /roles\.tank\.setups_by_evidence must have a setup at some evidence level/);
     refused("for every role at every level", (bundle) => {
       for (const role of Object.values(bundle.roles)) {
         role.setups = [];
@@ -525,8 +527,8 @@ describe("a malformed bundle", () => {
     for (const key of ["__proto__", "constructor", "prototype"]) {
       refused(`${key} at the top`, (bundle) => withKey(bundle, key, 1), /poison/);
       refused(`${key} in profile_common`, (bundle) => withKey(bundle.profile_common, key, {}), /poison/);
-      refused(`${key} among the weights`, (bundle) => withKey(bundle.roles.balanced.weights, key, 1), /poison/);
-      refused(`${key} for a role`, (bundle) => withKey(bundle.roles, key, bundle.roles.balanced), /poison/);
+      refused(`${key} among the weights`, (bundle) => withKey(bundle.roles.tank.weights, key, 1), /poison/);
+      refused(`${key} for a role`, (bundle) => withKey(bundle.roles, key, bundle.roles.tank), /poison/);
       refused(`${key} in a race`, (bundle) => withKey(bundle.races[0], key, "HUM"), /poison/);
       refused(`${key} among the buff keys`, (bundle) => withKey(bundle.buffs, key, bundle.buffs.own), /poison/);
       refused(`${key} among the buff ids`, (bundle) => withKey(bundle.buff_table, key, { name: "x" }), /poison/);
@@ -554,7 +556,7 @@ describe("a malformed bundle", () => {
         refused(`${name} among ${where}`, (bundle) => put(bundle), /poison/);
       }
       refused(`${name} among the setups of a role`, (bundle) => {
-        bundle.roles.balanced.setups = [...bundle.roles.balanced.setups, name];
+        bundle.roles.tank.setups = [...bundle.roles.tank.setups, name];
       });
       refused(`${name} among the setups of a role at an evidence level`, (bundle) => {
         bundle.roles.tank.setups_by_evidence.strict = [name];
@@ -743,7 +745,7 @@ describe("a malformed bundle", () => {
 
   it("is refused with a message that says where, and without the content of the bundle", () => {
     const bundle = sampleBundle();
-    bundle.roles.balanced.setups = [];
+    bundle.roles.tank.setups = [];
     let caught;
     try {
       assembleProfile(bundle, GOOD);
@@ -753,10 +755,10 @@ describe("a malformed bundle", () => {
     expect(caught).toBeInstanceOf(BundleError);
     expect(caught).toBeInstanceOf(Error);
     expect(caught.name).toBe("BundleError");
-    expect(caught.message).toMatch(/roles\.balanced\.setups/);
+    expect(caught.message).toMatch(/roles\.tank\.setups/);
     // a key the bundle holds is not echoed back whole when it is odd
     const odd = sampleBundle();
-    withKey(odd.roles, `evil-${"x".repeat(500)}\u0000`, odd.roles.balanced);
+    withKey(odd.roles, `evil-${"x".repeat(500)}\u0000`, odd.roles.tank);
     let oddError;
     try {
       readBundle(odd);
@@ -807,7 +809,7 @@ describe("reading a bundle", () => {
     const raw = sampleBundle();
     const read = readBundle(raw);
     const before = JSON.stringify(read);
-    raw.roles.balanced.setups.push("stick");
+    raw.roles.tank.setups.push("stick");
     raw.constants.attributes.length = 0;
     raw.races.length = 0;
     expect(JSON.stringify(read)).toBe(before);
@@ -833,7 +835,7 @@ describe("the cost of reading a bundle", () => {
   // digits). A bundle of 400 texts of 4,096 digits (3.3 MB) used to stall the reader for 24 s; now a text is held to 64 digits, a bundle to
   // 2,500 texts, and the answer, a bundle or a refusal, comes in well under a second whatever a document within the limits holds.
   const SECOND = 1000;
-  const SAMPLE_TEXTS = 389; // the p/q texts of the bundle of the sample (387 before the four ranks of Natural Durability joined the constants, 391 before the mana bands lost their break at 255), of which 137 are the bins of the Monk curve
+  const SAMPLE_TEXTS = 393; // the p/q texts of the bundle of the sample (390 before the fallback bonus took the level into account (T9: three more constants), 389 before the factor of a bow joined the weapon rules, 387 before the four ranks of Natural Durability joined the constants, 391 before the mana bands lost their break at 255), of which 137 are the bins of the Monk curve
 
   /** Consecutive Fibonacci numbers are the worst case for Euclid's algorithm: a text of that many digits that is in lowest terms. */
   function fibonacciText(digits) {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import gzip
 import json
 import shutil
@@ -126,18 +127,18 @@ def test_a_build_without_the_effects_files_has_no_section_and_no_file_for_it(wit
 def test_the_build_lists_the_two_files_among_the_files_of_the_site_exactly(built):
     written = sorted(p.relative_to(built).as_posix() for p in built.rglob("*") if p.is_file())
     assert "data/effects.json" in written and "data/pal-mnk-ber/exalt.json" in written
-    names = build.site_files([build.TrioFiles("pal-mnk-ber", ("balanced", "tank", "melee"), (0, 4, 10), (50,), True)], assets=["assets/app-AAAAAAAA.js"], noindex=True)
+    names = build.site_files([build.TrioFiles("pal-mnk-ber", ("tank", "melee"), (0, 4, 10), (50,), True)], assets=["assets/app-AAAAAAAA.js"], noindex=True)
     assert "data/effects.json" in names and "data/pal-mnk-ber/exalt.json" in names and len(names) == len(set(names))
-    plain = build.site_files([build.TrioFiles("pal-mnk-ber", ("balanced", "tank", "melee"), (0, 4, 10), (50,))], assets=["assets/app-AAAAAAAA.js"], noindex=True)
+    plain = build.site_files([build.TrioFiles("pal-mnk-ber", ("tank", "melee"), (0, 4, 10), (50,))], assets=["assets/app-AAAAAAAA.js"], noindex=True)
     assert len(names) == len(plain) + 2
     slugs = ("pal-mnk-ber", "war-clr-pal")
-    two = build.site_files([build.TrioFiles(s, ("balanced",), (0, 4, 10), (50,), True) for s in slugs], assets=["assets/app-AAAAAAAA.js"], noindex=True)
-    none = build.site_files([build.TrioFiles(s, ("balanced",), (0, 4, 10), (50,)) for s in slugs], assets=["assets/app-AAAAAAAA.js"], noindex=True)
+    two = build.site_files([build.TrioFiles(s, ("melee",), (0, 4, 10), (50,), True) for s in slugs], assets=["assets/app-AAAAAAAA.js"], noindex=True)
+    none = build.site_files([build.TrioFiles(s, ("melee",), (0, 4, 10), (50,)) for s in slugs], assets=["assets/app-AAAAAAAA.js"], noindex=True)
     assert two.count("data/effects.json") == 1 and len(two) == len(none) + 3  # (the shared file once, and a file for each trio)
 
 
 def test_the_release_check_counts_the_files_of_the_effects_layer():
-    facts = [release.TrioFacts(slug, (0, 4, 10), ("balanced",), (50,), "data-2026-10-14", "2026-10-13", "2026-09-22", 50) for slug in ("pal-mnk-ber", "war-clr-pal")]
+    facts = [release.TrioFacts(slug, (0, 4, 10), ("melee",), (50,), "data-2026-10-14", "2026-10-13", "2026-09-22", 50) for slug in ("pal-mnk-ber", "war-clr-pal")]
     names = ["assets/app-AAAAAAAA.js"]
     base = release.check_file_count(facts, {}, assets=names)
     assert release.check_file_count(facts, {}, assets=names, exalt={"pal-mnk-ber"}) == base + 2  # (its file, and the shared one)
@@ -177,6 +178,8 @@ def test_a_trio_file_without_the_shared_file_is_refused(tmp_path):
     [
         ("effects.json", lambda d: d.update(version=2), "version"),
         ("effects.json", lambda d: d.update(data_release="data-2020-01-01"), "not from one run"),
+        ("effects.json", lambda d: d.update(rules_version="2020-01-01"), r"rules_version.*2020-01-01.*rules file"),  # of the rules of another version than the shards and the checkout
+        ("effects.json", lambda d: d.update(rules_version=None), "rules_version"),
         ("effects.json", lambda d: d["effects"][0].update(k="stun"), r"effects\[0\]|effects e000"),
         ("effects.json", lambda d: d["effects"][0].update(id="x1"), "new id"),
         ("effects.json", lambda d: d["effects"][0]["d"].append(["w999999", 1]), "item table has"),
@@ -438,7 +441,7 @@ def test_a_role_the_page_offers_may_have_no_entry_and_the_page_says_so(tmp_path)
     trio = data.load_trio(results / "pal-mnk-ber")
     items = data.load_items(results, [trio])
     exalt = data.load_exalt(results, [trio], items.document)
-    assert set(exalt.trios["pal-mnk-ber"]["roles"]) == {"balanced", "tank"}
+    assert set(exalt.trios["pal-mnk-ber"]["roles"]) == {"tank"}
     page_code = (REPO / "pipeline" / "trioforge" / "site" / "static" / "ui" / "exalt.js").read_text(encoding="utf-8")
     assert "This site has no effect plan for the" in page_code
 
@@ -456,7 +459,7 @@ def test_one_answer_says_which_trios_ship_the_file_of_the_effects_layer_and_the_
     with pytest.raises(data.ResultsError, match="is there, but effects.json is not"):
         data.exalt_slugs(again, slugs)
     # the release counts what the build would write: the shared file once, a file for each trio that has one, nothing for a layer with no trio file
-    facts = [release.TrioFacts(slug, (0, 4, 10), ("balanced",), (50,), "data-2026-10-14", "2026-10-13", "2026-09-22", 50) for slug in slugs]
+    facts = [release.TrioFacts(slug, (0, 4, 10), ("melee",), (50,), "data-2026-10-14", "2026-10-13", "2026-09-22", 50) for slug in slugs]
     base = release.check_file_count(facts, {}, assets=["assets/app-AAAAAAAA.js"])
     assert release.check_file_count(facts, {}, assets=["assets/app-AAAAAAAA.js"], exalt=data.exalt_slugs(results, slugs)) == base
     full = exalt_results(tmp_path / "full")
@@ -486,8 +489,30 @@ def test_a_partial_layer_makes_the_files_the_release_counted(tmp_path):
     run_build(out, tmp_path, noindex=True, results=results)
     assert (out / "data/effects.json").is_file() and (out / "data/pal-mnk-ber/exalt.json").is_file() and not (out / "data/pal-shd-ber/exalt.json").exists()
     listed = build.site_files(
-        [build.TrioFiles(slug, ("balanced", "tank", "melee"), (0, 4, 10), (50,), slug in data.exalt_slugs(results, ["pal-mnk-ber", "pal-shd-ber"])) for slug in ("pal-mnk-ber", "pal-shd-ber")],
+        [build.TrioFiles(slug, ("tank", "melee"), (0, 4, 10), (50,), slug in data.exalt_slugs(results, ["pal-mnk-ber", "pal-shd-ber"])) for slug in ("pal-mnk-ber", "pal-shd-ber")],
         assets=["assets/app-AAAAAAAA.js"],
         noindex=True,
     )
     assert "data/effects.json" in listed and "data/pal-mnk-ber/exalt.json" in listed and "data/pal-shd-ber/exalt.json" not in listed
+
+
+def test_a_role_that_only_the_wide_pool_plays_is_offered_by_the_file_of_the_effects_layer(tmp_path):
+    """E1: a release's strict shards hold the naked-plus-buffs kits, and no bow among them, so the first shard has no ``ranged`` build; the wiki pool does, and an Archer trio's ``exalt.json``
+    has ``roles.ranged``. The roles the file may name are the widest pool's (:data:`data.WIDEST`), the roles the page offers, and not those of whichever shard is first."""
+    results = exalt_results(tmp_path)
+    trio, items = load(results)
+    first = next(iter(trio.shards))
+    assert first != data.WIDEST and "melee" in trio.shards[data.WIDEST].roles
+    narrow = dataclasses.replace(trio.shards[first], scenarios=tuple(s for s in trio.shards[first].scenarios if s.role != "melee"))
+    assert narrow.roles == ("tank",)  # (the first shard plays no melee build, as the strict pool of a release plays no ranged one)
+    trio = dataclasses.replace(trio, shards={**trio.shards, first: narrow})
+    exalt = data.load_exalt(results, [trio], items.document)
+    assert set(exalt.trios["pal-mnk-ber"]["roles"]) == {"tank", "melee"}
+
+
+def test_a_role_that_no_pool_plays_is_still_refused_by_the_reader(tmp_path):
+    results = exalt_results(tmp_path)
+    edit(results / "pal-mnk-ber" / "exalt.json", lambda d: d["roles"].update({"ranged": d["roles"]["tank"]}))
+    trio, items = load(results)
+    with pytest.raises(data.ResultsError, match="roles.ranged.*role the page does not offer"):
+        data.load_exalt(results, [trio], items.document)

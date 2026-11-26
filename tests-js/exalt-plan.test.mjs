@@ -22,7 +22,7 @@ function run(testCase, { tier = testCase.tier, transform = (kit) => kit } = {}) 
 describe("the matcher equals Python's plan on every fixture", () => {
   test("the fixture is a real sample: many trios, every role, every reason, every kind", () => {
     expect(fixture.cases.length).toBeGreaterThanOrEqual(100);
-    expect(new Set(Object.values(fixture.lists).map((list) => list.role))).toEqual(new Set(["balanced", "tank", "melee", "caster"]));
+    expect(new Set(Object.values(fixture.lists).map((list) => list.role))).toEqual(new Set(["tank", "shield", "melee", "ranged", "castertank", "caster"]));
     expect(new Set(Object.values(fixture.lists).map((list) => list.classes.join("-"))).size).toBeGreaterThanOrEqual(20);
     const reasons = new Set(fixture.cases.flatMap((c) => c.noroom.map((row) => row.w)));
     expect([...reasons].sort()).toEqual(REASON_ORDER.filter((reason) => reason !== "donor").sort()); // ("donor" needs an option no class can wear a copy of: a list never offers one; tested by hand below)

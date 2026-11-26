@@ -173,7 +173,7 @@ describe("when it runs", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(t.engine.runs, "the same view: nothing new").toHaveLength(1);
     let count = 1;
-    for (const change of [{ race: "OGR" }, { role: "tank" }, { setup: "2h" }, { buffs: "group" }, { evidence: "strict" }]) {
+    for (const change of [{ race: "OGR" }, { role: "melee" }, { setup: "2h" }, { buffs: "group" }, { evidence: "strict" }]) {
       t.setView(change);
       count += 1;
       await sent(t, count);

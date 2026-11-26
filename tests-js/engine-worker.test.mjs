@@ -20,6 +20,7 @@ import {
   LIMITS,
   LIVENESS_TIMEOUT_MS,
   STARTUP_COMPILE_MS,
+  STARTUP_FIRST_SIGN_MS,
   STARTUP_STALL_MS,
   WATCHDOG_GRACE_MS,
   isUrlLike,
@@ -66,7 +67,7 @@ const scenarioRequest = (over = {}) => ({
   kind: "scenario",
   trio: "pal-mnk-ber",
   level: 50,
-  scenario: { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" },
+  scenario: { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" },
   owned: [["w1234@4", 1]],
   mode: "equip-now",
   budgetMs: 5000,
@@ -421,7 +422,7 @@ describe("validating a request", () => {
       expect(isUrlLike(text)).toBe(true);
     });
   }
-  for (const text of ["pal-mnk-ber", "n[HEAD|w123@4]", "cap.AC", "balanced", "Rusty Dagger +4", "x[0]", "", "50"]) {
+  for (const text of ["pal-mnk-ber", "n[HEAD|w123@4]", "cap.AC", "tank", "Rusty Dagger +4", "x[0]", "", "50"]) {
     it(`does not see an address in ${JSON.stringify(text)}`, () => {
       expect(isUrlLike(text)).toBe(false);
     });
@@ -1840,6 +1841,7 @@ describe("the watchdog", () => {
     const load = engine.load.bind(engine);
     let release = null;
     engine.load = async (args) => {
+      args.onProgress({ phase: "loading", loaded: 0, total: 100 }); // (the download says it has begun, as the real one does at once: a worker that says nothing at all is another case, given up)
       await new Promise((resolve) => (release = resolve)); // a slow download
       return load(args);
     };
@@ -1932,6 +1934,44 @@ describe("the limits on starting the optimizer", () => {
   it("names its limits in one place: 20 seconds without a byte, a minute for the compile and the start once the last byte is in", () => {
     expect(STARTUP_STALL_MS).toBe(20_000);
     expect(STARTUP_COMPILE_MS).toBe(60_000);
+  });
+
+  it("E13: gives up a cold worker that has said nothing at all, after the time the worker's own two limits (the list of files, the first byte) could take and a margin; a first sign clears that limit", async () => {
+    fakeTimers();
+    const engine = fakeEngine();
+    engine.load = () => new Promise(() => {}); // (the worker's script never runs: no progress, no error event)
+    const h = makeHarness({ engine });
+    const request = track(h.client.solve(modelRequest()));
+    await tick(80);
+    expect(h.workers).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(STARTUP_FIRST_SIGN_MS - 1);
+    expect(request.state).toBe("pending");
+    expect(h.workers[0].terminated).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await tick(10);
+    expect(request.state).toBe("rejected");
+    expect(request.error).toMatchObject({ code: "engine-load", message: expect.stringMatching(/too long/i) });
+    expect(h.workers[0].terminated).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(STARTUP_FIRST_SIGN_MS).toBeGreaterThan(2 * STARTUP_STALL_MS); // (after the worker's own limits, which a slow link meets first)
+  });
+
+  it("E13: a worker whose first progress comes late, inside the limit, is not given up, and the limit is cleared by that first sign", async () => {
+    fakeTimers();
+    const engine = fakeEngine();
+    const load = engine.load.bind(engine);
+    engine.load = async (args) => {
+      await new Promise((resolve) => setTimeout(resolve, STARTUP_FIRST_SIGN_MS - 1000)); // (nothing for a long time: the list of files and the headers were slow)
+      return load(args);
+    };
+    const h = makeHarness({ engine });
+    const request = track(h.client.solve(modelRequest()));
+    await tick(80);
+    await vi.advanceTimersByTimeAsync(STARTUP_FIRST_SIGN_MS - 500);
+    await tick(80);
+    expect(request.state).toBe("resolved");
+    expect(h.workers[0].terminated).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("does not give up a download that keeps delivering, however long it takes: ten minutes of progress, and then the answer", async () => {
@@ -4197,6 +4237,7 @@ describe("the source", () => {
   const files = [
     ...readdirSync(resolve(STATIC, "engine")).filter((name) => name.endsWith(".js")).map((name) => resolve(STATIC, "engine", name)),
     resolve(STATIC, "tt-policy.js"),
+    resolve(STATIC, "tt-record.js"),
   ];
   // the sinks the page's policy exists to keep out (spec 8.5): none of them may appear in the engine's code, comments included
   const SINKS = new RegExp(
@@ -4221,7 +4262,7 @@ describe("the source", () => {
 
   it("lists the files the plan names", () => {
     const names = files.map((f) => f.slice(STATIC.length + 1).replaceAll("\\", "/"));
-    expect(names).toEqual(expect.arrayContaining(["engine/worker.js", "engine/client.js", "tt-policy.js"]));
+    expect(names).toEqual(expect.arrayContaining(["engine/worker.js", "engine/client.js", "tt-policy.js", "tt-record.js"]));
   });
 
   for (const file of files) {
@@ -4232,7 +4273,9 @@ describe("the source", () => {
     });
     it(`${name} names no other site and opens no other channel`, () => {
       const text = readFileSync(file, "utf8");
-      expect(text).not.toMatch(/https?:\/\//);
+      // the record of the policy names one address outside the site, the page counter's script (Part M), and only that one: it lets nothing else through for the counter
+      const named = [...text.matchAll(/https?:\/\/[^\s"'`)]+/g)].map((match) => match[0]);
+      expect(named).toEqual(name === "tt-record.js" ? ["https://static.cloudflareinsights.com/beacon.min.js"] : []);
       expect(text).not.toMatch(/\bWebSocket\b|\bXMLHttpRequest\b|\bEventSource\b|\bsendBeacon\b/);
     });
     if (name.startsWith("engine/")) {

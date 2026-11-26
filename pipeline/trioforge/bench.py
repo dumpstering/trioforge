@@ -62,7 +62,7 @@ import highspy
 from trioforge.classes import CLASS_CODES
 from trioforge.model import formulas as fm
 from trioforge.model import weapons as wp
-from trioforge.model.buffs import BuffSet, group_preset, own_buffs, resolve
+from trioforge.model.buffs import BuffSet, buffsets
 from trioforge.model.items import ItemVec, at_tier
 from trioforge.model.profile import Profile, make_profile
 from trioforge.model.roles import CASTER_CLASSES, TANK_CLASSES, roles_for
@@ -126,7 +126,8 @@ BENCH_TIERS = (0, 4, 10)
 BUFF_SETS = ("own", "group")  # the trio's own long buffs; those plus the 13 common group buffs
 EVIDENCE_LEVELS = ("wiki", "strict-proxy")
 GRID_CELLS = len(TIERS) * len(EVIDENCE_LEVELS) * len(BUFF_SETS)  # 44 cells of tier, evidence level and buff set
-SPEC_SCENARIOS = 2_825_460  # the number of scenarios the run is sized for (15 races x 4,281 role-setups x 44)
+SPEC_SCENARIOS = 2_825_460  # the specification's own sizing of the run (15 races x 4,281 role-setups x 44), kept as the scale the hours are compared to the spec at: it is the document's figure, not a count of
+# this grid (which is counted from the catalog on every run and reported as ``scenarios``: now 16 races and the builds' setups), so a sixteenth race does not change it
 CPU_BUDGET_HOURS = 300.0  # above this after the cuts, only tiers 0, 4 and 10 are precomputed (the project's rule)
 STRICT_SHARE = 0.44  # the strict proxy keeps this share of the wiki items
 WIKI_FIRST_SKIP = 0.74  # share of strict solves that the wiki-first cut skips (measured on the previous model)
@@ -452,10 +453,7 @@ class Context:
             seconds: dict[str, float] = {}
 
             def build() -> BuffSet:
-                buffs = own_buffs(trio, LEVEL, self.inputs.spells, self.rules)
-                if kind == "group":
-                    buffs = [*buffs, *group_preset(self.inputs.spells)]
-                return resolve(buffs, self.rules)
+                return buffsets(trio, LEVEL, self.inputs.spells, self.rules, (kind,))[kind]
 
             self._buffsets[key] = _step(seconds, "buffs", build)
             self.buff_seconds[key] = seconds
@@ -520,7 +518,7 @@ class Context:
             record.update(
                 status_off=off.status, status_on=on.status, F_off=off.F, F_on=on.F, nodes_off=off.nodes,
                 nodes_on=on.nodes, verdict=compare_solutions(off.status, off.F, on.status, on.F),
-                rel_diff=_rel_diff(off.F, on.F), same_items=_items(off) == _items(on), same_kit=_keys(off) == _keys(on),
+                rel_diff=_rel_diff(off.F, on.F), same_items=_same(_items(off), _items(on)), same_kit=_same(_keys(off), _keys(on)),
                 cols=milp.num_cols,
             )
             if canonical:
@@ -531,7 +529,7 @@ class Context:
                 record.update(
                     status_canon_off=off_c.status, status_canon_on=on_c.status, F_canon_off=off_c.F, F_canon_on=on_c.F,
                     verdict_canon=compare_solutions(off_c.status, off_c.F, on_c.status, on_c.F),
-                    same_items_canon=_items(off_c) == _items(on_c), same_kit_canon=_keys(off_c) == _keys(on_c),
+                    same_items_canon=_same(_items(off_c), _items(on_c)), same_kit_canon=_same(_keys(off_c), _keys(on_c)),
                 )
         except Exception as exc:  # noqa: BLE001
             record["error"] = _error_text(exc)
@@ -551,6 +549,11 @@ def _keys(solution: Any) -> tuple[str | None, ...] | None:
 def _items(solution: Any) -> tuple[str, ...] | None:
     keys = _keys(solution)
     return None if keys is None else tuple(sorted(key for key in keys if key))
+
+
+def _same(a: Any, b: Any) -> bool:
+    """Whether two kits (or their item lists) agree: two kits that are both missing (a solve that found none) do not."""
+    return a is not None and a == b
 
 
 def _rel_diff(a: float | None, b: float | None) -> float | None:
@@ -573,6 +576,16 @@ def compare_solutions(
     if on_status != "optimal" or on_value is None or off_value is None:
         return "guarded"
     return "ok" if abs(off_value - on_value) <= rel * max(1.0, abs(off_value), abs(on_value)) else "mismatch"
+
+
+def gate_passed(gate: Mapping[str, Any] | None) -> bool:
+    """The one test of the presolve gate, used by the exit code, the Result bullet and the decision. It passes when no scenario mismatched in either stage (the plain solve
+    and the canonical tie stage), none raised an error, and at least one was compared (a run in which every presolve-off solve timed out, or with no scenario, has verified nothing).
+    Guarded runs (presolve on did not end optimal) do not fail it: the production rule re-solves them with presolve off."""
+    if not gate:
+        return False
+    canonical = gate.get("canonical") or {}
+    return gate.get("n_mismatch") == 0 and gate.get("errors") == 0 and canonical.get("mismatches", 0) == 0 and (gate.get("compared") or 0) > 0
 
 
 # ---- running many scenarios ----------------------------------------------------------------------------------------
@@ -676,7 +689,8 @@ def presolve_gate(
     diffs = [r["rel_diff"] for r in ok if r.get("rel_diff") is not None]
     solver = highspy.Highs()
     both = [r for r in ok if r["verdict"] in ("ok", "mismatch")]
-    canon = [r for r in ok if "c_canon_off" in r]
+    ran_canon = [r for r in ok if "c_canon_off" in r]
+    canon = [r for r in ran_canon if r["verdict_canon"] in ("ok", "mismatch")]  # (a guarded or unverified run has no second answer to compare with: it counts nowhere)
 
     def speedup(rows: Sequence[Mapping[str, Any]], off: str, on: str, clock: str) -> float | None:
         return _ratio(sum(r[f"{clock}_{off}"] for r in rows), sum(r[f"{clock}_{on}"] for r in rows))
@@ -693,7 +707,7 @@ def presolve_gate(
         "speedup": {"solve": speedup(both, "off", "on", "c"), "canon": speedup(canon, "canon_off", "canon_on", "c")},
         "wall_speedup": {"solve": speedup(both, "off", "on", "t"), "canon": speedup(canon, "canon_off", "canon_on", "t")},
         "canonical": {
-            "n": len(canon), "mismatches": sum(r["verdict_canon"] == "mismatch" for r in canon),
+            "n": len(canon), "left_out": len(ran_canon) - len(canon), "mismatches": sum(r["verdict_canon"] == "mismatch" for r in canon),
             "same_items": sum(r["same_items_canon"] for r in canon), "same_kit": sum(r["same_kit_canon"] for r in canon),
             "time_off": summarize([r["c_canon_off"] for r in canon]),
             "time_on": summarize([r["c_canon_on"] for r in canon]),
@@ -961,10 +975,13 @@ def _row(label: str, s: Mapping[str, Any], digits: int = 3) -> str:
 
 def _presolve_bullet(gate: Mapping[str, Any]) -> str:
     speed = gate.get("speedup", {}).get("solve")
-    failed = gate.get("n_mismatch") or gate.get("errors")
+    failed = not gate_passed(gate)
     head = f"The gate {'fails' if failed else 'passes'} on {gate.get('n')} scenarios"
     if failed:
-        return f"- **Presolve.** {head} ({gate.get('n_mismatch')} mismatches, {gate.get('errors')} errors): it stays off."
+        return (
+            f"- **Presolve.** {head} ({gate.get('n_mismatch')} mismatches, {(gate.get('canonical') or {}).get('mismatches', 0)} in the tie stage, "
+            f"{gate.get('errors')} errors, {gate.get('compared', 0)} compared): it stays off."
+        )
     if speed is not None and speed <= 1:
         return (
             f"- **Presolve.** {head} (0 mismatches), but presolve runs at {_fmt(speed)}x the speed of presolve off on "
@@ -999,7 +1016,7 @@ def _gate_text(gate: Mapping[str, Any]) -> str:
         f"{gate.get('n')} scenarios drawn uniformly from the grid (all tiers, races, trios, roles and setups, both buff "
         f"sets, wiki and strict-proxy pools), each solved with presolve off and with presolve on. **Objective "
         f"mismatches: {gate.get('n_mismatch')}** (a difference above {gate.get('tolerance', 1e-9):g} relative; the "
-        f"largest seen is {gate.get('max_rel_diff', 0):.1e}). Presolve-on runs that did not end optimal (to be "
+        f"largest seen is {gate.get('max_rel_diff', 0):.1e}), of {gate.get('compared')} scenarios whose two solves both ended optimal. Presolve-on runs that did not end optimal (to be "
         f"re-solved with presolve off): {gate.get('guarded')}. Errors: {gate.get('errors')}. Speed-up of presolve (time "
         f"off over time on; below 1 is slower): solve {_fmt(speed.get('solve'))}x{tie}."
     )
@@ -1376,14 +1393,25 @@ def tier_seconds(records: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, fl
     return out
 
 
+def _count(text: str) -> int:
+    """An argument that is a number of scenarios: a whole number, not below zero (a negative sample draws none, and a gate of none verifies nothing)."""
+    try:
+        number = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a whole number") from None
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"{number} is below zero")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     today = datetime.date.today().isoformat()
     parser = argparse.ArgumentParser(prog="python -m trioforge.bench", description=(__doc__ or "").split("\n")[0])
     add = parser.add_argument
     add("--catalog", help="the catalog file (default: $TRIOFORGE_CATALOG, else derived/catalog.json)")
     add("--out", default=f"reports/bench-{today}.json", help="the JSON report; a .md is written beside it")
-    add("--sample", type=int, default=500, help="scenarios of the presolve gate (default 500; the CI gate uses 5000)")
-    add("--gate-only", action="store_true", help="run only the presolve gate; the exit code is 1 on a mismatch or error")
+    add("--sample", type=_count, default=500, help="scenarios of the presolve gate (default 500; the CI gate uses 5000)")
+    add("--gate-only", action="store_true", help="run only the presolve gate; the exit code is 1 on a mismatch (in either stage), an error or a gate that compared nothing")
     add("--render", metavar="JSON", help="rewrite the notes and the markdown beside an existing JSON report, and exit")
     add("--canonical-every", type=int, default=5, help="the gate compares the canonical solve on every N-th scenario")
     add("--bench-trios", type=int, default=60, help="trios of the coverage sample (the coverage rules need 40 or more)")
@@ -1446,7 +1474,7 @@ def notes_for(result: Mapping[str, Any]) -> list[str]:
         f"{ratio.get('solve', 0):.2f}x to solve and {ratio.get('canon', 0):.2f}x with the tie stage. The 74 percent of "
         "strict solves that wiki-first skips was measured on the previous model; it cannot be measured without strict items.",
         "Sampling: the coverage sample has three races and tiers 0, 4 and 10; the other eight tiers are interpolated. "
-        "The uniform sample (all 15 races, all 11 tiers) is the check. The interval covers the choice of trios only, and "
+        "The uniform sample (all 16 races, all 11 tiers) is the check. The interval covers the choice of trios only, and "
         "treats a stratum with a single sampled trio as exact.",
     ]  # fmt: skip
     out += _driver_notes(result.get("bench", {}), result.get("grid", {}).get("by_stratum", {}))
@@ -1513,7 +1541,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     result["gate"] = gate
     if args.gate_only:
         write_reports(result, Path(args.out))
-        passed = bool(gate) and gate["n_mismatch"] == 0 and gate["errors"] == 0
+        passed = gate_passed(gate)
         print(f"presolve gate: {'passed' if passed else 'FAILED'}", file=sys.stderr)
         return 0 if passed else 1
 
@@ -1570,7 +1598,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cells, strata = aggregate(records)
     ratio = paired_ratio(wiki_rows, strict_rows) if args.uniform else dict.fromkeys(FIELDS, STRICT_SHARE)
     costs = wiki_costs(cells, strata, shapes)
-    gate_ok = bool(gate) and gate["n_mismatch"] == 0 and gate["errors"] == 0
+    gate_ok = gate_passed(gate)
     presolve = {k: v for k, v in gate["speedup"].items() if v is not None} if gate_ok else None
     extrap = extrapolate(costs, ratio, shapes, skip_strict=args.skip_strict, presolve=presolve)
     point, low, high = canonical_interval(cells, strata, shapes, ratio, skip_strict=args.skip_strict, seed=args.seed)

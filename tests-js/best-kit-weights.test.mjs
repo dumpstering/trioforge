@@ -26,11 +26,11 @@ const weighted = REFERENCE.cases.filter((c) => c.weights !== undefined);
 const plain = REFERENCE.cases.filter((c) => c.weights === undefined);
 
 describe("the reference", () => {
-  it("has the views the fixture promises: the sliders at x0.5 and x2 of every group, a custom weight, a window, the four buff sets and a deity", () => {
+  it("has the views the fixture promises: the sliders at x0.5 and x2 of every group, a custom weight, a window, the four buff sets (and three of their haste twins) and a deity", () => {
     expect(REFERENCE).toMatchObject({ trio: "pal-mnk-ber", level: 50 });
     expect(weighted.length).toBeGreaterThanOrEqual(10);
     expect(plain.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(REFERENCE.cases.map((c) => c.scenario.buffs))).toEqual(new Set(["own", "group", "group+enchanter", "raid"]));
+    expect(new Set(REFERENCE.cases.map((c) => c.scenario.buffs))).toEqual(new Set(["own", "group", "group+enchanter", "raid", "own+haste", "group+enchanter+haste", "raid+haste"]));
     expect(new Set(weighted.flatMap((c) => Object.keys(c.weights.multipliers ?? {})))).toEqual(new Set(["AC", "MANA", "ATK+HASTE", "SV", "regen"]));
     expect(new Set(weighted.flatMap((c) => Object.values(c.weights.multipliers ?? {})))).toEqual(new Set([0.5, 2]));
     expect(weighted.some((c) => c.weights.custom !== undefined) && weighted.some((c) => c.weights.regenT !== undefined)).toBe(true);

@@ -13,8 +13,8 @@
 //   * no key that could poison a lookup (__proto__, constructor, prototype) anywhere, and no such name in a list of names (the attributes, the
 //     weight keys, the setups ...), since the names become keys downstream;
 //   * the shape of everything `assembleProfile` and the other ports read, field by field: the version, the trio and the level, the common part
-//     with exactly the fields of Profile.to_dict() that do not vary, the races, the roles with their weights and non-empty setups at every evidence
-//     level, the buff sets -- and nothing else: the top level, a row of the races, the roles and the buff sets, and an entry of a pool list have
+//     with exactly the fields of Profile.to_dict() that do not vary, the races, the roles with their weights and setups at every evidence
+//     level (a list may be empty at a level where the role is not offered: the Ranged role plays the bow and nothing else), the buff sets -- and nothing else: the top level, a row of the races, the roles and the buff sets, and an entry of a pool list have
 //     exactly the fields that the exporter writes (a mana pool names its stat, no other does); the buff table holds whole numbers only, under the
 //     component names of the bundle (the builder adds the always-on buffs in exact numbers, Python as floats: they agree for whole numbers); and every exact number in the six exact blocks a
 //     reduced "p/q" text (a bare number there, or a rational with a zero denominator or not in lowest terms, is refused) -- the same texts that
@@ -30,6 +30,7 @@
 // or evidence level the bundle does not have and a blank deity are a ChoiceError (a BundleError that is the asker's fault); a choice other than the five above, and any bundle that is not
 // what the exporter writes, are a BundleError that is not.
 
+import { isPlainObject, safe } from "./plain.js";
 import { MAX_DIGITS, MAX_TEXT_LENGTH, Rational, RationalError } from "./rational.js";
 
 /** A bundle that is not what the exporter writes, or a choice the bundle does not have (that is a ChoiceError, below). */
@@ -54,6 +55,17 @@ export class ChoiceError extends BundleError {
 /** The format number of the bundle (FORMAT in browser.py). */
 export const BUNDLE_VERSION = 1;
 
+/** The end of the key of a buff set that keeps the haste of the spells (`own+haste`): the sets a reader's "I have a haste spell" solves and values a kit with. */
+export const HASTE_SUFFIX = "+haste";
+
+/**
+ * The buff set of a key as the evaluator and the model take it, `{set, table}`: the set of the row of the key and the table of the buffs it reads, which is
+ * `buff_table_haste` for a key that ends in `+haste` (a buff that carries haste has two readings of one spell id) and `buff_table` for the others.
+ */
+export function buffsetOf(bundle, key) {
+  return { set: bundle.buffs[key].set, table: key.endsWith(HASTE_SUFFIX) ? bundle.buff_table_haste : bundle.buff_table };
+}
+
 /**
  * What a document may hold. `maxRationals` is the number of "p/q" texts: each costs a reduction (see MAX_DIGITS in rational.js), so a document of
  * texts of the most digits, as many as there are, reads in about a tenth of a second here. The bundles of the exporter hold 104 to 393 (385 in
@@ -66,28 +78,30 @@ export const BUNDLE_LIMITS = Object.freeze({ ...LIMITS, maxDigits: MAX_DIGITS })
 /** The fields of Profile.to_dict(), in order. */
 export const PROFILE_FIELDS = Object.freeze([
   "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap", "cs_pct", "pe_pct",
-  "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity", "haste_bonus", "nd_pct",
+  "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights", "setups", "deity", "haste_bonus", "nd_pct", "ranged_factor", "stance",
 ]); // fmt: skip
 const RACE_FIELDS = ["race", "naked", "iksar_ac"];
-const ROLE_FIELDS = ["role", "weights", "setups"];
+const ROLE_FIELDS = ["role", "weights", "setups", "stance"];
+/** The roles that only a pool offers (`POOL_ROLES` of model/roles.py): no setup is assumed for them with no pool, so a profile of one is made at an evidence level alone. */
+const POOL_ROLES = new Set(["ranged"]);
 const BUFF_FIELDS = ["buff_totals", "spell_haste"];
 const VARYING = new Set([...RACE_FIELDS, ...ROLE_FIELDS, ...BUFF_FIELDS]);
 const COMMON_FIELDS = PROFILE_FIELDS.filter((field) => !VARYING.has(field));
 /** The fingerprint of the inputs a bundle (and the item table) was made from: a SHA-256, as 64 lower-case hexadecimal digits. The field is optional. */
 const FINGERPRINT = /^[0-9a-f]{64}$/;
 const TOP_FIELDS = [
-  "version", "data_release", "rules_version", "trio", "level", "profile_common", "evidence_levels", "races", "roles", "buffs", "buff_table", "constants",
-  "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios",
+  "version", "data_release", "rules_version", "trio", "level", "profile_common", "evidence_levels", "races", "roles", "buffs", "buff_table", "buff_table_haste",
+  "procs", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios",
 ]; // fmt: skip
 /** The blocks whose every exact number is a "p/q" text (and which hold no bare number). */
 const EXACT_BLOCKS = ["constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios"];
 /** The roles a bundle may offer (ROLES in pipeline/trioforge/model/roles.py). */
-const ROLES = ["balanced", "tank", "melee", "caster"];
+const ROLES = ["tank", "shield", "melee", "ranged", "castertank", "caster"];
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const SET_FIELDS = ["always_on", "optional", "conflicts", "cliques", "cardinality", "dropped"];
 /** The fields of a row of `races`, of `roles` and of `buffs`, and of an entry of a pool list, as `bundle` and `Profile.to_dict()` of browser.py write them. */
 const RACE_ROW_FIELDS = ["code", "name", "legal", "naked", "iksar_ac"];
-const ROLE_ROW_FIELDS = ["weights", "setups", "setups_by_evidence"];
+const ROLE_ROW_FIELDS = ["weights", "setups", "stance", "setups_by_evidence"];
 const BUFF_ROW_FIELDS = ["buff_totals", "spell_haste", "set"];
 const POOL_FIELDS = ["cls", "base", "fac"];
 const MANA_POOL_FIELDS = ["cls", "base", "fac", "stat"]; // only a mana pool names the stat that it converts
@@ -98,18 +112,8 @@ const CHOICE_KEYS = new Set(["race", "role", "buffs", "evidence", "deity"]);
 
 const fail = (where, problem) => new BundleError(`${where} ${problem}`);
 
-/** A name from the bundle or from a visitor, safe to put in a message: short, and only letters, digits and a few signs. */
-function safeName(name) {
-  if (typeof name !== "string") return "?";
-  if (name.length === 0) return "(empty)";
-  if (name.length > 24) return "?";
-  for (let i = 0; i < name.length; i += 1) {
-    const code = name.charCodeAt(i);
-    const ok = (code >= 0x30 && code <= 0x39) || (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a) || code === 0x5f || code === 0x2b || code === 0x2e || code === 0x2d;
-    if (!ok) return "?";
-  }
-  return name;
-}
+/** A name from the bundle or from a visitor, safe to put in a message (`safe` of evaluate.js; an empty name is said so). */
+const safeName = (name) => (name === "" ? "(empty)" : safe(name));
 
 /** The path of a node of the walk, from the chain of entries (only built when something is wrong). */
 function pathOf(entry) {
@@ -120,12 +124,6 @@ function pathOf(entry) {
 }
 
 // ---- the walk: plain data, copied and frozen ------------------------------------------------------------------------------------
-
-function isPlainObject(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
 
 /**
  * A copy of plain data, frozen all through. Iterative, with a stack of its own: the depth and the number of nodes are counted, and the
@@ -319,6 +317,7 @@ function checkCommon(common, bundle, context) {
   needNumber(common.haste_bonus, `${where}.haste_bonus`, { min: 0 });
   // Natural Durability: the percent it adds to the HP that comes from STA. It is already in the `fac` of the HP pools below (the evaluator and the builder read the pools), so it is only checked here
   needNumber(common.nd_pct, `${where}.nd_pct`, { min: 0 });
+  needNumber(common.ranged_factor, `${where}.ranged_factor`, { min: 0 }); // the multiplier of the damage per delay of a bow in the bow setup
   needList(common.softcap, `${where}.softcap`, { exactly: 2 }).forEach((value, index) => needNumber(value, `${where}.softcap[${index}]`));
   if (common.monk !== null) {
     needObject(common.monk, `${where}.monk`);
@@ -382,12 +381,20 @@ function checkRoles(roles, context) {
       needNumber(weights[key], `${at}.weights.${safeName(key)}`, { min: 0 });
     }
     needNames(row.setups, `${at}.setups`, { within: context.setups });
+    if (row.stance !== null) {
+      // the Berserker stance of the build (`stance.berserker`): the factor of the swing speed and the share of agility that counts in the armor class and the evasion; null for a build that plays no stance
+      const stance = needFields(row.stance, ["agi_share", "swing_factor"], `${at}.stance`);
+      needNumber(stance.agi_share, `${at}.stance.agi_share`, { min: 0 });
+      if (stance.agi_share > 1) throw fail(`${at}.stance.agi_share`, "must be at most 1");
+      if (!(needNumber(stance.swing_factor, `${at}.stance.swing_factor`) > 0)) throw fail(`${at}.stance.swing_factor`, "must be above 0");
+    }
     const byLevel = needObject(row.setups_by_evidence, `${at}.setups_by_evidence`);
     const given = Object.keys(byLevel);
     if (given.length !== context.levels.size || given.some((level) => !context.levels.has(level))) {
       throw fail(`${at}.setups_by_evidence`, "must have one list for each evidence level of the bundle, and no other");
     }
-    for (const level of given) needNames(byLevel[level], `${at}.setups_by_evidence.${safeName(level)}`, { within: context.setups });
+    for (const level of given) needNames(byLevel[level], `${at}.setups_by_evidence.${safeName(level)}`, { within: context.setups, min: 0 }); // (empty: the role is not offered for the pool of that level)
+    if (given.every((level) => byLevel[level].length === 0)) throw fail(`${at}.setups_by_evidence`, "must have a setup at some evidence level: a role that no pool offers is no role");
     rows.set(role, row);
   }
   if (rows.size === 0) throw fail("bundle.roles", "must not be empty");
@@ -484,6 +491,8 @@ function check(bundle) {
   const roles = checkRoles(bundle.roles, context);
   const buffs = checkBuffs(bundle.buffs, context);
   checkBuffTable(bundle.buff_table, context.components);
+  checkBuffTable(bundle.buff_table_haste, context.components);
+
   if (bundle.monk_bins !== null) needObject(bundle.monk_bins, "bundle.monk_bins");
   for (const block of ["tier_rules", "weapon_rules", "weight_groups", "regen_ratios"]) needObject(bundle[block], `bundle.${block}`);
   for (const block of EXACT_BLOCKS) if (bundle[block] !== null) checkExact(bundle[block], `bundle.${block}`, context);
@@ -546,8 +555,12 @@ export function assembleProfile(bundle, choices) {
   const buffRow = typeof buffs === "string" ? index.buffs.get(buffs) : undefined;
   if (buffRow === undefined) throw new ChoiceError(`buffs ${describeChoice(buffs)} is not a buff set of the bundle (use ${someNames(index.buffs.keys())})`);
   const withEvidence = evidence !== undefined && evidence !== null;
+  if (!withEvidence && POOL_ROLES.has(role)) throw new ChoiceError(`role ${describeChoice(role)} is offered by a pool alone (a bow is never assumed): name an evidence level`);
   if (withEvidence && (typeof evidence !== "string" || !index.levels.has(evidence))) {
     throw new ChoiceError(`evidence ${describeChoice(evidence)} is not one of ${someNames(index.levels)}`);
+  }
+  if (withEvidence && roleRow.setups_by_evidence[evidence].length === 0) {
+    throw new ChoiceError(`role ${describeChoice(role)} is not offered for the solve pool of the ${evidence} evidence level (it has no weapon setup there)`);
   }
   const withDeity = deity !== undefined && deity !== null;
   if (withDeity && (typeof deity !== "string" || isBlank(deity))) throw new ChoiceError("deity is null or a name, not blank or anything else");
@@ -559,6 +572,7 @@ export function assembleProfile(bundle, choices) {
     ["role", role],
     ["weights", roleRow.weights],
     ["setups", withEvidence ? roleRow.setups_by_evidence[evidence] : roleRow.setups],
+    ["stance", roleRow.stance],
     ["buff_totals", buffRow.buff_totals],
     ["spell_haste", buffRow.spell_haste],
   ]);

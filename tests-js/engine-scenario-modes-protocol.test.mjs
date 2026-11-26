@@ -38,7 +38,7 @@ const MANIFEST = parseManifest({
   trios: { "pal-mnk-ber": [50] },
 });
 
-const SCENARIO = { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" };
+const SCENARIO = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" };
 const OWNED = [["w90001@4", 1], ["w90007@4", 2], ["w80113@0", 1]];
 const KIT = ["w90001@4", null, "w90007@4", "w90007@4", ...new Array(17).fill(null), "w80113@0"];
 const READY4 = { mode: "ready4" };
@@ -64,7 +64,7 @@ describe("the modes of a scenario request", () => {
     for (const mode of [5, null, undefined, true, ["farm-path"], { mode: "farm-path" }]) bad(farm({ mode }));
     bad(without(farm, "mode")); // a scenario request names its mode
     // the generic shape: any plain data for a scenario, a list of owned items of any form, and candidates
-    bad({ v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, scenario: { race: "OGR", role: "balanced", tier: 4 }, owned: [[1234, 4, 1]], candidates: [], mode: "equip", budgetMs: 5000 });
+    bad({ v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, scenario: { race: "OGR", role: "tank", tier: 4 }, owned: [[1234, 4, 1]], candidates: [], mode: "equip", budgetMs: 5000 });
     bad({ v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, scenario: { race: "OGR" }, owned: [], candidates: [], budgetMs: 5000 });
   });
 

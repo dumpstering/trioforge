@@ -61,6 +61,11 @@ Result files (``<trio>/``)
 ``totals``     the distinct total vectors, in the order of ``totals_keys``
 ``buff_sets``  the distinct lists of the **optional** buffs the solver chose (spell ids, sorted): the buffs that are always on
                for the scenario's buff set are not listed, they follow from the buff set itself
+``procs``      written only when some scenario scores a weapon proc: ``{"rows": [...], "at": [...]}``. A row is the list of the procs the hands of a kit count,
+               ``[hand, effect name, donor item key, mode, value]`` (``hand`` ``P`` for the main hand and ``S`` for the off hand, ``mode`` ``n`` when the donor is the weapon
+               itself and ``h`` when the effect is moved onto it from the donor, ``value`` procs a minute times the damage-equivalent of one, to four decimals: a proc
+               adds ``value / 600`` to the weapon index of its hand, times the factor of the off hand), the rows are the distinct ones, and ``at`` has one entry for each scenario in the
+               order of ``scenarios``: the index of its row, or -1 when no proc counts (see :mod:`trioforge.model.procs`). The reader ignores the key
 ``scenarios``  ``[race, role, tier, setup, kit, F, gain, totals, buffs, haste]``: ``kit``, ``totals`` and ``buffs`` index
                ``kits``, ``totals`` and ``buff_sets``; ``F`` is the value of the kit (HP-equivalents) and ``gain`` is ``F``
                minus the value of the naked character with its best buffs (both have two decimals); ``haste`` is the haste
@@ -110,9 +115,12 @@ order of role (``tiers`` is the same list as the file's own, ``bytes`` and ``sha
 size at level 9). The old single ``runnerups.json`` and the files of an earlier layout, one for each role and tier
 (``<role>-<tier>.json``), are no longer written, and a run removes them.
 
-``defaults.json``: the ``view`` (role, tier, evidence, buffs) the default answer is taken from, ``strict_pool_empty``, the
+``defaults.json``: the ``view`` (role, tier, evidence, buffs) the default answer is taken from (the **opening build** of the trio at +4,
+:func:`trioforge.model.roles.opening_role`), ``strict_pool_empty``, the
 default ``race`` (the creation-legal race with the highest total value in that view; a race that cannot be created never
-wins), ``runner_up_race``, the ``margin`` between them, its ``F`` and best ``setup``, the value of every race
+wins), ``runner_up_race``, the ``margin`` between them, ``close_races`` (the creation-legal races whose value is within the rule ``defaults.race_close_pct``
+of the best, the default first, in descending value; an empty list when the best race stands alone, so that the page says "close" only where it is),
+its ``F`` and best ``setup``, the value of every race
 (``races``), the ``flip_notes`` of the robustness solves and ``robustness`` (``done`` or ``skipped: <why>``). A flip note
 says that an open rule, switched to its alternative, would put another race on top of the default view:
 ``"Iksar, if Iksar AC stacks inside the cap (test B17)"`` (the race, the alternative, the in-game test that settles the rule); the
@@ -166,7 +174,7 @@ runner-up evidence     the header names the evidence level of  the reader (the s
 robust.json            ``roles``: ``{role: {tier: {place:      the reader (the site took a list of views with 22
                        label}}}``                              labels)
 defaults.json          ``view``, ``runner_up_race``,           the reader (the site took ``runner_up`` and ``flips``
-                       ``flip_notes``, ``setup``, ``F``        and fixed the view at Balanced, +4, strict, own buffs)
+                       ``flip_notes``, ``setup``, ``F``        and fixed the view at one build, +4, strict, own buffs)
 =====================  =====================================  ==========================================================
 
 The two engine files are read there too, and checked against the shards: the bundle's format number, trio, level, ``data_release`` and
@@ -198,6 +206,7 @@ import hashlib
 import json
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -219,6 +228,7 @@ __all__ = [
     "RUNNERUP_DIR",
     "arrival_tier",
     "check_budget",
+    "close_races",
     "check_invariants",
     "chunk_path",
     "default_race",
@@ -506,8 +516,12 @@ def shard_doc(
     kits: dict[tuple[int, ...], int] = {}
     totals: dict[tuple[int, ...], int] = {}
     buff_sets: dict[tuple[int, ...], int] = {}
+    proc_rows: dict[str, int] = {}
+    proc_at: list[int] = []
     scenarios = []
     for _, _, _, _, key, row in rows:
+        records = row.get("procs")
+        proc_at.append(proc_rows.setdefault(dumps(records), len(proc_rows)) if records else -1)
         kit = tuple(item_at[k] if k is not None else -1 for k in row["kit"])
         total = tuple(row["totals"])
         gain = row["F"] - bases[(row["race"], key.role, buffs)]
@@ -515,7 +529,7 @@ def shard_doc(
             row["race"], key.role, key.tier, key.setup, kits.setdefault(kit, len(kits)), _rounded(row["F"]), _rounded(gain),
             totals.setdefault(total, len(totals)), buff_sets.setdefault(tuple(row["buffs"]), len(buff_sets)), row["haste"],
         ])  # fmt: skip
-    return {
+    doc = {
         **layout.header(), "evidence": evidence, "buffs": buffs, "solver": {**layout.solver, "kept_first": kept_first},
         "build_options": dict(layout.build_options), "assumptions": dict(layout.assumptions), "flags": list(layout.flags), "partial": len(rows) != layout.expected[(evidence, buffs)], "pool": layout.pools[evidence],
         "races": [{"code": code, "legal": legal} for code, legal in layout.races], "roles": list(layout.roles),
@@ -524,10 +538,13 @@ def shard_doc(
         "kits": [list(kit) for kit in kits], "totals_keys": list(TOTALS_KEYS), "totals": [list(t) for t in totals],
         "buff_sets": [list(ids) for ids in buff_sets], "scenarios": scenarios,
     }  # fmt: skip
+    if proc_rows:  # (only a run in which a proc counts has the key: the result files of a pool with no proc are as they were)
+        doc["procs"] = {"rows": [json.loads(text) for text in proc_rows], "at": proc_at}
+    return doc
 
 
 def runnerup_name(role: str) -> str:
-    """The name of a role's runner-up file, relative to the folder of the trio: ``runnerups/balanced.json``."""
+    """The name of a build's runner-up file, relative to the folder of the trio: ``runnerups/tank.json``."""
     return f"{RUNNERUP_DIR}/{role}.json"
 
 
@@ -588,32 +605,53 @@ def runnerup_texts(layout: Layout, chunk_docs: Mapping[tuple[str, int], Mapping[
     return texts
 
 
-def default_race(values: Mapping[str, float], legal: Collection[str], order: Sequence[str]) -> dict[str, Any] | None:
-    """The default race: the creation-legal race with the highest value, the runner-up and the margin.
+def close_races(ranked: Sequence[str], values: Mapping[str, float], close_pct: Any) -> list[str]:
+    """The races of ``ranked`` (in descending value) whose value is within ``close_pct`` percent of the best one's: ``value >= (100 - close_pct) / 100 x best``, in exact
+    arithmetic on the decimals the values are written as. Two races or more make a list, the best first; a best race that stands alone (or a best of no value above 0) gives an empty list."""
+    if len(ranked) < 2 or values[ranked[0]] <= 0:
+        return []
+    best, share = Fraction(str(values[ranked[0]])), (100 - Fraction(str(close_pct))) / 100
+    close = [race for race in ranked if Fraction(str(values[race])) >= share * best]
+    return close if len(close) >= 2 else []
 
-    ``values`` is the value of each race, ``legal`` the creation-legal ones (only asked about, never listed: pass
-    :meth:`Layout.legal_races`) and ``order`` the display order, which decides a tie. A race that cannot be created never wins,
-    whatever its value. None when no legal race has a value; the runner-up and the margin are None when only one does."""
+
+def default_race(
+    values: Mapping[str, float], legal: Collection[str], order: Sequence[str], close_pct: Any
+) -> dict[str, Any] | None:
+    """The default race: the race that can be created with the highest value, the runner-up, the margin and the races that are close to it.
+
+    ``values`` is the value of each race, ``legal`` the races that can be created at character creation (only asked about, never listed: pass :meth:`Layout.legal_races`) and
+    ``order`` the display order, which decides a tie. Only the races that can be created take part: a race that cannot be created is never the default, never the runner-up
+    and never named as close, whatever its value (the page offers only races a reader can create). So the default is the best race that can be created, which is not the best
+    race overall when that one cannot be created, and the margin is its lead over the next race that can be created.
+
+    ``close`` lists the races that can be created whose value is within ``close_pct`` percent (the rule ``defaults.race_close_pct``) of the best of them: the window is measured
+    from the best race that can be created, not from the best race overall. They come in descending value (the display order on a tie), the default first; the list is empty
+    when the best race that can be created stands alone, and when its value is not above 0. None when no race that can be created has a value; the runner-up and the margin are
+    None when only one does."""
     ranked = sorted((race for race in order if race in legal and race in values), key=lambda race: (-values[race], order.index(race)))
     if not ranked:
         return None
+    close = close_races(ranked, values, close_pct)
     if len(ranked) == 1:
-        return {"race": ranked[0], "runner_up": None, "margin": None}
-    return {"race": ranked[0], "runner_up": ranked[1], "margin": values[ranked[0]] - values[ranked[1]]}
+        return {"race": ranked[0], "runner_up": None, "margin": None, "close": close}
+    return {"race": ranked[0], "runner_up": ranked[1], "margin": values[ranked[0]] - values[ranked[1]], "close": close}
 
 
 def defaults_doc(
     layout: Layout, *, view: Mapping[str, Any], per_race: Mapping[str, tuple[float, str]], strict_empty: bool,
-    robustness: str, flip_notes: Sequence[str] = (), why: Sequence[Any] | None = None,
+    robustness: str, flip_notes: Sequence[str] = (), why: Sequence[Any] | None = None, close_pct: Any,
 ) -> dict[str, Any]:
-    """``defaults.json``: ``per_race`` maps a race to its value and best setup in the default view. ``why`` (the 22 places of
-    :func:`trioforge.precompute.kitwhy.default_why`) is written as ``why.places`` when given."""
+    """``defaults.json``: ``per_race`` maps a race to its value and best setup in the default view (the opening build of the trio: ``view.role``). ``close_pct`` is
+    the rule ``defaults.race_close_pct``: ``close_races`` lists the races within that percent of the best, the default first, or is empty when the best stands alone.
+    ``why`` (the 22 places of :func:`trioforge.precompute.kitwhy.default_why`) is written as ``why.places`` when given."""
     order = [code for code, _ in layout.races]
-    choice = default_race({race: value for race, (value, _) in per_race.items()}, layout.legal_races(), order)
+    choice = default_race({race: value for race, (value, _) in per_race.items()}, layout.legal_races(), order, close_pct)
     doc = {
         **layout.header(), "view": dict(view), "strict_pool_empty": strict_empty,
         "race": choice["race"] if choice else None, "runner_up_race": choice["runner_up"] if choice else None,
         "margin": None if not choice or choice["margin"] is None else _rounded(choice["margin"]),
+        "close_races": list(choice["close"]) if choice else [],
         "F": _rounded(per_race[choice["race"]][0]) if choice else None,
         "setup": per_race[choice["race"]][1] if choice else None,
         "races": [

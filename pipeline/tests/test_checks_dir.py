@@ -226,6 +226,54 @@ def test_node_and_python_agree_on_the_folders_that_are_in_a_git_work_tree(tmp_pa
             assert Path(got) == Path(expected)
 
 
+# ---- a part that ends in a dot or a space: Windows reads the name without it, and Python and Node read the real path of such a name differently (S2) ----------------------
+
+DOTTED = ["C:\\stamps\\j.\\x", "C:\\stamps\\j \\x", "C:\\stamps\\j.", "C:/stamps/j./x", "C:\\stamps\\...\\x", "C:\\stamps\\a \\"]  # (Windows paths that have such a part)
+PLAIN_WINDOWS = ["C:\\stamps\\a.b\\c", "C:\\stamps\\.\\x", "C:\\stamps\\..\\x", "C:\\stamps\\.hidden", "C:\\stamps\\x\\", "C:/stamps/a.b"]  # (a dot inside a name, and the parts "." and "..")
+
+
+@pytest.mark.parametrize("value", DOTTED)
+def test_a_part_that_ends_in_a_dot_or_a_space_is_refused_for_a_windows_path_on_any_computer(value):
+    with pytest.raises(ValueError, match=r"TRIOFORGE_CHECKS_DIR .*ends in a dot or a space"):
+        checks_dir({ENVIRONMENT_VARIABLE: value}, platform="win32", home=HOME)
+
+
+@pytest.mark.parametrize("value", PLAIN_WINDOWS)
+def test_a_dot_inside_a_name_and_the_parts_dot_and_dot_dot_are_no_reason_to_refuse_a_windows_path(value):
+    assert checks_dir({ENVIRONMENT_VARIABLE: value}, platform="win32", home=HOME) == Path(value)
+
+
+def test_a_part_that_ends_in_a_dot_is_a_name_like_any_other_where_the_computer_is_not_a_windows_one():
+    value = "/stamps/a./b"
+    if sys.platform == "win32":  # (a path that Windows reads, whatever the platform that was given)
+        with pytest.raises(ValueError, match="ends in a dot or a space"):
+            checks_dir({ENVIRONMENT_VARIABLE: value}, platform="linux", home=HOME)
+    else:
+        assert checks_dir({ENVIRONMENT_VARIABLE: value}, platform="linux", home=HOME) == Path(value)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the two real paths of a name with a trailing dot differ on Windows only")
+def test_the_reviews_spelling_of_a_junction_with_a_dot_is_refused_by_name_before_any_real_path_is_asked(tmp_path):
+    places = make_repositories(tmp_path)
+    (places["repo"] / "build").mkdir()
+    make_link(places["plain"] / "j", places["repo"] / "build")
+    with pytest.raises(ValueError, match="ends in a dot or a space"):
+        checks_dir({ENVIRONMENT_VARIABLE: f"{places['plain']}\\j.\\x"}, platform=sys.platform, home=HOME)
+
+
+def test_node_and_python_agree_on_which_paths_have_a_part_that_ends_in_a_dot_or_a_space():
+    need_node()
+    asked = [(platform, value) for value in (*DOTTED, *PLAIN_WINDOWS, "/stamps/a./b", "/stamps/a.b") for platform in ("win32", "linux")]
+    answers = node_answers(FOLDERS_IN_NODE, asked)
+    for platform, value in asked:
+        try:
+            checks_dir({ENVIRONMENT_VARIABLE: value}, platform=platform, home=HOME)
+            refused = False
+        except ValueError:
+            refused = True
+        assert (answers[f"{platform}|{value}"] is None) is refused, (platform, value)
+
+
 # ---- the shared module of the checks and the smoke check work out the same folder --------------------------------------------------------------------------
 
 
@@ -253,3 +301,58 @@ def test_the_smoke_check_works_out_the_folder_the_way_the_other_checks_do(monkey
     assert Path(named.stdout) == given
     bad = run_node(snippet, **{ENVIRONMENT_VARIABLE: "relative/folder"})
     assert bad.returncode != 0 and "TRIOFORGE_CHECKS_DIR" in bad.stderr
+
+
+def test_the_work_tree_question_is_asked_of_a_path_that_is_a_path_of_this_computer_and_not_of_one_that_is_not(monkeypatch):
+    """A Windows path on a Linux runner is a relative name, which lies in the checkout and was refused as a path in a work tree: the guard is about folders of THIS computer. A path of another kind of
+    platform that IS a path here (a rooted path such as /x on Windows is on the current drive: R5) is asked about as well."""
+    asked = []
+    monkeypatch.setattr(module, "in_a_work_tree", lambda folder: asked.append(folder) or True)  # (every folder that is asked about is in a work tree)
+    foreign = "linux" if sys.platform == "win32" else "win32"
+    here = Path(ABSOLUTE[foreign]).root != ""  # (rooted on this computer: /stamps on Windows is; C:\stamps on Linux is not)
+    if here:
+        with pytest.raises(ValueError, match="git work tree"):
+            checks_dir({ENVIRONMENT_VARIABLE: ABSOLUTE[foreign]}, platform=foreign, home=HOME)
+        assert asked == [Path(ABSOLUTE[foreign])]
+    else:
+        assert checks_dir({ENVIRONMENT_VARIABLE: ABSOLUTE[foreign]}, platform=foreign, home=HOME) == Path(ABSOLUTE[foreign])
+        assert asked == []
+    del asked[:]
+    own = ABSOLUTE["win32"] if sys.platform == "win32" else ABSOLUTE["linux"]
+    with pytest.raises(ValueError, match="git work tree"):
+        checks_dir({ENVIRONMENT_VARIABLE: own}, platform=sys.platform, home=HOME)
+    assert asked == [Path(own)]
+
+
+def make_link(link: Path, target: Path) -> None:
+    """A symbolic link (a junction on Windows when symbolic links are refused: it needs no privilege and is the same thing for a folder), or a skip."""
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError:
+        if sys.platform != "win32":
+            pytest.skip("cannot make a symbolic link here")
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+
+
+def test_a_junction_or_a_link_to_a_folder_in_a_work_tree_is_refused_whatever_it_is_called_and_whether_or_not_the_rest_is_there_yet(tmp_path):
+    places = make_repositories(tmp_path)
+    (places["repo"] / "build").mkdir()
+    make_link(places["plain"] / "j", places["repo"] / "build")
+    for inner in (places["plain"] / "j", places["plain"] / "j" / "x", places["plain"] / "j" / "not" / "yet" / "made"):
+        with pytest.raises(ValueError, match=r"TRIOFORGE_CHECKS_DIR .*git work tree"):
+            checks_dir({ENVIRONMENT_VARIABLE: str(inner)}, platform=sys.platform, home=HOME)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    make_link(places["plain"] / "ok", outside)
+    assert checks_dir({ENVIRONMENT_VARIABLE: str(places["plain"] / "ok" / "checks")}, platform=sys.platform, home=HOME) == places["plain"] / "ok" / "checks"  # (a link to a place that is no work tree is fine)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="a path with a root and no drive (/x, \\x) is a path on the current drive on Windows only")
+@pytest.mark.parametrize("value", ["/some-folder/checks"])  # (no test asks the network about a share: // is left out)
+def test_a_rooted_path_with_no_drive_is_guarded_on_windows_whatever_the_platform_that_is_given(monkeypatch, value):
+    asked = []
+    monkeypatch.setattr(module, "in_a_work_tree", lambda folder: asked.append(folder) or False)
+    checks_dir({ENVIRONMENT_VARIABLE: value}, platform="linux", home=HOME)
+    assert asked, "the guard was asked about it"

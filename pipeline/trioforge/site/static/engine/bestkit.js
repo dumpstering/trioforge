@@ -48,7 +48,10 @@
 
 import { CONSTANTS } from "./evaluate.js";
 import { ITEM_DEFAULTS, atTier } from "./items.js";
+import { isBow, readItem } from "./model.js";
 import { usableBy } from "./path.js";
+import { procsOf } from "./procs.js";
+import { buffsetOf } from "./profile.js";
 import { WEAPON_TIER_RATES } from "./protocol.js";
 import { prune } from "./prune.js";
 import { closeSession, createSession, solveScenario } from "./solve.js";
@@ -113,6 +116,9 @@ function checkTier(tier) {
   if (!Number.isInteger(tier) || tier < 0 || tier > MAX_TIER) throw new BestKitError(`The tier is a whole number from 0 to ${MAX_TIER}.`);
 }
 
+/** What is said when the view is the bow setup and no bow of its pool can be worn by its race and deity. */
+export const NO_BOW_IN_VIEW = "No bow in the pool can be worn by this race and deity: pick another build.";
+
 /** The items of the view's pool at the tier, as `atTier` gives them (at the weapon tier rate, when there is one): the records of `poolRecords` that the profile can use. */
 function poolOf(records, bundle, profile, evidence, tier, weapon) {
   const usable = usableBy(profile);
@@ -133,13 +139,15 @@ export function viewPool({ records, bundle, scenario, tier, weights, weaponTierR
   checkTier(tier);
   const weapon = weaponOptions(weaponTierRate);
   const profile = viewProfile(bundle, scenario, weights);
-  const buffset = { set: bundle.buffs[scenario.buffs].set, table: bundle.buff_table };
+  const buffset = buffsetOf(bundle, scenario.buffs);
   const monkBins = bundle.monk_bins === null ? undefined : bundle.monk_bins;
+  const procs = procsOf(bundle);
   const pool = poolOf(records, bundle, profile, scenario.evidence, tier, weapon);
   const pooledAt = now();
-  const pruneOptions = monkBins === undefined ? options : { ...options, monk_bins: monkBins };
+  const withBins = monkBins === undefined ? options : { ...options, monk_bins: monkBins };
+  const pruneOptions = procs === null ? withBins : { ...withBins, procs };
   const pruned = pool.length === 0 ? [] : prune(pool, profile, tier, scenario.setup, buffset, pruneOptions);
-  return { profile, buffset, monkBins, pool, pruned, pruneOptions, pooledAt, prunedAt: now() };
+  return { profile, buffset, monkBins, procs, pool, pruned, pruneOptions, pooledAt, prunedAt: now() };
 }
 
 /**
@@ -150,8 +158,11 @@ export function viewPool({ records, bundle, scenario, tier, weights, weaponTierR
 export function bestKit({ highs, records, bundle, scenario, tier, weights, weaponTierRate, budgetMs, canonical = false, now = defaultNow, options = {} }) {
   checkTier(tier);
   const began = now();
-  const { profile, buffset, monkBins, pool, pruned, pooledAt, prunedAt } = viewPool({ records, bundle, scenario, tier, weights, weaponTierRate, options, now });
-  const session = createSession({ highs, profile, setup: scenario.setup, buffset, monkBins, options, now });
+  const { profile, buffset, monkBins, procs, pool, pruned, pooledAt, prunedAt } = viewPool({ records, bundle, scenario, tier, weights, weaponTierRate, options, now });
+  // the bow setup puts a bow in the range place (the row range.bow of the model): a pool with no bow the view can wear has no model (`weapons.bow_available` of the page checks the class only), and is
+  // refused here, before one is made, as a bad request of the view, as a list without a bow is (`requireBow` in path.js). (`viewPool` leaves it: the pruning of any pool is held to the precompute's.)
+  if (scenario.setup === "ranged" && !pruned.some((item, at) => isBow(readItem(item, at)))) throw new BestKitError(NO_BOW_IN_VIEW);
+  const session = createSession({ highs, profile, setup: scenario.setup, buffset, monkBins, procs, options, now });
   try {
     // the truthful solve: the weapons are paid the haste the kit counts (one program for each haste a kit can count, solve.js), unless the options fix one
     const answer = solveScenario(session, { name: SCENARIO, items: pruned, options, budgetMs: Math.max(0, began + budgetMs - prunedAt), canonical });

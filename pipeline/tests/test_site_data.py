@@ -114,7 +114,7 @@ def test_the_metadata_comes_from_the_results(results):
     assert meta.data_tag == "data-2026-10-14"
     assert meta.data_date == "2026-10-14"  # the date inside the tag
     assert meta.game_patch == "2026-09-22"
-    assert meta.rules_version == "2026-10-13"
+    assert meta.rules_version == "2026-11-19"
     assert meta.partial is True  # the fixture holds three races and three tiers, as a narrowed run would write them
 
 
@@ -127,18 +127,17 @@ def test_all_four_shards_are_read(results):
 def test_the_grid_is_derived_from_the_rows(results):
     shard = results.shards[("strict", "own")]
     assert shard.races == ("OGR", "TRL", "ELF")
-    assert shard.roles == ("balanced", "tank", "melee")
+    assert shard.roles == ("tank", "melee")
     assert shard.tiers == (0, 4, 10)
-    assert shard.setups_for("balanced") == ("1h-shield", "2h", "dw")
     assert shard.setups_for("tank") == ("1h-shield", "2h", "dw")
     assert shard.setups_for("melee") == ("2h", "dw")  # Melee never offers 1H + shield
-    assert len(shard.scenarios) == 3 * 8 * 3
+    assert len(shard.scenarios) == 3 * 5 * 3
 
 
 def test_a_scenario_has_its_kit_value_and_totals(results):
     shard = results.shards[("strict", "own")]
-    scenario = shard.scenario("OGR", "balanced", 4, "dw")
-    assert (scenario.race, scenario.role, scenario.tier, scenario.setup) == ("OGR", "balanced", 4, "dw")
+    scenario = shard.scenario("OGR", "tank", 4, "dw")
+    assert (scenario.race, scenario.role, scenario.tier, scenario.setup) == ("OGR", "tank", 4, "dw")
     assert scenario.value == 10720.0
     assert scenario.gain == 7769.5
     assert len(scenario.kit) == 22
@@ -157,12 +156,16 @@ def test_a_scenario_has_its_kit_value_and_totals(results):
 
 def test_the_optional_buffs_and_the_assumed_haste_are_read_for_every_scenario(results):
     own = results.shards[("strict", "own")]
-    assert own.scenario("OGR", "tank", 4, "1h-shield").buffs == (20011,)
+    assert own.scenario("OGR", "tank", 4, "1h-shield").buffs == ()  # (no optional buff kept up in this view)
     assert own.scenario("OGR", "tank", 4, "1h-shield").haste_assumed == 66
+    assert own.scenario("OGR", "tank", 10, "1h-shield").buffs == (20011,)  # (the Tank at +10 keeps one up, a one-element tuple)
+    assert own.scenario("OGR", "tank", 10, "1h-shield").haste_assumed == 85
+    group = results.shards[("strict", "group")]
+    assert group.scenario("OGR", "tank", 4, "dw").buffs == (20001, 20002)
     group = results.shards[("strict", "group")]
     assert group.scenario("TRL", "melee", 10, "2h").buffs == (20001, 20002, 20003)
     assert group.scenario("TRL", "melee", 10, "2h").haste_assumed == 85  # held at the Monk cap
-    assert group.scenario("OGR", "balanced", 0, "dw").haste_assumed == 70
+    assert group.scenario("OGR", "tank", 0, "dw").haste_assumed == 70
     assert all(isinstance(i, int) for s in group.scenarios for i in s.buffs)
 
 
@@ -176,36 +179,37 @@ def test_the_solver_options_and_build_options_are_kept_as_recorded(results):
 def test_a_missing_scenario_is_none(results):
     shard = results.shards[("strict", "own")]
     assert shard.scenario("OGR", "melee", 4, "1h-shield") is None
-    assert shard.scenario("HUM", "balanced", 4, "dw") is None
+    assert shard.scenario("HUM", "tank", 4, "dw") is None
 
 
 def test_the_best_setup_is_the_highest_value_with_ties_going_to_the_earlier_setup(results):
     shard = results.shards[("strict", "own")]
-    assert shard.best_setup("OGR", "balanced", 4) == "dw"
-    assert shard.best_setup("OGR", "tank", 4) == "1h-shield"
+    assert shard.best_setup("OGR", "tank", 4) == "dw"
+    assert shard.best_setup("OGR", "tank", 10) == "1h-shield"  # (the best setup moves with the tier)
     assert shard.best_setup("OGR", "melee", 4) == "2h"
+    assert results.shards[("wiki", "own")].best_setup("OGR", "tank", 4) == "1h-shield"  # (and with the evidence level)
     scenarios = tuple(
-        dataclasses.replace(s, value=100.0) if s.role == "balanced" else s for s in shard.scenarios
+        dataclasses.replace(s, value=100.0) if s.role == "tank" else s for s in shard.scenarios
     )
     tied = data.Shard(shard.evidence, shard.buffs, shard.items, scenarios)
-    assert tied.best_setup("OGR", "balanced", 4) == "1h-shield"  # SETUPS order breaks the tie
+    assert tied.best_setup("OGR", "tank", 4) == "1h-shield"  # SETUPS order breaks the tie
 
 
 def test_text_is_passed_through_untouched(results):
     """The reader never edits a name: escaping is the templates' and the DOM code's job."""
     shard = results.shards[("strict", "own")]
-    assert shard.scenario("OGR", "balanced", 4, "dw").kit[17].name == "<b>x</b>"
-    assert shard.scenario("OGR", "balanced", 4, "dw").kit[17].source == 'Plane <i>of</i> Hate & "Fear"'
+    assert shard.scenario("OGR", "tank", 4, "dw").kit[17].name == "<b>x</b>"
+    assert shard.scenario("OGR", "tank", 4, "dw").kit[17].source == 'Plane <i>of</i> Hate & "Fear"'
 
 
 def test_items_carry_their_rule_arrival_source_evidence_and_deity(results):
-    item = results.shards[("strict", "own")].scenario("OGR", "balanced", 0, "dw").kit[4]
+    item = results.shards[("strict", "own")].scenario("OGR", "tank", 0, "dw").kit[4]
     assert item.name == "Choker of Seven Pebbles"
     assert (item.tier_rule, item.arrival, item.evidence, item.deity) == ("fixed0", 0, "strict", None)
     assert item.slots == ("NECK",)
     wiki_only = [i for i in results.shards[("wiki", "own")].items if i.evidence == "wiki"]
     assert [i.name for i in wiki_only] == ["Crown of the Vanguard"]
-    drop = results.shards[("strict", "own")].scenario("OGR", "balanced", 4, "dw").kit[0]
+    drop = results.shards[("strict", "own")].scenario("OGR", "tank", 4, "dw").kit[0]
     assert (drop.tier_rule, drop.arrival) == ("drop", 4)  # the highest tier a copy exists at without merging
 
 
@@ -215,25 +219,25 @@ def test_the_defaults_file(results):
     assert defaults.margin == 812.5
     assert defaults.flips == ("Iksar, if Iksar AC stacks inside the cap (test B17)",)
     # the view the answer is taken from, and the best weapon setup of the default race in it
-    assert (defaults.role, defaults.tier, defaults.evidence, defaults.buffs, defaults.setup) == ("balanced", 4, "strict", "own", "dw")
+    assert (defaults.role, defaults.tier, defaults.evidence, defaults.buffs, defaults.setup) == ("tank", 4, "strict", "own", "dw")
     assert defaults.value == 10720.0 and defaults.strict_empty is False and defaults.robustness == "done"
 
 
 def test_runner_ups_come_as_one_file_for_each_role_with_every_tier_of_the_run_and_an_index(results):
     runnerups = results.runnerups
-    assert [f.name for f in runnerups.files] == ["balanced.json", "tank.json", "melee.json"]  # in role order
-    assert [(f.role, f.tiers) for f in runnerups.files] == [(role, (0, 4, 10)) for role in ("balanced", "tank", "melee")]
-    assert runnerups.roles() == ("balanced", "tank", "melee")
-    assert runnerups.pairs() == tuple((role, tier) for role in ("balanced", "tank", "melee") for tier in (0, 4, 10))
+    assert [f.name for f in runnerups.files] == ["tank.json", "melee.json"]  # in role order
+    assert [(f.role, f.tiers) for f in runnerups.files] == [(role, (0, 4, 10)) for role in ("tank", "melee")]
+    assert runnerups.roles() == ("tank", "melee")
+    assert runnerups.pairs() == tuple((role, tier) for role in ("tank", "melee") for tier in (0, 4, 10))
     for file in runnerups.files:
         body = (FIXTURE / "runnerups" / file.name).read_bytes()
         assert (file.size, file.sha256) == (len(body), hashlib.sha256(body).hexdigest())
-    assert len(runnerups.views) == 3 * 3 * 3  # three races at three tiers in the file of each of the three roles
+    assert len(runnerups.views) == 3 * 3 * 2  # three races at three tiers in the file of each of the two builds
     assert results.shards[("strict", "own")].tiers == (0, 4, 10)  # the tiers of the run: what the files of the roles hold
 
 
 def test_a_slot_has_up_to_three_runner_ups_that_need_no_deity_and_at_most_one_that_does(results):
-    view = results.runnerups.view("OGR", "balanced", 4)
+    view = results.runnerups.view("OGR", "tank", 4)
     assert view.setup == "dw"
     assert len(view.slots) == 22
     for swaps in view.slots:
@@ -249,7 +253,7 @@ def test_a_slot_has_up_to_three_runner_ups_that_need_no_deity_and_at_most_one_th
     chest = view.slots[13]
     assert chest[0].item.name == "Mantle of the Faithful" and chest[0].item.deity == ("The Tribunal", "Rodcet Nife")
     assert chest[0].delta == -9.0 and chest[0].delta > chest[1].delta  # worse than the pick, yet better than the best other swap
-    assert results.runnerups.view("HUM", "balanced", 4) is None
+    assert results.runnerups.view("HUM", "tank", 4) is None
     assert results.runnerups.view("OGR", "caster", 4) is None
 
 
@@ -264,11 +268,11 @@ def test_the_badge_wording_for_an_item_that_needs_a_deity():
 def test_robustness_covers_the_default_race_at_tiers_4_and_10(results):
     robust = results.robust
     assert robust.race == "OGR"
-    labels = robust.view("balanced", 4)
+    labels = robust.view("tank", 4)
     assert len(labels) == 22 and labels[0] == "robust"  # in the order of the places of a kit
     assert labels[16] == 'depends on the "AC" & mana weight (x2)'
     assert labels[13] == "depends on the Monk curve (test B9)"
-    assert robust.view("balanced", 0) is None
+    assert robust.view("tank", 0) is None
     assert robust.view("caster", 4) is None
 
 
@@ -276,12 +280,12 @@ def test_the_seals_say_what_view_they_were_made_for_and_hold_for_that_view_alone
     """The precompute seals each role at the default race with the default evidence level, own buffs and the role's best weapon
     setup. A page that shows another setup, evidence level or buff set must not show those seals as if they were its own."""
     robust = results.robust
-    assert robust.sealed("balanced", 4) == data.Sealed(setup="dw", evidence="strict", buffs="own")
+    assert robust.sealed("tank", 4) == data.Sealed(setup="dw", evidence="strict", buffs="own")
     assert robust.sealed("tank", 10) == data.Sealed(setup="1h-shield", evidence="strict", buffs="own")  # the Tank's best here
     assert robust.sealed("melee", 4) == data.Sealed(setup="2h", evidence="strict", buffs="own")
-    assert robust.sealed("balanced", 0) is None and robust.sealed("caster", 4) is None
-    labels = robust.view("balanced", 4)
-    assert robust.labels_for("OGR", "balanced", 4, "dw", "strict", "own") == labels
+    assert robust.sealed("tank", 0) is None and robust.sealed("caster", 4) is None
+    labels = robust.view("tank", 4)
+    assert robust.labels_for("OGR", "tank", 4, "dw", "strict", "own") == labels
     for race, setup, evidence, buffs in (
         ("TRL", "dw", "strict", "own"),  # another race: the seals are for the default race
         ("OGR", "2h", "strict", "own"),  # another setup
@@ -289,8 +293,8 @@ def test_the_seals_say_what_view_they_were_made_for_and_hold_for_that_view_alone
         ("OGR", "dw", "wiki", "own"),  # another evidence level
         ("OGR", "dw", "strict", "group"),  # other buffs
     ):
-        assert robust.labels_for(race, "balanced", 4, setup, evidence, buffs) is None, (race, setup, evidence, buffs)
-    assert robust.labels_for("OGR", "balanced", 0, "dw", "strict", "own") is None  # a tier with no seals
+        assert robust.labels_for(race, "tank", 4, setup, evidence, buffs) is None, (race, setup, evidence, buffs)
+    assert robust.labels_for("OGR", "tank", 0, "dw", "strict", "own") is None  # a tier with no seals
     assert robust.labels_for("OGR", "caster", 4, "dw", "strict", "own") is None
 
 
@@ -315,8 +319,8 @@ def test_the_seals_of_a_page_whose_default_answer_is_the_wiki_level_are_for_that
         entry.update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
     index_path.write_text(json.dumps(index), encoding="utf-8")
     robust = data.load_trio(scratch).robust
-    assert robust.sealed("balanced", 4).evidence == "wiki"
-    assert robust.labels_for("OGR", "balanced", 4, robust.sealed("balanced", 4).setup, "strict", "own") is None
+    assert robust.sealed("tank", 4).evidence == "wiki"
+    assert robust.labels_for("OGR", "tank", 4, robust.sealed("tank", 4).setup, "strict", "own") is None
 
 
 def test_rounding_to_three_decimals_happens_in_the_reader(broken):
@@ -354,7 +358,7 @@ def test_an_item_may_list_slots_that_no_place_of_a_kit_has(broken):
         shot[2] = ["RANGE", "AMMO"]
 
     shard = data.load_trio(broken("strict-own", change)).shards[("strict", "own")]
-    assert shard.scenario("OGR", "balanced", 4, "dw").kit[17].slots == ("RANGE", "AMMO")
+    assert shard.scenario("OGR", "tank", 4, "dw").kit[17].slots == ("RANGE", "AMMO")
 
 
 def test_a_summoned_item_has_no_arrival_tier_and_the_browser_file_says_null(broken):
@@ -436,12 +440,12 @@ def test_a_level_whose_pool_has_no_shield_has_fewer_setups_than_the_wiki_level(n
     results = data.load_trio(no_strict_shield)
     for buffs in ("own", "group"):
         strict, wiki = results.shards[("strict", buffs)], results.shards[("wiki", buffs)]
-        assert [strict.setups_for(role) for role in strict.roles] == [("2h", "dw")] * 3
-        assert [wiki.setups_for(role) for role in wiki.roles] == [("1h-shield", "2h", "dw"), ("1h-shield", "2h", "dw"), ("2h", "dw")]
+        assert [strict.setups_for(role) for role in strict.roles] == [("2h", "dw")] * 2
+        assert [wiki.setups_for(role) for role in wiki.roles] == [("1h-shield", "2h", "dw"), ("2h", "dw")]
         assert (strict.races, strict.roles, strict.tiers) == (wiki.races, wiki.roles, wiki.tiers)
     strict, wiki = results.shards[("strict", "own")], results.shards[("wiki", "own")]
     assert strict.scenario("OGR", "tank", 4, "1h-shield") is None and wiki.scenario("OGR", "tank", 4, "1h-shield") is not None
-    assert (strict.best_setup("OGR", "tank", 4), wiki.best_setup("OGR", "tank", 4)) == ("dw", "1h-shield")
+    assert (strict.best_setup("OGR", "tank", 4), wiki.best_setup("OGR", "tank", 4)) == ("dw", "1h-shield")  # (the shield is the Tank's best at the wiki level only)
     assert results.defaults.setup == "dw" and results.runnerups.view("OGR", "tank", 4).setup == "dw"
 
 
@@ -452,12 +456,14 @@ def test_every_shard_carries_its_own_setups_and_none_is_compared_with_another(br
     root = broken("wiki-own", lambda document: drop_setup(document, "dw"))  # ... and a wiki shard lacks another
     results = data.load_trio(root)
     seen = {key: [shard.setups_for(role) for role in shard.roles] for key, shard in results.shards.items()}
-    assert seen[("strict", "own")] == [("1h-shield", "2h", "dw"), ("1h-shield", "2h", "dw"), ("2h", "dw")]
-    assert seen[("strict", "group")] == [("2h", "dw")] * 3
-    assert seen[("wiki", "own")] == [("1h-shield", "2h"), ("1h-shield", "2h"), ("2h",)]
-    assert seen[("wiki", "group")] == [("1h-shield", "2h", "dw"), ("1h-shield", "2h", "dw"), ("2h", "dw")]
-    assert results.shards[("strict", "group")].best_setup("OGR", "tank", 4) == "dw"  # the best of the shard's own setups
-    assert results.shards[("strict", "own")].best_setup("OGR", "tank", 4) == "1h-shield"
+    assert seen[("strict", "own")] == [("1h-shield", "2h", "dw"), ("2h", "dw")]
+    assert seen[("strict", "group")] == [("2h", "dw")] * 2
+    assert seen[("wiki", "own")] == [("1h-shield", "2h"), ("2h",)]
+    assert seen[("wiki", "group")] == [("1h-shield", "2h", "dw"), ("2h", "dw")]
+    assert results.shards[("strict", "group")].best_setup("OGR", "tank", 10) == "dw"  # the best of the shard's own setups (no shield in it)
+    assert results.shards[("strict", "own")].best_setup("OGR", "tank", 10) == "1h-shield"
+    assert results.shards[("wiki", "own")].best_setup("OGR", "tank", 4) == "1h-shield"  # (no dual wield in this one: the best of the setups it has, and the shield is the best of them)
+    assert results.shards[("wiki", "own")].best_setup("OGR", "melee", 4) == "2h" and results.shards[("wiki", "own")].setups_for("tank") == ("1h-shield", "2h")
 
 
 def test_a_default_answer_with_a_setup_its_own_level_does_not_have_is_refused(no_strict_shield):
@@ -474,7 +480,7 @@ def test_the_default_answer_and_the_runner_ups_are_read_against_the_level_of_the
         document.update(setup="1h-shield", strict_pool_empty=True)
 
     rewrite(root, "defaults", wiki_tank)
-    for role in ("balanced", "tank", "melee"):
+    for role in ("tank", "melee"):
         broken_runnerup(f"{role}.json", lambda document: document.update(evidence="wiki", evidence_fallback=True))
     edit_index(root, lambda document: document.update(evidence="wiki", evidence_fallback=True))
     results = data.load_trio(root)  # the strict level has no 1h-shield, and the answer of the wiki level may have it
@@ -496,7 +502,7 @@ def test_the_browser_shard_is_compact_arrays_the_js_can_index(results):
     assert all(len(kit) == 22 for kit in document["kits"])
     assert all(len(row) == 9 for row in document["rows"])  # ... totals index, assumed haste
     assert all(len(total) == 14 for total in document["totals"])
-    row = next(r for r in document["rows"] if r[:4] == ["OGR", "balanced", 4, "dw"])
+    row = next(r for r in document["rows"] if r[:4] == ["OGR", "tank", 4, "dw"])
     kit = document["kits"][row[4]]
     assert document["items"][kit[17]][1] == "<b>x</b>"  # still plain data
     assert kit[19] == -1
@@ -505,8 +511,8 @@ def test_the_browser_shard_is_compact_arrays_the_js_can_index(results):
 
 
 def test_the_browser_runnerups_are_one_file_for_a_role_with_every_tier_and_every_race(results):
-    document = json.loads(data.site_runnerups_json(results.runnerups, "balanced", CREDIT))
-    assert document["v"] == data.RUNNERUPS_VERSION == 2 and document["role"] == "balanced" and document["tiers"] == [0, 4, 10]
+    document = json.loads(data.site_runnerups_json(results.runnerups, "tank", CREDIT))
+    assert document["v"] == data.RUNNERUPS_VERSION == 2 and document["role"] == "tank" and document["tiers"] == [0, 4, 10]
     assert set(document) == {"v", "release", "license", "attribution", "role", "tiers", "items", "views"}
     assert [v[:2] for v in document["views"]] == [[tier, race] for tier in (0, 4, 10) for race in ("OGR", "TRL", "ELF")]  # by tier, then the file's races
     tier, race, setup, slots = next(v for v in document["views"] if v[:2] == [4, "OGR"])
@@ -532,16 +538,15 @@ def test_the_browser_runnerups_are_one_file_for_a_role_with_every_tier_and_every
 def test_the_browser_robust_file(results):
     robust = json.loads(data.site_robust_json(results.robust, CREDIT))
     assert robust["v"] == 2 and robust["race"] == "OGR"  # version 2: each view says what it was sealed for
-    assert ["balanced", 4] == next(v for v in robust["views"] if v[:2] == ["balanced", 4])[:2]
-    assert [v[:2] for v in robust["views"]] == [[role, tier] for role in ("balanced", "tank", "melee") for tier in (4, 10)]
+    assert ["tank", 4] == next(v for v in robust["views"] if v[:2] == ["tank", 4])[:2]
+    assert [v[:2] for v in robust["views"]] == [[role, tier] for role in ("tank", "melee") for tier in (4, 10)]
     # [role, tier, setup, evidence, buffs, 22 labels]
     assert [v[2:5] for v in robust["views"]] == [
-        ["dw", "strict", "own"], ["dw", "strict", "own"],
-        ["1h-shield", "strict", "own"], ["1h-shield", "strict", "own"],
+        ["dw", "strict", "own"], ["1h-shield", "strict", "own"],
         ["2h", "strict", "own"], ["2h", "strict", "own"],
     ]  # fmt: skip
     assert all(len(v) == 6 and len(v[5]) == 22 for v in robust["views"])
-    assert robust["views"][0][5] == list(results.robust.view("balanced", 4))
+    assert robust["views"][0][5] == list(results.robust.view("tank", 4))
 
 
 def test_the_browser_json_is_deterministic(results):
@@ -555,7 +560,7 @@ def test_every_browser_file_starts_with_the_release_the_licence_and_the_attribut
     the page refuses a file of another release, and a copy of the file anywhere carries its credit with it."""
     documents = [
         json.loads(data.site_shard_json(results.shards[("wiki", "group")], CREDIT)),
-        json.loads(data.site_runnerups_json(results.runnerups, "balanced", CREDIT)),
+        json.loads(data.site_runnerups_json(results.runnerups, "tank", CREDIT)),
         json.loads(data.site_robust_json(results.robust, CREDIT)),
     ]
     for document in documents:
@@ -646,6 +651,18 @@ def test_a_directory_must_hold_a_known_trio_slug(tmp_path):
         ("defaults", lambda d: d.update(runner_up_race="HUM"), "runner_up_race"),
         ("defaults", lambda d: d.update(runner_up_race=None), "runner_up_race"),  # a lone race that can be created has no runner-up
         ("defaults", lambda d: d.update(runner_up_race=d["race"]), "runner_up_race"),
+        ("defaults", lambda d: d.update(runner_up_race="ELF"), "runner_up_race"),  # a race of the grid that the shards say cannot be created is no runner-up either
+        ("defaults", lambda d: d.update(close_races=["OGR", "ELF"]), "close_races"),  # nor is it a close race
+        ("defaults", lambda d: d["view"].update(role="melee"), "view.role"),  # the page opens on the build the classes open on (a Paladin trio: the Tank), not on any build the grid has
+        ("strict-own", lambda d: d["races"][0].update(legal="yes"), "races[0]"),  # a row of the list of races that is not {code, legal} refuses the shard: no race check is skipped for it
+        ("strict-own", lambda d: d["races"][1].pop("code"), "races[1]"),
+        ("strict-own", lambda d: d["races"][2].update(code=7), "races[2]"),
+        ("strict-own", lambda d: d["races"].append("HUM"), "races["),
+        ("strict-own", lambda d: d["races"].append({"code": "ZZZ", "legal": True}), "races["),
+        ("strict-own", lambda d: d["races"].append(dict(d["races"][0])), "twice"),  # two rows with one race code (the second says the same, or the other thing)
+        ("strict-own", lambda d: d["races"].append({**d["races"][0], "legal": not d["races"][0]["legal"]}), "twice"),
+        ("strict-own", lambda d: d.update(races="HUM"), "races"),
+        ("wiki-group", lambda d: d["races"][0].update(legal=1), "races[0]"),  # whichever shard it is in
         ("defaults", lambda d: d.update(margin="big"), "margin"),
         ("defaults", lambda d: d.update(margin=None), "margin"),
         ("defaults", lambda d: d.update(flip_notes="x"), "flip_notes"),
@@ -661,11 +678,11 @@ def test_a_directory_must_hold_a_known_trio_slug(tmp_path):
         ("defaults", lambda d: d.update(robustness=7), "robustness"),
         ("defaults", lambda d: d.update(data_release="data-2026-10-20"), "data_release"),  # from another run than the shards
         ("defaults", lambda d: d.update(rules_version="2026-10-20"), "rules_version"),
-        ("robust", lambda d: d["roles"]["balanced"]["4"].pop("HEAD"), "HEAD"),
-        ("robust", lambda d: d["roles"]["balanced"]["4"].update(HELM="robust"), "HELM"),
-        ("robust", lambda d: d["roles"]["balanced"]["4"].update(HEAD=""), "label"),
+        ("robust", lambda d: d["roles"]["tank"]["4"].pop("HEAD"), "HEAD"),
+        ("robust", lambda d: d["roles"]["tank"]["4"].update(HELM="robust"), "HELM"),
+        ("robust", lambda d: d["roles"]["tank"]["4"].update(HEAD=""), "label"),
         ("robust", lambda d: d["roles"].update(healer={}), "healer"),
-        ("robust", lambda d: d["roles"]["balanced"].update({"7": d["roles"]["balanced"]["4"]}), "tier"),
+        ("robust", lambda d: d["roles"]["tank"].update({"7": d["roles"]["tank"]["4"]}), "tier"),
         ("robust", lambda d: d.update(race="HUM"), "race"),
         ("robust", lambda d: d.update(roles=[]), "roles"),
         ("robust", lambda d: d.update(game_patch="2026-09-23"), "game_patch"),
@@ -681,11 +698,11 @@ def test_a_bad_value_is_refused_with_the_file_and_field_named(broken, name, chan
     assert "\n" not in text  # one line, as every refusal in this repository
 
 
-# one entry of balanced.json is refused for each of these; the file's index entry is brought up to date first. A view is [tier, race, setup, places].
+# one entry of tank.json is refused for each of these; the file's index entry is brought up to date first. A view is [tier, race, setup, places].
 RUNNERUP_CHANGES = [
     (lambda d: d.update(buffs="group"), "buffs"),
     (lambda d: d.update(evidence="wiki"), "evidence"),
-    (lambda d: d.update(role="tank"), "role"),
+    (lambda d: d.update(role="melee"), "role"),
     (lambda d: d.update(items_keys=["key"]), "items_keys"),
     (lambda d: d["views"][0][3].__setitem__(0, [[0, -1.0]] * 4), "three runner-ups that need no deity"),
     (lambda d: d["views"][0][3].pop(), "22"),
@@ -706,11 +723,11 @@ RUNNERUP_CHANGES = [
 
 @pytest.mark.parametrize(("change", "message"), RUNNERUP_CHANGES)
 def test_a_bad_runner_up_file_is_refused_with_the_file_and_field_named(broken_runnerup, change, message):
-    root = broken_runnerup("balanced.json", change)
+    root = broken_runnerup("tank.json", change)
     with pytest.raises(data.ResultsError) as caught:
         data.load_trio(root)
     text = str(caught.value)
-    assert "runnerups/balanced.json" in text and message in text and "\n" not in text
+    assert "runnerups/tank.json" in text and message in text and "\n" not in text
 
 
 # The scope of a run is the tiers its shards record. The file of a role holds every tier of it: not one more, not one fewer, none twice.
@@ -747,12 +764,12 @@ def test_the_scope_is_whatever_tiers_the_shards_record(broken, broken_runnerup):
         broken(name, lambda d: d.update(tiers=[0, 10], partial=False, scenarios=[row for row in d["scenarios"] if row[2] != 4]))  # (a run of a scope has all of it)
     broken("defaults", lambda d: d["view"].update(tier=10))
     broken("robust", lambda d: (d.update(tiers=[10]), [by_tier.pop("4") for by_tier in d["roles"].values()]))
-    for role in ("balanced", "tank", "melee"):
+    for role in ("tank", "melee"):
         broken_runnerup(f"{role}.json", lambda d: d.update(tiers=[0, 10], views=[v for v in d["views"] if v[0] != 4]))
     edit_index(broken.root, lambda d: [entry.update(tiers=[0, 10]) for entry in d["files"]])
     results = data.load_trio(broken.root)
     assert results.shards[("wiki", "own")].tiers == (0, 10) and not results.meta.partial
-    assert [f.tiers for f in results.runnerups.files] == [(0, 10)] * 3 and results.runnerups.view("OGR", "tank", 4) is None
+    assert [f.tiers for f in results.runnerups.files] == [(0, 10)] * 2 and results.runnerups.view("OGR", "tank", 4) is None
     assert results.runnerups.view("OGR", "tank", 10) is not None
     broken_runnerup("tank.json", lambda d: d.update(tiers=[0, 4, 10]))  # the file of a role with a tier that this run does not have
     with pytest.raises(data.ResultsError, match=r"tank\.json: tiers\[1\]: \+4 is not a tier of the run"):
@@ -775,7 +792,7 @@ def test_more_than_one_runner_up_that_needs_a_deity_in_a_slot_is_refused(broken_
         i = locked_item(document)
         document["views"][0][3][0] = [[i, -1.0], [i, -2.0]]
 
-    root = broken_runnerup("balanced.json", change)
+    root = broken_runnerup("tank.json", change)
     with pytest.raises(data.ResultsError, match="more than one runner-up that needs a deity"):
         data.load_trio(root)
 
@@ -787,8 +804,8 @@ def test_one_that_needs_a_deity_beside_three_that_do_not_is_fine(broken_runnerup
         view = next(v for v in document["views"] if v[:2] == [4, "OGR"])
         view[3][0] = [[i, 4.5]] + [[n, -1.0 * (k + 1)] for k, n in enumerate(free)]
 
-    root = broken_runnerup("balanced.json", change)
-    swaps = data.load_trio(root).runnerups.view("OGR", "balanced", 4).slots[0]
+    root = broken_runnerup("tank.json", change)
+    swaps = data.load_trio(root).runnerups.view("OGR", "tank", 4).slots[0]
     assert len(swaps) == 4 and swaps[0].item.deity is not None and swaps[0].delta == 4.5  # better than the pick, and allowed
 
 
@@ -797,12 +814,12 @@ def test_a_swap_of_an_item_that_needs_no_deity_may_tie_the_pick_but_not_beat_it(
         free = next(n for n, row in enumerate(document["items"]) if not row[7])
         next(v for v in document["views"] if v[:2] == [4, "OGR"])[3][0] = [[free, 0.0]]
 
-    root = broken_runnerup("balanced.json", tie)
-    assert data.load_trio(root).runnerups.view("OGR", "balanced", 4).slots[0][0].delta == 0.0
+    root = broken_runnerup("tank.json", tie)
+    assert data.load_trio(root).runnerups.view("OGR", "tank", 4).slots[0][0].delta == 0.0
 
 
 def test_the_same_item_must_read_the_same_in_every_runner_up_file(broken_runnerup):
-    root = broken_runnerup("balanced.json", lambda d: d["items"][0].__setitem__(1, "Another Name"))
+    root = broken_runnerup("tank.json", lambda d: d["items"][0].__setitem__(1, "Another Name"))
     with pytest.raises(data.ResultsError, match="not the same as in another"):
         data.load_trio(root)
 
@@ -825,7 +842,8 @@ def test_the_index_must_match_the_files(broken_runnerup):
 
 def test_a_file_the_index_does_not_list_is_refused(broken_runnerup):
     root = broken_runnerup.root
-    (root / "runnerups" / "extra.json").write_text("{}", encoding="utf-8")
+    version = json.loads((root / "runnerups" / "index.json").read_text(encoding="utf-8"))["rules_version"]
+    (root / "runnerups" / "extra.json").write_text(json.dumps({"rules_version": version}), encoding="utf-8")  # (a file of this run: one that records no rules version is refused earlier, as old)
     with pytest.raises(data.ResultsError, match=r"runnerups/index\.json: files: extra\.json is in the folder but not in the index"):
         data.load_trio(root)
 
@@ -852,10 +870,10 @@ def _bad_name(name):
         (_bad_name("tank-04.json"), "is not a runner-up file name"),
         (lambda d: entry_of(d, "tank.json").update(role="melee"), "role"),  # the entry must agree with the file's name
         (lambda d: entry_of(d, "tank.json").pop("role"), "role"),
-        (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4]), r"files[1].tiers: has no +10, a tier of the run"),  # the entry lists the scope too
-        (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4, 7, 10]), r"files[1].tiers[2]: +7 is not a tier of the run"),
+        (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4]), r"files[0].tiers: has no +10, a tier of the run"),  # the entry lists the scope too
+        (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4, 7, 10]), r"files[0].tiers[2]: +7 is not a tier of the run"),
         (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4, 4, 10]), "lists +4 twice"),
-        (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4, 10, 11]), "files[1].tiers[3]"),
+        (lambda d: entry_of(d, "tank.json").update(tiers=[0, 4, 10, 11]), "files[0].tiers[3]"),
         (lambda d: entry_of(d, "tank.json").pop("tiers"), "tiers"),
         (lambda d: entry_of(d, "tank.json").update(bytes="big"), "bytes"),
         (lambda d: entry_of(d, "tank.json").update(sha256="ABC"), "sha256"),
@@ -864,7 +882,7 @@ def _bad_name(name):
         (lambda d: d["files"].pop(), "files: has no file for the melee role"),  # every role of the run has one
         (lambda d: d.update(files=[]), "no runner-up files"),
         (lambda d: d.update(files={}), "files"),
-        (lambda d: d["files"].append("tank.json"), "files[3]"),
+        (lambda d: d["files"].append("tank.json"), "files[2]"),
         (lambda d: d.update(version=2), "version"),
         (lambda d: d.update(trio="mnk-pal-ber"), "trio"),
         (lambda d: d.update(evidence="wiki"), "evidence"),
@@ -898,7 +916,7 @@ def test_an_item_in_a_slot_it_does_not_fit_is_refused(broken):
 
 
 def test_the_any_slots_take_any_item(results):
-    scenario = results.shards[("strict", "own")].scenario("OGR", "balanced", 4, "dw")
+    scenario = results.shards[("strict", "own")].scenario("OGR", "tank", 4, "dw")
     assert scenario.kit[18].slots == ("FINGER",)  # a ring in an Any slot is fine
 
 
@@ -910,7 +928,7 @@ def test_the_grid_must_be_complete(broken):
 
 
 def test_every_shard_must_have_the_same_grid(broken):
-    root = broken("wiki-group", lambda d: d["scenarios"].__delitem__(slice(0, 24)))  # one whole race
+    root = broken("wiki-group", lambda d: d["scenarios"].__delitem__(slice(0, 15)))  # one whole race (three tiers of five pairs of a build and a setup)
     with pytest.raises(data.ResultsError, match="grid") as caught:
         data.load_trio(root)
     assert "wiki-group.json" in str(caught.value) and "strict-own.json" in str(caught.value)
@@ -938,7 +956,7 @@ def test_shards_that_list_other_tiers_than_the_rest_are_refused_whichever_is_the
 
 GRID_DIFFERENCES = [
     (lambda d: d.update(scenarios=[row for row in d["scenarios"] if row[0] != "ELF"]), "its races are OGR TRL, and strict-own.json's are OGR TRL ELF"),
-    (lambda d: d.update(scenarios=[row for row in d["scenarios"] if row[1] != "melee"]), "its roles are balanced, tank, and strict-own.json's are balanced, tank, melee"),
+    (lambda d: d.update(scenarios=[row for row in d["scenarios"] if row[1] != "melee"]), "its roles are tank, and strict-own.json's are tank, melee"),
     (  # more than one part differs: each is said, the tiers first
         lambda d: d.update(scenarios=[row for row in d["scenarios"] if row[0] != "ELF" and row[2] != 10], tiers=[0, 4]),
         "its tiers are +0, +4, and strict-own.json's are +0, +4, +10; its races are OGR TRL, and strict-own.json's are OGR TRL ELF",
@@ -983,8 +1001,8 @@ ROBUST_TIER_CHANGES = [
     (lambda d: d.update(tiers=[4, 4, 10]), r"robust\.json: tiers: lists \+4 twice$"),
     (lambda d: d.update(tiers=[10, 4]), r"robust\.json: tiers: must be in ascending order$"),
     (lambda d: d.update(tiers=[0, 4, 10]), r"robust\.json: tiers: lists \+0, but no role has labels at \+0$"),  # a tier of the run, but not one of the seals
-    (lambda d: d.update(tiers=[4]), r"robust\.json: roles\.balanced\.10: is not a tier of the grid that this file lists in tiers"),  # labels at a tier it does not list
-    (lambda d: d.update(tiers=[]), r"robust\.json: roles\.balanced\.4: is not a tier of the grid that this file lists in tiers"),
+    (lambda d: d.update(tiers=[4]), r"robust\.json: roles\.tank\.10: is not a tier of the grid that this file lists in tiers"),  # labels at a tier it does not list
+    (lambda d: d.update(tiers=[]), r"robust\.json: roles\.tank\.4: is not a tier of the grid that this file lists in tiers"),
     (lambda d: d.update(tiers="4,10"), r"robust\.json: tiers: must be a list$"),
     (lambda d: d.update(tiers=[4, 10.5]), r"robust\.json: tiers\[1\]"),
     (lambda d: d.pop("tiers"), r"robust\.json: tiers: is missing$"),

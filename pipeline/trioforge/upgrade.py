@@ -38,8 +38,14 @@ The functions
 * :func:`farm_path`: step 1 is the exact best single addition (the best kit when exactly one addition may be made); each
   later step is the exact best single addition after the steps before it, the step's item having joined the owned set as the
   kind above says. The path ends after ``steps`` steps or when no addition improves the value: there is never a step with no
-  gain. Of equal additions the canonical solve decides, as everywhere (the kit of the smaller total rank of ``(key, tier)``).
+  gain. Of additions of exactly the same value the first by ``(key, tier)`` is the step's, in the canonical solve and in the browser's solve alike (see below).
   The label the page gives it: "Each step is the single best addition after the steps before it".
+* **Of equal additions** (a step whose best value is the value of more than one addition, exactly): the step takes the one with the smallest ``(key, tier)`` (the candidates are one to a key). The
+  solve of a step gives one of them, which one is the solver's path (the canonical solve takes the one of the kit that comes first in the order of kits, :mod:`trioforge.solver.solve`, which can be
+  another key), so after it the step looks for a smaller one: the same program with only the candidates before the one found on offer, and, if its best value is exactly the step's, the smaller
+  addition it found is taken and the look goes on from it, until none ties. The step's kit is then the solve of that one addition alone (canonical when the path is). Both engines do this
+  (``farmPath`` of ``path.js``), so the path of a visitor's browser, which runs no tie stage, is the path of the reference; the look is the solves of the same pool with the other candidates held
+  at none (``owned_caps``), and they are not part of what a fixture records.
 * :func:`best_sets`: the best kit when up to ``k`` additions may be made at once (sets, not a path: the best 2 can be worth
   more than the first two steps, and never less, with one candidate per key, as the tier modes give).
 * :func:`every_slot`: for each of the 22 places, the exact gain of swapping one item in with the rest of the kit held fixed
@@ -64,7 +70,7 @@ turns it off, for the tests that show so).
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from typing import Any
@@ -76,6 +82,8 @@ from trioforge.model.buffs import BuffSet
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, ItemVec, at_tier
 from trioforge.model.tiers import arrival_tier, cost_to_reach, tier_for_mode
 from trioforge.solver.haste import solve_scenario
+
+_look_scenario = solve_scenario  # the solves of the look for an earlier equal addition: the same function under a name that the recorder of the fixtures does not replace (it records the solves a step is made from)
 from trioforge.solver.model import BuildOptions, eval_buff_totals, ident
 from trioforge.solver.prune import prune
 from trioforge.solver.solve import Solution, solve, solve_canonical
@@ -274,11 +282,13 @@ def _haste_of(solution: Solution, options: BuildOptions) -> int:
 
 
 def _solve(
-    profile: Any, pool: Sequence[ItemVec], setup: str | None, buffset: BuffSet | None, options: BuildOptions, canonical: bool
+    profile: Any, pool: Sequence[ItemVec], setup: str | None, buffset: BuffSet | None, options: BuildOptions, canonical: bool,
+    scenario: Any = None,
 ) -> Solution:
     """The truthful solve of one pool (see the module docstring): the best kit valued at the haste it counts, or at the fixed
-    haste of ``options.haste_assumed``."""
-    solution = solve_scenario(profile, pool, setup, buffset, options, solver=solve_canonical if canonical else solve).solution
+    haste of ``options.haste_assumed``. ``scenario`` is the function that makes it (the module's ``solve_scenario`` when None)."""
+    made = solve_scenario if scenario is None else scenario
+    solution = made(profile, pool, setup, buffset, options, solver=solve_canonical if canonical else solve).solution
     if solution.status != "optimal":
         raise RuntimeError(f"the solver ended with status {solution.status!r}, not optimal (no time limit is set)")
     return solution
@@ -304,8 +314,10 @@ class _Plan:
         self.news: set[str] = set()
         self.ups: dict[str, str] = {}
         self.kinds: dict[str, tuple[str, int | None]] = {}
+        self.cands: dict[str, ItemVec] = {}  # every candidate by ident (a copy or a Lore copy too), for the order of the equal additions
         for cand in sorted(candidates, key=lambda c: (c.key, c.tier)):
             name = ident(cand.key, cand.tier)
+            self.cands[name] = cand
             kind, source = ledger.classify(cand)
             if kind == "copy":
                 if not cand.lore:  # a Lore copy adds nothing
@@ -319,14 +331,24 @@ class _Plan:
             else:
                 self.news.add(name)
 
-    def options(self, base: BuildOptions, pool: Sequence[ItemVec], max_new: int) -> BuildOptions:
-        """The options for ``pool`` (the whole pool of this solve or a pruned one): idents that are no longer in it are left out."""
+    def options(self, base: BuildOptions, pool: Sequence[ItemVec], max_new: int, only: Collection[str] | None = None) -> BuildOptions:
+        """The options for ``pool`` (the whole pool of this solve or a pruned one): idents that are no longer in it are left out. With ``only``, only those candidates are on
+        offer: the others are not new items or upgrade targets any more, a candidate that is not owned is held at none (a count of 0 in ``owned_caps``) and one that is owned has no copy
+        beyond its count."""
         present = {ident(item.key, item.tier) for item in pool}
+        caps = dict(self.caps)
+        news = {n for n in self.news if n in present}
         ups = {t: s for t, s in self.ups.items() if t in present}
-        return replace(
-            base, owned_caps=dict(self.caps) or None, new_keys=frozenset(n for n in self.news if n in present),
-            max_new=max_new, upgrades=ups or None,
-        )
+        if only is not None:
+            for name in sorted((news | set(ups)) - set(only)):
+                caps.setdefault(name, 0)
+            news = {n for n in news if n in only}
+            ups = {t: s for t, s in ups.items() if t in only}
+        return replace(base, owned_caps=caps or None, new_keys=frozenset(news), max_new=max_new, upgrades=ups or None)
+
+    def before(self, limit: tuple[str, int]) -> set[str]:
+        """The idents of the candidates that come before ``limit`` (a ``(key, tier)``): the ones the look for an earlier equal addition puts on offer."""
+        return {name for name, cand in self.cands.items() if (cand.key, cand.tier) < limit}
 
 
 def _candidates(candidates: Iterable[ItemVec]) -> list[ItemVec]:
@@ -343,9 +365,9 @@ def _candidates(candidates: Iterable[ItemVec]) -> list[ItemVec]:
 def _best_additions(
     profile: Any, ledger: _Owned, candidates: Sequence[ItemVec], setup: str | None, buffset: BuffSet | None,
     session: BuildOptions, max_new: int, canonical: bool, prune_pool: bool,
-) -> tuple[Solution, _Plan] | None:
-    """The best kit when up to ``max_new`` additions are made, and the plan it was solved under; None when the candidates
-    offer no addition at all."""
+) -> tuple[Solution, _Plan, list[ItemVec]] | None:
+    """The best kit when up to ``max_new`` additions are made, the plan it was solved under and the pool it was solved on (the
+    pruned one); None when the candidates offer no addition at all."""
     plan = _Plan(ledger, candidates)
     if not plan.news and not plan.ups:
         return None
@@ -354,7 +376,7 @@ def _best_additions(
         pool = prune(
             pool, profile, None, setup, buffset, plan.options(session, pool, max_new), owned=frozenset(plan.caps)
         )
-    return _solve(profile, pool, setup, buffset, plan.options(session, pool, max_new), canonical), plan
+    return _solve(profile, pool, setup, buffset, plan.options(session, pool, max_new), canonical), plan, pool
 
 
 def _acquired(solution: Solution, plan: _Plan, ledger: _Owned) -> list[Acquisition]:
@@ -389,6 +411,30 @@ def _join(ledger: _Owned, found: Acquisition) -> None:
 # ---- the farm path ------------------------------------------------------------------------------------------------------
 
 
+def _earlier_equal(
+    profile: Any, ledger: _Owned, plan: _Plan, pool: Sequence[ItemVec], setup: str | None, buffset: BuffSet | None, session: BuildOptions,
+    chosen: Acquisition, best: Fraction,
+) -> Acquisition | None:
+    """The first by ``(key, tier)`` of the additions worth exactly ``best`` (the value of the step) when one comes before ``chosen``, else None. The program of the step is solved again
+    with only the candidates before the addition found on offer (the other ones held at none, on the same pool), and if its best value is ``best`` its addition is the next to look
+    before, until the best value is less (it is never more: ``best`` is the best of all). The solves are plain ones (no tie stage): which addition of the equal ones such a solve gives does
+    not matter, the look goes on from it, and the first of them is the end of it."""
+    found: Acquisition | None = None
+    limit = (chosen.item.key, chosen.item.tier)
+    while True:
+        offered = plan.before(limit) & {ident(item.key, item.tier) for item in pool}
+        if not offered:
+            return found
+        solution = _solve(profile, pool, setup, buffset, plan.options(session, pool, 1, only=offered), False, _look_scenario)
+        if solution.breakdown.F != best:
+            return found
+        acquired = _acquired(solution, plan, ledger)
+        if len(acquired) != 1:
+            raise RuntimeError(f"the look for an earlier equal addition acquires {len(acquired)} items, not one")
+        found = acquired[0]
+        limit = (found.item.key, found.item.tier)
+
+
 def farm_path(
     profile: Any, owned: Mapping[ItemVec, int], candidates: Iterable[ItemVec], setup: str | None,
     buffset: BuffSet | None = None, steps: int = 8, options: BuildOptions | None = None, *, canonical: bool = True,
@@ -411,13 +457,20 @@ def farm_path(
         found = _best_additions(profile, ledger, offered, setup, buffset, session, 1, canonical, prune_pool)
         if found is None:
             break
-        solution, plan = found
+        solution, plan, pool = found
         acquired = _acquired(solution, plan, ledger)
         gain = solution.breakdown.F - before
         if not acquired or gain <= 0:
             break
         if len(acquired) != 1:
             raise RuntimeError(f"step {number} acquires {len(acquired)} items, not one: the model admitted too much")
+        earlier = _earlier_equal(profile, ledger, plan, pool, setup, buffset, session, acquired[0], solution.breakdown.F)
+        if earlier is not None:  # another addition of exactly the same value comes first: the step is that one, solved alone (canonically when the path is)
+            alone = plan.options(session, pool, 1, only={ident(earlier.item.key, earlier.item.tier)})
+            solution = _solve(profile, pool, setup, buffset, alone, canonical)
+            acquired = _acquired(solution, plan, ledger)
+            if acquired != [earlier] or solution.breakdown.F != before + gain:
+                raise RuntimeError(f"step {number}: the addition that comes first among the equal ones is not worth what the best is")
         _join(ledger, acquired[0])
         before = solution.breakdown.F
         path.append(Step(
@@ -445,7 +498,7 @@ def best_sets(
     start = equip_now(profile, owned, setup, buffset, session, canonical=canonical)
     found = _best_additions(profile, ledger, offered, setup, buffset, session, k, canonical, prune_pool)
     if found is not None:
-        solution, plan = found
+        solution, plan, _ = found
         acquired = _acquired(solution, plan, ledger)
         if acquired and solution.breakdown.F > start.breakdown.F:
             gain = solution.breakdown.F - start.breakdown.F
@@ -462,7 +515,7 @@ def _fits_place(item: ItemVec, place: str, setup: str | None, any_rule: str) -> 
         return "ANY" in item.slots or (any_rule == "all" and bool(WEARABLE_SLOTS & item.slots))
     if place not in item.slots:
         return False
-    return wp.allowed_in_hand(item, place.lower(), setup or "stick") if place in HANDS else True
+    return wp.allowed_in_hand(item, place.lower(), setup or "stick") if place in (*HANDS, "RANGE") else True  # (the range place takes a bow in the bow setup)
 
 
 def every_slot(
@@ -511,8 +564,8 @@ def every_slot(
 
     def value(trial: list[ItemVec | None]) -> Fraction:
         if haste is None:
-            return fm.evaluate_truthful(p, trial, totals, setup=setup).F
-        return fm.evaluate(p, trial, totals, setup=setup, haste_assumed=haste).F
+            return fm.evaluate_truthful(p, trial, totals, setup=setup, procs=opts.procs).F
+        return fm.evaluate(p, trial, totals, setup=setup, haste_assumed=haste, procs=opts.procs).F
 
     base = value(slots)
     pool = sorted((c for c in [*offered, *counted.values()] if usable(c)), key=lambda c: (c.key, c.tier))

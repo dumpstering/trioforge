@@ -26,6 +26,7 @@ from test_privacy_helpers import (  # noqa: F401  (fixtures are used by name)
     gitenv,
     git,
     keyfile,
+    macos_profile,
     parse_output,
     posix_home,
     privacy_files,
@@ -36,7 +37,9 @@ from test_privacy_helpers import (  # noqa: F401  (fixtures are used by name)
     scan,
     scan_blob,
     self_line,
+    tell_line,
     windows_profile,
+    wsl_home,
     write,
 )
 from trioforge.privacy import logshape
@@ -100,6 +103,49 @@ def test_provenance_is_found_in_the_history_of_messages_and_deleted_files(repo, 
     assert found == [("<commit", "provenance"), ("old.txt", "provenance")]
 
 
+# ---- provenance in a name -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("word", list(PROVENANCE_WORDS.values()), ids=list(PROVENANCE_WORDS))
+def test_a_provenance_word_in_a_file_name_is_found_though_the_content_is_clean(word):
+    # (keyless: only the content rules run, and that is how a continuous-integration run reads a name)
+    assert rules(scan("nothing here\n", path="docs/" + word + "-notes.md", key=None)) == ["provenance"]
+    assert [f.line for f in scan("nothing here\n", path="docs/" + word + "-notes.md", key=None)] == [0]  # (a name is line 0, as every finding about a name is)
+
+
+@pytest.mark.parametrize("name", ["docs/the-game-notes.md", "docs/assembler.md", "docs/rdata.json", "RVAs.txt", "src/ARVA/x.py"])
+def test_an_ordinary_file_name_is_not_a_provenance_finding(name):
+    assert scan("nothing here\n", path=name, key=None) == []
+
+
+def test_the_other_content_rules_still_leave_a_file_name_alone():
+    # a name may hold the shape of a chat line or a profile folder without being one: only the program-file words are read in a name
+    assert scan("x\n", path=tell_line() + ".txt", key=None) == []
+    assert scan("x\n", path=gitbash_profile("vexandra") + "/notes.txt", key=None) == []
+
+
+def test_a_provenance_word_in_a_branch_name_is_found_in_history(repo, keyfile):
+    write(repo, "a.txt", "fine\n")
+    git(repo, "add", "a.txt")
+    commit(repo, "a file")
+    git(repo, "branch", "notes-on-" + PROVENANCE_WORDS["client name in lower case"])
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert [(f["rule"], f["line"]) for f in parse_output(done.stdout)] == [("provenance", "0")]
+    assert parse_output(done.stdout)[0]["path"].startswith("<ref:refs/heads/notes-on-")
+
+
+def test_a_provenance_word_in_the_name_of_a_file_in_history_is_found_too(repo, keyfile):
+    write(repo, "docs/" + PROVENANCE_WORDS["code listing"] + "-notes.md", "fine\n")
+    git(repo, "add", "docs")
+    commit(repo, "a file")
+    git(repo, "rm", "-q", "-r", "docs")
+    commit(repo, "gone")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert {f["rule"] for f in parse_output(done.stdout)} == {"provenance"}
+
+
 # ---- local-path ---------------------------------------------------------------------------
 
 LOCAL_PATHS = {
@@ -111,6 +157,22 @@ LOCAL_PATHS = {
     "wsl": ("/mnt" + gitbash_profile("vexandra") + "/notes", 9),
     "linux home": (posix_home("vexandra") + "/notes", 5),
     "file url": ("file:///" + "home/vexandra/notes", 12),
+    "macos": (macos_profile("vexandra") + "/notes", 5),
+    "macos, a quoted path": ('"' + macos_profile("Brannoc") + "/notes", 6),
+    "macos, after an equals sign": ("HOME=" + macos_profile("vexandra") + "/bin", 10),
+    "macos, on the data volume": ("/System/Volumes/Data" + macos_profile("vexandra") + "/notes", 25),
+    "macos, on the data volume, in a file address": ("file:///System/Volumes/Data" + macos_profile("Brannoc"), 32),
+    "macos, a folder that only starts like the shared one": (macos_profile("SharedBy") + "/notes", 5),
+    "macos, a name that is the shared one and a dot and more": (macos_profile("Shared.vexandra") + "/notes", 5),
+    "macos, a name that is the shared one and a hyphen and more": (macos_profile("Shared-vexandra"), 5),
+    "macos, a name that is the shared one and an underscore and more": ('"' + macos_profile("Shared_vexandra") + '"', 6),
+    "macos, on the data volume, a name that starts like the shared one": ("/System/Volumes/Data" + macos_profile("SharedBy") + "/notes", 25),
+    "macos, a file address": ("file://" + macos_profile("vexandra") + "/notes", 12),
+    "wsl share": (wsl_home("vexandra") + "\\notes", 5),
+    "wsl localhost share": (wsl_home("vexandra", "Debian", "wsl.localhost") + "\\notes", 5),
+    "wsl share, slashes": (wsl_home("vexandra", sep="/") + "/notes", 5),
+    "wsl share, a distribution with dots and hyphens": (wsl_home("Brannoc", "Ubuntu-22.04") + "\\notes", 5),
+    "wsl share, upper case": (wsl_home("vexandra", "Ubuntu", "WSL$").replace("home", "HOME") + "\\notes", 5),
 }
 
 
@@ -138,6 +200,31 @@ def test_a_local_path_written_as_json_with_doubled_backslashes_is_found():
         "C:" + "\\Windows\\System32",
         "/" + "homework/notes",
         "/c/" + "Usersguide/notes",
+        macos_profile("<user>") + "/notes",
+        macos_profile("<name>"),
+        macos_profile("Shared") + "/notes",  # the folder every user shares: no one's
+        macos_profile("Shared"),
+        '"' + macos_profile("Shared") + '"',  # in quotes: a JSON value, a shell argument
+        "'" + macos_profile("Shared") + "'",
+        macos_profile("Shared") + ",",
+        "[" + macos_profile("Shared") + "]",
+        "(" + macos_profile("Shared") + ")",
+        "paths: " + macos_profile("Shared") + ": shared",
+        "{" + macos_profile("Shared") + "}",
+        "/System/Volumes/Data" + macos_profile("Shared") + "/notes",
+        '"/System/Volumes/Data' + macos_profile("Shared") + '"',
+        "/System/Volumes/Data" + macos_profile("Shared") + ",",
+        "/System/Volumes/Data" + macos_profile("Shared") + ":",
+        "/System/Volumes/Data" + macos_profile("<user>") + "/notes",
+        "/System/Volumes/Data/Applications/notes",
+        "https://example.invalid/" + "Users" + "/about",  # a web address, not a profile folder
+        "/" + "Usersguide/notes",
+        "~/" + "Users" + "/vexandra",  # a folder named Users inside a home folder
+        "/" + "users" + "/42",  # a route of an interface, in lower case
+        wsl_home("<user>") + "\\notes",
+        wsl_home("<name>", host="wsl.localhost"),
+        "\\\\" + "wsl$\\Ubuntu\\etc",  # the share, not a home folder
+        "wsl" + "$ " + "home",
     ],
     ids=[
         "windows placeholder user",
@@ -150,6 +237,31 @@ def test_a_local_path_written_as_json_with_doubled_backslashes_is_found():
         "system folder",
         "similar folder name",
         "similar guide name",
+        "macos placeholder user",
+        "macos placeholder name",
+        "macos shared folder",
+        "macos shared folder alone",
+        "macos shared folder in double quotes",
+        "macos shared folder in single quotes",
+        "macos shared folder, a comma after",
+        "macos shared folder in brackets",
+        "macos shared folder in parentheses",
+        "macos shared folder, a colon after",
+        "macos shared folder in braces",
+        "macos shared folder on the data volume",
+        "macos shared folder on the data volume, in quotes",
+        "macos shared folder on the data volume, a comma after",
+        "macos shared folder on the data volume, a colon after",
+        "macos data volume, a placeholder",
+        "macos data volume, no users folder",
+        "macos web address",
+        "macos similar name",
+        "macos folder inside home",
+        "lower-case route",
+        "wsl placeholder user",
+        "wsl placeholder name",
+        "wsl share outside home",
+        "wsl word",
     ],
 )
 def test_placeholders_and_ordinary_paths_are_not_local_paths(text):

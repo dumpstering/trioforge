@@ -76,7 +76,7 @@ def test_the_kit_rows_carry_the_icon_of_their_place():
 
 def test_a_role_has_a_crest_only_where_one_fits(monkeypatch):
     assert art.role_crest("tank") == "crest-tank" and art.role_crest("melee") == "crest-damage"
-    assert art.role_crest("balanced") is None and art.role_crest("caster") is None and art.role_crest("healer") is None
+    assert all(art.role_crest(role) is None for role in ("balanced", "shield", "castertank", "caster", "ranged", "healer"))
     monkeypatch.setattr(art, "_assets", lambda: frozenset())
     assert art.role_crest("tank") is None
 
@@ -145,7 +145,8 @@ def test_a_race_without_a_picture_gets_none_and_so_does_a_code_that_is_no_race()
     for code in sorted(set(RACE_NAMES) - set(RACE_PICTURES)):
         assert art.race_picture(code) is None, code
     assert art.race_picture("KER") is None and art.race_picture("NOT-A-RACE") is None and art.race_picture("") is None
-    assert len(set(RACE_NAMES) - set(RACE_PICTURES)) == 9
+    assert art.race_picture("HDE") is None  # (the Half Dark Elf has no picture)
+    assert len(set(RACE_NAMES) - set(RACE_PICTURES)) == 10
 
 
 def test_a_race_picture_whose_asset_is_not_part_of_the_site_is_not_given(monkeypatch):

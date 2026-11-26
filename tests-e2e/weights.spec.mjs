@@ -137,9 +137,9 @@ test("the chunk of the sliders and the optimizer are asked for when a control is
 test("a slider at x2 asks the visitor first, then gives Python's answer for the view, in place of the shard's kit; the optimizer is downloaded once @once", async ({ page, watch }) => {
   test.skip(FIXTURE_ONLY, REAL_RESULTS);
   const seen = observe(page);
-  const c = REFERENCE.cases[0]; // an Ogre, balanced, own buffs, wiki evidence, dual wield, +4: armor class x2
+  const c = REFERENCE.cases[0]; // an Ogre, tank, own buffs, wiki evidence, dual wield, +4: armor class x2
   await open(page, TRIO);
-  await showView(page, { race: "OGR", role: "balanced", tier: 4, setup: "dw", evidence: "wiki" });
+  await showView(page, { race: "OGR", role: "tank", tier: 4, setup: "dw", evidence: "wiki" });
   const shard = await answerRows(page);
   await openWeights(page);
   await pick(page, "w-0-2");
@@ -176,7 +176,7 @@ test("moving a slider and back restores the shard's kit, with no question and no
   test.skip(FIXTURE_ONLY, REAL_RESULTS);
   const seen = observe(page);
   await open(page, TRIO);
-  await showView(page, { race: "OGR", role: "balanced", tier: 4, setup: "dw", evidence: "wiki" });
+  await showView(page, { race: "OGR", role: "tank", tier: 4, setup: "dw", evidence: "wiki" });
   const shard = await answerRows(page);
   await openWeights(page);
   await pick(page, "w-0-2");
@@ -211,7 +211,7 @@ test("declining the question keeps the precomputed answer and offers the optimiz
   const seen = observe(page);
   const c = REFERENCE.cases[0];
   await open(page, TRIO);
-  await showView(page, { race: "OGR", role: "balanced", tier: 4, setup: "dw", evidence: "wiki" });
+  await showView(page, { race: "OGR", role: "tank", tier: 4, setup: "dw", evidence: "wiki" });
   const shard = await answerRows(page);
   await openWeights(page);
   await pick(page, "w-0-2");
@@ -232,7 +232,7 @@ test("Stop ends the work and Try again asks again @once", async ({ page, watch }
   test.skip(FIXTURE_ONLY, REAL_RESULTS);
   const c = REFERENCE.cases[0];
   await open(page, TRIO);
-  await showView(page, { race: "OGR", role: "balanced", tier: 4, setup: "dw", evidence: "wiki" });
+  await showView(page, { race: "OGR", role: "tank", tier: 4, setup: "dw", evidence: "wiki" });
   const shard = await answerRows(page);
   await openWeights(page);
   await pick(page, "w-0-2");
@@ -253,7 +253,7 @@ test("Stop ends the work and Try again asks again @once", async ({ page, watch }
 
 // The reference has the full raid and the Enchanter's group for an Iksar only, a race the fixture's page does not offer (it has an Ogre, a Troll and a Wood Elf): for those two the answer of the page is
 // held to the answer of the optimizer's own client to the request written above, which the engine's end-to-end test holds to Python's for the Iksar. The own buffs and the common group buffs are Python's.
-const TROLL = { race: "TRL", role: "tank", tier: 4, setup: "1h-shield", evidence: "wiki" };
+const TROLL = { race: "TRL", role: "tank", tier: 4, setup: "dw", evidence: "wiki" }; // (the weapons the fixture's shard calls the Tank's best for the Troll at +4: the page asks for the shard's best setup)
 const BUFF_SETS = [
   { buffs: "own", reference: REFERENCE.cases[0] },
   { buffs: "group", reference: caseNamed("a Troll, tank, group buffs, strict evidence, one-hander and shield, +4: armor class x0.5") },
@@ -296,14 +296,14 @@ for (const { buffs, reference, direct } of BUFF_SETS) {
 test("a page opened with the address of an answer solves it after the question, and shows the precomputed answer and offers the solve if the visitor declines @once", async ({ page, watch }) => {
   test.skip(FIXTURE_ONLY, REAL_RESULTS);
   const c = REFERENCE.cases[0];
-  const asked = "?race=OGR&role=balanced&tier=4&ev=wiki&buffs=own&w=21111"; // (the ev is ignored: the page is made from the wiki level here)
+  const asked = "?race=OGR&role=tank&tier=4&ev=wiki&setup=dw&buffs=own&w=21111"; // (the reference's weapons: the Tank's best on the wiki level of the fixture is another setup) // (the ev is ignored: the page is made from the wiki level here)
   await madeFrom(page, "wiki");
   await open(page, `${TRIO}${asked}`);
   await accept(page);
   await solved(page);
   expect(await answerRows(page)).toEqual(namesOf(c.kit));
   expect(await positions(page)).toBe("21111");
-  expect(new URL(page.url()).search).toBe("?race=OGR&role=balanced&tier=4&buffs=own&w=21111"); // (written without the ev)
+  expect(new URL(page.url()).search).toBe("?race=OGR&role=tank&tier=4&setup=dw&buffs=own&w=21111"); // (written without the ev)
   // the same address with the visitor saying no (a new session: the yes is kept for the session)
   const other = await page.context().newPage();
   await other.goto(`${TRIO}${asked}`);

@@ -93,6 +93,14 @@ def test_some_trios_make_a_trial_build(script, recorded):
     assert recorded[1]["trial"] is False and recorded[1]["trios"] is None
 
 
+def test_the_search_console_name_is_an_option_that_is_passed_on_as_it_is_and_is_none_without_it(script, recorded):
+    # (the site build takes --google-verification, else $TRIOFORGE_GOOGLE_VERIFICATION: the exact count of the files of the release's site takes it from the same two places, Part P, P7)
+    name = "google0123456789abcdef.html"  # (invented)
+    script.main(ARGS)
+    script.main([*ARGS, "--google-verification", name])
+    assert recorded[0]["verification"] is None and recorded[1]["verification"] == name
+
+
 def test_the_other_options_are_passed_on(script, recorded, tmp_path):
     script.main([
         *ARGS, "--catalog", str(tmp_path / "catalog.json"), "--previous", "none", "--parity-stride", "50", "--build-dir", str(tmp_path / "build"),

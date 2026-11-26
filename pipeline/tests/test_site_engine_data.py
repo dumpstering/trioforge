@@ -131,10 +131,10 @@ BUNDLE_CHANGES = [
     (lambda d: d["constants"].update(stat_knee="510/2"), "stat_knee"),  # a ratio not in lowest terms
     (lambda d: d["tier_rules"].update(max_tier="10/0"), "max_tier"),
     (lambda d: d.update(races=[r for r in d["races"] if r["code"] != "OGR"]), "OGR"),  # a race the shards have rows for
-    (lambda d: d["roles"].pop("tank"), "tank"),
-    (lambda d: d["roles"]["balanced"].update(setups_by_evidence={"strict": ["2h"], "wiki": ["1h-shield", "2h", "dw"]}), "setups"),
+    (lambda d: d["roles"].pop("melee"), "melee"),
+    (lambda d: d["roles"]["tank"].update(setups_by_evidence={"strict": ["2h"], "wiki": ["1h-shield", "2h", "dw"]}), "setups"),
     (lambda d: d["roles"]["melee"]["setups_by_evidence"].update(wiki=["2h"]), "setups"),
-    (lambda d: d["roles"]["balanced"]["setups_by_evidence"].pop("wiki"), "balanced"),
+    (lambda d: d["roles"]["tank"]["setups_by_evidence"].pop("wiki"), "tank"),
     (lambda d: d["buffs"].pop("raid"), "buffs"),
     (lambda d: d["profile_common"].pop("pools"), "reassemble"),
     (lambda d: d["races"][0].pop("naked"), "reassemble"),
@@ -184,7 +184,7 @@ def test_a_bundle_that_is_missing_or_unreadable_is_named(scratch):
     with pytest.raises(data.ResultsError, match=r"engine-l50\.json"):
         scratch.load()
     path.write_text("[]", encoding="utf-8")
-    with pytest.raises(data.ResultsError, match=r"engine-l50\.json.*object"):
+    with pytest.raises(data.ResultsError, match=r"engine-l50\.json records no rules_version"):  # (a bundle that is no object records no version: refused as old, with the file named, before it is read)
         scratch.load()
     path.unlink()
     with pytest.raises(data.ResultsError, match=r"engine-l50\.json.*missing"):
@@ -209,7 +209,7 @@ def test_the_bundle_is_checked_by_the_exporters_own_reader_for_every_evidence_le
     scratch.load()
     assert {evidence for *_, evidence in seen} == {None, "strict", "wiki"}
     assert {race for race, *_ in seen} >= {"HUM", "DEF"} and {buffs for _, _, buffs, _ in seen} == {"own", "raid"}
-    assert {role for _, role, *_ in seen} == {"balanced", "melee"}
+    assert {role for _, role, *_ in seen} == {"tank", "melee"}
 
 
 # ---- the item table ------------------------------------------------------------------------------------------------------------

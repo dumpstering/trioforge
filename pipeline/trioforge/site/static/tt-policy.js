@@ -1,9 +1,11 @@
-// The one Trusted Types policy of the site, named "trioforge".
+// The one Trusted Types policy of the site, named "trioforge": the optimizer's way in.
 //
 // The site's policy header (require-trusted-types-for 'script') makes the browser refuse a plain string wherever it would start a
 // script: that includes the address of a Worker. Its trusted-types directive names this policy and no other (no 'default', no second name,
 // no duplicates), so that nothing else on the page can make a policy that lets plain strings through. That also means the policy is made
-// once per page, by one bundle (the optimizer's client): a second copy of this module in another bundle would be refused as a duplicate.
+// once per page, by the page script's copy of tt-record.js as the page script loads; the optimizer's client carries another copy, which finds the record of the page's
+// one policy under a named property of the window (see there). This file is the optimizer's: it checks the paths it lists against the manifest's own patterns first
+// (it reads the list through the array iterator, which a script that runs later can change: that can only make this call throw, and so deny the optimizer its worker; tt-record.js says what a later script can and cannot do).
 //
 // The page starts exactly one such worker, the optimizer's, and this policy is the only way to get its address past the browser: it hands
 // out a trusted address for the paths the build's manifest lists (hashed files under /assets/engine/) and for nothing else. It has no
@@ -13,11 +15,9 @@
 // plain, checked path is returned instead.
 
 import { isEnginePath } from "./engine/manifest.js";
+import { POLICY_NAME, getEnginePolicy } from "./tt-record.js";
 
-export const POLICY_NAME = "trioforge";
-
-// one policy per Trusted Types object: asking again for the same page adds paths, it does not make a second policy
-const made = new WeakMap();
+export { POLICY_NAME };
 
 /**
  * The policy for the given paths (each a hashed engine file). Returns `{name, scriptURL(path)}`: `scriptURL` returns a TrustedScriptURL for a
@@ -29,28 +29,5 @@ export function getAssetPolicy(trustedTypes, paths) {
   for (const path of list) {
     if (!isEnginePath(path)) throw new TypeError("The optimizer's files are hashed files under /assets/engine/ and nothing else.");
   }
-  const available = typeof trustedTypes === "object" && trustedTypes !== null && typeof trustedTypes.createPolicy === "function";
-  let record = available ? made.get(trustedTypes) : undefined;
-  if (record === undefined) {
-    const allowed = new Set();
-    record = { allowed, policy: null };
-    if (available) {
-      record.policy = trustedTypes.createPolicy(POLICY_NAME, {
-        createScriptURL(input) {
-          if (typeof input !== "string" || !allowed.has(input)) throw new TypeError("This address is not one of the optimizer's files.");
-          return input;
-        },
-      });
-      made.set(trustedTypes, record);
-    }
-  }
-  for (const path of list) record.allowed.add(path);
-  const { allowed, policy } = record;
-  return {
-    name: POLICY_NAME,
-    scriptURL(path) {
-      if (typeof path !== "string" || !allowed.has(path)) throw new TypeError("This address is not one of the optimizer's files.");
-      return policy === null ? path : policy.createScriptURL(path);
-    },
-  };
+  return getEnginePolicy(trustedTypes, list);
 }

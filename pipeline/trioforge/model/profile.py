@@ -22,9 +22,11 @@ spell_haste    the best spell haste **on offer**, always-on or optional, plus ``
 haste_bonus    the flat haste of Unbound Alacrity: 10 for a trio with a Monk, else 0 (``haste.unbound_alacrity``). The
                evaluator adds it to the buff haste, so it stacks with the spell haste and the best worn haste and is
                cut by ``haste_cap``; the field comes last, after ``deity``, with a default of 0
-haste_cap      75, or 85 with a Monk in the trio (``haste.cap_pct``, ``haste.cap_pct_with_monk``)
-softcap        ``(cap, rate past it)`` of the trio's best class at the level (the larger cap; the larger rate on a tie):
-               the rate is that class's own, read from the client table (``ac.softcap.past_cap_rate`` says so)
+haste_cap      the cap of the level (:func:`~trioforge.model.formulas.haste_cap_at`: 75 at level 50, 85 for levels 51 to 59, 100 from 60) and, with a Monk in
+               the trio, the 10 of Unbound Alacrity on top of it (``haste.cap_pct``, ``haste.cap_pct_with_monk``)
+softcap        ``(cap, rate past it)`` of the trio at the level, from the client table (``ac.softcap.past_cap_rate``): the cap is
+               the larger of the best class cap and ``ac.softcap.base_floor`` (350), and the rate the best class rate, which may be another
+               class's, and at least ``ac.softcap.rate_floor`` (0.3): the client's own calculation
 cs_pct,        percent added to the softcap by Combat Stability and Physical Enhancement; the softcap the sheet uses is
 pe_pct         :attr:`Profile.effective_softcap`, ``floor(cap x (100 + cs + pe) / 100)``
 nd_pct         percent that Natural Durability adds to the HP that comes from STA (``hp.natural_durability_pct``); it is already in
@@ -42,10 +44,16 @@ caps           ``{"regen": {"HP", "MANA", "END"}, "resist": n}`` (``regen.gear_c
 bands          the WIS/INT conversion bands (``mana.wis_bands``)
 dw_factor      the share of the off hand that counts under dual wield (``weapons.dual_wield_factor``: its value for a
                trio with a Monk or for a trio without one)
+ranged_factor  the multiplier of the damage per delay of a bow in the range place under the ``ranged`` setup (no damage bonus is added)
+               (``weapons.ranged_factor``); the field comes last, after ``nd_pct``, with a default of 1
+stance         None, or ``{"swing_factor", "agi_share"}``: the Berserker stance of the Melee damage build of a trio with a Berserker (``stance.berserker``): the
+               swing of the hands is multiplied by ``swing_factor`` after the haste cap, and agility counts ``agi_share`` (0) in mitigation and evasion; the field
+               comes last, after ``ranged_factor``, with a default of None
 weights        the role's weights (:func:`~trioforge.model.roles.weights_for`)
 setups         the weapon setups of the role (:func:`~trioforge.model.weapons.setups_for`); the ``1h-shield`` setup is
                there when the pool given to :func:`make_profile` holds a shield some class of the trio can wear (with no
-               pool a shield is assumed)
+               pool a shield is assumed), and the ``ranged`` setup when it holds a bow some class of the trio can equip (with
+               no pool there is none)
 deity          None: items locked to a deity are left out. A name admits that deity's items
 =============  =========================================================================================================
 
@@ -125,7 +133,9 @@ __all__ = [
     "Profile",
     "eval_buffs",
     "fixed_pools",
+    "haste_caps",
     "make_profile",
+    "placements",
 ]
 
 FORMAT = 1  # the version of the JSON shape
@@ -136,6 +146,9 @@ FAMILIES = ("HP", "MANA", "END")
 #: ``haste.cap_pct_with_monk``, which already holds the other 10)
 UNBOUND_ALACRITY_TEXT = "adds 10 haste and raises the cap by 10"
 UNBOUND_ALACRITY_HASTE = 10
+#: what ``haste.cap_pct`` and ``haste.cap_pct_with_monk`` must say for this model (:func:`~trioforge.model.formulas.haste_cap_at` implements them)
+HASTE_CAP_TEXT = "max(level, 30) + 25 up to level 50 (75 at level 50), 85 for levels 51 to 59, 100 from level 60"
+HASTE_CAP_MONK_TEXT = "the cap of the level plus the 10 that Unbound Alacrity adds (85 at level 50)"
 _PLACEMENT_TEXT = {"on top of the capped sheet AC": "top", "inside X before the cap": "inside"}
 _INPUTS = ("HP", "END", "WIS", "INT")  # the names of the pool inputs a range can be given for
 
@@ -361,6 +374,8 @@ class Profile:
     deity: str | None = None
     haste_bonus: Any = 0
     nd_pct: Any = 0
+    ranged_factor: Any = 1
+    stance: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         def put(name: str, value: Any) -> None:
@@ -391,12 +406,19 @@ class Profile:
             raise ValueError(
                 f"spell_haste must be at least 0 and at least the haste of the always-on buffs, not {self.spell_haste!r}"
             )
-        for name in ("haste_cap", "cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor", "haste_bonus", "nd_pct"):
+        for name in ("haste_cap", "cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor", "haste_bonus", "nd_pct", "ranged_factor"):
             put(name, _num(getattr(self, name), name))
         if self.haste_bonus < 0:
             raise ValueError(f"haste_bonus must be at least 0, not {self.haste_bonus!r}")
         if self.nd_pct < 0:
             raise ValueError(f"nd_pct must be at least 0, not {self.nd_pct!r}")
+        if self.ranged_factor < 0:
+            raise ValueError(f"ranged_factor must be at least 0, not {self.ranged_factor!r}")
+        if self.stance is not None:
+            stance = _mapping("stance", self.stance, ("agi_share", "swing_factor"))
+            put("stance", _canon(stance, "stance"))
+            if not (self.stance["swing_factor"] > 0 and 0 <= self.stance["agi_share"] <= 1):
+                raise ValueError(f"stance is a swing_factor above 0 and an agi_share from 0 to 1, not {dict(stance)!r}")
         if not isinstance(self.softcap, (list, tuple)) or len(self.softcap) != 2:
             raise ValueError(f"softcap is (cap, rate past it), not {self.softcap!r}")
         put("softcap", (_num(self.softcap[0], "softcap"), _num(self.softcap[1], "softcap")))
@@ -523,6 +545,15 @@ def _placement(rules: Any, rule_id: str, level: int) -> str:
     raise ValueError(f"{rule_id} is {text!r}, but this model implements only {' and '.join(map(repr, _PLACEMENT_TEXT))}")
 
 
+def placements(rules: Any, level: int) -> dict[str, str]:
+    """Where the rules put the Monk worn-weight bonus and the Iksar racial armor class at ``level``: ``{"monk": ..., "iksar": ...}``, each ``"top"`` or ``"inside"``. What
+    :func:`make_profile` gives a profile, and what a profile built by hand (the exporter's brute-force module) takes when it is given none."""
+    return {
+        "monk": _placement(rules, "monk.bonus_placement", level),
+        "iksar": _placement(rules, "race.iksar_ac_placement", level),
+    }
+
+
 def _unbound_alacrity(rules: Any, level: int, codes: Sequence[str]) -> int:
     """The flat haste of Unbound Alacrity for a trio: 10 with a Monk, else 0. Refuses a rule that says anything else."""
     text = rules.get("haste.unbound_alacrity", level)
@@ -531,6 +562,40 @@ def _unbound_alacrity(rules: Any, level: int, codes: Sequence[str]) -> int:
             f"haste.unbound_alacrity is {text!r}, but this model implements only {UNBOUND_ALACRITY_TEXT!r}"
         )
     return UNBOUND_ALACRITY_HASTE if "MNK" in codes else 0
+
+
+def _stance(rules: Any, level: int, codes: Sequence[str], role: str) -> dict[str, Any] | None:
+    """The stance of a build: the Berserker stance (``stance.berserker``) for a build the rule lists, in a trio that has a Berserker; else None. Refuses a rule of another shape."""
+    value = rules.get("stance.berserker", level)
+    ok = isinstance(value, Mapping) and set(value) == {"swing_factor", "agi_counts", "builds"}
+    if ok:
+        factor, counts, builds = value["swing_factor"], value["agi_counts"], value["builds"]
+        ok = (
+            isinstance(factor, (int, float)) and not isinstance(factor, bool) and factor > 0 and isinstance(counts, bool)
+            and isinstance(builds, list) and all(isinstance(build, str) and build in ROLES for build in builds)
+        )  # fmt: skip
+    if not ok:
+        raise ValueError(
+            f"stance.berserker is {value!r}, but this model implements only {{swing_factor: a number above 0, agi_counts: true or false, builds: a list of builds}}"
+        )
+    if "BER" not in codes or role not in value["builds"]:
+        return None
+    return {"swing_factor": value["swing_factor"], "agi_share": 1 if value["agi_counts"] else 0}
+
+
+def _haste_cap(rules: Any, level: int, codes: Sequence[str]) -> int:
+    """The haste cap of a trio at a level: the cap of the level, and with a Monk the haste Unbound Alacrity adds on top. Refuses a rule that says anything else than the texts it implements."""
+    for rule_id, expected in (("haste.cap_pct", HASTE_CAP_TEXT), ("haste.cap_pct_with_monk", HASTE_CAP_MONK_TEXT)):
+        text = rules.get(rule_id, level)
+        if text != expected:
+            raise ValueError(f"{rule_id} is {text!r}, but this model implements only {expected!r}")
+    return formulas.haste_cap_at(level) + (UNBOUND_ALACRITY_HASTE if "MNK" in codes else 0)
+
+
+def haste_caps(rules: Any, level: int) -> tuple[int, int]:
+    """The haste cap at ``level`` of a trio with no Monk and of a trio with one (the 10 that Unbound Alacrity adds, :data:`UNBOUND_ALACRITY_HASTE`): the numbers
+    :func:`make_profile` puts in a profile's ``haste_cap``, read by the same function, so that the exporter's constants cannot differ from the profile's."""
+    return _haste_cap(rules, level, ()), _haste_cap(rules, level, ("MNK",))
 
 
 def _rank(given: Mapping[str, Any], name: str, steps: Mapping[str, Any]) -> int:
@@ -585,9 +650,9 @@ def make_profile(
     ``buffset`` is the resolved buff set (``trioforge.model.buffs.resolve``) or None for no buffs; ``aa`` the AA
     choices or None for the defaults; ``tables`` the :class:`~trioforge.model.tables.Tables`; ``rules`` the rules
     (``tables.rules`` when None; another ``Rules`` object tries an alternative value). ``evidence`` and ``deity`` are
-    recorded in the profile. ``items`` is the item pool the profile will be solved with, or None: only its shields that
-    the race can wear are read, to decide whether the ``1h-shield`` setup exists
-    (:func:`~trioforge.model.weapons.shield_available`); the pool is not stored. Raises ``ValueError`` for a race, trio, level or role the tables or the role rules do not
+    recorded in the profile. ``items`` is the item pool the profile will be solved with, or None: only its shields and bows that
+    the race can wear are read, to decide whether the ``1h-shield`` and ``ranged`` setups exist
+    (:func:`~trioforge.model.weapons.shield_available`, :func:`~trioforge.model.weapons.bow_available`); the pool is not stored. Raises ``ValueError`` for a race, trio, level or role the tables or the role rules do not
     have, for AA choices or an evidence level that do not exist, and for a rule value this model does not implement.
     """
     rules = tables.rules if rules is None else rules
@@ -602,14 +667,21 @@ def make_profile(
     absent = [code for code in codes if (code, level) not in tables.basedata or (code, level) not in tables.softcap]
     if absent:
         raise ValueError(f"the client tables have no level {level} row for {' '.join(absent)}")
-    if role not in roles_for(codes):
-        raise ValueError(f"role {role!r} is not offered to {' '.join(codes)}; its roles are {', '.join(roles_for(codes))}")
+    # only a shield or a bow the race can wear makes the shield or the bow setup: an item whose races exclude this one is not eligible
+    wearable = None if items is None else [i for i in items if getattr(i, "races", None) is None or race in i.races]
+    bow = wearable is not None and weapons.bow_available(codes, wearable, tables=tables, level=level)  # (with no pool there is no bow: it is never assumed)
+    offered = roles_for(codes, bow=bow)  # (the Ranged role plays the bow and nothing else: a pool with no bow for the trio does not offer it)
+    if role not in offered:
+        raise ValueError(f"role {role!r} is not offered to {' '.join(codes)}; its roles are {', '.join(offered)}")
 
     pools = pools_for(codes, level, tables)
     aa_state, cs_pct, pe_pct, nd_pct = _aa(aa, bool(MELEE_CLASSES & set(codes)), rules, level)
     if nd_pct:  # Natural Durability: its percent goes on the factor of the HP that comes from STA, in every HP pool (the base and the 5 are not scaled)
         pools["HP"] = tuple(PoolSpec(spec.cls, spec.base, spec.fac * (100 + fr(nd_pct)) / 100) for spec in pools["HP"])
-    softcap = max((tables.softcap[(code, level)] for code in codes), key=lambda cap_rate: (cap_rate[0], cap_rate[1]))
+    softcap = (
+        max(rules.get("ac.softcap.base_floor", level), *(tables.softcap[(code, level)][0] for code in codes)),
+        max(rules.get("ac.softcap.rate_floor", level), *(tables.softcap[(code, level)][1] for code in codes)),
+    )
     defense = [tables.skillcap[(code, "Defense", level)] for code in codes if (code, "Defense", level) in tables.skillcap]
     if not defense:
         raise ValueError(f"the client tables have no Defense skill cap at level {level} for {' '.join(codes)}")
@@ -622,10 +694,9 @@ def make_profile(
     else:
         raise ValueError(f"buffset is a BuffSet or None, not {type(buffset).__name__}")
     haste_bonus = _unbound_alacrity(rules, level, codes)
+    haste_cap = _haste_cap(rules, level, codes)
     spell_haste += haste_bonus  # the weapon term assumes it too
 
-    # only a shield the race can wear makes the shield setup: an item whose races exclude this one is not eligible
-    wearable = None if items is None else [i for i in items if getattr(i, "races", None) is None or race in i.races]
     return Profile(
         race=race,
         trio=codes,
@@ -636,17 +707,14 @@ def make_profile(
         naked=naked(race, codes, tables),
         buff_totals=totals,
         spell_haste=spell_haste,
-        haste_cap=rules.get("haste.cap_pct_with_monk" if "MNK" in codes else "haste.cap_pct", level),
+        haste_cap=haste_cap,
         softcap=softcap,
         cs_pct=cs_pct,
         pe_pct=pe_pct,
         defense_cap=max(defense),
         monk=monk_curve(rules, level) if "MNK" in codes else None,
         iksar_ac=rules.get("race.iksar_ac_bonus", level) if race == "IKS" else 0,
-        placement={
-            "monk": _placement(rules, "monk.bonus_placement", level),
-            "iksar": _placement(rules, "race.iksar_ac_placement", level),
-        },
+        placement=placements(rules, level),
         pools=pools,
         caps={"regen": rules.get("regen.gear_caps", level), "resist": rules.get("resist.cap", level)},
         bands=rules.get("mana.wis_bands", level),
@@ -656,4 +724,6 @@ def make_profile(
         deity=deity,
         haste_bonus=haste_bonus,
         nd_pct=nd_pct,
+        ranged_factor=rules.get("weapons.ranged_factor", level),
+        stance=_stance(rules, level, codes, role),
     )

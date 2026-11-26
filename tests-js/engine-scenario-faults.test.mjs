@@ -7,8 +7,10 @@ import loadHighs from "highs";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { EvaluateError } from "../pipeline/trioforge/site/static/engine/evaluate.js";
 import { ItemError } from "../pipeline/trioforge/site/static/engine/items.js";
+import { NO_BOW, NoBowError } from "../pipeline/trioforge/site/static/engine/model.js";
 import { createScenarioEngine } from "../pipeline/trioforge/site/static/engine/scenario.js";
 import { createWorkerCore } from "../pipeline/trioforge/site/static/engine/worker.js";
+import { bestKitRequest } from "./best-kit-harness.mjs";
 import { BASE, EQUIP_NOW, SLUG, makeSite, siteFetch } from "./engine-site-fixture.mjs";
 import { spyOn } from "./engine-spy.mjs";
 
@@ -68,6 +70,7 @@ function harness(solver = highs) {
         throw new Error("a model request is not what is tested here");
       },
       equipNow: (request, options) => scenarios.equipNow(request, options),
+      bestKit: (request, options) => scenarios.bestKit(request, options),
     }),
   });
   let id = 0;
@@ -171,6 +174,23 @@ describe("a bundle that no session can be made of", () => {
     failing.session = new TypeError("undefined is not a function");
     expect(await h.ask()).toMatchObject({ type: "error", code: "internal" });
     expect((await h.ask()).type).toBe("result");
+  });
+});
+
+describe("a pool with no bow that reaches the catch of the best kit (G3, latent: bestKit refuses it first)", () => {
+  const view = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" };
+
+  it("is a bad request with the sentence, and the bundle is not dropped as corrupt (a NoBowError is a ModelError, which the catch took for a fault of the data)", async () => {
+    const h = harness();
+    await h.start();
+    expect((await h.ask(bestKitRequest(view, 4))).type).toBe("result");
+    const asked = h.asked.length;
+    failing.session = new NoBowError();
+    const failed = await h.ask(bestKitRequest(view, 4));
+    expect(failed).toMatchObject({ type: "error", code: "bad-request", message: NO_BOW });
+    expect(h.scenarios.stats(), "the bundle and the table stay").toMatchObject({ itemTables: 1, bundles: 1 });
+    expect((await h.ask(bestKitRequest(view, 4))).type).toBe("result");
+    expect(h.asked.length, "nothing was fetched again").toBe(asked);
   });
 });
 

@@ -190,7 +190,8 @@ export function createUpgradeAnswer(root, env) {
       const shown = last === null ? null : last.ctx;
       if (shown === null || !shown.equip) return null;
       const { slots, left } = slotsOfIdents(shown.equip.kit);
-      return { kit: { v: 1, trio, race: shown.request.scenario.race, level, slots }, left };
+      const setup = shown.request.scenario.setup;
+      return { kit: { v: 1, trio, race: shown.request.scenario.race, level, slots, ...(setup === "ranged" ? { setup } : {}) }, left }; // (the Bow setup is named in the link: its bow stands where the hands do not show it)
     },
   });
   const equip = el(

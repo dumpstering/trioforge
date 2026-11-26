@@ -532,7 +532,7 @@ def test_the_real_pool_of_an_iksar_trio_is_placed_the_same_for_every_order_of_it
     trio = ("MNK", "SHM", "NEC")
     spells = json.loads((H.REPO / "derived" / "client" / "spells-l55.json").read_text(encoding="utf-8"))
     buffset = resolve([*own_buffs(trio, 55, spells, H.TABLES.rules), *group_preset(spells)], H.TABLES.rules)
-    prof = real_profile("IKS", trio, 55, "balanced", buffset, None, H.TABLES)
+    prof = real_profile("IKS", trio, 55, "melee", buffset, None, H.TABLES)
     pool = H.catalog_pool(trio, 4)
     placements, worn = set(), set()
     for k in range(6):

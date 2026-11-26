@@ -5,10 +5,11 @@
 model sees when the item is worn at tier ``tier`` (0 to 10). The tier rules are read from
 ``rules/rules.json``:
 
-* **Stats** (AC STR STA AGI DEX WIS INT CHA HP MANA END ATK) and **resists**: ``base + max(n, floor(base *
-  n / 10))`` when the base is above zero (``tier.stat_rule``). A negative stat is not scaled
-  (``tier.negatives_scale`` is false); a rules file that says otherwise is refused, because how a negative
-  stat would grow is not defined anywhere.
+* **Stats** (AC STR STA AGI DEX WIS INT CHA HP MANA END) and **resists**: ``base + max(n, floor(base *
+  n / 10))`` when the base is above zero (``tier.stat_rule``). A **negative** stat moves toward zero by the same
+  amount, ``max(n, floor(|base| * n / 10))``, and never passes zero (``tier.negatives_scale``, the game client's own
+  calculation: -2 is -1 at +1 and 0 at +2, -20 is -12 at +4); a rules file that says anything else is refused. **Attack** (ATK) is
+  not scaled at all (``tier.unscaled_stats``, the same source): an item's attack at +4 or +10 is its +0 value.
 * **Worn haste** and the three **regens**: a flat ``haste.worn_per_tier`` / ``regen.per_tier`` a tier when
   the base is above zero. Haste is a field of its own (``ItemVec.haste``), not one of the stats.
 * **Weight**, in tenths of a stone: ``max(floor10, w - w * pct * n // 100)`` for a weight ``w`` above zero, with
@@ -74,6 +75,7 @@ SV_KEYS: tuple[str, ...] = ("FIRE", "COLD", "MAGIC", "POISON", "DISEASE", "CORRU
 
 MAX_TIER = 10
 STAT_RULE_TEXT = "base + max(n, floor(base*n/10))"
+NEGATIVES_RULE_TEXT = "toward zero by max(n, floor(|base|*n/10)), never past zero"  # tier.negatives_scale
 WEAPON_PCTS = (5, 10)
 DAMAGE_RULE_TEXT = "dmg + dmg * n * pct // 100"  # what the browser's bundle names, and items.js checks
 WEIGHT_RULE_TEXT = "max(floor, w - w * pct * n // 100)"
@@ -126,6 +128,7 @@ class _TierRules:
     regen_per_tier: int
     floor10: int
     weight_pct: int
+    unscaled: frozenset[str]
 
 
 def _whole(value: Any, rule: str, minimum: int = 0) -> int:
@@ -146,11 +149,12 @@ def _tier_rules(rules: Any) -> _TierRules:
     text = rules.get("tier.stat_rule")
     if text != STAT_RULE_TEXT:
         raise ValueError(f"tier.stat_rule is {text!r}, but trioforge.model.items implements {STAT_RULE_TEXT!r}")
-    if rules.get("tier.negatives_scale") is not False:
-        raise ValueError(
-            "tier.negatives_scale is not false, but how a negative stat grows with the tier is not defined; "
-            "trioforge.model.items leaves negative stats unscaled"
-        )
+    negatives = rules.get("tier.negatives_scale")
+    if negatives != NEGATIVES_RULE_TEXT:
+        raise ValueError(f"tier.negatives_scale is {negatives!r}, but trioforge.model.items implements {NEGATIVES_RULE_TEXT!r}")
+    unscaled = rules.get("tier.unscaled_stats")
+    if not isinstance(unscaled, list) or not all(isinstance(key, str) and key in STAT_KEYS for key in unscaled):
+        raise ValueError(f"tier.unscaled_stats must be a list of stats of the model ({', '.join(STAT_KEYS)}), not {unscaled!r}")
     floor = Fraction(str(rules.get("tier.weight_floor"))) * 10
     if floor.denominator != 1 or floor < 1:
         raise ValueError(f"tier.weight_floor must be a whole number of tenths of a stone, not {floor / 10} stone")
@@ -160,6 +164,7 @@ def _tier_rules(rules: Any) -> _TierRules:
         regen_per_tier=_whole(rules.get("regen.per_tier"), "regen.per_tier"),
         floor10=int(floor),
         weight_pct=_whole(rules.get("tier.weight_pct"), "tier.weight_pct"),
+        unscaled=frozenset(unscaled),
     )
 
 
@@ -175,8 +180,12 @@ def _check_tier(tier: Any) -> int:
 
 
 def _scaled(base: int, n: int) -> int:
-    """The stat rule: ``base + max(n, base * n // 10)`` above zero; zero and negatives unchanged."""
-    return base + max(n, base * n // 10) if base > 0 else base
+    """The stat rule: ``base + max(n, base * n // 10)`` above zero; below zero the stat moves toward zero by ``max(n, |base| * n // 10)``, never past it; zero stays."""
+    if base > 0:
+        return base + max(n, base * n // 10)
+    if base < 0:
+        return base + min(-base, max(n, -base * n // 10))
+    return base
 
 
 def _flat(base: int, n: int, per_tier: int) -> int:
@@ -249,7 +258,9 @@ def at_tier(item: dict[str, Any], tier: int, rules: Any, *, weapon_pct: int | No
     stats: dict[str, int] = {}
     for key in STAT_KEYS:
         if raw.get(key):
-            stats[key] = _scaled(raw[key], n)
+            value = raw[key] if key in rule.unscaled else _scaled(raw[key], n)
+            if value:  # (a negative stat that the tiers have shrunk to nothing is gone, like any zero)
+                stats[key] = value
     for key in REGEN_KEYS:
         if raw.get(key):
             stats[key] = _flat(raw[key], n, rule.regen_per_tier)
@@ -259,7 +270,7 @@ def at_tier(item: dict[str, Any], tier: int, rules: Any, *, weapon_pct: int | No
     unknown = sorted(set(raw_sv) - set(SV_KEYS))
     if unknown:
         raise ValueError(f"item {item['key']}: unknown resist {unknown[0]!r}")
-    sv = {key: _scaled(raw_sv[key], n) for key in SV_KEYS if raw_sv.get(key)}
+    sv = {key: value for key in SV_KEYS if raw_sv.get(key) and (value := _scaled(raw_sv[key], n))}
 
     slots = frozenset(item["slots"])
     is_shield = _is_shield(item, slots)

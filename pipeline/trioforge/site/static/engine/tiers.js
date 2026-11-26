@@ -16,6 +16,8 @@
 // whole-number arithmetic on small integers.
 
 /** A tier rule, mode, tier or difficulty that is not one of the allowed. */
+import { safe } from "./plain.js";
+
 export class TierError extends Error {
   constructor(message) {
     super(message);
@@ -45,15 +47,6 @@ function whole(value, name, low, high) {
   return value;
 }
 
-/** A name from the caller, safe to put in a message: short, and only letters, digits and a few signs. */
-function safe(name) {
-  if (typeof name !== "string" || name.length === 0 || name.length > 32) return "?";
-  for (let i = 0; i < name.length; i += 1) {
-    const code = name.charCodeAt(i);
-    if (!((code >= 0x30 && code <= 0x39) || (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a) || code === 0x5f || code === 0x2d || code === 0x2e)) return "?";
-  }
-  return name;
-}
 
 /**
  * The options of a call: an object, or none. `known` are the options the call reads: any other key is a TierError, since a misspelt D or N

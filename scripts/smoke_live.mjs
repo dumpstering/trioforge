@@ -1,6 +1,6 @@
 // The smoke check of the live site, weekly and after each deploy:
 //
-//   node scripts/smoke_live.mjs [--base https://trioforge.pages.dev] [--indexable] [--expect-data data-YYYY-MM-DD[-N]|newest|none] [--releases-dir releases]
+//   node scripts/smoke_live.mjs [--base https://trioforge.pages.dev] [--indexable] [--analytics] [--expect-data data-YYYY-MM-DD[-N]|newest|none] [--releases-dir releases]
 //                               [--seed N] [--out DIR] [--headers-file site/_headers] [--trios 5] [--items 5] [--wait 10] [--settle 5] [--pace 0]
 //
 // Playwright (Chromium) loads 5 pages of trios and 5 pages of items of the site, and the page of an address that does not exist, and checks each:
@@ -10,7 +10,14 @@
 //     sent to answers with, and the main element of a trio page and of an item page must say that it is one (data-page);
 //   * the response headers: Content-Security-Policy, X-Content-Type-Options and Referrer-Policy are those of site/_headers (the file the site is built to be
 //     deployed with; --headers-file names another, for a build whose policy was made for it), and X-Robots-Tag is the "noindex" of a preview unless --indexable
-//     says the site is the real one, when it must not be there;
+//     says the site is the real one, when it must not be there. A site built with page counts (--analytics-token) has the two hosts of the counter in its policy, and is checked with --analytics:
+//     the policy must then be the committed one plus exactly those two hosts (the script host in script-src, the data host in connect-src), which needs no other file, so the weekly task can say it in
+//     its options (the build also writes that policy into its own _headers, but that folder is not kept);
+//   * no counting tag in the page as the server sent it, in either mode: no page of this site has a script tag for the page counter (the page script adds it, to a page opened with no kit link), so a
+//     page whose HTML holds "cloudflareinsights", "data-cf-beacon" or "beacon.min" has had a tag put into it, which the switch of the Cloudflare dashboard for Web Analytics does at the edge (and a counting
+//     site's policy would let it load, on a kit page too). Only the body of the response to the navigation is read, and only when it says it is HTML: the page script's own bundle names the counter's
+//     address and is another response, which is never read, so it is told apart by being a sub-resource and not the document;
+//   * with --analytics, one trio page is opened with an invented kit fragment (#k=...), and it must make no request to either host of the counter: a page opened from a kit link is never counted;
 //   * no console error and no uncaught error of the page, watched for until the page's network has been idle and then --settle seconds more (5 by default), so that an
 //     error a page makes some seconds after it loaded is seen too;
 //   * the page script ran: the theme button, which the page hides until its script has run, is showing (the page gets --wait seconds for it, 10 by default);
@@ -31,7 +38,7 @@
 //
 // Exit codes: 0 everything passed; 1 something failed (a short list of what is printed); 2 not run (bad options, no browser, no headers file).
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -71,6 +78,8 @@ export const USAGE = `usage: node scripts/smoke_live.mjs [--base URL] [--indexab
                                   [--headers-file FILE] [--trios N] [--items N] [--wait SECONDS] [--settle SECONDS] [--pace SECONDS]
   --base URL           the site (default ${DEFAULT_BASE}); an address with no path
   --indexable          the site is the real one: it must not send X-Robots-Tag noindex (without this it must)
+  --analytics          the site is built with page counts: its policy must be the committed one plus exactly the two hosts of the counter (https://static.cloudflareinsights.com in
+                       script-src, https://cloudflareinsights.com in connect-src), and without this switch it must be the committed one as it is
   --expect-data TAG|newest|none
                        the data release the manifest and every trio and item page must name, such as data-2026-10-14; newest (the default) is the release of the newest
                        pointer in the releases folder, and nothing is expected when it has none; none expects nothing
@@ -96,6 +105,7 @@ class Problem extends Error {}
 const OPTIONS = {
   base: { type: "string" },
   indexable: { type: "boolean" },
+  analytics: { type: "boolean" },
   "expect-data": { type: "string" },
   "releases-dir": { type: "string" },
   seed: { type: "string" },
@@ -133,9 +143,13 @@ export function weekSeed(date) {
  * checks and the release build use, and a test holds the two to give the same folder: $TRIOFORGE_CHECKS_DIR if it is set (an empty value counts as unset; an absolute path
  * by the one rule of isAbsolutePath; a relative one is refused, since two working folders would mean two folders, and so is one in a git work tree), else
  * ~/.local/state/trioforge/checks, on Windows too (never %LOCALAPPDATA%, which a program run from the Claude app writes in a private copy of). `env`, `platform` and `home` are
- * those of the process unless a test gives its own.
+ * those of the process unless a test gives its own. The work-tree rule is about folders of THIS computer: a path of another kind of platform than the computer's (a Windows
+ * path asked by a test on a Linux runner, which is a relative name there and would lie in the checkout) is resolved by the rules of its own platform and is not asked about, unless it is rooted
+ * (`/x` on Windows is on the current drive). On Windows no part of the path may end in a dot or a space (`.` and `..` are fine): Windows reads such a name without them, and Python and Node do
+ * not agree on the real path of one (a junction written `j.` is the folder `j` to Python and no folder at all to Node). The rule is asked of the path AND of its real path (a junction or a symbolic link into a checkout is refused, and so is a path through one that does not
+ * exist yet). `exists` is how a folder is looked for and `real` how its real path is had (the process's own unless a test gives one).
  */
-export function checksDir(env = process.env, platform = process.platform, home = os.homedir()) {
+export function checksDir(env = process.env, platform = process.platform, home = os.homedir(), { exists = existsSync, real = realpathSync.native } = {}) {
   const given = (env[CHECKS_ENV] ?? "").trim();
   if (given !== "") {
     if (!isAbsolutePath(given, platform)) {
@@ -144,13 +158,27 @@ export function checksDir(env = process.env, platform = process.platform, home =
           "the checks and the release build run in different folders, and must find the same one",
       );
     }
-    const folder = path.resolve(given);
-    if (inAWorkTree(folder)) {
+    if ((platform === "win32" || process.platform === "win32") && hasPartEndingInDotOrSpace(given)) {
+      // (a path that Windows reads, whatever the platform that was given)
+      throw new UsageError(
+        `${CHECKS_ENV} must not have a part that ends in a dot or a space (${JSON.stringify(given)}): Windows reads such a name without them, and the checks would not agree on which folder it is`,
+      );
+    }
+    const ownKind = (platform === "win32") === (process.platform === "win32"); // (a Windows path on Windows, any other on any other)
+    const written = (platform === "win32" ? path.win32 : path.posix).resolve(given);
+    if (!ownKind && path.parse(given).root === "") return written; // (not a path of this computer: C:\x on Linux is a relative name)
+    const folder = path.resolve(given); // (the path on this computer)
+    if (inAWorkTree(folder, exists) || inAWorkTree(realPathOf(folder, exists, real), exists)) {
       throw new UsageError(`${CHECKS_ENV} must not be inside a git work tree (${JSON.stringify(given)}): a stamp there would be a file of that checkout`);
     }
-    return folder;
+    return ownKind ? folder : written;
   }
   return path.join(home, ".local", "state", "trioforge", "checks");
+}
+
+/** Whether a part of `text` (cut at / and \) ends in a dot or a space, other than the parts . and ..: Windows reads such a name without them (the same rule as trioforge.checks_dir). */
+function hasPartEndingInDotOrSpace(text) {
+  return text.split(/[\\/]+/).some((part) => part !== "" && part !== "." && part !== ".." && /[. ]$/.test(part));
 }
 
 const WINDOWS_ABSOLUTE = /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/]+[^\\/])/; // a drive and a separator, or \\server\share
@@ -163,10 +191,29 @@ export function isAbsolutePath(text, platform = process.platform) {
   return platform === "win32" ? WINDOWS_ABSOLUTE.test(text) : text.startsWith("/");
 }
 
+/** The folder with every junction and symbolic link in it followed as far as it exists, the rest (not made yet) kept: where it really is. The folder itself when it cannot be had. */
+function realPathOf(folder, exists, real) {
+  const rest = [];
+  let current = folder;
+  for (;;) {
+    if (exists(current)) {
+      try {
+        return path.join(real(current), ...rest.reverse());
+      } catch {
+        return folder;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return folder;
+    rest.push(path.basename(current));
+    current = parent;
+  }
+}
+
 /** Whether a folder is in a git work tree: it or a folder above it holds a .git (a directory, or the file of a linked worktree). The folder need not be there yet. */
-function inAWorkTree(folder) {
+function inAWorkTree(folder, exists = existsSync) {
   for (let current = folder; ; current = path.dirname(current)) {
-    if (existsSync(path.join(current, ".git"))) return true;
+    if (exists(path.join(current, ".git"))) return true;
     if (path.dirname(current) === current) return false;
   }
 }
@@ -200,6 +247,7 @@ export function parseArgs(argv, now = new Date(), env = process.env) {
     help: given.help === true,
     base,
     indexable: given.indexable === true,
+    analytics: given.analytics === true,
     expectData: RELEASE_TAG.test(expectation) ? expectation : null,
     expectFrom: RELEASE_TAG.test(expectation) ? "tag" : expectation, // "tag" (given), "newest" (the newest pointer, found when the check runs) or "none"
     releasesDir: path.resolve(given["releases-dir"] ?? path.join(ROOT, "releases")),
@@ -324,14 +372,61 @@ export function parseHeaderBlock(text, pattern = "/*") {
   return block;
 }
 
-/** The headers every page must carry: the three that site/_headers sets, as it sets them. */
-export function expectedHeaders(text) {
+/** The two hosts that a site built with page counts adds to the policy: where the counter's script is loaded from (script-src) and where it sends its report (connect-src). */
+export const COUNTER_SCRIPT_HOST = "https://static.cloudflareinsights.com";
+export const COUNTER_DATA_HOST = "https://cloudflareinsights.com";
+
+/** What no page of the site holds as it is served (in lower case): the host of the counter's script, the attribute that carries its token and the script's name. */
+export const COUNTER_MARKERS = Object.freeze(["cloudflareinsights", "data-cf-beacon", "beacon.min"]);
+/** The most that the kit link check waits, after it has closed the page, for what the page asks for as it goes. */
+const MOST_CLOSE_WAIT_MS = 1000;
+/** The least that the kit link check waits after it has sent the page away (the report of a counter at pagehide is a request like any other: it takes a moment to be made). */
+const LEAVING_WAIT_MS = 300;
+/** The invented kit fragment of the kit link check (a payload of no kit: the page only has to see the shape). */
+export const KIT_PROBE_FRAGMENT = "#k=AQIDBAUGBwgJCgsMDQ4P";
+
+/** The first mark of a counting tag in the text of a page, or null (compared in lower case). */
+export function countingTagIn(body) {
+  const lowered = String(body).toLowerCase();
+  return COUNTER_MARKERS.find((marker) => lowered.includes(marker)) ?? null;
+}
+
+/** Whether an address is a request to either host of the counter (by its host, not by a word in it). */
+export function isCounterRequest(address) {
+  try {
+    const { hostname } = new URL(address);
+    return [COUNTER_SCRIPT_HOST, COUNTER_DATA_HOST].some((host) => new URL(host).hostname === hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The policy of a site built with page counts, from the policy of the committed file: exactly the two hosts added, the script host to script-src and the data host to connect-src (the build's
+ * ANALYTICS_CSP; a test holds the two to the same policy). Raises UsageError when the policy is not the one the hosts can be added to, or names a host already.
+ */
+function withCounterHosts(policy) {
+  const script = "script-src 'self' 'wasm-unsafe-eval'";
+  const connect = "connect-src 'self'";
+  const once = (part) => policy.split(part).length === 2;
+  if (!once(script) || !once(connect) || policy.includes("cloudflare")) {
+    throw new UsageError("the headers file's policy is not the policy of the site with no host, which the two hosts of the counter can be added to");
+  }
+  return policy.replace(script, `${script} ${COUNTER_SCRIPT_HOST}`).replace(connect, `${connect} ${COUNTER_DATA_HOST}`);
+}
+
+/**
+ * The headers every page must carry: the three that site/_headers sets, as it sets them. With `analytics` (a site built with page counts) the policy is the file's plus exactly the two hosts of
+ * the counter (:func:`withCounterHosts`), so the check needs no file but the committed one.
+ */
+export function expectedHeaders(text, { analytics = false } = {}) {
   const block = parseHeaderBlock(text);
   const wanted = {};
   for (const name of ["content-security-policy", "x-content-type-options", "referrer-policy"]) {
     if (!block.has(name)) throw new UsageError(`the headers file sets no ${name} for /*`);
     wanted[name] = block.get(name);
   }
+  if (analytics) wanted["content-security-policy"] = withCounterHosts(wanted["content-security-policy"]);
   return wanted;
 }
 
@@ -341,12 +436,14 @@ const squeeze = (text) => String(text).replace(/\s+/g, " ").trim();
  * What is wrong with the headers of a response, as short sentences: the policy, nosniff and the referrer policy must be what the file says, and X-Robots-Tag must say noindex
  * when the site is a preview and must not when it is the real site (`indexable`). The headers are those of Playwright's `response.headers()`, with lower-case names.
  */
-export function checkHeaders(headers, expected, { indexable }) {
+export function checkHeaders(headers, expected, { indexable, analytics = false }) {
   const problems = [];
   for (const [name, wanted] of Object.entries(expected)) {
     const got = headers[name];
     if (got === undefined) problems.push(`no ${name} header`);
-    else if (squeeze(got).toLowerCase() !== squeeze(wanted).toLowerCase()) problems.push(`${name} is not what site/_headers sets`);
+    else if (squeeze(got).toLowerCase() !== squeeze(wanted).toLowerCase()) {
+      problems.push(`${name} is not what site/_headers sets${analytics && name === "content-security-policy" ? " with the two hosts of the counter added to script-src and connect-src" : ""}`);
+    }
   }
   const robots = (headers["x-robots-tag"] ?? "").toLowerCase();
   const blocks = /\bnoindex\b|\bnone\b/.test(robots);
@@ -540,6 +637,25 @@ async function checkPage(context, options, expected, target) {
     }
     if (response.status() !== target.status) say(`answered ${response.status()}, not ${target.status}`);
     for (const problem of checkHeaders(response.headers(), expected, options)) say(problem);
+    // the page as the server sent it: no counting tag in it, in either mode (the document only: what a script of the page holds is another response, and a response that says it is not HTML is not looked at).
+    // A page that cannot be read, and a navigation that gives no content type (so that it cannot be told whether it is HTML), are problems and no pass: the check says what it could not do.
+    const contentType = response.headers()["content-type"] ?? "";
+    if (contentType.trim() === "") {
+      say("answered with no content type, so it was not checked for a counting tag (every page of the site says it is HTML)");
+    } else if (/html/i.test(contentType)) {
+      let body = null;
+      try {
+        body = typeof response.text === "function" ? await response.text() : null;
+      } catch {
+        body = null;
+      }
+      const marker = body === null ? null : countingTagIn(body);
+      if (body === null) {
+        say("could not be read as the server sent it (the browser gave no body for the navigation), so it was not checked for a counting tag");
+      } else if (marker !== null) {
+        say(`has a counting tag ("${marker}") in the page as the server sent it: no page of this site carries a script tag for the counter (the page script adds it), so this is a tag that was put in: turn the Web Analytics switch of the Cloudflare dashboard off`);
+      }
+    }
     try {
       await page.locator("#theme-toggle").waitFor({ state: "visible", timeout: options.waitMs });
     } catch {
@@ -572,6 +688,83 @@ async function checkPage(context, options, expected, target) {
   return problems;
 }
 
+/**
+ * What a page holds of the counter, read in the page (so it is serialized: nothing outside this function may be used in it): how many script elements it has that are the counter's (the attribute
+ * data-cf-beacon, or a source on either host) and the entries of its resource timing that are on either host. `hosts` are the host names of the counter's two hosts.
+ */
+export function readCounterTraces(hosts) {
+  const matches = (address) => {
+    try {
+      return hosts.includes(new URL(address, document.baseURI).hostname.toLowerCase());
+    } catch {
+      return false;
+    }
+  };
+  const scripts = [...document.querySelectorAll("script")].filter((script) => script.hasAttribute("data-cf-beacon") || matches(script.src)).length;
+  const resources = performance
+    .getEntriesByType("resource")
+    .map((entry) => entry.name)
+    .filter(matches);
+  return { scripts, resources };
+}
+
+/**
+ * With --analytics: open the page of a trio with an invented kit fragment, in a browser context of its own (the pages that were checked before may have put the counter's script in the HTTP cache of
+ * theirs, and a script that comes from the cache may not be a request that the browser reports), and return what is wrong, which is any request to either host of the counter (a page opened from a kit
+ * link is never counted: not the script, and not its report), however it came to ask (the page script, or a tag that was put into the page), a script element of the counter in the page and an
+ * entry of its resource timing on either host. The requests are listened for on the context until the page has been closed (a report is often sent as the page goes).
+ */
+async function checkKitLink(context, options, target) {
+  const problems = [];
+  const say = (text) => problems.push(`${target.path} (a kit link): ${text}`);
+  const asked = [];
+  context.on("request", (request) => {
+    if (isCounterRequest(request.url())) asked.push(request.url());
+  });
+  const page = await context.newPage();
+  try {
+    try {
+      await page.goto(options.base + target.path + KIT_PROBE_FRAGMENT, { waitUntil: "load", timeout: options.navigationMs });
+    } catch (error) {
+      say(`could not be loaded (${firstLine(error.message)})`);
+      return problems;
+    }
+    try {
+      await page.locator("#theme-toggle").waitFor({ state: "visible", timeout: options.waitMs });
+    } catch {
+      say("the page script did not run, so this check shows nothing (the theme button never showed)");
+    }
+    await page.waitForLoadState("networkidle", { timeout: IDLE_CAP_MS }).catch(() => {});
+    if (options.settleMs > 0) await page.waitForTimeout(options.settleMs);
+    let traces = null;
+    try {
+      traces = await page.evaluate(readCounterTraces, [new URL(COUNTER_SCRIPT_HOST).hostname, new URL(COUNTER_DATA_HOST).hostname]);
+    } catch {
+      say("could not look in the page for the counter's script and its resource timing, so this check shows less than it should");
+    }
+    if (traces !== null && traces.scripts > 0) {
+      say(`has ${traces.scripts} counter script element${traces.scripts === 1 ? "" : "s"} in the page: a page opened from a kit link is never counted, and no script of the counter may be in it`);
+    }
+    if (traces !== null && traces.resources.length > 0) {
+      say(`resource timing lists ${traces.resources.length} request${traces.resources.length === 1 ? "" : "s"} to the counter's hosts (first: ${new URL(traces.resources[0]).host}) in the page`);
+    }
+  } finally {
+    // The page is sent away before it is closed, and a moment is given: pagehide fires on a navigation (it may not on a close of the target), and a report that a counter sends at pagehide, or as the
+    // page becomes hidden, is sent then. The context is listened to until the page has gone.
+    try {
+      await page.goto("about:blank", { timeout: options.navigationMs });
+    } catch (error) {
+      say(`could not be sent away to about:blank (${firstLine(error.message)}), so a report that the page sends as it goes may be missed and this check shows less than it should`);
+    }
+    await new Promise((done) => setTimeout(done, Math.min(Math.max(options.settleMs, LEAVING_WAIT_MS), MOST_CLOSE_WAIT_MS)));
+    await page.close().catch(() => {});
+  }
+  if (asked.length > 0) {
+    say(`made ${asked.length} request${asked.length === 1 ? "" : "s"} to the counter's hosts (first: ${new URL(asked[0]).host}): a page opened from a kit link is never counted, and nothing of the counter may be asked for there`);
+  }
+  return problems;
+}
+
 // ---- the run -----------------------------------------------------------------------------------------------------------------------------------
 
 async function launchBrowser() {
@@ -600,7 +793,7 @@ function failure(options, problems) {
 export async function run(options, { now = () => new Date(), launch = launchBrowser } = {}) {
   let expected;
   try {
-    expected = expectedHeaders(readFileSync(options.headersFile, "utf8"));
+    expected = expectedHeaders(readFileSync(options.headersFile, "utf8"), { analytics: options.analytics });
   } catch (error) {
     if (error instanceof UsageError) throw error;
     throw new UsageError(`cannot read the headers file ${path.basename(options.headersFile)} (${error.code ?? error.name})`);
@@ -633,14 +826,26 @@ export async function run(options, { now = () => new Date(), launch = launchBrow
   }
   const browser = await launch();
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "en-US", colorScheme: "light" });
-    if (options.paceSeconds > 0) {
-      await context.route("**/*", async (route) => {
-        await pace();
-        await route.continue().catch(() => {});
-      });
-    }
+    const newContext = async () => {
+      const made = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "en-US", colorScheme: "light" });
+      if (options.paceSeconds > 0) {
+        await made.route("**/*", async (route) => {
+          await pace();
+          await route.continue().catch(() => {});
+        });
+      }
+      return made;
+    };
+    const context = await newContext();
     for (const target of targets) problems.push(...(await checkPage(context, options, expected, target)));
+    if (options.analytics) {
+      const fresh = await newContext(); // (the kit link page has a context of its own: nothing the counted pages loaded is in its cache)
+      try {
+        problems.push(...(await checkKitLink(fresh, options, targets.find((target) => target.kind === "trio"))));
+      } finally {
+        await fresh.close().catch(() => {});
+      }
+    }
   } finally {
     await browser.close().catch(() => {});
   }

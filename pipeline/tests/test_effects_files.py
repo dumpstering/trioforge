@@ -16,6 +16,7 @@ from trioforge.effects import derive, files, judgment, plan
 from trioforge.effects import spells as sp
 from trioforge.model.roles import roles_for
 from trioforge.precompute import assemble, release
+from trioforge.rules import load as load_rules
 from trioforge.sources import client_tables as ct
 
 REPO = Path(__file__).resolve().parents[2]
@@ -30,7 +31,7 @@ def catalog():
 
 @pytest.fixture(scope="module")
 def built(catalog):
-    return files.build(catalog, sp.SpellBook.load(), J, "2026-10-13")
+    return files.build(catalog, sp.SpellBook.load(), J, load_rules().version)  # (the rules version of the checkout: the site's reader refuses files of another)
 
 
 def pseudo_kit(built, classes):
@@ -134,6 +135,53 @@ def test_generate_writes_the_file_and_keeps_the_date_the_manifest_has_for_the_sa
     assert book.source_sha256 == digest and [r["id"] for r in book.rows] == [1] and book.by_name == {}
 
 
+def test_generate_records_the_effect_names_of_the_catalog_it_was_derived_for(tmp_path, small_files):
+    """E3: a spell is kept by name only when an item of the catalog calls it by that name, so a file knows which names it was made for. The names (aliases applied, sorted) are in the file."""
+    client, out = tmp_path / "client", tmp_path / "out"
+    write_spells(client / "spells_us.txt", spell_line(1, "Nuke", {"WIZ": 40}, "1|0|-200|0|100|0"))
+    catalog = tmp_path / "catalog.json"
+    items = [{"evidence": {"level": "wiki"}, "effects": [{"name": "Nuke"}, {"name": "Complete Healing"}]}, {"evidence": {"level": "hidden"}, "effects": [{"name": "Secret"}]}]
+    catalog.write_text(json.dumps({"items": items}), encoding="utf-8")
+    out.mkdir()
+    derive.generate(client, out, catalog, "2026-10-24")
+    assert json.loads((out / "effect-spells.json").read_text(encoding="utf-8"))["catalog_names"] == ["Complete Heal", "Nuke"]
+    assert sp.SpellBook.load(out / "effect-spells.json").derived_for == frozenset({"Complete Heal", "Nuke"})
+
+
+def test_a_book_made_for_some_names_refuses_a_catalog_that_names_another(tmp_path):
+    book = sp.SpellBook([], 50, None, ["Ember Brand", "Stun"])
+    book.check_names({"Stun"})  # (a name fewer is no stale file: the spells of the book are enough for it)
+    book.check_names(set())
+    with pytest.raises(ValueError, match=r"2 effect names.*Gale Brand.*Ice Brand.*derive") as raised:
+        book.check_names({"Stun", "Gale Brand", "Ice Brand"})
+    assert "Stun" not in str(raised.value).split("derive")[0]  # (only the names that are new are said)
+    sp.SpellBook([], 50).check_names({"Stun"})  # (a file made before the record says nothing of its names: nothing is refused for it, and the next derive writes the record)
+
+
+def test_the_committed_spell_file_passes_the_check_of_the_catalog_names_with_or_without_the_record(catalog):
+    """The committed file was derived (2026-10-24) before the record was written, so it has none and nothing can be refused for it; a derive that writes the record must be for the catalog it is
+    committed with (the day the file is derived again, this holds it to that)."""
+    book = sp.SpellBook.load()
+    book.check_names(derive.effect_names(catalog))
+    assert book.derived_for is None or derive.effect_names(catalog) <= book.derived_for
+
+
+def test_write_effects_refuses_a_catalog_with_an_effect_the_spell_file_was_not_derived_for(results, tmp_path, catalog):
+    root = tmp_path / "root"
+    (root / "rules").mkdir(parents=True)
+    (root / "derived" / "client").mkdir(parents=True)
+    shutil.copy(REPO / "rules" / "rules.json", root / "rules" / "rules.json")
+    spells = json.loads((REPO / "derived" / "client" / "effect-spells.json").read_text(encoding="utf-8"))
+    spells["catalog_names"] = sorted(derive.effect_names(catalog))  # (a file that was derived for this catalog: the record the derive writes)
+    (root / "derived" / "client" / "effect-spells.json").write_text(json.dumps(spells), encoding="utf-8")
+    newer = json.loads(json.dumps(catalog))
+    wiki = next(item for item in newer["items"] if item["evidence"]["level"] == "wiki" and item["effects"])
+    wiki["effects"] = [*wiki["effects"], {"kind": "proc", "name": "Brand Newer Than The File", "raw": "Effect: Brand Newer Than The File (Combat)"}]
+    with pytest.raises(assemble.ReleaseRefused, match=r"Brand Newer Than The File.*derive"):
+        release.write_effects(results, ["pal-mnk-ber"], newer, root, print)
+    assert not (results / "effects.json").exists()
+
+
 def test_the_committed_spell_file_is_made_from_the_client_file_the_manifest_names():
     manifest = json.loads((REPO / "derived" / "client" / "manifest.json").read_text(encoding="utf-8"))
     recorded = next(i["sha256"] for i in manifest["inputs"] if i["file"] == "spells_us.txt")
@@ -199,9 +247,9 @@ def test_the_shared_file_has_no_unresolved_effect_and_no_fingerprint_and_no_evid
 
 def test_a_trio_file_has_the_offered_roles_only_and_item_keys_only(built):
     kit = pseudo_kit(built, ["PAL", "MNK", "BER"])
-    doc = files.trio_document(built, "pal-mnk-ber", "OGR", 4, {"balanced": kit, "tank": kit, "caster": kit})
-    assert list(doc["roles"]) == ["balanced", "tank"]  # a caster role is not offered to a trio of PAL, MNK and BER, and melee had no kit
-    entry = doc["roles"]["balanced"]
+    doc = files.trio_document(built, "pal-mnk-ber", "OGR", 4, {"tank": kit, "caster": kit})
+    assert list(doc["roles"]) == ["tank"]  # a caster build is not offered to a trio of PAL, MNK and BER, and melee had no kit
+    entry = doc["roles"]["tank"]
     assert set(entry) == {"focus", "click", "carry", "worn", "proc", "plan", "noroom"}
     for name in ("focus", "click", "carry", "worn", "proc"):
         for row in entry[name]:
@@ -244,7 +292,7 @@ def test_a_plan_follows_the_rules_for_real_items(built, catalog):
 
 
 def test_the_trio_files_stay_under_the_budget_for_roles_full_of_rows(built):
-    sample = [combo for combo in combinations(CLASS_CODES, 3) if len(roles_for(list(combo))) == 4][::37]  # trios with all four roles
+    sample = [combo for combo in combinations(CLASS_CODES, 3) if len(roles_for(list(combo))) == 4][::12]  # trios with all four builds (Tank, Shield caster, Melee damage, Caster)
     assert len(sample) >= 5
     worst = 0
     for combo in sample:
@@ -266,13 +314,40 @@ def test_the_shared_file_is_within_its_budget(built):
 
 def test_default_kits_read_the_solved_kit_of_each_role_for_the_default_race_at_the_default_tier():
     race, tier, kits = files.default_kits(REPO / "fixtures" / "site" / "results" / "pal-mnk-ber")
-    assert race == "OGR" and tier == 4 and set(kits) == {"balanced", "tank", "melee"}
+    assert race == "OGR" and tier == 4 and set(kits) == {"tank", "melee"}
     for kit in kits.values():
         assert kit and all(place in PLACES for place, _ in kit) and len({place for place, _ in kit}) == len(kit)
     shard = json.loads((REPO / "fixtures" / "site" / "results" / "pal-mnk-ber" / "strict-own.json").read_text(encoding="utf-8"))
-    best = max((r for r in shard["scenarios"] if r[0] == "OGR" and r[1] == "balanced" and r[2] == 4), key=lambda r: r[5])
+    best = max((r for r in shard["scenarios"] if r[0] == "OGR" and r[1] == "tank" and r[2] == 4), key=lambda r: r[5])
     keys = [row[0] for row in shard["items"]]
-    assert kits["balanced"] == [(place, keys[i]) for place, i in zip(shard["places"], shard["kits"][best[4]], strict=True) if i >= 0]
+    assert kits["tank"] == [(place, keys[i]) for place, i in zip(shard["places"], shard["kits"][best[4]], strict=True) if i >= 0]
+
+
+def test_the_kit_of_the_opening_build_is_in_the_setup_defaults_json_names(tmp_path):
+    """E5: the shards keep the value of a row to two decimals and ``defaults.json`` the exact one, so two setups worth the same to the cent may be told apart differently. The opening build's
+    setup is the file's own (``setup``), and the kit read is the row of that setup; the other builds, for which the file says nothing, keep the best of the rounded values."""
+    folder = tmp_path / "pal-mnk-ber"
+    shutil.copytree(REPO / "fixtures" / "site" / "results" / "pal-mnk-ber", folder)
+    shard = json.loads((folder / "strict-own.json").read_text(encoding="utf-8"))
+    rows = {r[3]: r for r in shard["scenarios"] if r[0] == "OGR" and r[1] == "tank" and r[2] == 4}
+    assert set(rows) == {"1h-shield", "2h", "dw"} and max(rows.values(), key=lambda r: r[5])[3] == "dw"
+    defaults = json.loads((folder / "defaults.json").read_text(encoding="utf-8"))
+    assert defaults["view"]["role"] == "tank" and defaults["setup"] == "dw"
+    keys = [row[0] for row in shard["items"]]
+
+    def kit(row):
+        return [(place, keys[i]) for place, i in zip(shard["places"], shard["kits"][row[4]], strict=True) if i >= 0]
+
+    assert files.default_kits(folder)[2]["tank"] == kit(rows["dw"])
+    defaults["setup"] = "2h"  # (the exact values put the two-hander first: the rounded ones are not the arbiter)
+    (folder / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+    kits = files.default_kits(folder)[2]
+    assert kits["tank"] == kit(rows["2h"]) and kits["tank"] != kit(rows["dw"])
+    best_melee = max((r for r in shard["scenarios"] if r[0] == "OGR" and r[1] == "melee" and r[2] == 4), key=lambda r: r[5])
+    assert kits["melee"] == kit(best_melee)  # (not the opening build: the best of the rows, as before)
+    defaults["setup"] = "ranged"  # (a setup the shard has no row for at that race and tier: the best row stands, and the file is not trusted over the rows)
+    (folder / "defaults.json").write_text(json.dumps(defaults), encoding="utf-8")
+    assert files.default_kits(folder)[2]["tank"] == kit(rows["dw"])
 
 
 def test_a_trio_with_no_default_race_has_no_kits(tmp_path):
@@ -339,7 +414,7 @@ def test_the_check_refuses_a_trio_file_over_its_budget(results, built):
     import random
 
     rng = random.Random(7)
-    doc["roles"]["balanced"]["noroom"] = [{"k": "focus", "e": "e000", "w": "".join(rng.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(40))} for _ in range(900)]
+    doc["roles"]["tank"]["noroom"] = [{"k": "focus", "e": "e000", "w": "".join(rng.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(40))} for _ in range(900)]
     path.write_text(json.dumps(doc), encoding="utf-8")
     assert len(gzip.compress(path.read_bytes())) > files.TRIO_GZIP_LIMIT
     with pytest.raises(files.EffectsError, match="over the 20,480-byte budget"):
@@ -351,7 +426,7 @@ def test_the_check_refuses_an_effect_the_shared_file_lacks_and_a_trio_made_for_a
     path = results / "pal-mnk-ber" / "exalt.json"
     good = json.loads(path.read_text(encoding="utf-8"))
     bad = json.loads(path.read_text(encoding="utf-8"))
-    bad["roles"]["balanced"]["focus"].append({"e": "e999", "d": "x", "o": [], "s": 1, "m": "PAL"})
+    bad["roles"]["tank"]["focus"].append({"e": "e999", "d": "x", "o": [], "s": 1, "m": "PAL"})
     path.write_text(json.dumps(bad), encoding="utf-8")
     with pytest.raises(files.EffectsError, match="effect e999"):
         files.check_release(results, ["pal-mnk-ber"])
@@ -363,7 +438,7 @@ def test_the_check_refuses_an_effect_the_shared_file_lacks_and_a_trio_made_for_a
 
 def test_the_check_refuses_a_host_the_item_table_lacks(results, built, catalog):
     kit = pseudo_kit(built, ["PAL", "MNK", "BER"])
-    doc = files.trio_document(built, "pal-mnk-ber", "OGR", 4, {"balanced": kit})
+    doc = files.trio_document(built, "pal-mnk-ber", "OGR", 4, {"tank": kit})
     (results / "pal-mnk-ber").mkdir(exist_ok=True)
     (results / "pal-mnk-ber" / "exalt.json").write_text(jsonio.render(doc), encoding="utf-8")
     (results / "effects.json").write_text(jsonio.render(files.shared_document(built), per_line=("effects",)), encoding="utf-8")
@@ -398,8 +473,13 @@ def test_the_stage_carries_the_effects_files_when_there_are_any_and_works_withou
 
 
 def test_the_effects_code_is_covered_by_the_code_hash_of_the_release():
-    for name in ("effects/__init__.py", "effects/derive.py", "effects/donors.py", "effects/files.py", "effects/judgment.py", "effects/layer.py", "effects/plan.py", "effects/spells.py"):
-        assert name in assemble.WRITER_FILES
+    from trioforge.precompute import grid
+
+    root = Path(assemble.__file__).resolve().parents[1]
+    covered = set(assemble.WRITER_FILES) | {path.relative_to(root).as_posix() for path in grid.code_files()}  # (the weapon procs are made from the effects code: it is the code of the chunks now)
+    for name in ("effects/__init__.py", "effects/derive.py", "effects/donors.py", "effects/files.py", "effects/judgment.py", "effects/layer.py", "effects/plan.py", "effects/score.py", "effects/spells.py"):
+        assert name in covered
+    assert not {name for name in assemble.WRITER_FILES if name.startswith("effects/")}  # (a file is in one of the two lists, not both)
 
 
 def test_write_effects_does_nothing_without_the_spell_file_and_writes_with_it(results, tmp_path, catalog):
@@ -519,13 +599,13 @@ MALFORMED_TRIO = [
     pytest.param(lambda doc: {**doc, "roles": []}, id="roles-a-list"),
     pytest.param(lambda doc: {**doc, "classes": 3}, id="classes-not-a-list"),
     pytest.param(lambda doc: {**doc, "classes": ["XXX", "YYY", "ZZZ"]}, id="classes-not-classes"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": 3}}, id="a-role-not-an-object"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": {"focus": []}}}, id="a-role-without-lists"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": {**doc["roles"]["balanced"], "plan": [3]}}}, id="a-plan-row-a-number"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": {**doc["roles"]["balanced"], "plan": [{"k": "focus"}]}}}, id="a-plan-row-without-keys"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": {**doc["roles"]["balanced"], "noroom": [{"k": "focus", "e": 4}]}}}, id="an-effect-not-text"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": {**doc["roles"]["balanced"], "focus": [{"e": "e000", "d": "x"}]}}}, id="a-row-without-other-donors"),
-    pytest.param(lambda doc: {**doc, "roles": {"balanced": {**doc["roles"]["balanced"], "click": [{"e": "e000", "d": "x", "o": 4}]}}}, id="other-donors-not-a-list"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": 3}}, id="a-role-not-an-object"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": {"focus": []}}}, id="a-role-without-lists"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": {**doc["roles"]["tank"], "plan": [3]}}}, id="a-plan-row-a-number"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": {**doc["roles"]["tank"], "plan": [{"k": "focus"}]}}}, id="a-plan-row-without-keys"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": {**doc["roles"]["tank"], "noroom": [{"k": "focus", "e": 4}]}}}, id="an-effect-not-text"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": {**doc["roles"]["tank"], "focus": [{"e": "e000", "d": "x"}]}}}, id="a-row-without-other-donors"),
+    pytest.param(lambda doc: {**doc, "roles": {"tank": {**doc["roles"]["tank"], "click": [{"e": "e000", "d": "x", "o": 4}]}}}, id="other-donors-not-a-list"),
 ]
 
 
@@ -590,7 +670,7 @@ def test_the_check_refuses_a_trio_row_whose_best_or_other_donor_or_plan_donor_th
     # data-2026-10-27: 16 trio files named the AMMO mounts as donors; the check looked at hosts only.
     # check_release refuses a shared-file donor the table lacks before it reads a trio file, so the trio check is called on its own here: a donor the shared file lists and the table lacks.
     kit = pseudo_kit(built, ["PAL", "MNK", "BER"])
-    doc = files.trio_document(built, "pal-mnk-ber", "OGR", 4, {"balanced": kit})
+    doc = files.trio_document(built, "pal-mnk-ber", "OGR", 4, {"tank": kit})
     shared = files.shared_document(built)
     ids = {e["id"] for e in shared["effects"]}
     known = {key for e in shared["effects"] for key, _ in e["d"]}
@@ -601,16 +681,16 @@ def test_the_check_refuses_a_trio_row_whose_best_or_other_donor_or_plan_donor_th
     def check(document, wanted):
         files._check_trio(document, "pal-mnk-ber", name, shared, ids, known, wanted)
 
-    entry = doc["roles"]["balanced"]
+    entry = doc["roles"]["tank"]
     used = {r["d"] for part in files.LISTS for r in entry[part]} | {k for part in files.LISTS for r in entry[part] for k in r["o"]} | {r["d"] for r in entry["plan"]}
     spare = sorted(known - used)
     assert len(spare) >= 3 and entry["plan"]
     check(doc, everything)
     host, anchor = entry["plan"][0]["h"], min(used)
     for where, make in (
-        ("best", lambda document, key: document["roles"]["balanced"]["click"].append({"e": effect, "d": key, "o": [], "s": 1, "m": "PAL"})),
-        ("other", lambda document, key: document["roles"]["balanced"]["click"].append({"e": effect, "d": anchor, "o": [key], "s": 1, "m": "PAL"})),
-        ("plan", lambda document, key: document["roles"]["balanced"]["plan"].append({"k": "click", "e": effect, "d": key, "h": host, "p": "HEAD", "c": [], "u": 0})),
+        ("best", lambda document, key: document["roles"]["tank"]["click"].append({"e": effect, "d": key, "o": [], "s": 1, "m": "PAL"})),
+        ("other", lambda document, key: document["roles"]["tank"]["click"].append({"e": effect, "d": anchor, "o": [key], "s": 1, "m": "PAL"})),
+        ("plan", lambda document, key: document["roles"]["tank"]["plan"].append({"k": "click", "e": effect, "d": key, "h": host, "p": "HEAD", "c": [], "u": 0})),
     ):
         key = spare[0]
         changed = json.loads(json.dumps(doc))

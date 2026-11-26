@@ -1,0 +1,48 @@
+{
+ "v": 1,
+ "release": "data-2030-01-02",
+ "license": "CC BY-SA 4.0",
+ "attribution": "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, tier-scaled",
+ "ev": "strict",
+ "buffs": "own",
+ "stat_tiers": [0,4,10],
+ "items": [],
+ "kits": [
+  [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+ ],
+ "totals": [
+  [143,4891,2430,2877,0,150,0,40,20,40,20,24,-3,10],
+  [137,4891,2430,2877,0,150,0,40,20,40,20,24,-3,10],
+  [142,5028,2492,2958,0,165,0,40,20,40,20,24,-3,10],
+  [137,5028,2492,2958,0,165,0,40,20,40,20,24,-3,10]
+ ],
+ "rows": [
+  ["TRL","tank",0,"2h",0,9598.97,0.0,0,0],
+  ["TRL","tank",0,"dw",0,9598.97,0.0,0,0],
+  ["TRL","tank",4,"2h",0,9598.97,0.0,0,0],
+  ["TRL","tank",4,"dw",0,9598.97,0.0,0,0],
+  ["TRL","tank",10,"2h",0,9598.97,0.0,0,0],
+  ["TRL","tank",10,"dw",0,9598.97,0.0,0,0],
+  ["TRL","melee",0,"2h",0,9452.23,0.0,1,0],
+  ["TRL","melee",0,"dw",0,9452.23,0.0,1,0],
+  ["TRL","melee",4,"2h",0,9452.23,0.0,1,0],
+  ["TRL","melee",4,"dw",0,9452.23,0.0,1,0],
+  ["TRL","melee",10,"2h",0,9452.23,0.0,1,0],
+  ["TRL","melee",10,"dw",0,9452.23,0.0,1,0],
+  ["OGR","tank",0,"2h",0,9783.12,0.0,2,0],
+  ["OGR","tank",0,"dw",0,9783.12,0.0,2,0],
+  ["OGR","tank",4,"2h",0,9783.12,0.0,2,0],
+  ["OGR","tank",4,"dw",0,9783.12,0.0,2,0],
+  ["OGR","tank",10,"2h",0,9783.12,0.0,2,0],
+  ["OGR","tank",10,"dw",0,9783.12,0.0,2,0],
+  ["OGR","melee",0,"2h",0,9718.03,0.0,3,0],
+  ["OGR","melee",0,"dw",0,9718.03,0.0,3,0],
+  ["OGR","melee",4,"2h",0,9718.03,0.0,3,0],
+  ["OGR","melee",4,"dw",0,9718.03,0.0,3,0],
+  ["OGR","melee",10,"2h",0,9718.03,0.0,3,0],
+  ["OGR","melee",10,"dw",0,9718.03,0.0,3,0]
+ ],
+ "icons": ["icon-helm","icon-face","icon-ear","icon-neck","icon-shoulders","icon-arms","icon-back","icon-wrist","icon-hands-leather","icon-ring","icon-chest","icon-legs","icon-feet","icon-waist","icon-pouch"],
+ "ic": "",
+ "pl": "0122345677899bcdfg--gg"
+}

@@ -25,9 +25,9 @@ afterEach(() => {
 });
 
 /** The page with its code started, a site that serves the manifest, the item table and the page's own views, and the stand-in for the optimizer. */
-function open({ offline = [] } = {}) {
+function open({ offline = [], search = "" } = {}) {
   mountPage();
-  window.history.replaceState(null, "", "/trio/pal-mnk-ber/");
+  window.history.replaceState(null, "", "/trio/pal-mnk-ber/" + search);
   const made = makeSite();
   made.files.set(MAIN, encode(made.manifestJson));
   const net = siteFetch(made);
@@ -81,10 +81,10 @@ describe("the section on the page", () => {
       await sent(t, count);
       expect(t.engine.runs[count - 1].request.scenario).toEqual(pageView());
     };
-    await pick('input[name="role"][value="tank"]', 2);
-    expect(t.engine.runs[1].request.scenario.role).toBe("tank");
+    await pick('input[name="role"][value="melee"]', 2); // (the page opens on the Tank)
+    expect(t.engine.runs[1].request.scenario.role).toBe("melee");
     await pick('input[name="buffs"][value="group"]', 3);
-    expect(t.engine.runs[2].request.scenario).toMatchObject({ role: "tank", buffs: "group" });
+    expect(t.engine.runs[2].request.scenario).toMatchObject({ role: "melee", buffs: "group" });
     expect(t.engine.runs[2].request.scenario.evidence).toBe("strict"); // (no switch moves the evidence level: the page asks at the level it is made from)
     const race = $("#sw-race");
     race.value = [...race.options].find((o) => o.value !== race.value).value;
@@ -99,7 +99,7 @@ describe("the section on the page", () => {
   }, 30_000);
 
   it("does not restart for a switch the request does not use (the tier), nor for a view that could not be loaded", async () => {
-    const t = open({ offline: ["strict-group"] });
+    const t = open({ offline: ["strict-group"], search: "?role=melee" }); // (Melee damage plays the two-hander at every tier: the Tank's best weapons change with the tier, and the weapons are in the request)
     await wake(t);
     addByName("larkspur", "4");
     await sent(t, 1);
@@ -268,7 +268,7 @@ describe("the section started without the page", () => {
       fetch: siteFetch(made).fetchImpl,
       release: null,
       loadEngine: engine.loadEngine,
-      view: () => ({ race: "OGR", role: "balanced", buffs: "own", evidence: "strict", setup: "dw" }),
+      view: () => ({ race: "OGR", role: "tank", buffs: "own", evidence: "strict", setup: "dw" }),
       words: {},
       onView: () => {
         throw new Error("the page cannot say when its view changes");

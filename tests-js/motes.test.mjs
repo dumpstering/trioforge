@@ -45,11 +45,12 @@ const shown = (step) => ({
 
 describe("the mote order of the page against the Python reference", () => {
   it("has the cases of the fixture: every ending, a limit, weights, the runs", () => {
-    expect(cases.length).toBe(20);
+    expect(cases.length).toBe(26); // (the case of the shortest run, from Part E7, is the last of the runs)
     expect(new Set(cases.map((row) => row.ending))).toEqual(new Set(["top", "motes", "no-gain"]));
     expect(cases.some((row) => row.weights !== undefined)).toBe(true);
     expect(cases.some((row) => row.steps.some((step) => step.motes > 1))).toBe(true);
     expect(cases.some((row) => row.nextRun !== null)).toBe(true);
+    expect(cases.find((row) => row.name.includes("shortest run")).nextRun, "E7: the order names the fewest motes of any run left (two), not the length of the run of the best rate (six)").toBe(2);
   });
 
   it.each(cases.map((row) => [row.name, row]))("gives the order Python gives: %s", (_, row) => {
@@ -135,7 +136,7 @@ describe("the mote order of the page against the Python reference", () => {
 });
 
 describe("the walk refuses what the reference refuses (motes.py), with a MoteError", () => {
-  const profile = assembleProfile(bundle, { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki" });
+  const profile = assembleProfile(bundle, { race: "OGR", role: "tank", buffs: "own", evidence: "wiki" });
   const head = placesOf(cases[0].kit)[0]; // an item of the fixture, at its tier
   const item = (key, tier) => atTier(table.records.get(key), tier, bundle);
   const kitWith = (worn) => Array.from({ length: 22 }, (_, at) => worn[at] ?? null);
@@ -185,6 +186,6 @@ describe("the walk refuses what the reference refuses (motes.py), with a MoteErr
     expect(() => createMoteWalk(make({ itemAt }))).toThrow(new RegExp(`no record for item ${head.key}`));
     expect(valued).toBeGreaterThan(0);
     // and the error is of the kit, at its start: not a step that fails when the walk is half way
-    expect(() => moteWalkOf({ bundle, records: new Map(), race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw", places: [{ slotIndex: 0, key: head.key, tier: head.tier }] })).toThrow(MoteError);
+    expect(() => moteWalkOf({ bundle, records: new Map(), race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw", places: [{ slotIndex: 0, key: head.key, tier: head.tier }] })).toThrow(MoteError);
   });
 });

@@ -76,9 +76,10 @@ import { DATA_FILE, EngineFault, fetchBytes, sameOriginUrl, sha256Hex } from "./
 import { EvaluateError } from "./evaluate.js";
 import { ItemError, atTier, checkTierRules, readItemTable } from "./items.js";
 import { ManifestError, ManifestReleaseError, fetchTextWithin, parseTrioManifest, trioManifestPath } from "./manifest.js";
-import { ModelError, ident } from "./model.js";
+import { ModelError, NoBowError, ident } from "./model.js";
 import { PathError, bestSets, createFarmPath, equipNow, everySlot } from "./path.js";
-import { BundleError, readBundle } from "./profile.js";
+import { procsOf } from "./procs.js";
+import { BundleError, buffsetOf, readBundle } from "./profile.js";
 import { LABEL_NO_INCUMBENT, LIMITS, LOADING_BEAT_MS, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "./protocol.js";
 import { PruneError } from "./prune.js";
 import { ExactnessError, PlacementError, SolveError, SolverFault, closeSession, createSession } from "./solve.js";
@@ -304,8 +305,9 @@ export function createScenarioEngine({ highs, fetchImpl = (...args) => fetch(...
         highs,
         profile,
         setup,
-        buffset: { set: document.buffs[buffs].set, table: document.buff_table },
+        buffset: buffsetOf(document, buffs),
         monkBins: document.monk_bins === null ? undefined : document.monk_bins,
+        procs: procsOf(document),
         options: {},
         now: () => clock(),
       });
@@ -594,7 +596,7 @@ export function createScenarioEngine({ highs, fetchImpl = (...args) => fetch(...
           now: () => clock(),
         });
       } catch (error) {
-        if (error instanceof BestKitError) throw new EngineFault("bad-request", error.message);
+        if (error instanceof BestKitError || error instanceof NoBowError) throw new EngineFault("bad-request", error.message); // (a NoBowError is a ModelError: a pool with no bow is the visitor's choice, not a fault of the data)
         if (error instanceof SolverFault || error instanceof ExactnessError || error instanceof PlacementError) throw error; // (the worker tells them; the session was closed)
         if (!isEngineError(error)) throw error;
         // the request was checked, and what it chose exists: it is what the data holds that is wrong (a record, or the rules of the bundle)

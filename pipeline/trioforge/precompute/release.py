@@ -100,6 +100,7 @@ from trioforge import rules as rules_module
 from trioforge.checks_dir import checks_dir as folder_of_the_checks
 from trioforge.data import catalog as catalog_module
 from trioforge.data.jsonio import MAX_FILE_BYTES, JsonFileError, load_strict, loads_strict, render
+from trioforge.effects import derive as effects_derive
 from trioforge.effects import files as effects_files
 from trioforge.effects import judgment as effects_judgment
 from trioforge.effects import spells as effects_spells
@@ -254,12 +255,15 @@ def _sha256(path: Path) -> str:
 
 
 def _result_digests(trio_dir: Path) -> dict[str, str]:
-    """``{relative name: sha256}`` of every result file of a trio (its folder without the chunks)."""
+    """``{relative name: sha256}`` of every result file of a trio (its folder without the chunks, and without ``exalt.json``: the file of the effects layer is written after the marker, by
+    every build and for resumed trios too, from the shipped kits, so a digest of it would make every rerun of a finished trio look changed; it is never trusted, it is written again)."""
     found: dict[str, str] = {}
     for here, dirs, files in os.walk(trio_dir):
         if Path(here) == trio_dir:
             dirs[:] = [name for name in dirs if name != "chunks"]
         for name in files:
+            if Path(here) == trio_dir and name == effects_files.TRIO_FILE:
+                continue
             path = Path(here, name)
             found[path.relative_to(trio_dir).as_posix()] = _sha256(path)
     return dict(sorted(found.items()))
@@ -423,7 +427,9 @@ def write_effects(
         return False
     try:
         rules = rules_module.load(Path(tables_root) / "rules" / "rules.json")
-        built = effects_files.build(dict(catalog), effects_spells.SpellBook.load(spell_file), effects_judgment.Judgment.from_rules(rules), rules.version)
+        book = effects_spells.SpellBook.load(spell_file)
+        book.check_names(effects_derive.effect_names(dict(catalog)))  # (the catalog may not name an effect the file was not derived for: it would count 0, in silence)
+        built = effects_files.build(dict(catalog), book, effects_judgment.Judgment.from_rules(rules), rules.version)
         sizes = effects_files.write_release(results, trios, built)
     except (OSError, ValueError, KeyError, JsonFileError) as error:
         raise ReleaseRefused(f"the effects files cannot be made: {' '.join(str(error).split())}") from None
@@ -438,7 +444,7 @@ def _weight(spec: TrioSpec) -> int:
         codes = grid.parse_trio(spec.slug)
     except ValueError:
         return 0  # (the run of it says what is wrong)
-    return len(roles_for(codes)) * len(spec.tiers if spec.tiers is not None else default_tiers(codes))
+    return len(roles_for(codes, bow=None)) * len(spec.tiers if spec.tiers is not None else default_tiers(codes))  # (the roles it may have: whether a pool offers the Ranged role is not known yet)
 
 
 def _run_pool(
@@ -780,34 +786,38 @@ def _eqlt_address(text: Any) -> str | None:
 
 
 def check_eqlegendstools_source(rules: str | os.PathLike[str], document: Mapping[str, Any]) -> None:
-    """The items of a zone that ``rules/hand-lists.json`` takes from EQ Legends Tools were put in the catalog: its provenance names the zone page it was built from.
+    """The items of the zones that the site of EQ Legends Tools settles were put in the catalog: its provenance names at least one page of that site among its inputs (the builder records each
+    zone page it read), whatever the hand lists say, and, for each ``exists_unflagged_zones`` entry of ``rules/hand-lists.json`` whose source is a page of that site, that page.
 
-    The catalog builder reads that site only when it is given ``--eqlegendstools`` (the option is not required), and a catalog built without it still has the hand-listed zone,
-    with the wiki's copy of its items; a release would then solve with the wiki's numbers for items the maintainers decided that site settles. Every ``exists_unflagged_zones`` entry
-    whose source is a page of that site must be one of the catalog's inputs (the builder records each zone page it read); :class:`ReleaseRefused` otherwise, naming the zone and the page.
-    No hand-lists file, or no such entry, asks nothing of the catalog.
-    """
+    The catalog builder reads that site only when it is given ``--eqlegendstools`` (the option is not required), and a catalog built without it has the wiki's copy of the items the maintainers
+    decided that site settles; a release would then solve with the wiki's numbers. A catalog that names no page of the site is refused, with a hand-lists file or without one (a hand-listed
+    zone of the site was once the only thing that asked, and the zone is no longer one: the client flags it); an entry that names a page the catalog does not is refused naming the zone and the
+    page. :class:`ReleaseRefused` otherwise."""
     path = Path(rules) / "hand-lists.json"
-    if not path.exists():
-        return
-    try:
-        lists = load_strict(path)
-    except (OSError, JsonFileError) as error:
-        raise ReleaseRefused(f"rules/hand-lists.json cannot be read: {error}") from None
     inputs = (document.get("provenance") or {}).get("inputs") or ()
     recorded = {address for record in inputs if isinstance(record, Mapping) and (address := _eqlt_address(record.get("file"))) is not None}
-    for entry in lists.get("exists_unflagged_zones") or () if isinstance(lists, Mapping) else ():
-        if not isinstance(entry, Mapping):
-            continue
-        for source in entry.get("source") or ():
-            ref = source.get("ref") if isinstance(source, Mapping) else None
-            address = _eqlt_address(ref)
-            if address is not None and address not in recorded:
-                names = ", ".join(str(name) for name in entry.get("names") or ()) or "a zone"
-                raise ReleaseRefused(
-                    f"rules/hand-lists.json takes the items of {names} from {ref}, which the public catalog does not name among its inputs: the catalog was built without "
-                    "--eqlegendstools, so those items are still the wiki's; build the catalog again with the EQ Legends Tools fetch"
-                )
+    if path.exists():
+        try:
+            lists = load_strict(path)
+        except (OSError, JsonFileError) as error:
+            raise ReleaseRefused(f"rules/hand-lists.json cannot be read: {error}") from None
+        for entry in lists.get("exists_unflagged_zones") or () if isinstance(lists, Mapping) else ():
+            if not isinstance(entry, Mapping):
+                continue
+            for source in entry.get("source") or ():
+                ref = source.get("ref") if isinstance(source, Mapping) else None
+                address = _eqlt_address(ref)
+                if address is not None and address not in recorded:
+                    names = ", ".join(str(name) for name in entry.get("names") or ()) or "a zone"
+                    raise ReleaseRefused(
+                        f"rules/hand-lists.json takes the items of {names} from {ref}, which the public catalog does not name among its inputs: the catalog was built without "
+                        "--eqlegendstools, so those items are still the wiki's; build the catalog again with the EQ Legends Tools fetch"
+                    )
+    if not recorded:
+        raise ReleaseRefused(
+            "the public catalog names no EQ Legends Tools page among its inputs: it was built without --eqlegendstools, so the items of the zone pages of that site are still "
+            "the wiki's; build the catalog again with the EQ Legends Tools fetch"
+        )
 
 
 @contextlib.contextmanager
@@ -1000,15 +1010,20 @@ def check_bundle_reader(folder: str | os.PathLike[str], trios: Sequence[str], *,
     return totals
 
 
-def check_file_count(facts: Sequence[TrioFacts], evidence: Mapping[str, str], *, assets: Sequence[str] | None = None, exalt: Collection[str] = ()) -> int:
+def check_file_count(
+    facts: Sequence[TrioFacts], evidence: Mapping[str, str], *, assets: Sequence[str] | None = None, exalt: Collection[str] = (), verification: str | None = None
+) -> int:
     """The exact number of the files of the site this release would make (:func:`trioforge.site.build.site_files`: the trios with their roles, scopes and levels, an
     item page for each strict or wiki item of the evidence map, the fixed pages and the page code) is at most the budget (15,000). ``assets`` are the names of the page
     code; None bundles it, as a build does (it needs Node and esbuild). ``exalt`` are the trios that have the file of the effects layer (each adds a data file to the site, and the
-    shared effects file comes with the first). Returns the count."""
+    shared effects file comes with the first). ``verification`` is the name of the Search Console file of a site that has one (one file more, at the root): the setting of the build that follows, which
+    is ``$TRIOFORGE_GOOGLE_VERIFICATION`` when none is given (an empty variable is no setting). Returns the count."""
     try:
+        if verification is None:
+            verification = os.environ.get(build.VERIFICATION_ENV) or None
         names = tuple(assets) if assets is not None else build.page_code_files()
         pages = sorted(key for key, level in evidence.items() if level in ("strict", "wiki"))
-        listed = build.site_files([build.TrioFiles(f.slug, f.roles, f.tiers, f.levels, f.slug in exalt) for f in facts], assets=names, item_pages=pages, noindex=False)
+        listed = build.site_files([build.TrioFiles(f.slug, f.roles, f.tiers, f.levels, f.slug in exalt) for f in facts], assets=names, item_pages=pages, noindex=False, verification=verification)
         return build.check_file_budget(listed)
     except build.BudgetError as error:
         raise ReleaseRefused(str(error)) from None
@@ -1028,13 +1043,25 @@ class SpotResult:
     message: str = ""
 
 
-def _spot_task(spec: Mapping[str, Any]) -> SpotResult:
-    slug = spec["slug"]
+def _spot_draw(folder: str | os.PathLike[str], slug: str, seed: Any) -> tuple[str, str, str, str, int, str, float]:
+    """The scenario the spot check of a trio solves again: ``(evidence, buffs, race, role, tier, setup, shipped value)``, one row drawn from the shards that have a pool. A shard with
+    no item in its pool (the strict one, in a release: its kits are naked plus buffs) has nothing to prune, so no pruning loss could show in it; drawing there wastes the check."""
     rows: list[tuple[str, str, str, str, int, str, float]] = []
     for name in shards.SHARD_NAMES:
         evidence, buffs = name.removesuffix(".json").split("-")
-        rows += [(evidence, buffs, r[0], r[1], r[2], r[3], r[5]) for r in _json(Path(spec["folder"]) / slug / name)["scenarios"]]
-    evidence, buffs, race, role, tier, setup, shipped = random.Random(f"{spec['seed']}/{slug}").choice(rows)
+        document = _json(Path(folder) / slug / name)
+        if document["items"]:
+            rows += [(evidence, buffs, r[0], r[1], r[2], r[3], r[5]) for r in document["scenarios"]]
+    if not rows:  # (no shard has a pool: nothing was pruned anywhere; the check still solves one scenario)
+        for name in shards.SHARD_NAMES:
+            evidence, buffs = name.removesuffix(".json").split("-")
+            rows += [(evidence, buffs, r[0], r[1], r[2], r[3], r[5]) for r in _json(Path(folder) / slug / name)["scenarios"]]
+    return random.Random(f"{seed}/{slug}").choice(rows)
+
+
+def _spot_task(spec: Mapping[str, Any]) -> SpotResult:
+    slug = spec["slug"]
+    evidence, buffs, race, role, tier, setup, shipped = _spot_draw(spec["folder"], slug, spec["seed"])
     view = {"evidence": evidence, "buffs": buffs, "race": race, "role": role, "tier": tier, "setup": setup}
     try:
         codes = grid.parse_trio(slug)
@@ -1044,7 +1071,7 @@ def _spot_task(spec: Mapping[str, Any]) -> SpotResult:
         context = grid.Context(config)
         profile = context.profile(race, role, buffs, evidence)
         solution = solve_scenario(
-            profile, context.pool(evidence, tier), setup, context.buffsets[buffs], grid.BUILD_OPTIONS, solver=solver_solve.solve
+            profile, context.pool(evidence, tier), setup, context.buffsets[buffs], context.options, solver=solver_solve.solve
         ).solution
     except Exception as error:  # noqa: BLE001
         return SpotResult(slug, view, shipped, float("nan"), False, f"the unpruned solve failed: {type(error).__name__}: {' '.join(str(error).split())}")
@@ -1812,7 +1839,7 @@ def build_release(
     now: datetime.datetime | None = None, seed: int | None = None,
     runner: Callable[[TrioSpec], TrioOutcome] | None = None, bundle_reader: Callable[..., dict[str, int]] | None = None,
     assets: Sequence[str] | None = None, parity_runner: Callable[..., tuple[int, str]] | None = None, robustness: Any = None,
-    whole_grid: Sequence[str] | None = None, git: Any = None, checks_dir: str | os.PathLike[str] | None = None,
+    whole_grid: Sequence[str] | None = None, git: Any = None, checks_dir: str | os.PathLike[str] | None = None, verification: str | None = None,
 ) -> ReleaseResult:
     """Build a release (see the module docstring). ``root`` is the folder with ``derived/``, ``rules/``, ``privacy/``, ``releases/``, ``reports/`` and ``build/``
     (the checkout, in a real run, and it must be a git worktree: ``git`` is the :class:`Git` of it, or a stand-in in a test). ``trios`` is the grid of the release
@@ -1821,7 +1848,8 @@ def build_release(
     shard parity is divided between (:func:`check_parity`; 1: one process, as it was). ``whole_grid`` and the keyword arguments from
     ``runner`` on stand in for the grid and for the slow and external steps in the tests. The catalog is the public one (``derived/catalog.json``) and must have no strict
     item (:func:`check_no_strict_item`). ``checks_dir`` is the folder of the stamps of the scheduled checks
-    (None: the folder of the checks, outside every worktree; see :func:`scheduled_warnings`). A failure to say something (a closed pipe) is no failure of the build.
+    (None: the folder of the checks, outside every worktree; see :func:`scheduled_warnings`). ``verification`` is the name of the Search Console file that the site of this release is built with, for the
+    exact count of its files: the option of the command (``--google-verification``), else ``$TRIOFORGE_GOOGLE_VERIFICATION``, as the site build takes it (:func:`check_file_count`). A failure to say something (a closed pipe) is no failure of the build.
     Raises :class:`ReleaseRefused`."""
 
     def tell(text: str) -> None:
@@ -1967,7 +1995,7 @@ def build_release(
             with_exalt = data.exalt_slugs(staging, wanted)  # (the site build's own answer: which trios ship the file of the effects layer)
         except data.ResultsError as error:
             raise ReleaseRefused(str(error)) from None
-        site_files = check_file_count(facts, evidence, assets=assets, exalt=with_exalt)
+        site_files = check_file_count(facts, evidence, assets=assets, exalt=with_exalt, verification=verification)
         tell(f"check: {site_files:,} files in the site (limit {build.LIMITS['files']:,})")
         spots = check_pruning(staging, wanted, catalog=public, tables_root=tables, seed=seed, processes=processes, chunk_code=begun.chunk_code)
         tell(f"check: {len(spots)} scenarios against the unpruned optimum")

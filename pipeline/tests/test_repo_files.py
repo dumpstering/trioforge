@@ -601,12 +601,14 @@ def test_checkout_never_persists_the_token():
 
 def test_python_job_installs_the_hashed_lock_and_runs_pytest():
     job = _job("python")
-    assert _step_actions(job) == ["actions/checkout", "actions/setup-python"]
+    # Node and esbuild come with it (L9): the tests of the site build need them, and the step of pytest requires them (the test after the js job's, below)
+    assert _step_actions(job) == ["actions/checkout", "actions/setup-node", "actions/setup-python"]
     setup = next(step for step in job["steps"] if "setup-python" in step.get("uses", ""))
     assert setup["with"]["python-version"] == "3.12"
     assert _step_commands(job) == [
+        "npm ci --ignore-scripts",
         "python -m pip install --require-hashes -r requirements.lock",
-        "python -m pytest",
+        'python -m pytest --shard "$SHARD"',  # (Q2: the job is a matrix of shards; test_shards.py holds the matrix)
     ]
 
 
@@ -1526,3 +1528,34 @@ def test_public_files_do_not_cite_private_documents():
             if PRIVATE_DOCUMENT_REFERENCE.search(line):
                 offenders.append(f"{relative}:{number}")
     assert not offenders, f"these lines cite private documents: {offenders}"
+
+
+# ---- the python job of CI runs the Node tests (Part L, L9) ----------------------------------------------------------------------------------------------
+
+
+def _steps(job: dict) -> list[dict]:
+    return [step for step in job["steps"] if isinstance(step, dict)]
+
+
+def test_the_python_job_has_node_and_the_packages_and_requires_the_node_tests_so_they_run_in_ci_and_do_not_skip():
+    workflow = load_yaml((WORKFLOW_DIR / "test.yml").read_text(encoding="utf-8"))
+    python_steps, js_steps = _steps(workflow["jobs"]["python"]), _steps(workflow["jobs"]["js"])
+    node = [step for step in python_steps if str(step.get("uses", "")).startswith("actions/setup-node@")]
+    js_node = [step for step in js_steps if str(step.get("uses", "")).startswith("actions/setup-node@")]
+    assert len(node) == 1 and node == js_node, "the python job sets Node up exactly as the js job does (the same pinned action and version)"
+    runs = [str(step.get("run", "")) for step in python_steps]
+    install = next(at for at, run in enumerate(runs) if NPM_CI.search(run))
+    assert "--ignore-scripts" in runs[install]
+    pytest_at = next(at for at, run in enumerate(runs) if "pytest" in run)
+    assert install < pytest_at, "the packages are installed before the tests run"
+    assert python_steps[pytest_at].get("env", {}).get("TRIOFORGE_REQUIRE_NODE") == "1", "a test that needs Node fails instead of skipping"
+    assert all("playwright" not in run for job in workflow["jobs"].values() for run in (str(step.get("run", "")) for step in _steps(job))), "no browser test runs in CI"
+
+
+def test_the_documents_of_the_repository_name_no_private_document_and_quote_no_chat():
+    """R6: DECISIONS.md named a private document of the owner's, cited a report that is not in the repository and quoted the owner's chat; it states the decision plainly, and no document of docs/ has those words (the first is written in two pieces here, so that this file does not name it either)."""
+    for path in sorted((ROOT / "docs").glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for needle in ("answer" + " key", "the report of Part", "i dont care"):
+            assert needle not in text, (path.name, needle)
+    assert "the owner's decision of 2026-11-22" in (ROOT / "docs" / "DECISIONS.md").read_text(encoding="utf-8")

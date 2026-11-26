@@ -94,7 +94,8 @@ test("the panel says what it is, and the best kit of the page is its first choic
 test("the list for the kit Wear this shows is the order Python recorded, line by line, with the stats that moved and the kit value, and ends by saying so", async ({ page, watch }) => {
   test.skip(!FIXTURE, REAL_RESULTS);
   await opened(page);
-  await expect(page.locator("#upgrade-motes-end")).toHaveText("That is every mote there is to spend: every item is then at +10.", { timeout: 30_000 });
+  // (T1: the best kit of the fixture's baked page wears an item whose only stat is attack, which no tier grows, so six motes could still be spent and none of them gains anything)
+  await expect(page.locator("#upgrade-motes-end")).toHaveText("After these, no mote adds any kit value: 6 could still be spent, and none of them gains anything.", { timeout: 30_000 });
   const labels = await slotLabels(page);
   await expect(list(page)).toHaveCount(BAKED.steps.length);
   expect(await page.$$eval("#upgrade-motes-list > li .step-what", (nodes) => nodes.map((node) => node.textContent))).toEqual(BAKED.steps.map((step) => lineOf(labels, step)));
@@ -288,7 +289,7 @@ test("the gear: the order for the kit Equip now wears is the one Python recorded
     requestAnimationFrame(sample);
   });
   await openSwitches(page);
-  await pick(page, "role-tank");
+  await pick(page, "role-melee"); // (the page opens on the Tank: another build is another view)
   await expect(list(page)).toHaveCount(0, { timeout: 30_000 });
   await expect(page.locator("#upgrade-motes-state")).toContainText(/Waiting for Equip now's kit/, { timeout: 30_000 });
   await expect(page.locator("#upgrade-equip")).toBeVisible({ timeout: 120_000 });

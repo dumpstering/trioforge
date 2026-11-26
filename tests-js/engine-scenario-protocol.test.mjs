@@ -20,7 +20,7 @@ const MANIFEST = parseManifest({
   trios: { "pal-mnk-ber": [50] },
 });
 
-const SCENARIO = { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" };
+const SCENARIO = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" };
 const request = (over = {}) => ({
   v: 1,
   kind: "scenario",
@@ -69,7 +69,7 @@ describe("a request for Equip now", () => {
   it("takes the names a bundle has: the buff sets with a plus sign, the weapon setups with a hyphen or a digit, race codes, role names, evidence levels", () => {
     for (const [field, values] of Object.entries({
       race: ["HUM", "OGR", "IKS", "FRG"],
-      role: ["balanced", "tank", "melee", "caster"],
+      role: ["tank", "shield", "melee", "ranged", "castertank", "caster"],
       buffs: ["own", "group", "group+enchanter", "raid"],
       evidence: ["strict", "wiki"],
       setup: ["1h-shield", "2h", "dw", "stick"],
@@ -175,7 +175,7 @@ describe("a request for Equip now", () => {
         bad(scenario({ [extra]: "x" }));
       }
       const poisoned = request();
-      poisoned.scenario = JSON.parse('{"race": "OGR", "role": "balanced", "buffs": "own", "evidence": "wiki", "setup": "dw", "__proto__": {"race": "HUM"}}');
+      poisoned.scenario = JSON.parse('{"race": "OGR", "role": "tank", "buffs": "own", "evidence": "wiki", "setup": "dw", "__proto__": {"race": "HUM"}}');
       bad(poisoned);
     });
 
@@ -247,7 +247,7 @@ describe("a request for Equip now", () => {
   });
 
   it("does not keep the generic shape of the other modes: any short mode name, a scenario of any plain data, candidates, a request with no mode are bad requests", () => {
-    const other = { v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, scenario: { race: "OGR", role: "balanced", tier: 4 }, owned: [[1234, 4, 1]], candidates: [], mode: "equip", budgetMs: 5000 };
+    const other = { v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, scenario: { race: "OGR", role: "tank", tier: 4 }, owned: [[1234, 4, 1]], candidates: [], mode: "equip", budgetMs: 5000 };
     bad(other, MANIFEST);
     bad({ ...other, mode: "farm-path" }, MANIFEST); // (its own shape has a tier mode and steps, and no candidates)
     const { mode, candidates, ...bare } = other;

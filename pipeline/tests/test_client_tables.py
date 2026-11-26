@@ -1090,10 +1090,10 @@ def test_the_committed_manifest_matches_the_installed_files():
 
 
 @real_client
-def test_the_real_zone_names_have_at_least_700_rows_and_exactly_78_flagged():
+def test_the_real_zone_names_have_at_least_700_rows_and_exactly_80_flagged():
     data = ct.read_zones(CLIENT_DIR / ct.ZONES_FILE)
     assert len(data["zones"]) >= 700
-    assert data["flagged_count"] == 78
+    assert data["flagged_count"] == 80  # 78 until the patch of 2026-11-09 flagged Nektropos Castle (id 28) and added Permafrost Keep (id 888)
     assert len({zone["id"] for zone in data["zones"]}) == len(data["zones"])
 
 

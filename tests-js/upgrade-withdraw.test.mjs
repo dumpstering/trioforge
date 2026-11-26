@@ -37,7 +37,7 @@ describe("a request of the section that has not reached the worker", () => {
     addByName("tarn signet", "4");
     await given(t, 2); // the section's path waits behind it
     expect(t.engine.runs[1].sent).toBe(false);
-    t.setView({ role: "tank" });
+    t.setView({ role: "melee" });
     await given(t, 3);
     expect(t.engine.log.slice(2), "the path that waited is taken back, and no worker is told to stop for it").toEqual(["run2", "withdraw", "run3"]);
     expect(t.engine.log.filter((entry) => entry === "stop"), "(the stop before the first path is the one there is nothing to stop for)").toHaveLength(1);
@@ -54,7 +54,7 @@ describe("a request of the section that has not reached the worker", () => {
     const t = mountAnswer({ engine, pauseMs: 0 });
     addByName("tarn signet", "4");
     await given(t, 2);
-    t.setView({ role: "tank" });
+    t.setView({ role: "melee" });
     await given(t, 3);
     expect(t.engine.log).toEqual(["run1", "run2", "withdraw", "run3"]);
     expect(other.settled, "a request of another part of the page that waits for the same question is not cancelled with it").toBe(false);

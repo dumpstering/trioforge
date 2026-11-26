@@ -66,7 +66,8 @@ def test_rules_are_grouped_by_their_first_word_in_file_order(book):
     keys = [g.key for g in book.groups]
     assert keys[:4] == ["level", "naked", "hp", "mana"]
     assert len(keys) == len(set(keys))
-    assert book.get("haste.cap_pct").seal_label == "Player reports"
+    assert book.get("haste.cap_pct").seal_label == "Measured"  # (T7: the cap with a level dimension is the client's calculation)
+    assert book.get("hp.sta_curve").seal_label == "Player reports"
     assert book.get("hp.sta_curve").value == '{"breaks": [255, 510], "slopes": [1, 0.5, 0]}'
     with pytest.raises(content.ContentError, match="no.such"):
         book.get("no.such")
@@ -156,7 +157,7 @@ def test_a_manifest_of_the_wrong_shape_is_refused(tmp_path, change):
 def test_the_caps_come_from_the_model_for_the_trio():
     rules = rules_module.load()
     monk = view.trio_caps(("PAL", "MNK", "BER"), 50, rules)
-    assert (monk.softcap, monk.haste, monk.resist, monk.regen, monk.haste_rule) == (439, 85, 200, (30, 15, 15), "haste.cap_pct_with_monk")
+    assert (monk.softcap, monk.haste, monk.resist, monk.regen, monk.haste_rule) == (439, 85, 1000, (30, 15, 15), "haste.cap_pct_with_monk")
     plain = view.trio_caps(("PAL", "SHD", "BER"), 50, rules)
     assert (plain.haste, plain.haste_rule) == (75, "haste.cap_pct")
 
@@ -221,7 +222,7 @@ def test_the_section_get_these_first_is_in_the_page_of_a_trio_of_two_roles_or_mo
     results = data.load_trio(REPO / "fixtures" / "site" / "results" / "pal-mnk-ber")
     book = content.load_rulebook(REPO / "rules" / "rules.json")
     page = view.trio_page(results, book, view.trio_caps(results.meta.trio, results.meta.level, rules_module.load()))
-    assert [role.code for role in page.roles] == ["balanced", "tank", "melee"]
+    assert [role.code for role in page.roles] == ["tank", "melee"]
     for roles in (page.roles, page.roles[:2]):
         html = render_trio(dataclasses.replace(page, roles=roles), book)
         assert html.count('<details class="expander" id="common"><summary>Get these first</summary><div id="common-body"></div></details>') == 1, len(roles)
@@ -271,7 +272,7 @@ def test_a_kit_item_that_needs_a_deity_carries_the_badge_in_the_page(tmp_path):
 
     results = data.load_trio(REPO / "fixtures" / "site" / "results" / "pal-mnk-ber")
     book = content.load_rulebook(REPO / "rules" / "rules.json")
-    scenario = results.shards[("strict", "own")].scenario("OGR", "balanced", 4, "dw")
+    scenario = results.shards[("strict", "own")].scenario("OGR", "tank", 4, "dw")
     locked = dataclasses.replace(scenario.kit[0], deity=("The Tribunal", "Rodcet Nife"))
     rows = view.kit_rows(dataclasses.replace(scenario, kit=(locked, *scenario.kit[1:])))
     assert rows[0].deity == "Needs deity: The Tribunal or Rodcet Nife" and rows[1].deity == ""

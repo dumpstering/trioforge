@@ -1,17 +1,17 @@
 {
  "mip-buffs": {
   "status": "optimal",
-  "objective": 1556.97960272412,
+  "objective": 1587.90875272412,
   "integer_columns": 12
  },
  "mip-selection-ordering-haste": {
   "status": "optimal",
-  "objective": 1650.5147490401998,
+  "objective": 1650.5147490401996,
   "integer_columns": 20
  },
  "mip-buffs-haste": {
   "status": "optimal",
-  "objective": 2553.88105590426,
+  "objective": 2548.60767252926,
   "integer_columns": 22
  },
  "mip-owned-monk": {
@@ -26,7 +26,7 @@
  },
  "mip-prunable-pool": {
   "status": "optimal",
-  "objective": 3063.2143907500003,
+  "objective": 3094.1208047500004,
   "integer_columns": 64
  },
  "lp-one-column": {

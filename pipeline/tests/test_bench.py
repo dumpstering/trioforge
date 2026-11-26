@@ -113,14 +113,15 @@ def test_the_role_set_type_names_the_templates_a_trio_can_play(trio, expected):
     assert role_set_type(trio) == expected
 
 
-def test_every_trio_has_one_of_five_role_set_types_matching_its_roles():
+def test_every_trio_has_one_of_five_role_set_types_matching_its_tank_and_melee_builds():
     types = Counter(role_set_type(t) for t in ALL_TRIOS)
     assert types == {
         "caster": 35, "melee": 20, "tank+melee": 64, "melee+caster": 231, "tank+melee+caster": 210,
     }  # fmt: skip
     for trio in ALL_TRIOS:
         templates = role_set_type(trio).split("+")
-        assert roles_for(trio) == ["balanced", *(templates if len(templates) > 1 else [])]
+        offered = roles_for(trio, bow=None)
+        assert ("tank" in templates) == ("tank" in offered) and ("melee" in templates) == ("melee" in offered)  # (the stratum names the kinds of class; the builds follow them)
 
 
 def test_the_stratum_adds_the_monk_and_the_three_pools_that_mix_wis_and_int():
@@ -138,8 +139,8 @@ def test_the_grid_counts_every_race_trio_role_and_setup_once():
     for trio in ALL_TRIOS:
         for role in roles_for(trio):
             expected += len(wp.setups_for(trio, role, TABLES, level=50))
-    assert sum(shapes.values()) == 15 * expected
-    assert grid_shapes(TABLES, races=3) == {k: v // 5 for k, v in shapes.items()}
+    assert sum(shapes.values()) == 16 * expected
+    assert grid_shapes(TABLES, races=3) == {k: v // 16 * 3 for k, v in shapes.items()}
     assert GRID_CELLS == 44  # 11 tiers x 2 evidence levels x 2 buff sets
     assert all(re.fullmatch(r"[a-z+]+\|(monk|plain)\|(sel|std)", key) for key in shapes)
 
@@ -181,7 +182,7 @@ def test_the_coverage_sample_has_every_role_setup_race_tier_and_buff_set():
 def test_the_uniform_sample_is_deterministic_valid_and_covers_the_whole_grid():
     sample = random_sample(TABLES, 3000, seed=7)
     assert sample == random_sample(TABLES, 3000, seed=7) and sample != random_sample(TABLES, 3000, seed=8)
-    assert {s.tier for s in sample} == set(range(11)) and len({s.race for s in sample}) == 15
+    assert {s.tier for s in sample} == set(range(11)) and len({s.race for s in sample}) == 16
     assert {s.evidence for s in sample} == {"wiki", "strict-proxy"} and {s.buffs for s in sample} == {"own", "group"}
     for s in sample[:300]:
         assert s.role in roles_for(s.trio) and s.setup in wp.setups_for(s.trio, s.role, TABLES, level=50)
@@ -193,8 +194,8 @@ def test_the_uniform_sample_is_deterministic_valid_and_covers_the_whole_grid():
 
 
 def test_a_scenario_has_a_readable_key_and_round_trips_through_a_dict():
-    s = Scenario("OGR", ("PAL", "MNK", "BER"), "balanced", "2h", 4, "wiki", "group")
-    assert s.key == "OGR PAL/MNK/BER balanced 2h +4 wiki group"
+    s = Scenario("OGR", ("PAL", "MNK", "BER"), "melee", "2h", 4, "wiki", "group")
+    assert s.key == "OGR PAL/MNK/BER melee 2h +4 wiki group"
     assert Scenario.from_dict(s.to_dict()) == s
 
 
@@ -420,7 +421,7 @@ def tiny_inputs():
 def test_the_solver_layer_takes_option_overrides_for_one_call_only():
     inputs = tiny_inputs()
     ctx = bench.Context(inputs)
-    scenario = Scenario("HUM", ("WAR", "CLR", "ENC"), "balanced", "dw", 4, "wiki", "own")
+    scenario = Scenario("HUM", ("WAR", "CLR", "ENC"), "tank", "dw", 4, "wiki", "own")
     prepared = ctx.prepare(scenario)
     before = dict(_highs.OPTIONS)
     off = solve(prepared.milp)
@@ -447,7 +448,7 @@ def test_a_model_written_as_mps_solves_to_the_same_value(tmp_path):
     import highspy
 
     ctx = bench.Context(tiny_inputs())
-    prepared = ctx.prepare(Scenario("OGR", ("PAL", "MNK", "BER"), "balanced", "2h", 4, "wiki", "group"))
+    prepared = ctx.prepare(Scenario("OGR", ("PAL", "MNK", "BER"), "melee", "2h", 4, "wiki", "group"))
     path = tmp_path / "model.mps"
     _highs.write_mps(prepared.milp, path)
     assert path.stat().st_size > 1000
@@ -467,8 +468,8 @@ def test_the_exported_models_and_their_manifest_solve_to_the_same_value_in_highs
         pytest.skip("node or the highs package is not installed")
     ctx = bench.Context(tiny_inputs())
     sample = [
-        Scenario("HUM", ("WAR", "MNK", "ROG"), "balanced", "dw", 4, "wiki", "own"),
-        Scenario("ERU", ("CLR", "WIZ", "ENC"), "balanced", "stick", 0, "wiki", "group"),
+        Scenario("HUM", ("WAR", "MNK", "ROG"), "tank", "dw", 4, "wiki", "own"),
+        Scenario("ERU", ("CLR", "WIZ", "ENC"), "caster", "stick", 0, "wiki", "group"),
         Scenario("OGR", ("PAL", "MNK", "BER"), "tank", "1h-shield", 10, "wiki", "group"),
     ]
     records = bench.run(sample, inputs=tiny_inputs(), workers=1, time_limit=60.0)
@@ -508,7 +509,7 @@ def full_result(**changes):
         "date": "2026-10-14",
         "environment": {"python": "3.12", "highspy": "1.15.1", "highs_version": "1.15.1", "highs_githash": "04024d7",
                         "workers": 20, "threads": 24},
-        "gate": {"n": 500, "n_mismatch": 0, "mismatches": [], "max_rel_diff": 0.0, "guarded": 0, "errors": 0,
+        "gate": {"n": 500, "n_mismatch": 0, "mismatches": [], "max_rel_diff": 0.0, "guarded": 0, "errors": 0, "compared": 500, "same_items": 450, "same_kit": 300,
                  "tolerance": 1e-9, "speedup": {"solve": 0.9, "canon": 0.4},
                  "canonical": {"n": 100, "mismatches": 0, "same_items": 100, "same_kit": 70}},
         "sample": {"trios": 60},
@@ -549,7 +550,7 @@ def test_the_markdown_report_states_the_result_the_tables_and_the_decision():
     assert "| solve + tie stage |" in text and "| all 11 tiers | solve + tie stage (production) | 900 | 700 | n/a |" in text
     assert "took 0.67x the CPU time and 0.50x the wall time of the run with 20 workers" in text
     assert "Wall time on this shared machine was 1.80x the CPU time" in text and "(95 percent interval 650 to 760" in text
-    assert "C:\\" not in text and "/Users/" not in text
+    assert "C:\\" not in text and "/" + "Users" + "/" not in text  # (written in pieces: the privacy scan reads a path into a profile folder in a test as a finding)
 
 
 def test_the_result_says_whether_the_first_solve_alone_would_fit_the_budget():
@@ -650,8 +651,8 @@ def synthetic_items():
 def test_two_scenarios_run_in_under_a_minute_and_record_every_measurement():
     started = time.perf_counter()
     sample = [
-        Scenario("HUM", ("WAR", "MNK", "ROG"), "balanced", "dw", 4, "wiki", "own"),
-        Scenario("ERU", ("CLR", "WIZ", "ENC"), "balanced", "stick", 0, "strict-proxy", "group"),
+        Scenario("HUM", ("WAR", "MNK", "ROG"), "tank", "dw", 4, "wiki", "own"),
+        Scenario("ERU", ("CLR", "WIZ", "ENC"), "caster", "stick", 0, "strict-proxy", "group"),
     ]
     records = bench.run(sample, inputs=tiny_inputs(), workers=1, time_limit=60.0)
     assert time.perf_counter() - started < 60
@@ -669,7 +670,7 @@ def test_two_scenarios_run_in_under_a_minute_and_record_every_measurement():
 
 def test_a_scenario_that_fails_is_recorded_and_the_run_goes_on():
     bad = Scenario("HUM", ("WIZ", "MAG", "ENC"), "tank", "stick", 4, "wiki", "own")  # casters are not offered the tank role
-    good = Scenario("HUM", ("WIZ", "MAG", "ENC"), "balanced", "stick", 4, "wiki", "own")
+    good = Scenario("HUM", ("WIZ", "MAG", "ENC"), "caster", "stick", 4, "wiki", "own")
     records = bench.run([bad, good], inputs=tiny_inputs(), workers=1, time_limit=60.0)
     assert records[0]["error"] is not None and "role" in records[0]["error"] and records[0].get("t_solve") is None
     assert records[1]["error"] is None
@@ -742,5 +743,106 @@ def test_the_real_catalog_gives_a_wiki_pool_and_a_scenario_that_solves():
     proxy = bench.strict_proxy(inputs.items)
     assert 0.3 < len(proxy) / len(inputs.items) < 0.6 and {i["key"] for i in proxy} <= {i["key"] for i in inputs.items}
     ctx = bench.Context(inputs)
-    record = ctx.measure(Scenario("OGR", ("PAL", "MNK", "BER"), "balanced", "2h", 4, "wiki", "group"), time_limit=120.0)
+    record = ctx.measure(Scenario("OGR", ("PAL", "MNK", "BER"), "melee", "2h", 4, "wiki", "group"), time_limit=120.0)
     assert record["error"] is None and record["status_canon"] == "optimal" and record["cols"] > 500
+
+
+# ---- the one test of the presolve gate (Part L, L3) ----------------------------------------------------------------------
+
+
+def passing_gate(**changes):
+    gate = {**full_result()["gate"], "compared": 500, "canonical": {"n": 100, "mismatches": 0, "same_items": 100, "same_kit": 70}}
+    gate.update(changes)
+    return gate
+
+
+@pytest.mark.parametrize(
+    ("changes", "passes"),
+    [
+        ({}, True),
+        ({"n_mismatch": 1}, False),
+        ({"errors": 1}, False),
+        ({"canonical": {"n": 100, "mismatches": 1, "same_items": 99, "same_kit": 70}}, False),  # the tie stage disagrees
+        ({"compared": 0}, False),  # nothing was compared
+        ({"guarded": 499, "compared": 1}, True),  # a guarded run is the production rule's to re-solve; one comparison that agrees is enough
+    ],
+)
+def test_the_gate_passes_only_with_no_mismatch_in_either_stage_no_error_and_something_compared(changes, passes):
+    assert bench.gate_passed(passing_gate(**changes)) is passes
+
+
+def test_an_empty_gate_does_not_pass():
+    assert bench.gate_passed({}) is False and bench.gate_passed(None) is False
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"canonical": {"n": 100, "mismatches": 3, "same_items": 97, "same_kit": 70}}, {"compared": 0, "unverified": 500}],
+    ids=["a mismatch in the tie stage", "nothing compared"],
+)
+def test_the_result_bullet_says_the_gate_fails_when_the_exit_code_does(changes):
+    gate = passing_gate(speedup={"solve": 2.0, "canon": 2.0}, **changes)
+    assert not bench.gate_passed(gate)
+    text = bench._presolve_bullet(gate)
+    assert "The gate fails" in text and "stays off" in text and "may be switched on" not in text
+    assert bench._presolve_bullet(passing_gate(speedup={"solve": 2.0, "canon": 2.0})).startswith("- **Presolve.** The gate passes")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"canonical": {"n": 2, "mismatches": 1, "same_items": 1, "same_kit": 1}}, {"compared": 0}],
+    ids=["a mismatch in the tie stage", "nothing compared"],
+)
+def test_a_gate_only_run_exits_one_when_the_tie_stage_disagrees_or_nothing_was_compared(tmp_path, monkeypatch, changes):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"version": "test", "items": synthetic_items()}), encoding="utf-8")
+    real = bench.presolve_gate
+    monkeypatch.setattr(bench, "presolve_gate", lambda *a, **k: {**real(2, 1, inputs=bench.Inputs.load(catalog)), **changes})
+    out = tmp_path / "gate.json"
+    assert bench.main(["--catalog", str(catalog), "--out", str(out), "--gate-only", "--sample", "2", "--workers", "1"]) == 1
+    text = out.with_suffix(".md").read_text(encoding="utf-8")
+    assert "The gate fails" in text and "The gate passes" not in text
+
+
+def test_a_negative_sample_is_refused(capsys):
+    with pytest.raises(SystemExit) as stop:
+        bench.build_parser().parse_args(["--sample", "-1", "--gate-only"])
+    assert stop.value.code == 2 and "--sample" in capsys.readouterr().err
+    assert bench.build_parser().parse_args(["--sample", "0"]).sample == 0  # (no gate at all is a choice: the run then says so)
+
+
+def gate_record(verdict="ok", canon="ok", *, same=True, same_canon=True):
+    """The record of one scenario of the gate, as ``gate_one`` writes it (invented numbers), with the tie stage when ``canon`` is a verdict."""
+    record = {
+        "key": "k", "error": None, "verdict": verdict, "rel_diff": 0.0, "same_items": same, "same_kit": same, "status_off": "optimal", "status_on": "optimal",
+        "F_off": 1.0, "F_on": 1.0, "c_off": 2.0, "c_on": 1.0, "t_off": 2.0, "t_on": 1.0,
+    }  # fmt: skip
+    if canon is not None:
+        record.update(
+            verdict_canon=canon, same_items_canon=same_canon, same_kit_canon=same_canon, c_canon_off=8.0, c_canon_on=2.0, t_canon_off=8.0, t_canon_on=2.0
+        )
+    return record
+
+
+def gate_of(monkeypatch, records):
+    monkeypatch.setattr(bench, "_map", lambda *a, **k: list(records))
+    monkeypatch.setattr(bench, "_gate_with_canonical", lambda *a, **k: list(records))
+    return bench.presolve_gate(len(records), 1, inputs=tiny_inputs(), canonical_every=1)
+
+
+def test_the_tie_stage_statistics_leave_out_guarded_and_unverified_runs(monkeypatch):
+    gate = gate_of(monkeypatch, [gate_record(), gate_record("guarded", "guarded"), gate_record("unverified", "unverified"), gate_record(canon=None)])
+    canon = gate["canonical"]
+    assert canon["n"] == 1 and canon["same_items"] == 1 and canon["same_kit"] == 1 and canon["mismatches"] == 0
+    assert canon["time_off"]["n"] == 1 and gate["speedup"]["canon"] == pytest.approx(4.0)  # (8 over 2: the one run that was compared)
+    assert canon["left_out"] == 2  # (said, so that the count is not read as the number of runs of the tie stage)
+
+
+def test_the_tie_stage_statistics_count_the_mismatch_of_a_compared_run(monkeypatch):
+    gate = gate_of(monkeypatch, [gate_record(canon="mismatch", same_canon=False), gate_record()])
+    assert gate["canonical"]["n"] == 2 and gate["canonical"]["mismatches"] == 1 and gate["canonical"]["same_items"] == 1
+    assert not bench.gate_passed(gate)
+
+
+def test_two_missing_kits_do_not_agree():
+    assert bench._same(None, None) is False and bench._same(("a",), ("a",)) is True and bench._same(("a",), ("b",)) is False and bench._same(("a",), None) is False

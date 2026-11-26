@@ -57,7 +57,7 @@ describe("compareRow", () => {
   const kit = Array.from({ length: 22 }, () => null);
   kit[3] = "w80113";
   kit[9] = "w80158";
-  const row = { race: "HUM", role: "balanced", tier: 4, setup: "dw", kit, F: 15607.41, buffs: [5, 9], haste: 66 };
+  const row = { race: "HUM", role: "tank", tier: 4, setup: "dw", kit, F: 15607.41, buffs: [5, 9], haste: 66 };
   const answer = (changes = {}) => ({
     status: "optimal",
     F: Rational.fromNumber(15607.41),

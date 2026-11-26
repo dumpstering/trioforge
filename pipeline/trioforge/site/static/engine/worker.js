@@ -36,6 +36,7 @@ import { EngineFault, WASM_FILE, fetchBytes, sameOriginUrl, sha256Hex } from "./
 import { SOLVER_OPTIONS, toModelData } from "./highs-data.js";
 import { MANIFEST_PATH, fetchTextWithin, parseManifest } from "./manifest.js";
 import { EvaluateError } from "./evaluate.js";
+import { NoBowError } from "./model.js";
 import { PathError } from "./path.js";
 import { BundleError } from "./profile.js";
 import {
@@ -335,7 +336,7 @@ export function solveModelWith(highs, model, { budgetMs, startedAt, onProgress =
 // ---- the protocol side ----------------------------------------------------------------------------------------------------------
 
 /** The input errors of the engine's functions: a request that does not fit the data, an item or a profile it cannot use. */
-const REFUSALS = [PathError, SolveError, PruneError, EvaluateError, BundleError, TierError];
+const REFUSALS = [PathError, SolveError, PruneError, EvaluateError, BundleError, TierError, NoBowError];
 
 /**
  * The code of the protocol for an error raised while an answer for a scenario was worked out. A fault with a code of its own keeps it (the data

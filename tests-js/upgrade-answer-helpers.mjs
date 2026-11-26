@@ -11,7 +11,7 @@ import { $, mountPage, press, record, tableOf, type, wake } from "./upgrade-help
 export const TRIO = ["PAL", "MNK", "BER"];
 export const CLIENT_PATH = "/assets/engine/client-AAAAAAAA.js";
 export const CLIENT_URL = `https://trioforge.test${CLIENT_PATH}`;
-export const VIEW = Object.freeze({ race: "HUM", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" });
+export const VIEW = Object.freeze({ race: "HUM", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" });
 export const UPDATED_TEXT = "The optimizer was updated. Reload the page to use it.";
 
 /** The words the page code (trio.js) hands to the code of the section: the ones format.js has (the words for an arrival tier too), and the name of a place of the kit as the page's kit table writes it. */

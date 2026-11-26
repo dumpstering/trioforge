@@ -78,7 +78,7 @@ def make_client(replies, *, latency=0.0, **kwargs):
         transport=transport,
         clock=fake_time.clock,
         sleep=fake_time.sleep,
-        **kwargs,
+        **{"honour_robots": False, **kwargs},
     )
     return client, transport, fake_time
 
@@ -510,7 +510,7 @@ def test_default_transport_returns_status_headers_and_body(monkeypatch):
         return FakeResponse(200, {"Content-Encoding": "gzip"}, b'{"ok": 1}')
 
     monkeypatch.setattr(http_module, "_OPENER", FakeOpener(fake_urlopen))
-    client = PoliteClient(UA, timeout=12.5, clock=FakeTime().clock, sleep=lambda s: None)
+    client = PoliteClient(UA, timeout=12.5, clock=FakeTime().clock, sleep=lambda s: None, honour_robots=False)
     assert client.get_json({"action": "query"}) == {"ok": 1}
     assert seen["url"].startswith(API_URL + "?")
     assert seen["headers"]["user-agent"] == UA
@@ -532,7 +532,7 @@ def test_default_transport_turns_http_errors_into_statuses(monkeypatch):
 
     monkeypatch.setattr(http_module, "_OPENER", FakeOpener(fake_urlopen))
     fake_time = FakeTime()
-    client = PoliteClient(UA, clock=fake_time.clock, sleep=fake_time.sleep)
+    client = PoliteClient(UA, clock=fake_time.clock, sleep=fake_time.sleep, honour_robots=False)
     assert client.get_json({"action": "query"}) == {"ok": 1}
     assert fake_time.sleeps == [3]  # the 429 was read as a status, not as a network failure
 
@@ -548,7 +548,7 @@ def test_default_transport_failures_are_retried(monkeypatch):
 
     monkeypatch.setattr(http_module, "_OPENER", FakeOpener(fake_urlopen))
     fake_time = FakeTime()
-    client = PoliteClient(UA, clock=fake_time.clock, sleep=fake_time.sleep)
+    client = PoliteClient(UA, clock=fake_time.clock, sleep=fake_time.sleep, honour_robots=False)
     assert client.get_json({"action": "query"}) == {"ok": 1}
     assert fake_time.sleeps == [2]
 
@@ -608,7 +608,7 @@ def test_a_redirect_is_refused_and_its_target_is_never_requested(monkeypatch, co
     fake = FakeHTTPS((code, {"Location": "https://elsewhere.example/api.php"}, b""))
     monkeypatch.setattr(http_module, "_OPENER", http_module._build_opener(fake))
     fake_time = FakeTime()
-    client = PoliteClient(UA, clock=fake_time.clock, sleep=fake_time.sleep)
+    client = PoliteClient(UA, clock=fake_time.clock, sleep=fake_time.sleep, honour_robots=False)
     with pytest.raises(FetchError) as caught:
         client.get_json({"action": "query"})
     assert caught.value.status == code and "redirect refused" in str(caught.value)
@@ -619,7 +619,7 @@ def test_a_redirect_is_refused_and_its_target_is_never_requested(monkeypatch, co
 def test_the_opener_still_delivers_an_ordinary_reply(monkeypatch):
     fake = FakeHTTPS((200, {}, b'{"ok": 1}'))
     monkeypatch.setattr(http_module, "_OPENER", http_module._build_opener(fake))
-    client = PoliteClient(UA, clock=FakeTime().clock, sleep=lambda s: None)
+    client = PoliteClient(UA, clock=FakeTime().clock, sleep=lambda s: None, honour_robots=False)
     assert client.get_json({"action": "query"}) == {"ok": 1}
 
 
@@ -629,7 +629,7 @@ def test_the_transport_never_uses_the_global_urlopen(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)
     monkeypatch.setattr(http_module, "_OPENER", FakeOpener(lambda request, timeout=None: FakeResponse(200, {}, b'{"ok": 1}')))
-    client = PoliteClient(UA, clock=FakeTime().clock, sleep=lambda s: None)
+    client = PoliteClient(UA, clock=FakeTime().clock, sleep=lambda s: None, honour_robots=False)
     assert client.get_json({"action": "query"}) == {"ok": 1}
 
 

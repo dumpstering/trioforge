@@ -300,3 +300,36 @@ describe("the code of the Share button", () => {
     expect(click, "the write is after the listener of the click").toBeGreaterThan(-1);
   });
 });
+
+describe("the Share button of Equip now, for the Bow setup", () => {
+  const BOW_PLACES = { 11: "w80301@4", 4: "w80303@0", 15: "w80306@0", 17: "w80307@0" };
+  async function shared(setup, places = BOW_PLACES) {
+    const writeText = clipboard();
+    const t = mountAnswer({ pauseMs: 0 });
+    t.setView({ setup }); // (the page shows this weapon setup when Equip now is asked for)
+    addByName("tarn signet", "4");
+    await sent(t, 1);
+    t.engine.runs[0].onStep(equipStep({ kit: kitOf(places) }));
+    await flush();
+    button().click();
+    await flush();
+    return payloadOf(writeText.mock.calls[0][0]);
+  }
+
+  it("carries the marker of the Bow setup in the link of a kit that Equip now made for it", async () => {
+    const payload = await shared("ranged");
+    const decoded = decodeKit(payload, TABLE.records);
+    expect(decoded.errors).toEqual([]);
+    expect(decoded.kit.setup).toBe("ranged");
+    expect(payload).toBe(encodeKit({ v: 1, trio: "pal-mnk-ber", race: VIEW.race, level: 50, slots: decoded.kit.slots.map((s) => [s.slotIndex, s.pageId, s.tier]), setup: "ranged" }));
+  });
+
+  it("carries none for any other setup: the link is the old link, byte for byte", async () => {
+    for (const setup of ["dw", "2h", "1h-shield", "stick"]) {
+      const payload = await shared(setup, { 11: "w80301@4", 4: "w80303@0", 15: "w80306@0" });
+      expect(payload, setup).toBe(encodeKit({ v: 1, trio: "pal-mnk-ber", race: VIEW.race, level: 50, slots: [[4, 80303, 0], [11, 80301, 4], [15, 80306, 0]] }));
+      expect(decodeKit(payload, TABLE.records).kit.setup, setup).toBeUndefined();
+      document.body.replaceChildren();
+    }
+  });
+});

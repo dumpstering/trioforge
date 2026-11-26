@@ -4,6 +4,7 @@
 // Monk bins, and for an Upgrade case the owned set and the candidates. Nothing here is read by the site, and nothing here uses the engine's solver.
 
 import { atTier } from "../pipeline/trioforge/site/static/engine/items.js";
+import { readProcs } from "../pipeline/trioforge/site/static/engine/procs.js";
 import { readBundle } from "../pipeline/trioforge/site/static/engine/profile.js";
 import { Rational } from "../pipeline/trioforge/site/static/engine/rational.js";
 import { mulberry32 } from "./engine-models.mjs";
@@ -69,11 +70,14 @@ export function caseOf(shared, doc) {
   };
   const itemNamed = (name) => itemAt(...splitIdent(name));
   const bins = profile.monk === null ? undefined : deepFreeze(clone(shared.bins[String(inputs.level)]));
-  /** The options of a recorded solve or pruning, with the Monk bins the builder reads from the bundle. */
-  const withBins = (options) => deepFreeze({ ...clone(options), ...(bins === undefined ? {} : { monk_bins: bins }) });
+  /** The table of weapon procs a case was made with (an instance of the brute family that has one): the builder, the pruning and the evaluator are given it. */
+  const procs = readProcs(inputs.procs ?? null, inputs.trio);
+  /** The options of a recorded solve or pruning, with the Monk bins the builder reads from the bundle and the table of procs of the case. */
+  const withBins = (options) => Object.freeze({ ...deepFreeze({ ...clone(options), ...(bins === undefined ? {} : { monk_bins: bins }) }), ...(procs === null ? {} : { procs }) });
   return {
     doc,
     profile,
+    procs,
     setup: inputs.setup,
     buffset: inputs.buffset === null ? null : deepFreeze(clone(inputs.buffset)),
     bins,

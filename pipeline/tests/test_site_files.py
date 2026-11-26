@@ -30,7 +30,7 @@ from trioforge.site import build
 REPO = Path(__file__).resolve().parents[2]
 RESULTS = REPO / "fixtures" / "site" / "results"
 TRIOS = ("pal-mnk-ber", "pal-shd-ber", "clr-shd-ber")  # the trios of a build of three: the fixture's, and two made from it (Wood Elf, the fixture's third race, can start neither)
-ROLES = ("balanced", "tank", "melee")
+ROLES = ("tank", "melee")
 GRID = (0, 4, 10)
 #: the keys of the items that get a page in a build of the fixture: its strict and wiki wearables (47 of the 48 records of its item table; the other is hidden)
 ITEMS = build.item_page_keys(json.loads((RESULTS / "items.json").read_text(encoding="utf-8")))
@@ -139,7 +139,7 @@ def test_a_site_of_more_than_15000_files_is_refused_with_its_count(assets):
     trios = full_grid()
     listed = build.site_files(trios, item_pages=item_keys(2500), assets=assets)
     assert build.check_file_budget(listed) <= 15_000
-    over = build.site_files(trios, item_pages=item_keys(9000), assets=assets)
+    over = build.site_files(trios, item_pages=item_keys(9500), assets=assets)  # (the 560 trios have 5,874 files of their own with the builds they are offered: 1,394 runner-up files)
     with pytest.raises(build.BudgetError, match=rf"{len(over):,} files \(limit 15,000\)"):
         build.check_file_budget(over)
 
@@ -162,7 +162,7 @@ def test_the_item_pages_are_counted_one_for_each_key_and_a_key_twice_is_one_page
     ("trios", "message"),
     [
         ([build.TrioFiles("pal-mnk-ber", (), GRID)], "no role"),
-        ([build.TrioFiles("pal-mnk-ber", ("balanced", "balanced"), GRID)], "role balanced twice"),
+        ([build.TrioFiles("pal-mnk-ber", ("tank", "tank"), GRID)], "role tank twice"),
         ([build.TrioFiles("pal-mnk-ber", ("healer",), GRID)], "not a role"),
         ([build.TrioFiles("pal-mnk-ber", ROLES, ())], "no tier"),
         ([build.TrioFiles("pal-mnk-ber", ROLES, (4, 4))], "ascending"),

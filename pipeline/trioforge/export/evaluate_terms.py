@@ -334,8 +334,8 @@ def _monk_cases(out: _Cases, monk: Profile, iksar: int) -> None:
     stones = [0, soft, soft + 1, hard - 2, hard - 1, hard, hard + 1, hard + 2, bins, bins + 1, 400]
     tenths = sorted({t for stone in stones for t in (10 * stone - 1, 10 * stone, 10 * stone + 1) if t >= 0})
     on_top = _same(
-        monk, weights=_weights(AC=6), cs_pct=0, pe_pct=0, buff_totals={}, naked=dict.fromkeys(ATTRIBUTES, 0), iksar_ac=0
-    )  # the armor class term only: the sheet of a kit with 100 worn armor class, and the bonus on top
+        monk, weights=_weights(AC=6), cs_pct=0, pe_pct=0, buff_totals={}, naked=dict.fromkeys(ATTRIBUTES, 0), iksar_ac=0, placement={"monk": "top", "iksar": "top"}
+    )  # the armor class term only: the sheet of a kit with 100 worn armor class, and the bonus on top (whatever the rules' placement is: both are covered here)
     for weight in tenths:
         out.add(["monk"], on_top, {_place("CHEST"): _item("itterm-weight", stats={"AC": 100}, weight10=weight)})
     inside = _same(on_top, placement={"monk": "inside", "iksar": "top"})
@@ -382,7 +382,7 @@ def _haste_cases(out: _Cases, melee: Profile, monk: Profile) -> None:
 
 
 def _regen_resist_cases(out: _Cases, base: Profile) -> None:
-    """Gear regen up to 30, 15 and 15, buff regen outside the caps; gear and buff resists up to 200, a school's own weight."""
+    """Gear regen up to 30, 15 and 15, buff regen outside the caps; gear and buff resists up to the resist cap (1000: ``resist.cap``), a school's own weight."""
     profile = _same(
         base, weights=_weights(HPREG=2, MANAREG=3, ENDREG=5), buff_totals={"HPREG": 4, "MANAREG": 2, "ENDREG": 1}, spell_haste=0
     )
@@ -392,13 +392,14 @@ def _regen_resist_cases(out: _Cases, base: Profile) -> None:
     schools = _same(
         base, weights=_weights(SV=0.5, SV_FIRE=1.5, SV_MAGIC=0.25), buff_totals={"SV": {"FIRE": 40, "COLD": 40, "DISEASE": 40}}
     )
+    cap = fm.STANDARD_CAPS["resist"]  # (the cases sit below, at and above it: 40 of each school comes from the buffs)
     for fire, cold, magic, poison, disease in (
-        (0, 0, 0, 0, 0), (100, 159, 199, 200, 201), (159, 160, 161, 150, 5), (300, 1, 2, 3, 4), (-30, -30, -30, -30, -30),
+        (0, 0, 0, 0, 0), (100, cap - 41, cap - 1, cap, cap + 1), (cap - 41, cap - 40, cap - 39, cap - 50, 5), (cap + 100, 1, 2, 3, 4), (-30, -30, -30, -30, -30),
     ):  # fmt: skip
         stats = {"FIRE": fire, "COLD": cold, "MAGIC": magic, "POISON": poison, "DISEASE": disease, "CORRUPTION": 90}
         out.add(["resists"], schools, {_place("CHEST"): _item("itterm-resists", sv=stats)})
     general = _same(base, weights=_weights(SV=0.5))
-    out.add(["resists"], general, {_place("CHEST"): _item("itterm-resists", sv={"FIRE": 199, "COLD": 200, "MAGIC": 201})})
+    out.add(["resists"], general, {_place("CHEST"): _item("itterm-resists", sv={"FIRE": cap - 1, "COLD": cap, "MAGIC": cap + 1})})
 
 
 def _weapon_cases(out: _Cases, base: Profile) -> None:
@@ -445,6 +446,16 @@ def _weapon_cases(out: _Cases, base: Profile) -> None:
     ranged = {**hands(one, one), _place("RANGE"): bow, _place("ANY"): _item("itterm-any", weapon=one)}
     for setup in ("dw", "1h-shield"):  # only the primary and the secondary place are weapons
         out.add(["weapons"], profile, ranged, setup=setup, haste=25)
+    listed_bow = _item("itterm-bow-listed", weapon=WeaponVec("archery", 24, 28, 25, False))  # (the skill is read without regard to case)
+    for haste in (0, 25, 100):  # the bow setup scores the bow in the range place on its own damage per delay (no bonus), at the haste, and the hands score nothing
+        out.add(["weapons"], profile, ranged, setup="ranged", haste=haste)
+        out.add(["weapons"], profile, {**hands(listed, one), _place("RANGE"): listed_bow}, setup="ranged", haste=haste)
+    for factor in (0.75, 2):
+        out.add(["weapons"], _same(profile, ranged_factor=factor), ranged, setup="ranged", haste=25)
+    sword = _item("itterm-sword", weapon=one)
+    thrown = _item("itterm-thrown", weapon=WeaponVec("Throwing", 12, 20, None, False))
+    for kit in (hands(one, one), {_place("RANGE"): sword}, {_place("RANGE"): thrown}):  # no bow in the range place: nothing scores
+        out.add(["weapons"], profile, kit, setup="ranged", haste=25)
 
 
 BUFFSET = {
@@ -538,7 +549,7 @@ def build() -> dict[str, Any]:
     level = rules.get("level.current")
 
     def make(trio: tuple[str, ...], race: str = "HUM") -> Profile:
-        return make_profile(race, trio, level, "balanced", None, None, tables, rules)
+        return make_profile(race, trio, level, "melee", None, None, tables, rules)
 
     monk = make(("MNK", "SHD", "SHM"))  # a Monk, a WIS pool and an INT pool
     casters = make(("CLR", "SHD", "ENC"))  # three mana pools of both stats
@@ -560,7 +571,7 @@ def build() -> dict[str, Any]:
     _decimal_cases(out, casters)
     _limit_cases(out, monk)
     _empty_case(out, monk)
-    _durability_cases(out, lambda trio, rank: make_profile("HUM", trio, level, "balanced", None, {"natural_durability": rank}, tables, rules))
+    _durability_cases(out, lambda trio, rank: make_profile("HUM", trio, level, "melee", None, {"natural_durability": rank}, tables, rules))
     return {
         "format": FORMAT, "kind": KIND, "rules_version": rules.version, "level": level, "terms": dict(TERMS),
         "profiles": out.profiles, "cases": out.cases,

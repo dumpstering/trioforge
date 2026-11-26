@@ -9,7 +9,7 @@
 //   1. The weight in effect. For each settable weight (HP AC MANA ATK DEX HASTE END CHA, SV which sets the five schools, and a school of its own,
 //      which beats SV) it is the custom value when there is one, else the role's own.
 //   2. Derived weights follow. DMG is the role's own DMG times (ATK in effect / the role's own ATK): 600 times the ATK weight for Tank and
-//      Melee, 0 for Caster, the mean of the templates for Balanced. A regen weight is ticks a minute x T x the weight in effect of the resource
+//      Melee, 0 for Caster and the other builds that score no weapon (see roles.weapon_factor). A regen weight is ticks a minute x T x the weight in effect of the resource
 //      it returns (HP, MANA, END); when `regenT` is none, or within the tolerance of the T the role's weights were made with, the role's own
 //      regen weight is kept to the last digit and only follows the resource weight in effect.
 //   3. The sliders come last. A slider (x0.5, x1, x2) multiplies every weight of its group, derived ones included. The MANA slider scales MANA
@@ -22,6 +22,7 @@
 // lacks, sorted.
 
 import { BundleError, readBundle } from "./profile.js";
+import { isPlainObject as isTable } from "./protocol.js";
 import { ONE, Rational, RationalError, ZERO } from "./rational.js";
 
 /** A base, a slider, a custom weight, a window or a flag that is not allowed. */
@@ -154,12 +155,6 @@ function weightRules(rules) {
 }
 
 // ---- the arguments ------------------------------------------------------------------------------------------------------------------
-
-function isTable(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
 
 /** The value as an exact rational when it is a finite number (a double, read as the decimal it prints as) or a Rational from `low` to `high`, else null. */
 function inRange(value, low, high) {

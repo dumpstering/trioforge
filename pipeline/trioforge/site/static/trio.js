@@ -36,6 +36,13 @@
 // `state.weights`, a character for each group: h, 1 or 2), writes it in the address (`buffs` and `w`, which is left out when every slider is at x1) and in the lines that say what is assumed, and gives
 // the chunk what it draws the answer with. The answer of the optimizer is announced through #announce, once, and never when it is for settings that are no longer shown.
 //
+// The priorities. A control under the choices (priorities.js: a select for each of eight stats, five steps each, drawn by this script at its start into room that the stylesheet keeps, so that nothing moves)
+// sets how much each stat counts for the visitor: the role's own weight times 0, 0.5, 1, 2 or 4. A choice is part of the view as the sliders are (`state.priorities`, a character for each stat, `n` for Normal;
+// `p` in the address, left out when every step is Normal, and a `p` that this page cannot take is ignored whole, with a word of it), and every step Normal is the page that was made: the shards answer it.
+// Any other choice is worked out by the optimizer in the visitor's browser, by the chunk of the weights, with the choice's custom weights in the request (ui/priority-weights.js; the role's own weights it is made of
+// are read from the bundle of the trio by that chunk, which `apply` waits for before it shows such a view), and the chunk says in one line near the kit that the kit is the browser's, with a Reset. The same chunk,
+// when the visitor asks (the button under the control), says what one more point of a stat is worth on the kit that Wear this draws now (`kitForRates`, `drawn`).
+//
 // Two things make the page load the code of the section at the start, without a first use: a kit link (a shared kit is shown at the top of the page, which needs the item table) and
 // gear that the visitor asked the device to remember (it is restored into the list). The check for the second is one guarded read of the device, and nothing more is loaded
 // for a page that has neither. The section is given the kit link that came in the address (`kit`, what first.js took out of it), where the gear is kept (`remember`: the key, the
@@ -47,8 +54,9 @@ import { getStorage } from "./theme.js";
 import { DASH, EMPTY_NAME, EN_DASH, arrivalText, deityText, displayInt, fmtInt, fmtSigned, hasteChip, hasteWords, reachText, tierLabel } from "./format.js";
 import { parseIcons, parseRobust, parseRunnerups, parseShard } from "./shard.js";
 import { commonItems } from "./ui/common-items.js";
+import { OWN_PRIORITIES, PRESET_ROLES, drawPriorities, parsePriorities, sayPriorities } from "./priorities.js";
 
-const SWITCHES = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], #buffs-ench';
+const SWITCHES = '#sw-race, #sw-tier, input[name="role"], input[name="setup"], input[name="buffs"], #buffs-ench, #buffs-haste';
 const EXTRAS = ["runnerups", "robust"];
 const NOT_LOADED = "Couldn't load this view; try again.";
 const UPDATED = "Data updated, reload the page to see the new data.";
@@ -58,6 +66,12 @@ const NOT_LOADED_WEIGHTS = "Couldn't load the weights. Reload the page to try ag
 /** The weights in the address (`w`) that this page cannot take: a character for each weight group, h (x0.5), 1 or 2 (x2), and no more or fewer. */
 const BAD_WEIGHTS = "The weights in the address do not fit the sliders of this page, so the role's own weights are shown.";
 const OWN_WEIGHTS = "role's own";
+/** The priorities in the address (`p`) that this page cannot take: a character of 0 l n h t for each of the eight stats, and no more or fewer, given once. */
+const BAD_PRIORITIES = "The priorities in the address do not fit this page, so every step is Normal.";
+const YOUR_PRIORITIES = "your priorities";
+const NOT_LOADED_PRIORITIES = "Couldn't load the code or the weights for the priorities.";
+/** Every stat of the control Off (or not weighed by the build): the only weight left is charisma, which is nothing to optimise. */
+const ALL_OFF = "Every priority is off: nothing to optimise. Raise one, or Reset.";
 /** The first word of the folded line of the assumptions: it says so when one of them is not the page's own, without the line being opened. */
 const ASSUMPTIONS = "Assumptions";
 const ASSUMPTIONS_CHANGED = "Assumptions changed";
@@ -68,6 +82,11 @@ const POSITIONS = /^[h12]+$/;
 const ENCHANTER = "group+enchanter";
 /** What the address says for it: a word, with no plus sign for a browser to read as a space. The older spelling, group+enchanter, is read too, escaped or not. */
 const ENCHANTER_WORD = "enchanter";
+/** The end of the key of a buff set that keeps the haste of the spells (`group+haste`): the bundle's twin of the set, which "I have a haste spell" solves with (HASTE_SUFFIX of engine/profile.js). The page holds the choice in the buff code, and the address says it with `haste=1`. */
+const HASTE = "+haste";
+const HASTE_PARAM = "haste";
+/** A buff code without the haste of the spells. */
+const withoutHaste = (code) => (code.endsWith(HASTE) ? code.slice(0, -HASTE.length) : code);
 /** What starts the Upgrade section: a focus or a click on one of its controls, or a file brought to it (the file input's own choice comes as a change). */
 const UPGRADE_EVENTS = ["focusin", "click", "dragenter", "dragover", "drop", "change"];
 const UPGRADE_CONTROLS = "input, select, button, label";
@@ -88,12 +107,40 @@ const STATS_MISSING = "Its stats are not on this page.";
 /** The section Get these first: its summary as the page is made with it, and the line under it. */
 const COMMON_SUMMARY = "Get these first";
 const COMMON_LOADING = "Loading…";
+/** What the page says of the bow setup beside its range line (view.py BOW_NOTE; a test holds the two equal). */
+const BOW_NOTE = "In the Bow setup the range place holds a bow, scored on its own damage per delay, with no main-hand bonus; arrow damage is not counted.";
+/** What a row of the table of runner-ups says when its slot has no swap (view.py NO_ALTERNATIVES; a test holds the two equal): the page is made with it in those rows only, and this code makes it where another view leaves a slot without one. */
+const NO_ALTERNATIVES = "No close alternatives";
 const COMMON_NOTE = "The items each role's best kit has in common at this race and tier. Exalt advice differs by role: see Wear this. Each role uses its own best weapon setup.";
 
-/** A data file of another release than the page's: the site was published again while the page was open. */
-class DataUpdated extends Error {}
+/** A data file of another release than the page's: the site was published again while the page was open. (`dataUpdated` is the flag the chunks of the page look for in a failure.) */
+class DataUpdated extends Error {
+  constructor(...rest) {
+    super(...rest);
+    this.dataUpdated = true;
+  }
+}
+
+/** The code or the weights of the priorities could not be had: the line already says so with a Reload, and a Try again could not work. */
+class WeightsNotLoaded extends Error {}
 
 const field = (parent, name) => parent.querySelector('[data-f="' + name + '"]');
+
+/** What the haste row of the totals says when no haste spell is on offer (`HASTE_NOTE` of view.py). */
+const HASTE_NOTE = "Only the highest worn haste counts.";
+
+/** The notes about haste for a haste spell: the one beside the haste figure and the one beside the box "I have a haste spell" (`haste_notes` of view.py, word for word). `free` is the worn haste that counts without a spell; `pending` says that the box is ticked and the kit below is still the one without the spell (the solved kit is not drawn). */
+function hasteNotes(name, percent, free, bonus, ticked, pending) {
+  const room = Math.max(0, free - percent);
+  const flat = bonus ? ` Unbound Alacrity adds a flat ${bonus} on top.` : "";
+  const ticking = pending ? "The kit below is still the one without the spell." : "The kit below is chosen with the spell."; // (only once the solved kit is drawn is it the one with the spell)
+  const rowTail = ticked ? ticking : 'Tick "I have a haste spell" to see that kit.';
+  const boxTail = ticked ? ticking : "Tick the box to see that kit.";
+  const [unit, verb] = room === 1 ? ["point", "counts"] : ["points", "count"];
+  const rowWith = room > 0 ? `only ${room} ${unit} of worn haste ${verb} (${free} minus ${percent}), so a smaller haste item reaches the cap and its slot goes to stats.` : `no worn haste counts (the spell alone reaches the ${free} that count), so the slot of a haste item goes to stats.`;
+  const box = room > 0 ? `${name} gives ${percent}% haste, so worn haste counts only up to ${room} ${unit}: a smaller haste item is enough, and its slot goes to stats.` : `${name} gives ${percent}% haste, so no worn haste counts: the slot of a haste item goes to stats.`;
+  return [`${HASTE_NOTE} With no haste spell it counts in full, up to ${free}%. With ${name} (${percent}% haste) ${rowWith}${flat} ${rowTail}`, `${box}${flat} Without a spell the best worn haste counts in full, up to ${free}%. ${boxTail}`];
+}
 
 function setField(parent, name, text) {
   const node = field(parent, name);
@@ -194,6 +241,8 @@ class TrioApp {
     this.wakingExalt = false;
     this.exaltAhead = false;
     this.common = null; // what the section Get these first was drawn from: {shard, race, tier}, or null when it holds nothing
+    this.exaltDrawn = null; // what the section was last told that is true of what is drawn: where `exaltShown` goes back to when the view that was being loaded is not drawn
+    this.fillToken = new Map(); // the count of the fills of each expander (a fill that is no longer the last has nothing to clear)
     this.exaltShown = null; // what the section is told of the view: {role, race, tier, exact, kit}, the kit drawn in Wear this (set when the page is started; `kit` is null while the page shows the answer it was made with, whose items the files name)
     this.exaltWatchers = new Set();
     this.equipKit = null; // the kit of Equip now in the Upgrade section ({kit, record, defaults}), or null
@@ -202,7 +251,14 @@ class TrioApp {
     this.wakingWeights = null; // the promise of that, while it is being loaded
     this.groups = (root.dataset.groups ?? "").split(" ").filter(Boolean); // the weight groups of the trio's bundle, in its order: a slider and a character of `w` for each
     this.own = "1".repeat(this.groups.length); // every slider at x1: the role's own weights
+    this.ownP = OWN_PRIORITIES; // every priority Normal: the role's own weights
+    this.priorities = null; // the control of the priorities, once it was drawn (start): {read, sync}
+    this.standIn = false; // is the kit that Wear this draws a stand-in for one the optimizer is working out (or has not worked out), and not the kit of the settings?
+    this.warmed = false; // has the first touch of the control started the read of what the build weighs?
+    this.allOffShown = null; // the choice, when every step is Off and the selects stand at it: the kit shown is then the build's own for the view (or the kit that was kept, for a change of a select alone)
+    this.drawn = null; // the kit that Wear this draws now, `{kit, tier}`, once a view has drawn one (the baked answer has none, and the rates read the shard of its view)
     this.ench = root.querySelector("#buffs-ench"); // the Enchanter in the group
+    this.haste = root.querySelector("#buffs-haste"); // a haste spell: the haste of the spells is in the buffs the kit is chosen with
     this.stored = null; // what the device holds of the gear the visitor asked it to remember, read once at the start
     this.upgrade = null; // what the module made of the section, once it was loaded
     this.viewWatchers = new Set(); // what the Upgrade section wants to be told when the view the page shows has changed
@@ -214,7 +270,7 @@ class TrioApp {
     this.reportBase = null; // the address of the link that reports a problem, as the build wrote it
     this.shards = new Map(); // "strict-own" -> Promise<Shard>
     this.settled = new Set(); // the names of the shards that have loaded (a name in `shards` may be a request still on its way)
-    this.extraData = new Map(); // "runnerups/balanced" | "robust" -> Promise<parsed>
+    this.extraData = new Map(); // "runnerups/<build>" | "robust" -> Promise<parsed>
     this.pending = new Set();
     this.dirty = { runnerups: false, robust: false };
     this.token = 0;
@@ -230,20 +286,22 @@ class TrioApp {
     this.toggles = []; // the button of each row's panel, and the one that opens them all
     this.toggleAll = null;
     this.linkItems = root.dataset.items === ITEM_BASE; // the page says that every item it can show has a page of its own
-    // the roles that have a runner-up file ("balanced"; it holds every tier of the run): nothing else is ever asked for
+    // the builds that have a runner-up file (it holds every tier of the run): nothing else is ever asked for
     this.runnerupFiles = new Set((root.querySelector("#runnerups")?.dataset.files ?? "").split(" ").filter(Boolean));
     this.config = this.readConfig();
     const d = this.config.defaults;
     this.exaltShown = { role: d.role, race: d.race, tier: d.tier, exact: false, kit: null }; // (the view of the address is not drawn yet: start() says whether it is the baked one)
+    this.exaltDrawn = { role: d.role, race: d.race, tier: d.tier, exact: true, kit: null }; // (what the page is made with: the baked answer, which stands until another view is drawn)
     // what was asked for last and got. A setup of null means "the role's best": the visitor has not chosen one, so the view follows the
     // best of whatever role, tier and race comes next, and the address does not name a setup
-    this.state = { race: d.race, role: d.role, tier: d.tier, ev: d.ev, buffs: d.buffs, setup: null, weights: this.own };
+    this.state = { race: d.race, role: d.role, tier: d.tier, ev: d.ev, buffs: d.buffs, setup: null, weights: this.own, priorities: this.ownP };
     // the setup the visitor chose last, shown yet or not (a change made while a view loads must not lose it); null is "the role's best"
     this.wantedSetup = null;
     this.wantedWeights = this.own; // the same for the sliders
+    this.wantedPriorities = this.ownP; // and for the priorities
     this.lastKind = false; // the switch the latest change was made with, which the answer of the optimizer is announced with
     // what the page shows (the baked answer to begin with)
-    this.displayed = { ...d, weights: this.own, best: d.setup, offered: this.offeredFor(d.role) };
+    this.displayed = { ...d, weights: this.own, priorities: this.ownP, best: d.setup, offered: this.offeredFor(d.role) };
     this.shown = null;
   }
 
@@ -265,23 +323,27 @@ class TrioApp {
   /** The buff set the controls show: the own buffs, the common group buffs, the group with the Enchanter in it (the box is ticked while the group is chosen) or the full raid. */
   buffsValue() {
     const chosen = this.checkedValue("buffs");
-    return chosen === "group" && this.ench?.checked ? ENCHANTER : chosen;
+    const base = chosen === "group" && this.ench?.checked ? ENCHANTER : chosen;
+    return this.haste?.checked ? base + HASTE : base;
   }
 
   /** A buff set in words. */
   buffsPhrase(code) {
     const phrase = (list, one) => list.find((entry) => entry.code === one)?.phrase ?? one;
-    return code === ENCHANTER ? phrase(this.config.buffs, "group") + " " + (this.ench?.dataset.phrase ?? "and an Enchanter") : phrase(this.config.buffs, code);
+    const base = withoutHaste(code);
+    const words = base === ENCHANTER ? phrase(this.config.buffs, "group") + " " + (this.ench?.dataset.phrase ?? "and an Enchanter") : phrase(this.config.buffs, base);
+    return base === code ? words : words + ", " + (this.haste?.dataset.phrase ?? "with a haste spell");
   }
 
   /** The assumptions of the shards' answer nearest to a buff choice: the own buffs, or the common group buffs for every other, and the role's own weights. */
   nearest(buffs) {
-    return `${this.buffsPhrase(buffs === "own" ? "own" : "group")} and the role's own weights`;
+    return `${this.buffsPhrase(withoutHaste(buffs) === "own" ? "own" : "group")} and the role's own weights`;
   }
 
   /** A buff set as the address says it. */
   buffsWord(code) {
-    return code === ENCHANTER ? ENCHANTER_WORD : code;
+    const base = withoutHaste(code);
+    return base === ENCHANTER ? ENCHANTER_WORD : base;
   }
 
   /** The sliders in words: the role's own, or the groups that are not at x1 (the words are the chunk's; until it has come they are only said to be something else). */
@@ -290,18 +352,26 @@ class TrioApp {
     return this.weights ? this.weights.text(positions) : CUSTOM_WEIGHTS;
   }
 
-  /** The sliders as a request carries them, `{multipliers: {group: position}}` for the groups that are not at x1, or null for the role's own (what the Upgrade section and the chunk ask with). */
-  weightsTable(positions) {
+  /**
+   * The sliders and the priorities as a request carries them, `{multipliers?, custom?}`: the groups that are not at x1, and the custom weights of a choice of priorities (the role's own weight of each
+   * stat that is not Normal, times its step: the chunk of the weights has them, once it has read the role's own weights, which `apply` waits for before it shows such a view); null for the role's own
+   * (what the Upgrade section and the chunk ask with).
+   */
+  weightsTable(positions, priorities = this.ownP, role = this.displayed.role) {
+    const table = {};
     const multipliers = {};
     this.groups.forEach((group, index) => {
       if (positions[index] !== "1") multipliers[group] = positions[index] === "h" ? 0.5 : 2;
     });
-    return Object.keys(multipliers).length === 0 ? null : { multipliers };
+    if (Object.keys(multipliers).length > 0) table.multipliers = multipliers;
+    const custom = priorities === this.ownP ? null : (this.weights?.custom(role, priorities) ?? null);
+    if (custom !== null && Object.keys(custom).length > 0) table.custom = custom;
+    return Object.keys(table).length === 0 ? null : table;
   }
 
-  /** Whether the shards answer these settings: every slider at x1, and the own buffs or the common group buffs without the Enchanter. */
+  /** Whether the shards answer these settings: every slider at x1, every priority Normal, and the own buffs or the common group buffs without the Enchanter. */
   isPrecomputed(settings) {
-    return settings.weights === this.own && (settings.buffs === "own" || settings.buffs === "group");
+    return settings.weights === this.own && settings.priorities === this.ownP && (settings.buffs === "own" || settings.buffs === "group");
   }
 
   offeredFor(role) {
@@ -330,7 +400,7 @@ class TrioApp {
 
   /**
    * The view an address asks for, and whether it names a value that means nothing here (`malformed`: a race, role, tier, setup or buff set that is not one of the page's
-   * own, an empty one included) and whether its `w` (the sliders) is one that this page cannot take (`badWeights`). Anything it does not say clearly is left at the default.
+   * own, an empty one included) and whether its `w` (the sliders) or its `p` (the priorities) is one that this page cannot take (`badWeights`, `badPriorities`). Anything it does not say clearly is left at the default.
    * An `ev` is taken and ignored, and never malformed: addresses written before wiki became the one evidence level carry it.
    */
   parseQuery(search) {
@@ -350,6 +420,7 @@ class TrioApp {
     const spelled = params.get("buffs");
     const buffs = spelled === ENCHANTER_WORD || spelled === "group enchanter" ? ENCHANTER : spelled; // ("group enchanter" is the older spelling typed with a raw plus sign)
     state.buffs = known([...this.config.buffs, { code: ENCHANTER }], "code", buffs) ?? state.buffs;
+    if (this.haste !== null) state.buffs = withoutHaste(state.buffs) + (params.get(HASTE_PARAM) === "1" ? HASTE : ""); // (the haste of the spells: in the address only when it is on; anything but 1 is off)
     state.setup = known(this.config.setups, "code", params.get("setup"));
     // the sliders: a character for each group of the bundle. Anything else is not taken, and the page says so (a w given twice is not one the page can take: which of the two?)
     const weights = params.getAll("w");
@@ -358,7 +429,20 @@ class TrioApp {
       if (weights.length === 1 && weights[0].length === this.groups.length && POSITIONS.test(weights[0])) state.weights = weights[0];
       else badWeights = true;
     }
-    return { state, malformed, badWeights };
+    // the priorities: a character for each stat, given once; anything else is ignored whole, and the page says so
+    const priorities = params.getAll("p");
+    let badPriorities = false;
+    let redundant = false; // (every step Normal, said: the address of a page that has none)
+    state.priorities = this.ownP;
+    if (priorities.length > 0) {
+      const taken = priorities.length === 1 ? parsePriorities(priorities[0]) : null;
+      if (taken === null) badPriorities = true;
+      else {
+        state.priorities = taken;
+        redundant = taken === this.ownP;
+      }
+    }
+    return { state, malformed, badWeights, badPriorities, redundant };
   }
 
   // ---- starting and waiting --------------------------------------------------------------------------------------------
@@ -368,6 +452,7 @@ class TrioApp {
     // weapon setups that the role has no scenario for stay out of reach
     for (const control of this.root.querySelectorAll(SWITCHES)) control.disabled = false;
     this.setControls(this.displayed);
+    this.drawPriorities();
     this.bindChange();
     this.reportBase = this.doc.getElementById("report-link")?.getAttribute("href") ?? null;
     this.root.addEventListener("change", (event) => {
@@ -383,17 +468,19 @@ class TrioApp {
         if (details.open && this.dirty[name]) this.track(this.fillExtra(name));
       });
     }
-    const { state: asked, malformed, badWeights } = this.parseQuery(this.win.location.search);
+    const { state: asked, malformed, badWeights, badPriorities, redundant } = this.parseQuery(this.win.location.search);
     const d = this.config.defaults;
     // the baked answer is the role's best setup, so an address that names it asks for the best and not for a choice
-    const baked = ["race", "role", "tier", "buffs"].every((key) => asked[key] === d[key]) && (asked.setup === null || asked.setup === d.setup) && asked.weights === this.own;
+    const baked = ["race", "role", "tier", "buffs"].every((key) => asked[key] === d[key]) && (asked.setup === null || asked.setup === d.setup) && asked.weights === this.own && asked.priorities === this.ownP;
+    this.paintRoleRule(d.role); // (the baked view is a view too: the rule of its build is cited as it is for every view the page draws)
     this.exaltShown = { role: asked.role, race: asked.race, tier: asked.tier, exact: baked, kit: null }; // (the section is told only what is drawn: the baked answer, or nothing until the view of the address is)
-    if (!baked) this.track(this.apply(asked, { url: true, notice: badWeights ? BAD_WEIGHTS : null }));
+    const notice = [badWeights ? BAD_WEIGHTS : null, badPriorities ? BAD_PRIORITIES : null].filter(Boolean).join(" ");
+    if (!baked) this.track(this.apply(asked, { url: true, notice: notice === "" ? null : notice }));
     // the page shows the default answer for an address with a value that means nothing: the address says so too, at once, and without
     // fetching anything, so that a malformed link never passes for a link to the default view
-    else if (malformed || badWeights) {
-      this.writeUrl({ state: this.state });
-      if (badWeights) this.setStatus(BAD_WEIGHTS);
+    else if (malformed || badWeights || badPriorities || redundant) {
+      this.writeUrl({ state: this.state }); // (an address that says every step Normal is written without it, as the page writes it)
+      if (notice !== "") this.setStatus(notice);
     }
     this.bindWeights();
     this.bindUpgrade();
@@ -499,14 +586,24 @@ class TrioApp {
   setExaltView(scenario, exact, pending = false) {
     const d = this.config.defaults;
     // the files' plan is for the default race's kit at the default tier, in the default view (evidence, buffs, weights) and the role's best setup; the role may be any the file has
-    this.exaltShown = {
+    this.exaltShown = this.exaltDrawn = {
       role: this.displayed.role,
       race: this.displayed.race,
       tier: scenario.tier,
-      exact: exact && this.displayed.race === d.race && scenario.tier === d.tier && this.displayed.ev === d.ev && this.displayed.buffs === d.buffs && this.displayed.weights === this.own,
+      exact: exact && this.displayed.race === d.race && scenario.tier === d.tier && this.displayed.ev === d.ev && this.displayed.buffs === d.buffs && this.displayed.weights === this.own && this.displayed.priorities === this.ownP,
       kit: scenario.kit.map((item) => (item ? { key: item.key, name: item.name } : null)),
       pending, // the kit drawn stands in for one the optimizer is working out: no hint is shown for it
     };
+    this.tellExalt();
+  }
+
+  /** The view that was being loaded is not drawn (it could not be had, or there was nothing to optimise for it): the section is told what is drawn, as it was before the view was asked for. */
+  restoreExaltView() {
+    this.exaltShown = this.exaltDrawn;
+    this.tellExalt();
+  }
+
+  tellExalt() {
     for (const watcher of [...this.exaltWatchers]) {
       try {
         watcher();
@@ -588,7 +685,7 @@ class TrioApp {
   isBaked(view) {
     const d = this.config.defaults;
     const s = view.scenario;
-    return view.exact === true && view.state.weights === this.own && view.state.ev === d.ev && view.state.buffs === d.buffs && s.race === d.race && s.role === d.role && s.tier === d.tier && s.setup === d.setup;
+    return view.exact === true && view.state.weights === this.own && view.state.priorities === this.ownP && view.state.ev === d.ev && view.state.buffs === d.buffs && s.race === d.race && s.role === d.role && s.tier === d.tier && s.setup === d.setup;
   }
 
   /** The stats of an item at a tier: the shard's own, else those of another shard that lists the item, else nothing. */
@@ -730,7 +827,7 @@ class TrioApp {
             // the panel of the kit is code of a chunk of its own: when it cannot be had, the page says so at the top, where the kit would be shown
             onKitFailed: () => this.setStatus(KIT_NOT_LOADED, () => this.reload(), "Reload"),
             // the view the page shows, not the state of the switches (a view that could not be loaded is not shown); its setup is the one shown, never none
-            view: () => ({ race: this.displayed.race, role: this.displayed.role, buffs: this.displayed.buffs, evidence: this.displayed.ev, setup: this.displayed.setup, weights: this.weightsTable(this.displayed.weights) }),
+            view: () => ({ race: this.displayed.race, role: this.displayed.role, buffs: this.displayed.buffs, evidence: this.displayed.ev, setup: this.displayed.setup, weights: this.weightsTable(this.displayed.weights, this.displayed.priorities, this.displayed.role) }),
             onView: (callback) => {
               this.viewWatchers.add(callback);
               return () => this.viewWatchers.delete(callback);
@@ -784,6 +881,87 @@ class TrioApp {
       panel.toggleAttribute("data-open", open);
       button.setAttribute("aria-expanded", String(open));
     });
+  }
+
+  /** The priorities control is drawn at the start, by script, into the section of the choices (the stylesheet kept its room, so that nothing moves); its code is this script's, and nothing is fetched for it. */
+  drawPriorities() {
+    const controls = this.q(".controls");
+    if (!controls) return;
+    this.priorities = drawPriorities(this.doc, controls, {
+      onChange: (next) => this.choosePriorities(next),
+      onReset: () => {
+        this.choosePriorities(this.ownP);
+        this.priorities?.focus(); // (the button goes off with the choice: the focus goes to the first of the steps)
+      },
+      onPreset: (next) => this.choosePriorities(next),
+      onRates: () => this.track(this.wakeWeights().then((weights) => weights?.showRates())),
+      onWarm: () => this.warmPriorities(),
+    });
+    this.priorities.sync(this.displayed.priorities);
+    this.priorities.setPreset(PRESET_ROLES.includes(this.displayed.role));
+  }
+
+  /**
+   * The first touch of the control (a focus in it, a moment before a step is chosen) reads what the build weighs, from the chunk of the weights and the bundle of the trio, so that the selects of the
+   * stats it does not weigh are disabled before they can be used. It is read for a page that is touched and for none that is not. A failure is not said here (a step that is then chosen says it), and the
+   * next change of a step re-arms it (a focus alone does not read twice).
+   */
+  warmPriorities() {
+    this.track(
+      this.wakeWeights()
+        .then((weights) => {
+          if (weights === null) throw new WeightsNotLoaded(NOT_LOADED_WEIGHTS); // (the code did not come: a failure like any other, and the next touch asks again)
+          return weights.loadOwn();
+        })
+        .then(() => this.syncCounted())
+        .catch(() => this.priorities?.rearm()),
+    );
+  }
+
+  /** The selects of the stats that the build of the view shown does not weigh are disabled (once the build is read). */
+  syncCounted() {
+    this.priorities?.setCounted(this.weights?.hasOwn() ? this.weights.counted(this.displayed.role) : null);
+  }
+
+  /** The visitor chose steps, or put them all back: the page applies the new view, as it does for any other switch. */
+  choosePriorities(next) {
+    this.focusAfterRetry = false;
+    this.track(this.apply({ ...this.desired(this.wantedSetup), priorities: next }, { url: true, announce: "priorities" }));
+  }
+
+  /** The chunk of the weights, loaded, with the role's own weights read: a choice of priorities is made of them. */
+  async loadOwnWeights() {
+    const weights = await this.wakeWeights();
+    if (weights === null) throw new WeightsNotLoaded(NOT_LOADED_PRIORITIES);
+    try {
+      await weights.loadOwn();
+    } catch (error) {
+      if (error?.dataUpdated === true) throw new DataUpdated(); // (the site was released again: the one line of every page that meets that, and no Try again that could never work)
+      throw error;
+    }
+  }
+
+  /**
+   * What the exchange rates are worked out for: the kit that Wear this draws now and the view it is for (`{places, view}`, the shapes the evaluator takes), or null when the page has no kit to read. The
+   * baked answer has no kit in a script's hands: it is read from the shard of its view, as the section Get these first reads it.
+   */
+  async kitForRates() {
+    if (this.standIn) return { pending: true }; // (the kit drawn stands in for one the optimizer is working out, or did not work out: it is not the kit of the settings)
+    let drawn = this.drawn;
+    if (drawn === null) {
+      const d = this.config.defaults;
+      const shard = await this.loadShard(d.ev, withoutHaste(d.buffs) === "own" ? "own" : "group");
+      const scenario = shard.scenario(d.race, d.role, d.tier, d.setup);
+      if (!scenario) return null;
+      drawn = { kit: scenario.kit, tier: scenario.tier };
+    }
+    const shown = this.displayed;
+    const places = drawn.kit.flatMap((item, slotIndex) => (item ? [{ slotIndex, key: item.key, tier: drawn.tier }] : []));
+    return {
+      places,
+      steps: shown.priorities !== this.ownP,
+      view: { race: shown.race, role: shown.role, buffs: shown.buffs, evidence: shown.ev, setup: shown.setup, weights: this.weightsTable(shown.weights, shown.priorities, shown.role) },
+    };
   }
 
   /** The sliders are drawn by their chunk, which comes the first time the Weights assumption is opened. */
@@ -846,14 +1024,14 @@ class TrioApp {
 
   /** Draw the shown view again from the data, extras included. For tests, which compare it with the baked page. */
   async refresh() {
-    await this.track(this.apply({ ...this.state }, { force: true }));
+    await this.track(this.apply({ ...this.state, priorities: this.allOffShown ?? this.state.priorities }, { force: true }));
     await this.whenIdle();
   }
 
   onChange(target) {
     this.focusAfterRetry = false; // a new choice of the visitor's own ends the retry
     if (target.name === "buffs" && this.ench) this.ench.disabled = target.value !== "group"; // (the box goes with the group choice at once, not when the view has loaded)
-    const kind = target.id === "sw-race" ? "race" : target.id === "sw-tier" ? "tier" : target.id === "buffs-ench" ? "buffs" : target.name; // race, tier, role, setup or buffs
+    const kind = target.id === "sw-race" ? "race" : target.id === "sw-tier" ? "tier" : target.id === "buffs-ench" || target.id === "buffs-haste" ? "buffs" : target.name; // race, tier, role, setup or buffs
     this.track(this.apply(this.desired(target.name === "setup" ? target.value : this.wantedSetup), { url: true, announce: kind }));
   }
 
@@ -867,6 +1045,7 @@ class TrioApp {
       buffs: this.buffsValue(),
       setup,
       weights: this.wantedWeights,
+      priorities: this.wantedPriorities,
     };
   }
 
@@ -929,8 +1108,9 @@ class TrioApp {
     this.applying = token; // an answer of the optimizer for the view that is leaving is not drawn from here until this view is shown (or could not be)
     this.wantedSetup = desired.setup;
     this.wantedWeights = desired.weights;
+    this.wantedPriorities = desired.priorities;
     // the shards have the own buffs and the common group buffs: the other buff sets are shown with the shard of the group until the optimizer's answer takes its place
-    const buffs = desired.buffs === "own" ? "own" : "group";
+    const buffs = withoutHaste(desired.buffs) === "own" ? "own" : "group";
     let shard;
     try {
       // a retry keeps its button (and the focus on it) while the view loads again
@@ -939,6 +1119,11 @@ class TrioApp {
         this.setStatus("Loading this view…", this.focusAfterRetry ? this.retries.get(this.q("#status")) : undefined);
       }
       shard = await this.loadShard(desired.ev, buffs);
+      // a choice of priorities is made of the role's own weights, which the chunk of the weights reads from the bundle of the trio: the view waits for them, so that every request, and the Upgrade section, has the choice's weights
+      if (desired.priorities !== this.ownP && !this.weights?.hasOwn()) {
+        this.setStatus("Loading this view…", this.focusAfterRetry ? this.retries.get(this.q("#status")) : undefined);
+        await this.loadOwnWeights();
+      }
     } catch (error) {
       if (token === this.token) this.fail(desired, { url, announce, force, notice }, error);
       return;
@@ -949,12 +1134,35 @@ class TrioApp {
       this.fail(desired, { url, announce, force, notice });
       return;
     }
+    let off = null; // the choice, while every step is Off and the view is another than the one shown
+    if (desired.priorities !== this.ownP && this.weights?.hasOwn()) {
+      // the steps of the stats that the build of this role does not weigh are never a choice (they are Normal here, and in the address); with nothing left to weigh there is nothing to optimise
+      const fixed = this.weights.normalize(view.scenario.role, view.state.priorities);
+      if (fixed !== view.state.priorities) {
+        view.state = { ...view.state, priorities: fixed };
+        view.exact = this.isPrecomputed(view.state);
+      }
+      if (this.weights.allOff(view.scenario.role, fixed)) {
+        if (!this.differsFromShown(view) && !this.tableIsNotTheShards()) {
+          this.nothingToWeigh(fixed, { view, url, notice });
+          return;
+        }
+        // another race, role, tier, weapons, buffs or sliders than the ones shown, or the table holds an answer of the optimizer (or a stand-in for one) for steps that are gone: the kit shown must be the one
+        // asked for, so it is the build's own for that view (the precomputed one, as if every step were Normal; for a view that no shard answers the stand-in, and the optimizer's answer for it, which the
+        // end of this function asks for as for any other view), with the selects left at Off and the words saying why
+        off = fixed;
+        view.state = { ...view.state, priorities: this.ownP };
+        view.exact = this.isPrecomputed(view.state);
+      }
+    }
+    this.allOffShown = off;
     this.paint(view);
     this.state = view.state;
     this.wantedSetup = view.state.setup;
     this.wantedWeights = view.state.weights;
+    this.wantedPriorities = off ?? view.state.priorities;
     this.lastKind = announce;
-    this.setStatus([view.notice, notice].filter(Boolean).join(" "));
+    this.setStatus([off === null ? null : ALL_OFF, view.notice, notice].filter(Boolean).join(" "));
     this.updateReport(view);
     if (url) this.writeUrl(view);
     if (announce && view.exact) this.say(view, announce); // (the answer of the optimizer is announced when it is there)
@@ -966,6 +1174,36 @@ class TrioApp {
     this.renderExtras(force);
     this.applying = 0;
     this.settle(view, announce);
+  }
+
+  /** Does the table hold something other than the shard's own kit of the view: an answer of the optimizer, or the stand-in that waits for one? */
+  tableIsNotTheShards() {
+    return this.standIn || this.root.classList.contains("solved");
+  }
+
+  /**
+   * Every stat of the control is Off, or not weighed by the build, the view is the one shown and the table holds the shard's own kit of it (`apply` draws the view's own kit when it does not): no kit is worked out (the only weight left would be charisma, and the page would call a kit of the most
+   * charisma "solved for your settings"). The page says so (with the notice of the address, if it had one), keeps the kit it shows, tells the section what it shows, disables the selects of what the
+   * build does not weigh, and writes the address with every step Off, as it does for any other view, so that a reload returns to the same state; the selects stay as they were set, so that raising one is the
+   * way on (or Reset). An answer still on its way for steps that are gone is not drawn: under this line it would say "Solved for your settings". (For another view the kit shown is the build's own for it: see `apply`.)
+   */
+  nothingToWeigh(fixed, { view, url = false, notice = null }) {
+    this.allOffShown = fixed;
+    this.wantedPriorities = fixed;
+    this.priorities?.sync(fixed);
+    this.applying = 0;
+    this.weights?.cancel(); // (the settings that were wanted are not any more: no answer for them is drawn, and the answer area says nothing of them)
+    this.restoreExaltView();
+    this.syncCounted();
+    this.setStatus([ALL_OFF, notice].filter(Boolean).join(" "));
+    if (url) this.writeUrl(view);
+  }
+
+  /** Is the view that was resolved another than the one the page shows: the race, role, tier, weapons, buffs or sliders? */
+  differsFromShown(view) {
+    const s = view.scenario;
+    const shown = this.displayed;
+    return s.race !== shown.race || s.role !== shown.role || s.tier !== shown.tier || s.setup !== shown.setup || view.state.buffs !== shown.buffs || view.state.weights !== shown.weights;
   }
 
   /** Turn what was asked for into a scenario that exists. A setup the role does not have falls back to its best; so does a setup that is the best. */
@@ -985,7 +1223,7 @@ class TrioApp {
     } else if (setup === best) setup = null; // choosing the best, or naming it in the address, is following it
     const scenario = shard.scenario(race, role, tier, setup ?? best);
     if (!scenario) return null;
-    const state = { race, role, tier, ev: desired.ev, buffs: desired.buffs, setup, weights: desired.weights };
+    const state = { race, role, tier, ev: desired.ev, buffs: desired.buffs, setup, weights: desired.weights, priorities: desired.priorities };
     return { shard, scenario, best, offered, notice, state, exact: this.isPrecomputed(state) };
   }
 
@@ -996,11 +1234,18 @@ class TrioApp {
   fail(desired, options, error) {
     this.wantedSetup = this.state.setup;
     this.wantedWeights = this.state.weights;
+    this.wantedPriorities = this.allOffShown ?? this.state.priorities;
     this.setControls(this.displayed);
     this.applying = 0;
     this.weights?.release(); // (an answer for the view still shown that waited for this one is drawn now)
+    this.restoreExaltView(); // (the page still shows what it showed: the section is told so, and not the view that was asked for)
     const common = this.q("#common");
     if (common) common.open = false; // (the section was emptied for the shard that did not come: closed, with its summary, and no word of it)
+    if (error instanceof WeightsNotLoaded) {
+      // the line of the weights said it with a Reload at the first failure: a failed module fetch is kept until the page is reloaded, so a Try again here could never work
+      this.setStatus(NOT_LOADED_WEIGHTS + " " + this.revertNote(desired), () => this.reload(), "Reload");
+      return;
+    }
     if (error instanceof DataUpdated) {
       // the same file would come again: the way out is the page that goes with the data
       this.setStatus(UPDATED + " " + this.revertNote(desired), () => this.reload(), "Reload");
@@ -1022,6 +1267,8 @@ class TrioApp {
     if (desired.setup !== null && desired.setup !== shown.setup) changes.push(["weapons", "are", this.setupLabel(shown.setup)]);
     if (desired.buffs !== shown.buffs) changes.push(["buffs", "are", this.buffsPhrase(shown.buffs)]);
     if (desired.weights !== shown.weights) changes.push(["weights", "are", this.weightsText(shown.weights)]);
+    const standing = this.allOffShown ?? shown.priorities; // (the selects as they stand: with every step Off the kit shown is the build's own)
+    if (desired.priorities !== standing) changes.push(["priorities", "are", sayPriorities(standing)]);
     if (changes.length === 1) return "The " + changes[0][0] + " " + changes[0][1] + " back at " + changes[0][2] + ".";
     return "Still showing " + this.summaryOf(shown) + ".";
   }
@@ -1047,7 +1294,7 @@ class TrioApp {
         words.className = "status-text";
         status.prepend(words);
       }
-      words.textContent = text;
+      if (words.textContent !== text) words.textContent = text; // (the same words are not written twice: a live region says them again for every write)
     } else if (words) words.remove();
     if (retry) {
       this.retries.set(status, retry);
@@ -1088,6 +1335,7 @@ class TrioApp {
       setup: "Weapons " + this.setupLabel(s.setup),
       buffs: "Buffs " + this.buffsPhrase(view.state.buffs),
       weights: "Weights " + this.weightsText(view.state.weights),
+      priorities: "Priorities " + sayPriorities(this.allOffShown ?? view.state.priorities), // (every step Off: the choice, which the selects and the status line say, not the steps of the build's own kit that is asked for)
       back: "Back at the precomputed answer",
     }[kind];
     const value = solved === null ? s.value : solved.value;
@@ -1118,7 +1366,10 @@ class TrioApp {
     const params = new URLSearchParams({ race: state.race, role: state.role, tier: String(state.tier) });
     if (state.setup !== null) params.set("setup", state.setup);
     params.set("buffs", this.buffsWord(state.buffs));
+    if (state.buffs.endsWith(HASTE)) params.set(HASTE_PARAM, "1");
     if (state.weights !== this.own) params.set("w", state.weights); // (the sliders; with every one at x1 it is the role's own, which is not written)
+    const priorities = this.allOffShown ?? state.priorities; // (the selects as they stand: with every step Off the kit is the build's own and the address says Off, so that a reload returns to the same state)
+    if (priorities !== this.ownP) params.set("p", priorities); // (the priorities; with every one Normal it is the role's own, which is not written either)
     try {
       // the entry keeps the state it has: something else may hold a state there (a link to a kit), and rewriting the address is not the place to drop it
       this.win.history.replaceState(this.win.history.state, "", "?" + params.toString() + this.win.location.hash);
@@ -1144,9 +1395,11 @@ class TrioApp {
     }
     const s = view.scenario;
     const shown = view.exact || solved; // (else the table shows the shard of the nearest settings)
-    const buffs = shown || view.state.buffs === "own" ? view.state.buffs : "group";
+    const buffs = shown || withoutHaste(view.state.buffs) === "own" ? view.state.buffs : "group";
     const asked = { race: s.race, role: s.role, tier: String(s.tier), setup: s.setup, buffs: this.buffsWord(buffs) };
+    if (shown && buffs.endsWith(HASTE)) asked[HASTE_PARAM] = "1";
     if (shown && view.state.weights !== this.own) asked.w = view.state.weights;
+    if (shown && view.state.priorities !== this.ownP) asked.p = view.state.priorities;
     page.search = new URLSearchParams(asked).toString();
     url.searchParams.set("page", page.href);
     link.setAttribute("href", url.href);
@@ -1158,13 +1411,17 @@ class TrioApp {
     this.q("#sw-tier").value = String(shown.tier);
     for (const radio of this.radios("role")) radio.checked = radio.value === shown.role;
     // the Enchanter is a box under the group choice: it goes with the group, and keeps what the visitor left in it while the own buffs or the raid are chosen
-    const chosen = shown.buffs === ENCHANTER ? "group" : shown.buffs;
+    const base = withoutHaste(shown.buffs);
+    const chosen = base === ENCHANTER ? "group" : base;
     for (const radio of this.radios("buffs")) radio.checked = radio.value === chosen;
     if (this.ench) {
-      if (chosen === "group") this.ench.checked = shown.buffs === ENCHANTER;
+      if (chosen === "group") this.ench.checked = base === ENCHANTER;
       this.ench.disabled = chosen !== "group";
     }
+    if (this.haste) this.haste.checked = base !== shown.buffs; // (a haste spell goes with any buff set)
     this.weights?.sync(shown.weights);
+    this.priorities?.sync(this.allOffShown ?? shown.priorities);
+    this.priorities?.setPreset(PRESET_ROLES.includes(shown.role)); // ("Resists first" is for the builds that stand in front)
     for (const radio of this.radios("setup")) {
       const offered = shown.offered.includes(radio.value);
       const wrapper = radio.closest(".opt");
@@ -1186,7 +1443,7 @@ class TrioApp {
   paint(view) {
     const s = view.scenario;
     const state = view.state;
-    this.displayed = { race: s.race, role: s.role, tier: s.tier, ev: state.ev, buffs: state.buffs, weights: state.weights, setup: s.setup, best: view.best, offered: view.offered };
+    this.displayed = { race: s.race, role: s.role, tier: s.tier, ev: state.ev, buffs: state.buffs, weights: state.weights, priorities: state.priorities, setup: s.setup, best: view.best, offered: view.offered };
     this.setControls(this.displayed);
     this.shown = view;
     this.root.classList.remove("solved"); // (the kit of the shard is drawn: an answer of the optimizer is drawn again when it is there)
@@ -1197,6 +1454,7 @@ class TrioApp {
     setField(this.root, "v-setup", this.setupLabel(s.setup));
     const hint = this.q("#role-hint");
     if (hint) hint.textContent = this.config.roles.find((r) => r.code === s.role)?.hint ?? "";
+    this.paintRoleRule(s.role);
     setField(this.root, "assume-haste", s.hasteAssumed + "%");
     setField(this.root, "s-race", this.raceName(s.race));
     setField(this.root, "s-role", this.roleLabel(s.role));
@@ -1215,6 +1473,9 @@ class TrioApp {
       }
     }
     this.paintCommon(view.shard, s.race, s.tier);
+    this.standIn = view.exact !== true; // (the kit drawn is the shard's: for a choice that no shard answers it stands in for the optimizer's, which is not drawn yet)
+    this.syncCounted();
+    this.weights?.ratesChanged(view.exact === true);
   }
 
   // ---- the section Get these first --------------------------------------------------------------------------------------------
@@ -1242,9 +1503,10 @@ class TrioApp {
     const current = () => this.shown === null && this.applying === 0;
     this.q("#common-body")?.replaceChildren(this.makeCommon("p", COMMON_LOADING, "note"));
     this.track(
-      this.loadShard(d.ev, d.buffs === "own" ? "own" : "group").then(
+      this.loadShard(d.ev, withoutHaste(d.buffs) === "own" ? "own" : "group").then(
         (shard) => (current() ? this.paintCommon(shard, d.race, d.tier) : undefined),
-        () => {
+        (error) => {
+          if (error instanceof DataUpdated) this.dataUpdated(); // (the site was released again: the one line of every page that meets that)
           if (!current()) return;
           this.clearCommon();
           box.open = false;
@@ -1326,6 +1588,25 @@ class TrioApp {
   }
 
   /**
+   * The two answers about haste, in words, beside the haste figure of the totals and beside the box "I have a haste spell": for the buffs of the view, the trio's best haste spell (the box carries
+   * them in `data-spells`, by buff choice) and what it leaves of the cap for worn haste. A choice with no haste spell has the plain note of the row and no note beside the box. The words are
+   * those of `haste_notes` in view.py, which writes them into the baked page; a test holds the two to each other.
+   */
+  paintHasteNotes(shown) {
+    const box = this.haste;
+    const note = this.q("#haste-spell-note");
+    if (!box || !note) return;
+    this.hasteSpells ??= JSON.parse(box.dataset.spells ?? "{}");
+    const base = withoutHaste(shown.buffs); // (the buffs of the view carry the haste of the spells when the box is ticked)
+    const spell = this.hasteSpells[base];
+    const pending = !this.root.classList.contains("solved"); // (the kit drawn is the solved one only once `drawSolved` has drawn it: until then, and when the solve fails, it is the shard's, without the spell)
+    const [row, text] = spell === undefined ? [HASTE_NOTE, ""] : hasteNotes(spell[0], spell[1], Number(box.dataset.free), Number(box.dataset.bonus), base !== shown.buffs, pending);
+    setField(this.root, "haste-note", row);
+    note.textContent = text;
+    note.hidden = text === "";
+  }
+
+  /**
    * The lines that say what is assumed: the buffs, the weapons and the weights, in the Assumptions panel, in its folded line and in the line of a phone's switches (the last two say the same
    * words). The folded line says in its first word when an assumption is not the page's own (the buffs, a setup that is not the role's best, sliders that are not at x1), and the panel is marked.
    */
@@ -1334,11 +1615,18 @@ class TrioApp {
     const weights = this.weightsText(shown.weights);
     setField(this.root, "assume-buffs", this.buffsPhrase(shown.buffs));
     setField(this.root, "assume-setup", phrase(this.config.setups, shown.setup));
+    const stance = this.radios("role").find((r) => r.value === shown.role)?.dataset.stance ?? ""; // the stance the build plays (the Berserker's), said in the Assumptions beside the weapons
+    setField(this.root, "assume-stance", stance === "" ? "" : ", " + stance);
+    const bow = shown.setup === "ranged"; // (the stance's factor is the swing of the hands: a bow has its own sentence)
+    for (const note of this.root.querySelectorAll("#stance-note")) note.hidden = stance === "" || bow;
+    for (const note of this.root.querySelectorAll("#stance-note-bow")) note.hidden = stance === "" || !bow;
     setField(this.root, "assume-weights", weights);
-    const line = [phrase(this.config.setups, shown.setup), this.buffsPhrase(shown.buffs)];
+    this.paintHasteNotes(shown);
+    const line = [phrase(this.config.setups, shown.setup), ...(stance === "" ? [] : [stance]), this.buffsPhrase(shown.buffs)];
     if (shown.weights !== this.own) line.push(weights);
+    if (shown.priorities !== this.ownP) line.push(YOUR_PRIORITIES);
     for (const node of this.root.querySelectorAll('[data-f="s-assumes"]')) node.textContent = line.join(", ");
-    const changed = shown.buffs !== this.config.defaults.buffs || shown.weights !== this.own || (shown.best !== undefined && shown.setup !== shown.best);
+    const changed = shown.buffs !== this.config.defaults.buffs || shown.weights !== this.own || shown.priorities !== this.ownP || (shown.best !== undefined && shown.setup !== shown.best);
     setField(this.root, "a-lead", changed ? ASSUMPTIONS_CHANGED : ASSUMPTIONS);
     this.q("#assumes")?.toggleAttribute("data-changed", changed);
   }
@@ -1355,10 +1643,13 @@ class TrioApp {
     this.setExaltView({ kit: items, tier }, false);
     setField(this.root, "assume-haste", hasteAssumed + "%");
     this.root.classList.add("solved");
+    this.paintHasteNotes(this.displayed); // (the kit with the spell is drawn: the notes may say so)
     if (this.shown) {
       this.updateReport(this.shown, true);
       this.say(this.shown, kind, { value });
     }
+    this.standIn = false;
+    this.weights?.ratesChanged(true);
     return true;
   }
 
@@ -1392,6 +1683,7 @@ class TrioApp {
   }
 
   paintKit(scenario, baked = false) {
+    this.drawn = { kit: scenario.kit, tier: scenario.tier };
     this.rows.forEach((row, index) => {
       const item = scenario.kit[index] ?? null;
       setIcon(row, this.rowIcon(item, index));
@@ -1439,13 +1731,81 @@ class TrioApp {
     if (gain) gain.textContent = fmtSigned(displayInt(scenario.gain));
   }
 
+  /**
+   * The range line and the note of the bow setup. They are not in the markup of a page whose first answer is not the bow's (the markup pays for the controls of the setup and for nothing else, and a trio
+   * page has little room), so they are made the first time the bow setup is shown, with the same words as the generator's (view.py BOW_NOTE), and are out of sight in any other setup.
+   */
+  /**
+   * The rule behind the weights of the role, cited beside the templates in the four notes that cite them (the line under the role, the line under the best race, the
+   * line under the runner-ups and the line of "How roles weigh stats" in Why this kit). The Ranged role's weights are the Melee template with the factors of a rule of their own (the radio of the role names it: `data-rule` and
+   * `data-rule-title`), so for that role the notes name that rule too, with the seal that the templates have (both are judgments, a test of the generator holds the two seals
+   * equal), and for every other role they name the templates alone. Made here, not written in the page, so that a page pays for it only in the one radio.
+   */
+  paintRoleRule(role) {
+    const radio = this.radios("role").find((r) => r.value === role);
+    const id = radio?.dataset.rule ?? null;
+    const boxes = [this.q("#role-hint")?.parentElement, this.q("#best-race-rules"), this.q("#runnerups-rules"), this.q("#why .kit-line")];
+    for (const box of boxes) {
+      if (!box) continue;
+      for (const old of box.querySelectorAll(".role-rule")) old.remove();
+      const base = box.querySelector('a[href$="roles.templates"]'); // (the link of the templates: the address of a rule ends in its id)
+      if (id === null || !base) continue;
+      const added = this.doc.createElement("span");
+      added.className = "role-rule";
+      const link = base.cloneNode(true);
+      link.setAttribute("href", `/rules/#${id}`);
+      link.textContent = radio.dataset.ruleTitle ?? id;
+      added.append(" and ", link);
+      const seal = base.nextElementSibling;
+      if (seal && seal.classList.contains("seal")) added.append(" ", seal.cloneNode(true));
+      const after = seal && seal.classList.contains("seal") ? seal : base;
+      after.after(added);
+    }
+  }
+
+  paintBow(show, name) {
+    let row = this.q(".bow-line");
+    let note = this.q(".bow-note");
+    const list = this.q("#weapons dl.pairs");
+    if (show && !row && list !== null) {
+      const term = this.doc.createElement("dt");
+      term.textContent = "Range";
+      const value = this.doc.createElement("dd");
+      value.setAttribute("data-f", "w-range");
+      row = this.doc.createElement("div");
+      row.className = "bow-line";
+      row.append(term, value);
+      list.append(row);
+    }
+    if (show && !note) {
+      const after = this.q("#weapons p.hint");
+      if (after !== null) {
+        const link = this.doc.createElement("a");
+        link.setAttribute("href", "/rules/#weapons.ranged_factor");
+        link.textContent = "How a bow is scored";
+        note = this.doc.createElement("p");
+        note.className = "hint bow-note";
+        note.append(BOW_NOTE + " ", link);
+        const seal = after.querySelector("a")?.nextElementSibling; // (the seal of the line above, "How weapons are scored": a test of the generator holds it equal to the bow rule's)
+        if (seal && seal.classList.contains("seal")) note.append(" ", seal.cloneNode(true));
+        after.after(note);
+      }
+    }
+    if (row) {
+      row.hidden = !show;
+      if (show) row.lastElementChild.textContent = name; // (the value of the line: the line is made here or baked with the value last)
+    }
+    if (note) note.hidden = !show;
+  }
+
   paintWeapons(view) {
     const s = view.scenario;
-    const [main, off] = [s.kit[20], s.kit[21]];
+    const [main, off, range] = [s.kit[20], s.kit[21], s.kit[17]];
     setField(this.root, "w-setup", this.setupLabel(s.setup));
     setField(this.root, "w-haste", s.hasteAssumed + "%");
     setField(this.root, "w-main", main ? main.name : "Empty");
     setField(this.root, "w-off", off ? off.name : "Empty");
+    this.paintBow(s.setup === "ranged", range ? range.name : "Empty");
     const list = this.q("#w-others");
     if (!list) return;
     list.replaceChildren();
@@ -1453,8 +1813,9 @@ class TrioApp {
       if (setup === s.setup) continue;
       const other = view.shard.scenario(s.race, s.role, s.tier, setup);
       if (!other) continue;
-      const [m, o] = [other.kit[20], other.kit[21]];
-      const pair = (m ? m.name : "nothing") + (o ? " + " + o.name : "");
+      const [m, o, r] = [other.kit[20], other.kit[21], other.kit[17]];
+      const hands = (m ? m.name : "nothing") + (o ? " + " + o.name : "");
+      const pair = setup === "ranged" ? (r ? r.name : "nothing") + " with " + hands : hands; // (the bow, and the hands as for the others)
       const li = this.doc.createElement("li");
       li.textContent = this.setupLabel(setup) + ": " + pair + " (" + fmtSigned(displayInt(other.value - s.value)) + ")";
       list.append(li);
@@ -1499,8 +1860,14 @@ class TrioApp {
 
   async fillExtra(name) {
     const view = this.shown;
+    const mine = (this.fillToken.get(name) ?? 0) + 1;
+    this.fillToken.set(name, mine);
     this.dirty[name] = false;
     this.markLoading(name);
+    // the view moved on before the file came: what this fill marked is cleared unless a later fill is the one that waits now (it clears it when it is done)
+    const moved = () => {
+      if (this.fillToken.get(name) === mine) this.doneLoading(name);
+    };
     try {
       if (name === "runnerups") {
         // runner-ups exist for the default assumptions only: the buffs the page started with and the role's best setup
@@ -1508,13 +1875,13 @@ class TrioApp {
         const d = this.config.defaults;
         const standard = view.exact && view.state.ev === d.ev && view.state.buffs === d.buffs && s.setup === view.best;
         const data = standard ? await this.loadRunnerups(s.role) : null;
-        if (view !== this.shown) return;
+        if (view !== this.shown) return moved();
         const found = data ? data.view(s.tier, s.race) : null;
         this.doneLoading(name);
         this.paintRunnerups(found && found.setup === s.setup ? found : null, data);
       } else {
         const data = await this.loadExtra("robust", "robust", parseRobust);
-        if (view !== this.shown) return;
+        if (view !== this.shown) return moved();
         const s = view.scenario;
         // the seals describe the kit of the view they were made for (the race, the weapon setup, the evidence level and the buffs):
         // for any other view they would describe a kit that is not shown
@@ -1526,7 +1893,7 @@ class TrioApp {
     } catch (error) {
       // a failure that comes after the visitor has moved on belongs to a view that is no longer shown (the success paths above say the
       // same): the shown view's section is the business of the fill that was started for it
-      if (view !== this.shown) return;
+      if (view !== this.shown) return moved();
       this.dirty[name] = true;
       this.extraFailed(name, error);
     }
@@ -1567,13 +1934,14 @@ class TrioApp {
       for (const [itemIndex, delta] of swaps) {
         const item = data.items[itemIndex];
         const li = this.doc.createElement("li");
-        li.append(this.span("r-name", item.name), this.doc.createTextNode(" "), this.span("r-delta", fmtSigned(displayInt(delta)), "delta"));
+        li.append(this.span("r-name", item.name), this.doc.createTextNode(" "), this.span("r-delta", fmtSigned(displayInt(delta))));
         if (item.deity.length > 0) li.append(this.doc.createTextNode(" "), this.span("r-deity", deityText(item.deity), "deity"));
         list.append(li);
       }
       list.hidden = swaps.length === 0;
-      const none = field(row, "r-none");
-      if (none) none.hidden = swaps.length !== 0;
+      const none = field(row, "r-none"); // (the page has it in the rows that have no swap, shown; the other rows have none)
+      if (swaps.length !== 0) none?.remove();
+      else if (!none) list.after(this.span("r-none", NO_ALTERNATIVES, "muted"));
     });
   }
 

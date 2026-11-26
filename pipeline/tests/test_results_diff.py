@@ -16,6 +16,7 @@ Markdown shows the counts and the 20 largest changes of F; the JSON lists every 
 from __future__ import annotations
 
 import ast
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -51,10 +52,10 @@ from trioforge.data.evidence import classify
 from trioforge.precompute import assemble
 from trioforge.reports import results_diff
 
-OGR = ("OGR", "balanced", 4, "dw")  # a row of the fixture, and the kit it has (w90001 in the head, w80988 and w80113 in the hands)
+OGR = ("OGR", "tank", 4, "dw")  # a row of the fixture, and the kit it has (w90001 in the head, w80988 and w80113 in the hands)
 HEAD_ITEM = "w90001"
-OTHER_ITEM = "w80158"  # a sash the kit of OGR/balanced/+4/dw does not wear
-NO_HEAD_ITEM = ("TRL", "balanced", 0, "dw")  # a row whose kit does not wear w90001
+OTHER_ITEM = "w80158"  # a sash the kit of OGR/tank/+4/dw does not wear
+NO_HEAD_ITEM = ("TRL", "tank", 0, "dw")  # a row whose kit does not wear w90001
 
 
 def shard(folder: Path, name: str = "wiki-own") -> ShardFile:
@@ -136,7 +137,7 @@ def test_a_value_that_changes_with_the_same_inputs_is_a_solver_diff_and_is_flagg
     nudge(new, 5.0)
     report = run(old, new)
     (change,) = of_kind(report, "scenario")
-    assert change["view"] == {"evidence": "wiki", "buffs": "own", "race": "OGR", "role": "balanced", "tier": 4, "setup": "dw"}
+    assert change["view"] == {"evidence": "wiki", "buffs": "own", "race": "OGR", "role": "tank", "tier": 4, "setup": "dw"}
     assert change["fields"] == ["F"] and change["causes"] == [] and change["primary"] is None and change["flag"] == "solver-diff"
     assert change["trio"] == SLUG and change["change"] == "changed" and change["delta"] == 5.0 and change["F"][1] - change["F"][0] == 5.0
     assert report.summary["solver_diffs"] == 1 and report.summary["by_cause"]["unexplained"] == 1
@@ -188,14 +189,14 @@ def test_a_rule_the_pick_does_not_use_is_no_cause(tmp_path):
 @pytest.mark.parametrize(
     ("rule", "row", "applies"),
     [
-        ("race.iksar_ac_bonus", ("TRL", "balanced", 4, "dw"), False),
-        ("monk.weight_curve", ("TRL", "balanced", 4, "dw"), True),  # the trio has a Monk
-        ("weapons.dual_wield_factor", ("TRL", "balanced", 4, "dw"), True),
-        ("weapons.dual_wield_factor", ("TRL", "balanced", 4, "2h"), False),  # only the dual-wield setup counts the off hand
-        ("tier.stat_rule", ("TRL", "balanced", 4, "dw"), True),
-        ("tier.stat_rule", ("TRL", "balanced", 0, "dw"), False),  # at +0 no tier rule is in a pick
-        ("haste.cap_pct", ("TRL", "balanced", 4, "dw"), False),  # a trio with a Monk has the other cap
-        ("buffs.max_slots", ("TRL", "balanced", 0, "dw"), True),  # a rule with no scope is in every pick
+        ("race.iksar_ac_bonus", ("TRL", "tank", 4, "dw"), False),
+        ("monk.weight_curve", ("TRL", "tank", 4, "dw"), True),  # the trio has a Monk
+        ("weapons.dual_wield_factor", ("TRL", "tank", 4, "dw"), True),
+        ("weapons.dual_wield_factor", ("TRL", "tank", 4, "2h"), False),  # only the dual-wield setup counts the off hand
+        ("tier.stat_rule", ("TRL", "tank", 4, "dw"), True),
+        ("tier.stat_rule", ("TRL", "tank", 0, "dw"), False),  # at +0 no tier rule is in a pick
+        ("haste.cap_pct", ("TRL", "tank", 4, "dw"), False),  # a trio with a Monk has the other cap
+        ("buffs.max_slots", ("TRL", "tank", 0, "dw"), True),  # a rule with no scope is in every pick
     ],
 )
 def test_each_rule_is_in_the_picks_it_is_about(tmp_path, rule, row, applies):
@@ -211,7 +212,7 @@ def test_the_iksar_rules_are_in_the_picks_of_an_iksar(tmp_path):
     for folder in (old, new):  # (the fixture has no Iksar: the Ogre row is called one in both)
         rename_race(folder, "wiki-own", OGR, "IKS")
     change_rule(new, "race.iksar_ac_bonus", 40)
-    nudge(new, row=("IKS", "balanced", 4, "dw"))
+    nudge(new, row=("IKS", "tank", 4, "dw"))
     (change,) = of_kind(run(old, new), "scenario")
     assert change["causes"] == ["rule"] and change["view"]["race"] == "IKS"
 
@@ -923,10 +924,10 @@ def test_a_default_race_that_changes_with_the_same_inputs_is_a_solver_diff(tmp_p
 
 def test_a_runner_up_that_changes_is_a_record_with_the_places_that_differ(tmp_path):
     old, new = pair(tmp_path)
-    edit_runnerups(new, "balanced", lambda doc: runnerup_place(doc, 4, "OGR", "HEAD", [("w91002", -3.5), ("w91003", -6.25)]))
+    edit_runnerups(new, "tank", lambda doc: runnerup_place(doc, 4, "OGR", "HEAD", [("w91002", -3.5), ("w91003", -6.25)]))
     report = run(old, new)
     (change,) = of_kind(report, "runner-up")
-    assert (change["trio"], change["role"], change["tier"], change["race"]) == (SLUG, "balanced", 4, "OGR")
+    assert (change["trio"], change["role"], change["tier"], change["race"]) == (SLUG, "tank", 4, "OGR")
     assert change["fields"] == ["places"] and change["causes"] == [] and change["flag"] == "solver-diff"
     (place,) = change["places"]
     assert place["place"] == "HEAD" and place["new"] == [["w91002", -3.5], ["w91003", -6.25]] and place["old"] != place["new"]
@@ -936,7 +937,7 @@ def test_a_runner_up_that_changes_is_a_record_with_the_places_that_differ(tmp_pa
 def test_the_same_runner_ups_in_another_order_with_the_same_deltas_are_a_tie(tmp_path):
     old, new = pair(tmp_path)
     for folder, order in ((old, ["w91002", "w91003"]), (new, ["w91003", "w91002"])):
-        edit_runnerups(folder, "balanced", lambda doc, order=order: runnerup_place(doc, 4, "OGR", "HEAD", [(key, -3.5) for key in order]))
+        edit_runnerups(folder, "tank", lambda doc, order=order: runnerup_place(doc, 4, "OGR", "HEAD", [(key, -3.5) for key in order]))
     (change,) = of_kind(run(old, new), "runner-up")
     assert change["flag"] == "tie"
 
@@ -944,9 +945,9 @@ def test_the_same_runner_ups_in_another_order_with_the_same_deltas_are_a_tie(tmp
 def test_a_runner_up_item_that_changed_in_the_catalog_is_a_data_cause(tmp_path):
     old, new = pair(tmp_path)
     for folder in (old, new):
-        edit_runnerups(folder, "balanced", lambda doc: runnerup_place(doc, 4, "OGR", "HEAD", [(OTHER_ITEM, -3.5)]))
+        edit_runnerups(folder, "tank", lambda doc: runnerup_place(doc, 4, "OGR", "HEAD", [(OTHER_ITEM, -3.5)]))
     change_item(new, OTHER_ITEM)
-    edit_runnerups(new, "balanced", lambda doc: runnerup_place(doc, 4, "OGR", "HEAD", [(OTHER_ITEM, -4.5)]))
+    edit_runnerups(new, "tank", lambda doc: runnerup_place(doc, 4, "OGR", "HEAD", [(OTHER_ITEM, -4.5)]))
     (change,) = of_kind(run(old, new), "runner-up")
     assert change["causes"] == ["data"] and change["flag"] is None
 
@@ -955,7 +956,7 @@ def test_a_runner_up_moves_with_the_kit_it_is_swapped_from(tmp_path):
     """The deltas are against the kit: when an item of the kit changed in the catalog, every swap of the view moves with it."""
     old, new = pair(tmp_path)
     change_item(new)  # the head of the Ogre's kit
-    edit_runnerups(new, "balanced", lambda doc: runnerup_place(doc, 4, "OGR", "FACE", [("w91002", -9.0)]))
+    edit_runnerups(new, "tank", lambda doc: runnerup_place(doc, 4, "OGR", "FACE", [("w91002", -9.0)]))
     runnerups = [c for c in of_kind(run(old, new), "runner-up") if c["race"] == "OGR" and c["tier"] == 4]
     assert runnerups and runnerups[0]["causes"] == ["data"]
 
@@ -1090,7 +1091,7 @@ def test_the_summary_counts_the_changes_by_kind_and_by_primary_cause(tmp_path):
     report = run(old, new)
     summary = report.summary
     assert summary["by_kind"] == {"scenario": 2, "item": 1} and summary["changes"] == 3
-    assert summary["by_cause"] == {"code": 0, "rule": 0, "data": 2, "community": 0, "new": 0, "unexplained": 1}
+    assert summary["by_cause"] == {"code": 0, "rule": 0, "data": 2, "community": 0, "new": 0, "removed": 0, "unexplained": 1}  # (L2: the table has a row for removed trios and tiers)
     assert summary["solver_diffs"] == 1 and summary["ties"] == 0 and summary["community_only"] == 0
     assert summary["inputs"] == {"code": False, "rules": [], "game_patch": None, "catalog_date": None, "rules_version": None}
 
@@ -1112,30 +1113,34 @@ def test_a_note_the_caller_adds_is_in_both_renderings_and_only_then(tmp_path):
 
 REPO = Path(__file__).resolve().parents[2]
 SCOPED_RULES = {
-    "race.iksar_ac_bonus", "race.iksar_ac_placement", "monk.weight_curve", "monk.bonus_placement", "haste.cap_pct_with_monk", "haste.cap_pct",
-    "weapons.dual_wield_factor", "tier.weapon_damage_pct", "tier.stat_rule", "tier.weight_floor", "tier.weight_pct", "tier.negatives_scale",
-    "haste.unbound_alacrity",
+    "race.iksar_ac_bonus", "race.iksar_ac_placement", "stance.berserker", "monk.weight_curve", "monk.bonus_placement", "haste.cap_pct_with_monk", "haste.cap_pct",
+    "weapons.dual_wield_factor", "tier.weapon_damage_pct", "tier.stat_rule", "tier.weight_floor", "tier.weight_pct", "tier.negatives_scale", "tier.unscaled_stats",
+    "haste.unbound_alacrity", "weapons.ranged_factor", "roles.ranged_template", "defaults.race_close_pct",
+    "tier.socket_open", "effects.proc_per_minute", "effects.proc_reference_dex", "effects.proc_landing", "effects.proc_own_cut", "effects.proc_score_kinds",
+    "effects.proc_value", "effects.score_shape", "effects.haste_buff", "effects.restricted_targets", "effects.unverified_names",
 }  # fmt: skip
 EVERY_PICK_RULES = {
     "level.current", "mana.wis_bands", "mana.stat_by_class", "ac.softcap.combat_stability_pct", "ac.softcap.physical_enhancement_pct", "hp.natural_durability_pct",
     "ac.softcap.pe_for_caster_only_trios", "ac.shield.offhand_raises_cap", "haste.worn_per_tier", "regen.gear_caps", "regen.per_tier", "regen.value_minutes",
-    "resist.cap", "buffs.min_duration_minutes", "buffs.max_slots", "roles.templates", "weapons.damage_weight",
+    "resist.cap", "buffs.min_duration_minutes", "buffs.max_slots", "roles.templates", "roles.weapon_factor", "haste.assume_spell", "weapons.damage_weight",
+    "ac.softcap.base_floor", "ac.softcap.rate_floor",
+    "effects.focus_value", "effects.spell_weight", "effects.cast_categories", "effects.cast_mass_full", "effects.late_level", "effects.click_relevance",
+    "effects.dispel_relevance", "effects.gap_categories", "effects.own_compare", "effects.instant_categories", "effects.instant_bonus", "effects.near_best",
+    "effects.access_cost", "effects.raid_zones", "effects.one_off_spas", "effects.rows_kept",
 }  # fmt: skip
 NEVER_READ_RULES = {
     "naked.cap", "naked.rule", "hp.pools_counted", "hp.sta_curve", "mana.pools_counted", "mana.base_l50", "mana.per_stat_l50", "end.formula",
     "ac.sheet.item_mult", "ac.sheet.defense_div", "ac.sheet.spell_ac_div", "ac.sheet.agi_div", "ac.softcap.past_cap_rate", "stats.knee", "stats.hard_cap",
     "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "packrat.pct_per_rank", "tier.accuracy_pct",
-    "tier.socket_open", "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "tier.void_mote", "roles.balanced",
-        "effects.focus_value", "effects.spell_weight", "effects.cast_categories", "effects.cast_mass_full", "effects.late_level", "effects.click_relevance",
-        "effects.dispel_relevance", "effects.gap_categories", "effects.own_compare", "effects.instant_categories", "effects.instant_bonus", "effects.proc_value",
-        "effects.score_shape", "effects.haste_buff", "effects.near_best", "effects.access_cost", "effects.raid_zones", "effects.one_off_spas",
-        "effects.restricted_targets", "effects.unverified_names", "effects.rows_kept",
+    "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "tier.void_mote", "weapons.fallback_bonus",
 }  # fmt: skip
 PICKS = [
+    results_diff.Scope(frozenset({"PAL", "MNK", "BER"}), "OGR", 4, "dw", default=True),  # (the default pick of a trio: the one record a rule of the defaults is in)
     results_diff.Scope(frozenset({"PAL", "MNK", "BER"}), "OGR", 4, "dw"),
     results_diff.Scope(frozenset({"WAR", "CLR", "DRU"}), "HUM", 0, "2h"),
     results_diff.Scope(frozenset({"BRD", "BST", "BER"}), "IKS", 10, "dw"),
     results_diff.Scope(frozenset({"BRD", "BST", "BER"})),
+    results_diff.Scope(frozenset({"WAR", "RNG", "BER"}), "HUM", 4, "ranged"),
 ]
 
 
@@ -1143,7 +1148,7 @@ def rule_ids() -> list[str]:
     return [rule["id"] for rule in json.loads((REPO / "rules" / "rules.json").read_text(encoding="utf-8"))["rules"]]
 
 
-@pytest.mark.parametrize("rule", ["tier.exp_needed", "tier.socket_open", "tier.arrival", "tier.accuracy_pct", "tier.max_fresh_drop"])
+@pytest.mark.parametrize("rule", ["tier.exp_needed", "tier.arrival", "tier.accuracy_pct", "tier.max_fresh_drop"])
 def test_a_change_to_a_rule_the_solver_never_reads_hides_no_solver_diff(tmp_path, rule):
     """The reviewer's repro: one F raised by 7.5, and a rule changed that only the export and the site read. The rule is no reason for the pick."""
     old, new = pair(tmp_path)
@@ -1212,9 +1217,15 @@ def hashed_literals() -> set[str]:
     return found
 
 
+#: the rules that are in the default pick and in no solve: the precompute reads them after the solves, so no file of the code of the chunks names them
+DEFAULT_PICK_ONLY_RULES = {"defaults.race_close_pct"}
+
+
 def test_the_rules_the_code_of_the_solver_names_are_the_rules_that_are_in_some_pick():
     named = hashed_literals() & set(rule_ids())
-    assert named == SCOPED_RULES | EVERY_PICK_RULES, sorted(named ^ (SCOPED_RULES | EVERY_PICK_RULES))
+    in_a_solve = (SCOPED_RULES | EVERY_PICK_RULES) - DEFAULT_PICK_ONLY_RULES
+    assert DEFAULT_PICK_ONLY_RULES <= SCOPED_RULES and not DEFAULT_PICK_ONLY_RULES & named
+    assert named == in_a_solve, sorted(named ^ in_a_solve)
 
 
 def test_a_solve_reads_no_rule_of_the_never_group(tmp_path, monkeypatch):
@@ -1234,7 +1245,7 @@ def test_a_solve_reads_no_rule_of_the_never_group(tmp_path, monkeypatch):
     monkeypatch.setattr(Rules, "get", spy)
     ctx = context_of(tmp_path, CATALOG)
     for key, races in (
-        (grid.ChunkKey("wiki", "own", "balanced", "dw", 4), ["IKS", "OGR"]),
+        (grid.ChunkKey("wiki", "own", "tank", "dw", 4), ["IKS", "OGR"]),
         (grid.ChunkKey("wiki", "group", "tank", "1h-shield", 0), ["OGR"]),
         (grid.ChunkKey("strict", "own", "melee", "2h", 10), ["HUM"]),
     ):
@@ -1249,7 +1260,7 @@ def test_a_solve_reads_no_rule_of_the_never_group(tmp_path, monkeypatch):
 # ---- the seals and the bundles --------------------------------------------------------------------------------------------------------------
 
 
-def set_seal(folder: Path, place: str = "HEAD", text: str = "MANA x2", *, role: str = "balanced", tier: str = "4") -> None:
+def set_seal(folder: Path, place: str = "HEAD", text: str = "MANA x2", *, role: str = "tank", tier: str = "4") -> None:
     edit(folder / SLUG / "robust.json", lambda d: d["roles"][role][tier].update({place: text}))
 
 
@@ -1266,7 +1277,7 @@ def test_a_seal_that_changes_is_a_record_with_the_places_that_differ(tmp_path):
     set_seal(new, "HEAD", "MANA x2")
     report = run(old, new)
     (change,) = of_kind(report, "seal")
-    assert change["trio"] == SLUG and change["role"] == "balanced" and change["tier"] == 4 and change["race"] == "OGR" and change["change"] == "changed"
+    assert change["trio"] == SLUG and change["role"] == "tank" and change["tier"] == 4 and change["race"] == "OGR" and change["change"] == "changed"
     assert change["places"] == [{"place": "HEAD", "old": "robust", "new": "MANA x2"}] and change["fields"] == ["places"]
     assert change["causes"] == [] and change["flag"] == "solver-diff"  # the same inputs gave other seals: a bug until explained
     assert report.summary["by_kind"] == {"seal": 1} and report.summary["solver_diffs"] == 1
@@ -1280,7 +1291,7 @@ def test_every_place_of_a_seal_that_differs_is_listed_and_the_other_roles_and_ti
     set_seal(new, "BACK", "AC x2", role="tank", tier="10")
     report = run(old, new)
     first, second = of_kind(report, "seal")
-    assert (first["role"], first["tier"], [p["place"] for p in first["places"]]) == ("balanced", 4, ["HEAD", "CHEST"])
+    assert (first["role"], first["tier"], [p["place"] for p in first["places"]]) == ("tank", 4, ["HEAD", "CHEST"])
     assert (second["role"], second["tier"], [p["place"] for p in second["places"]]) == ("tank", 10, ["BACK"])
 
 
@@ -1301,7 +1312,7 @@ def test_a_seal_that_changes_with_a_new_input_has_that_cause(tmp_path, apply, ca
 
 
 def test_a_seal_that_moves_with_the_item_of_its_pick_is_a_data_cause(tmp_path):
-    """The seal of the Ogre's balanced pick at +4 goes with the kit of that pick: an item in it that changed explains the seal."""
+    """The seal of the Ogre's tank pick at +4 goes with the kit of that pick: an item in it that changed explains the seal."""
     old, new = pair(tmp_path)
     kit = shard(old, "strict-own").kit(shard(old, "strict-own").row(*OGR))
     worn = next(key for key in kit if key)
@@ -1315,12 +1326,12 @@ def test_a_seal_that_one_release_lacks_is_added_or_removed(tmp_path):
     old, new = pair(tmp_path)
 
     def drop(document):
-        del document["roles"]["balanced"]["10"]
+        del document["roles"]["tank"]["10"]
 
     edit(new / SLUG / "robust.json", drop)
     report = run(old, new)
     (change,) = of_kind(report, "seal")
-    assert (change["role"], change["tier"], change["change"]) == ("balanced", 10, "removed") and "places" not in change
+    assert (change["role"], change["tier"], change["change"]) == ("tank", 10, "removed") and "places" not in change
     assert run(new, old).changes[0]["change"] == "added"
 
 
@@ -1384,11 +1395,11 @@ def test_nothing_about_the_seals_and_the_bundles_is_capped(tmp_path):
     for slug in (SLUG, "war-clr-pal", "war-clr-rng"):
         edit(new / slug / "engine-l50.json", lambda b: b["constants"].update(hp_pool_constant="1/1"))
         for tier in ("4", "10"):
-            for role in ("balanced", "tank", "melee"):
+            for role in ("tank", "melee"):
                 edit(new / slug / "robust.json", lambda d: d["roles"][role][tier].update(HEAD="MANA x2"))
     report = run(old, new)
-    assert len(of_kind(report, "bundle")) == 3 and len(of_kind(report, "seal")) == 18
-    assert len(json.loads(report.json_text())["changes"]) == 21 and report.summary["changes"] == 21
+    assert len(of_kind(report, "bundle")) == 3 and len(of_kind(report, "seal")) == 12  # (two builds, two tiers, three trios)
+    assert len(json.loads(report.json_text())["changes"]) == 15 and report.summary["changes"] == 15
 
 
 # ---- a trial ----------------------------------------------------------------------------------------------------------------------------
@@ -1563,9 +1574,9 @@ def drop_view(doc, tier: int, race: str) -> None:
 
 def test_a_runner_up_view_that_one_release_lacks_is_added_or_removed(tmp_path):
     old, new = pair(tmp_path)
-    edit_runnerups(new, "balanced", lambda doc: drop_view(doc, 4, "TRL"))
+    edit_runnerups(new, "tank", lambda doc: drop_view(doc, 4, "TRL"))
     (removed,) = of_kind(run(old, new), "runner-up")
-    assert (removed["role"], removed["tier"], removed["race"], removed["change"]) == ("balanced", 4, "TRL", "removed")
+    assert (removed["role"], removed["tier"], removed["race"], removed["change"]) == ("tank", 4, "TRL", "removed")
     assert removed["fields"] == ["view"] and removed["causes"] == [] and removed["flag"] == "solver-diff"
     (added,) = of_kind(run(new, old), "runner-up")
     assert (added["race"], added["change"]) == ("TRL", "added")
@@ -1573,9 +1584,9 @@ def test_a_runner_up_view_that_one_release_lacks_is_added_or_removed(tmp_path):
 
 def test_the_evidence_of_a_runner_up_view_is_compared_with_its_setup_and_its_swaps(tmp_path):
     old, new = pair(tmp_path)
-    before = load(old / SLUG / "runnerups" / "balanced.json")["evidence"]
+    before = load(old / SLUG / "runnerups" / "tank.json")["evidence"]
     other = "wiki" if before == "strict" else "strict"
-    edit_runnerups(new, "balanced", lambda doc: doc.update(evidence=other))
+    edit_runnerups(new, "tank", lambda doc: doc.update(evidence=other))
     report = run(old, new)
     changes = of_kind(report, "runner-up")
     assert len(changes) == 9 and all(c["fields"] == ["evidence"] and c["evidence"] == [before, other] and c["flag"] == "solver-diff" for c in changes)
@@ -1583,8 +1594,8 @@ def test_the_evidence_of_a_runner_up_view_is_compared_with_its_setup_and_its_swa
 
 def test_a_view_that_is_added_in_a_tier_both_releases_have_is_not_missed_among_the_views_both_have(tmp_path):
     old, new = pair(tmp_path)
-    edit_runnerups(new, "balanced", lambda doc: drop_view(doc, 0, "ELF"))
-    edit_runnerups(new, "balanced", lambda doc: runnerup_place(doc, 4, "TRL", "HEAD", [(OTHER_ITEM, -3.0)]))
+    edit_runnerups(new, "tank", lambda doc: drop_view(doc, 0, "ELF"))
+    edit_runnerups(new, "tank", lambda doc: runnerup_place(doc, 4, "TRL", "HEAD", [(OTHER_ITEM, -3.0)]))
     kinds = sorted((c["race"], c["tier"], c["change"], tuple(c["fields"])) for c in of_kind(run(old, new), "runner-up"))
     assert kinds == [("ELF", 0, "removed", ("view",)), ("TRL", 4, "changed", ("places",))]
 
@@ -1696,3 +1707,267 @@ def test_a_bundle_that_differs_in_its_inputs_alone_with_no_input_changed_is_a_so
     set_bundle_inputs(new)
     (change,) = of_kind(run(old, new), "bundle")
     assert change["causes"] == [] and change["flag"] == "solver-diff"
+
+
+# ---- the close races of the default: a rule of the defaults explains the default and no solve ---------------------------------------------------
+
+
+def test_the_rule_of_the_close_races_is_in_the_default_pick_and_in_no_other_pick():
+    scope = results_diff.Scope(frozenset({"PAL", "MNK", "BER"}), "OGR", 4, "dw", "wiki")
+    assert results_diff.rule_in_pick("defaults.race_close_pct", dataclasses.replace(scope, default=True))
+    assert not results_diff.rule_in_pick("defaults.race_close_pct", scope)  # (no solve reads it: a change of it explains no kit and hides no solver diff)
+    assert "defaults.race_close_pct" not in results_diff.UNREAD
+
+
+def test_a_change_of_the_close_races_is_a_change_of_the_default_and_the_rule_that_makes_it_explains_it(tmp_path):
+    old, new = pair(tmp_path / "unexplained")
+    edit(new / SLUG / "defaults.json", lambda d: d.update(close_races=[d["race"], d["runner_up_race"]]))
+    (change,) = of_kind(run(old, new), "default")
+    assert change["fields"] == ["close_races"] and change["old"]["close_races"] == [] and change["new"]["close_races"] == ["OGR", "TRL"]
+    assert change["causes"] == [] and change["flag"] == "solver-diff"  # (the same rules: nothing explains it)
+    old, new = pair(tmp_path / "explained")
+    edit(new / SLUG / "defaults.json", lambda d: d.update(close_races=[d["race"], d["runner_up_race"]]))
+    change_rule(new, "defaults.race_close_pct", 5)
+    (change,) = of_kind(run(old, new), "default")
+    assert change["fields"] == ["close_races"] and change["causes"] == ["rule"] and change["flag"] is None
+
+
+def test_a_default_with_no_close_races_field_is_the_same_as_one_with_an_empty_list(tmp_path):
+    old, new = pair(tmp_path)
+    def before_the_field(document):
+        document.pop("close_races", None)
+
+    edit(old / SLUG / "defaults.json", before_the_field)  # (a release before the field)
+    edit(new / SLUG / "defaults.json", lambda d: d.update(close_races=[]))
+    assert of_kind(run(old, new), "default") == []
+
+
+def test_the_rule_of_the_close_races_changed_alone_explains_no_scenario(tmp_path):
+    old, new = pair(tmp_path)
+    nudge(new)
+    change_rule(new, "defaults.race_close_pct", 5)
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["fields"] == ["F"] and change["causes"] == [] and change["flag"] == "solver-diff"  # (the rule is in no solve: it explains nothing of a kit)
+
+
+# ---- the effects layer's files and the procs of the shards (Part L, L1) --------------------------------------------------------------------------
+
+
+def put_file(folder: Path, name: str, text: str) -> None:
+    path = folder / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def exalt_document(**roles) -> str:
+    return json.dumps({"version": 1, "trio": SLUG, "roles": roles}, separators=(",", ":"))
+
+
+def put_procs(folder: Path, donor: str, *, row=OGR, name: str = "wiki-own") -> None:
+    """The procs table of a shard: one distinct row, which the scenario of ``row`` counts and no other does (the value of the scenario is not touched)."""
+    file = shard(folder, name)
+    target = file.row(*row)
+    at = [-1] * len(file.doc["scenarios"])
+    at[file.doc["scenarios"].index(target)] = 0
+    file.doc["procs"] = {"rows": [[["P", "Invented Proc", donor, "n", 1.5]]], "at": at}
+    file.save()
+
+
+def test_exalt_json_effects_json_and_the_procs_of_a_shard_that_two_releases_have_the_same_are_no_change(tmp_path):
+    old, new = pair(tmp_path)
+    for folder in (old, new):
+        put_file(folder, f"{SLUG}/exalt.json", exalt_document(tank={"focus": [{"e": "e1"}]}))
+        put_file(folder, "effects.json", '{"effects": [1, 2]}')
+        put_procs(folder, "w80988")
+    report = run(old, new)
+    assert report.changes == [] and report.summary["changes"] == 0 and "No change" in report.markdown()
+
+
+def test_a_change_of_exalt_json_alone_is_a_change_and_the_report_does_not_say_no_change(tmp_path):
+    old, new = pair(tmp_path)
+    put_file(old, f"{SLUG}/exalt.json", exalt_document(tank={"focus": [{"e": "e1"}, {"e": "e2"}]}))
+    put_file(new, f"{SLUG}/exalt.json", exalt_document(tank={"focus": [{"e": "e2"}, {"e": "e1"}]}))
+    report = run(old, new)
+    (change,) = report.changes
+    assert change["kind"] == "exalt" and change["trio"] == SLUG and change["change"] == "changed" and change["fields"] == ["sha256"]
+    assert change["sha256"][0] != change["sha256"][1] and all(len(text) == 64 for text in change["sha256"])
+    assert change["lists"] == [{"role": "tank", "list": "focus", "how": "reordered"}]
+    assert change["causes"] == [] and change["flag"] == "solver-diff"  # (nothing in the inputs explains it)
+    assert report.summary["changes"] == 1 and report.summary["by_kind"] == {"exalt": 1} and "No change" not in report.markdown()
+    assert "SOLVER DIFF" in report.markdown() and f"- {SLUG}: exalt.json" in report.markdown()
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "how"),
+    [
+        ([{"e": "e1"}], [{"e": "e1"}, {"e": "e2"}], "gained"),
+        ([{"e": "e1"}, {"e": "e2"}], [{"e": "e2"}], "lost"),
+        ([{"e": "e1"}], [{"e": "e2"}], "changed"),
+    ],
+)
+def test_the_exalt_record_says_for_each_list_that_differs_whether_it_gained_lost_or_changed_rows(tmp_path, before, after, how):
+    old, new = pair(tmp_path)
+    put_file(old, f"{SLUG}/exalt.json", exalt_document(tank={"focus": before, "click": [{"e": "e9"}]}))
+    put_file(new, f"{SLUG}/exalt.json", exalt_document(tank={"focus": after, "click": [{"e": "e9"}]}))
+    (change,) = run(old, new).changes
+    assert change["lists"] == [{"role": "tank", "list": "focus", "how": how}]
+
+
+def test_a_change_of_effects_json_alone_is_a_change_of_the_release_and_not_of_a_trio(tmp_path):
+    old, new = pair(tmp_path)
+    put_file(old, "effects.json", '{"effects": [1]}')
+    put_file(new, "effects.json", '{"effects": [1, 2]}')
+    report = run(old, new)
+    (change,) = report.changes
+    assert change["kind"] == "effects" and change["trio"] is None and change["change"] == "changed" and change["fields"] == ["sha256"]
+    text = report.markdown()
+    assert report.summary["by_kind"] == {"effects": 1} and "No change" not in text and "- the release: effects.json" in text
+
+
+def test_a_change_of_the_procs_of_a_shard_alone_is_a_change_of_that_scenario_even_when_its_value_is_the_same(tmp_path):
+    old, new = pair(tmp_path)
+    put_procs(old, "w80988")
+    put_procs(new, "w80113")
+    report = run(old, new)
+    (change,) = of_kind(report, "scenario")
+    assert change["fields"] == ["procs"] and change["F"][0] == change["F"][1] and change["delta"] == 0.0
+    assert change["procs"] == [[["P", "Invented Proc", "w80988", "n", 1.5]], [["P", "Invented Proc", "w80113", "n", 1.5]]]
+    assert {"w80988", "w80113"} <= set(change["items"])  # (the donors are items of the pick: a change of their record explains the change)
+    assert change["causes"] == [] and "No change" not in report.markdown()
+
+
+def test_a_procs_table_that_one_release_has_and_the_other_lacks_is_a_change_of_the_scenarios_it_counts_in(tmp_path):
+    old, new = pair(tmp_path)
+    put_procs(new, "w80988")
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["fields"] == ["procs"] and change["procs"][0] is None and change["procs"][1] is not None
+
+
+def test_a_change_of_the_record_of_a_donor_explains_a_change_of_the_procs(tmp_path):
+    old, new = pair(tmp_path)
+    put_procs(old, "w80988")
+    put_procs(new, "w80113")
+    change_item(new, "w80113")
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["fields"] == ["procs"] and "data" in change["causes"] and change["flag"] is None
+
+
+def test_an_exalt_json_or_an_effects_json_that_only_one_release_has_is_reported(tmp_path):
+    old, new = pair(tmp_path)
+    put_file(new, f"{SLUG}/exalt.json", exalt_document())
+    put_file(old, "effects.json", "{}")
+    report = run(old, new)
+    (exalt,), (effects,) = of_kind(report, "exalt"), of_kind(report, "effects")
+    assert (exalt["change"], exalt["sha256"][0], exalt["causes"]) == ("added", None, ["new"]) and exalt["sha256"][1] is not None
+    assert (effects["change"], effects["sha256"][1]) == ("removed", None) and effects["sha256"][0] is not None and report.summary["changes"] == 2
+
+
+def test_a_change_of_the_effects_layer_under_a_new_code_hash_is_a_code_cause(tmp_path):
+    old, new = pair(tmp_path, new={"code_hash": "c3" * 32})
+    put_file(old, f"{SLUG}/exalt.json", exalt_document())
+    put_file(new, f"{SLUG}/exalt.json", exalt_document(tank={}))
+    put_file(old, "effects.json", "{}")
+    put_file(new, "effects.json", '{"x": 1}')
+    changes = run(old, new).changes
+    assert {c["kind"] for c in changes} == {"exalt", "effects"}
+    assert all(c["causes"][0] == "code" and c["flag"] is None for c in changes)
+
+
+# ---- ties, removed records and strict_lost (Part L, L2) ------------------------------------------------------------------------------------------
+
+
+def test_a_change_of_the_totals_alone_under_the_same_inputs_is_a_solver_diff_and_no_tie(tmp_path):
+    old, new = pair(tmp_path)
+    file = shard(new)
+    row = file.row(*OGR)
+    file.doc["totals"].append([value + 1 for value in file.doc["totals"][row[7]]])
+    row[7] = len(file.doc["totals"]) - 1
+    file.save()
+    report = run(old, new)
+    (change,) = of_kind(report, "scenario")
+    assert change["fields"] == ["totals"] and change["causes"] == [] and change["flag"] == "solver-diff"
+    assert report.summary["ties"] == 0 and report.summary["solver_diffs"] == 1 and "SOLVER DIFF" in report.markdown()
+
+
+def test_a_change_of_the_weapon_procs_alone_at_the_same_value_is_a_solver_diff_and_no_tie(tmp_path):
+    old, new = pair(tmp_path)
+    put_procs(old, "w80988")
+    put_procs(new, "w80113")
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["fields"] == ["procs"] and change["F"][0] == change["F"][1] and change["flag"] == "solver-diff"
+
+
+def test_a_change_of_the_haste_alone_under_the_same_inputs_is_a_solver_diff_and_no_tie(tmp_path):
+    old, new = pair(tmp_path)
+    file = shard(new)
+    file.row(*OGR)[9] += 1
+    file.save()
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["fields"] == ["haste"] and change["flag"] == "solver-diff"
+
+
+def test_a_change_of_the_flip_notes_alone_under_the_same_inputs_is_a_solver_diff_and_no_tie(tmp_path):
+    old, new = pair(tmp_path)
+    edit(new / SLUG / "defaults.json", lambda d: d.update(flip_notes=["Another note"]))
+    report = run(old, new)
+    (change,) = of_kind(report, "default")
+    assert change["fields"] == ["flip_notes"] and change["causes"] == [] and change["flag"] == "solver-diff"
+    assert report.summary["ties"] == 0 and report.summary["solver_diffs"] == 1
+
+
+def test_a_different_kit_of_the_same_value_and_a_default_of_the_same_value_in_another_race_stay_ties(tmp_path):
+    old, new = pair(tmp_path)
+    file = shard(new)
+    file.set_place(file.row(*OGR), "HEAD", OTHER_ITEM)
+    file.save()
+    (change,) = of_kind(run(old, new), "scenario")
+    assert change["fields"] == ["kit"] and change["flag"] == "tie"
+    old, new = pair(tmp_path / "default")
+    edit(new / SLUG / "defaults.json", lambda d: d.update(runner_up_race="ELF"))
+    (change,) = of_kind(run(old, new), "default")
+    assert change["fields"] == ["runner_up_race"] and change["flag"] == "tie"
+
+
+def test_the_first_cause_table_adds_up_when_a_trio_or_a_tier_is_removed(tmp_path):
+    old, new = pair(tmp_path)
+    copy_trio(old, "clr-shd-ber")
+    drop_tier(new, 10)
+    report = run(old, new)
+    summary = report.summary
+    assert summary["removed_trios"] == 1 and summary["removed_tiers"] == 1
+    assert summary["by_cause"]["removed"] == 2 and sum(summary["by_cause"].values()) == summary["changes"]
+    assert "| removed | 2 |" in report.markdown()
+
+
+def test_the_first_cause_table_adds_up_with_new_removed_and_unexplained_changes_together(tmp_path):
+    old, new = pair(tmp_path)
+    copy_trio(new, "clr-shd-ber")
+    copy_trio(old, "war-clr-pal")
+    nudge(new)
+    summary = run(old, new).summary
+    assert summary["by_cause"] == {"code": 0, "rule": 0, "data": 0, "community": 0, "new": 1, "removed": 1, "unexplained": 1}
+    assert sum(summary["by_cause"].values()) == summary["changes"]
+
+
+def test_an_item_that_a_report_made_strict_and_that_leaves_the_item_table_while_the_report_stands_is_listed_as_no_longer_strict(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    set_community(new, reports=[report_entry(LADDER_ITEM, 5)])  # (the report stands in the new file, and the new item table has no record of the item)
+    report = run(old, new)
+    assert lost(report) == [{"key": LADDER_ITEM, "why": "outweighed", "by": [results_diff.LEFT_THE_TABLE]}]
+    assert f"- no longer strict, the report outweighed (1): `{LADDER_ITEM}` (by {results_diff.LEFT_THE_TABLE})" in report.markdown()
+    (record,) = of_kind(report, "item", key=LADDER_ITEM)
+    assert record["change"] == "removed" and record["causes"] == ["data"]
+
+
+def test_an_item_that_leaves_the_item_table_with_its_report_gone_from_the_file_is_listed_as_retracted(tmp_path):
+    old, new = pair(tmp_path)
+    put_ladder_evidence(old, [], reported=True)
+    set_community(new, retracted=[retraction_entry(LADDER_ITEM, 5)])
+    assert lost(run(old, new)) == [{"key": LADDER_ITEM, "why": "retracted", "by": []}]
+
+
+def test_an_item_that_was_not_strict_by_a_report_and_leaves_the_item_table_is_not_listed(tmp_path):
+    old, new = pair(tmp_path)
+    add_invented_item(old, LADDER_ITEM, strict=False)
+    assert lost(run(old, new)) == []

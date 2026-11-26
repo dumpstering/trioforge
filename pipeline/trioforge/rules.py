@@ -14,9 +14,11 @@ test id, a null value on a settled rule or an impossible date all raise
 :class:`RulesError`, which lists every problem found, not just the first.
 
 A rule's ``source`` is a list of ``{"kind", "ref"}`` objects, and the file is public:
-a source is a URL, a shipped client text file, a public statement, or the fixed label
-for the maintainer's own observations (which never carry a count, value or date), and
-no ref may cite a client binary. The schema enforces those forms. The loader adds one
+a source is a URL, a shipped client text file, a public statement, the fixed label
+for the maintainer's own observations (which never carry a count, value or date) or the
+fixed label of the game client's own calculation (``game-client``), and no ref may carry
+an address or an offset inside the client program or a listing of its code. The schema
+enforces those forms. The loader adds one
 relation between fields: a rule with a ``private-*`` source, its own or an
 alternative's, has notes without a single digit.
 
@@ -526,5 +528,7 @@ def _describe(error: ValidationError) -> str:
         if error.validator == "pattern":
             return "is not an https:// address (a host, then an optional path; no spaces, user name or port)"
         if error.validator == "const":
+            if str(error.validator_value).startswith("EverQuest Legends client"):
+                return f"a game-client source must use exactly {error.validator_value!r}"
             return f"a private source must use exactly {error.validator_value!r}, never a count, value or date"
     return error.message

@@ -15,7 +15,7 @@ the answer depends on them, and both are made here from the solver's robustness 
   For every race that can be created, the default view (the default role, tier, evidence level and own buffs, over the role's
   weapon setups) is solved again under each variant that is a *rule* (a weight is a judgment call, not a test that can settle
   it). A race that has no such variant keeps its value. Where another race comes out on top, the note names it, the
-  alternative and the in-game test: "Iksar, if Iksar AC stacks inside the cap (test B17)" (:func:`flip_notes`).
+  alternative and the in-game test: "Iksar, if Iksar AC stacks on top of the cap" (:func:`flip_notes`; a rule that is settled names no test).
 
 Every solve is called with the model alone: no time limit, no HiGHS option.
 """
@@ -48,8 +48,8 @@ __all__ = [
 
 #: how a flip is worded, by the rule it is about (an unknown rule is named by the label of its variant)
 PHRASES = {
-    "race.iksar_ac_placement": "Iksar AC stacks inside the cap",
-    "monk.bonus_placement": "the Monk worn-weight bonus counts inside the AC cap",
+    "race.iksar_ac_placement": "Iksar AC stacks on top of the cap",
+    "monk.bonus_placement": "the Monk worn-weight bonus counts on top of the AC cap",
     "monk.weight_curve": "the Monk worn-weight curve is the other one",
     "mana.wis_bands": "mana from WIS follows the other bands",  # (settled today and listing no alternative; a rules file that lists one gets the variant again, and this is its wording)
     "tier.weapon_damage_pct": "weapon damage grows at the other rate a tier",
@@ -83,7 +83,7 @@ def solver_scenario(scenario: grid.RobustScenario) -> Any:
         setup=scenario.setup,
         tier=scenario.tier,
         buffset=scenario.buffset,
-        options=grid.BUILD_OPTIONS,
+        options=scenario.options if scenario.options is not None else grid.BUILD_OPTIONS,
     )
 
 
@@ -145,8 +145,8 @@ def flip_variants(
                 continue
             best: float | None = None
             for setup in setups:
-                items = prune(pool(variant.item_options), variant.profile, tier, setup, buffset, grid.BUILD_OPTIONS)
-                solution = solve_scenario(variant.profile, items, setup, buffset, grid.BUILD_OPTIONS, solver=solve).solution
+                items = prune(pool(variant.item_options), variant.profile, tier, setup, buffset, ctx.options)
+                solution = solve_scenario(variant.profile, items, setup, buffset, ctx.options, solver=solve).solution
                 if solution.status != "optimal" or solution.F is None:
                     raise SealError(
                         f"the solve of {RACE_NAMES.get(race, race)} under '{variant.label}' ended {solution.status}, not optimal"
@@ -159,18 +159,19 @@ def flip_variants(
 
 def flip_notes(
     variants: Sequence[Variant], base: Mapping[str, float], default: str, legal: Collection[str],
-    order: Sequence[str],
+    order: Sequence[str], close_pct: Any,
 ) -> list[str]:
     """The notes of the variants that put another race on top, in the order of the variants, each text once.
 
     ``base`` is the value of each race in the default view, ``default`` the race the page names, ``legal`` the races that can be
-    created and ``order`` the display order (it breaks a tie, as for the default race). Under a variant a race has the value the
+    created, ``order`` the display order (it breaks a tie, as for the default race) and ``close_pct`` the rule ``defaults.race_close_pct`` that the pick of the race takes (it
+    decides no winner here, and no copy of its value lives in this module). Under a variant a race has the value the
     variant gives it, or its base value if the variant does not touch it. A race that cannot be created never wins, and another
     race is on top only if it is worth more than the default race beyond a float's noise."""
     notes: list[str] = []
     for variant in variants:
         values = {race: variant.values.get(race, value) for race, value in base.items()}
-        choice = shards.default_race(values, legal, order)
+        choice = shards.default_race(values, legal, order, close_pct)
         if choice is None or choice["race"] == default or default not in values:
             continue
         winner = choice["race"]

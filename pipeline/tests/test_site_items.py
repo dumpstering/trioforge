@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 from after_an_add import AfterAnAdd, strict_without_a_report
+from unpaged_case import with_an_unpaged_wearable
 
 from trioforge import rules as rules_module
 from trioforge.data import evidence
@@ -228,7 +229,8 @@ def test_the_weight_falls_with_the_tier_to_a_floor_and_an_item_with_no_weight_ha
     assert dict((fact.label, fact.value) for fact in page_of(world, "w90037").facts)["Weight"] == "not listed"
 
 
-def test_a_negative_stat_stays_as_it_is_at_every_tier_with_a_true_minus_sign():
+def test_a_negative_stat_shrinks_toward_zero_with_the_tier_and_is_written_with_a_true_minus_sign():
+    """T6: the client moves a negative stat toward zero by max(n, |base| x n / 10) and never past zero (-5 is -4 at +1 and gone from +5 on); a true minus sign, and a zero where the stat is gone."""
     record = {
         "id": 9, "name": "Heavy Hat", "slots": ["HEAD"], "stats": {"AC": 10, "AGI": -5}, "weight10": 20, "tier_rule": "drop",
         "evidence": {"level": "wiki"},
@@ -238,7 +240,7 @@ def test_a_negative_stat_stays_as_it_is_at_every_tier_with_a_true_minus_sign():
         record, defaults=table["defaults"], rules=rules_module.load(RULES), book=content.load_rulebook(RULES), wiki=("Heavy Hat", 1)
     )
     agi = {row.key: row for row in page.rows}["AGI"]
-    assert set(agi.cells) == {f"{MINUS}5"}
+    assert agi.cells[:6] == (f"{MINUS}5", f"{MINUS}4", f"{MINUS}3", f"{MINUS}2", f"{MINUS}1", "0")  # (the stat is gone from +5: the page writes a zero where the item has none)
 
 
 def test_a_thousand_is_written_with_the_separator_of_the_trio_page():
@@ -568,13 +570,15 @@ def real_of(catalog: dict) -> SimpleNamespace:
 
 @pytest.fixture(scope="module")
 def real():
-    return real_of(json.loads(CATALOG.read_text(encoding="utf-8")))
+    """The committed catalog and one invented wearable that has no wiki page (the real catalog has none since the wiki made a page for the last one; unpaged_case.py): the tests hold the
+    page of such an item, with the tier table of the rule and no wiki credit."""
+    return real_of(with_an_unpaged_wearable(json.loads(CATALOG.read_text(encoding="utf-8"))))
 
 
 @pytest.fixture(scope="module")
 def real_after_an_add(tmp_path_factory):
     """The catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh."""
-    return real_of(AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), json.loads(CATALOG.read_text(encoding="utf-8"))).document)
+    return real_of(with_an_unpaged_wearable(AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), json.loads(CATALOG.read_text(encoding="utf-8"))).document))
 
 
 def twenty(real) -> list[str]:

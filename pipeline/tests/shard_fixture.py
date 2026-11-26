@@ -30,7 +30,7 @@ from engine_fixture import REPO, SLUG, catalog
 
 RESULTS = REPO / "fixtures" / "site" / "results-solved"
 RACES = ["OGR", "IKS"]  # an Ogre (it wears an item that only Ogres and Trolls wear) and an Iksar (the Iksar armor class)
-ROLES = ["balanced", "melee"]  # five weapon setups between them
+ROLES = ["tank", "melee"]  # five weapon setups between them
 TIERS = [0, 4]
 SHARDS = tuple(f"{evidence}-{buffs}.json" for evidence in ("strict", "wiki") for buffs in ("own", "group"))
 FILES = ("items.json", *(f"{SLUG}/{name}" for name in (*SHARDS, "defaults.json", "engine-l50.json")))

@@ -14,7 +14,9 @@ The machinery (instances, the independent enumerator, the float evaluator that r
 ``solver_helpers.py`` and is itself checked here against the oracle.
 """
 
+import dataclasses
 import random
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -45,6 +47,62 @@ def test_the_float_evaluator_agrees_with_the_oracle_on_random_kits_and_buff_sets
             exact = float(space.exact(tuple(space.kits[ki]), chosen))
             worst = max(worst, abs(fast - exact) / max(1.0, abs(exact)))
     assert worst < 1e-12
+
+
+def test_the_float_evaluator_follows_the_stance_the_level_and_the_weapon_bonus_of_the_level():
+    """R9: the oracle called ``weapon_index`` without the level (T9), left out the stance's swing factor on the hands (T8) and counted the agility of the sheet armor class and the evasion in full
+    under the stance (T8): on an instance with the stance, or at level 55 with a weapon that lists no bonus, it was not the evaluator's value."""
+    worst, stanced, level_55 = 0.0, 0, 0
+    stance = {"swing_factor": Fraction("2.1"), "agi_share": 0}
+    for seed in range(60):
+        rng = random.Random(2000 + seed)
+        inst = H.random_instance(rng, setup=rng.choice(("1h-shield", "2h", "dw")))
+        if seed % 2 == 0:
+            inst.profile = dataclasses.replace(inst.profile, stance=stance)
+            stanced += 1
+        if inst.profile.level == 55 and any(item.weapon is not None and not item.weapon.bonus for item in inst.items):
+            level_55 += 1
+        space = H.Space(inst)
+        for _ in range(25):
+            ki = rng.randrange(len(space.kits))
+            chosen = rng.choice(space.buff_sets)
+            fast = space.values(chosen)[ki]
+            exact = float(space.exact(tuple(space.kits[ki]), chosen))
+            worst = max(worst, abs(fast - exact) / max(1.0, abs(exact)))
+    assert stanced == 30 and level_55 >= 2  # (the instances do hold a stance, and a level-55 weapon with no listed bonus)
+    assert worst < 1e-12
+
+
+def test_the_softcap_of_the_helper_profiles_is_the_one_the_rules_give_for_every_trio_of_the_menu():
+    """R9: ``best_softcap`` took the cap and the rate of the class with the best cap, with no floor: the rules (T2) give the larger of the floor and the best cap, and the larger of the floor and the
+    best rate, each from the best class of the trio."""
+    from trioforge.export import brute
+
+    trios = {tuple(trio) for _, trio in H.TRIO_MENU} | {("WIZ", "MAG", "ENC"), ("SHD", "CLR", "SHM"), ("PAL", "MNK", "BER")}
+    differs = 0
+    for trio in sorted(trios):
+        for level in (50, 55):
+            got = H.best_softcap(trio, level)
+            assert tuple(got) == tuple(brute.best_softcap(trio, level)), (trio, level)
+            old = max((H.TABLES.softcap[(code, level)] for code in trio), key=lambda cap: cap[0])
+            differs += tuple(got) != tuple(old)
+    assert differs >= 2  # (a trio whose floor binds, or whose best rate is another class's, is among them)
+    assert tuple(H.best_softcap(("WIZ", "MAG", "ENC"), 50)) == (350, 0.3)
+
+
+def test_the_generators_draw_their_haste_from_the_cap_of_the_level():
+    """R9: both generators wrote ``haste_cap = 85 if monk else 75``, which is the cap of level 50; at level 55 it is 85 (95 with a Monk): the spells on offer and the haste a program assumes
+    are drawn from it."""
+    from trioforge.export import brute
+
+    for module in (H, brute):
+        at_the_cap = 0
+        for seed in range(400):
+            inst = module.random_instance(random.Random(seed))
+            allowed = {0, 25, 50, inst.profile.haste_cap}
+            assert inst.haste_assumed in allowed, (module.__name__, seed, inst.profile.level, inst.haste_assumed, inst.profile.haste_cap)
+            at_the_cap += inst.profile.level == 55 and inst.haste_assumed == inst.profile.haste_cap
+        assert at_the_cap >= 3, module.__name__
 
 
 def test_the_enumerator_counts_a_hand_worked_instance():
@@ -128,6 +186,16 @@ def test_two_or_more_conflicting_haste_buffs_are_chosen_with_the_worn_haste(seed
 def test_the_monk_trio_below_plus_10_agrees_under_both_curves_and_placements(seed, curve):
     run_seed(seed, trio_index=0, monk_curve=curve)
     run_seed(seed + 1, trio_index=2, monk_curve=curve)
+
+
+@settings(max_examples=80, deadline=None, derandomize=True, suppress_health_check=list(HealthCheck))
+@given(seed=st.integers(0, 2**32 - 1), setup=st.sampled_from(["1h-shield", "2h", "dw"]))
+def test_the_berserker_stance_agrees_with_the_brute_force(seed, setup):
+    """R9: the stance (T8: the swing of the hands times 2.1 after the haste cap, no agility in the sheet armor class and the evasion) on the instances of the suite, which drew none."""
+    inst = H.random_instance(random.Random(seed), setup=setup)
+    inst.profile = dataclasses.replace(inst.profile, stance={"swing_factor": Fraction("2.1"), "agi_share": 0})
+    result = check_instance(inst)
+    assert result.ok, f"seed {seed} ({inst.label}): {result.message}"
 
 
 @settings(max_examples=60, deadline=None, derandomize=True, suppress_health_check=list(HealthCheck))

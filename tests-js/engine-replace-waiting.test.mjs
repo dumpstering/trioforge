@@ -224,6 +224,26 @@ describe("replaceWaiting with a scripted worker", () => {
     expect(ask).toHaveBeenCalledTimes(1);
   });
 
+  it("E14: tells the progress of a worker that is still starting to the request now in front, when the one it was started for has been replaced", async () => {
+    const site = makeSite();
+    let say;
+    const script = (message, reply) => {
+      if (message.type === "init") say = reply; // (the worker is starting: it says nothing yet)
+    };
+    const h = harness({ site, script });
+    const heard = { first: [], second: [] };
+    const first = track(h.client.runScenario(caseRequest(FIRST), { replaceWaiting: true, onProgress: (report) => heard.first.push(report) }));
+    await until(() => h.workers[0] !== undefined && say !== undefined);
+    const second = track(h.client.runScenario(caseRequest(LAST), { replaceWaiting: true, onProgress: (report) => heard.second.push(report) }));
+    await flush();
+    expect(first).toMatchObject({ state: "rejected", error: { code: "cancelled" } });
+    expect(second.state).toBe("pending");
+    say({ v: 1, type: "progress", phase: "loading", loaded: 5, total: 10 });
+    await flush();
+    expect(heard.first, "the request that was replaced hears nothing more").toEqual([]);
+    expect(heard.second.map((report) => report.phase)).toEqual(["loading"]);
+  });
+
   it("replaces only the requests of the best kit: a request of another mode that waits stays, and a newer request of another mode replaces nothing", async () => {
     const h = scripted();
     const first = await running(h, caseRequest(FIRST));

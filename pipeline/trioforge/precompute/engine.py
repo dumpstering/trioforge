@@ -59,12 +59,12 @@ class EngineTexts:
 
 
 def level_setups(plan: Sequence[grid.Scenario]) -> dict[str, dict[str, list[str]]]:
-    """The weapon setups of each role at each evidence level that a plan of scenarios solves, in the order of ``wp.SETUPS``."""
+    """The weapon setups of each role at each evidence level that a plan of scenarios solves, in the order of ``wp.setup_order`` of the role (which breaks a tie)."""
     found: dict[str, dict[str, set[str]]] = {}
     for scenario in plan:
         found.setdefault(scenario.evidence, {}).setdefault(scenario.role, set()).add(scenario.setup)
     return {
-        kind: {role: sorted(setups, key=wp.SETUPS.index) for role, setups in by_role.items()} for kind, by_role in found.items()
+        kind: {role: sorted(setups, key=wp.setup_order(role).index) for role, setups in by_role.items()} for kind, by_role in found.items()
     }
 
 
@@ -110,7 +110,7 @@ def make(
     text: str | None = None
     try:
         made = browser.bundle(
-            codes, config.level, tables, tables.rules, config.spells, data_release=meta.data_release, catalog=document, seen=seen
+            codes, config.level, tables, tables.rules, config.spells, data_release=meta.data_release, catalog=document, seen=seen, procs=config.procs
         )
     except ValueError as error:
         problems.append(f"the browser bundle was not written ({shards.engine_name(config.level)}): {error}")

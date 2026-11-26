@@ -62,7 +62,8 @@ The order of the checks:
    ``zones-unmapped``.
 6. Notes added at every level; the item stays in the catalog: ``not-for-bis`` (a temporary item, one a quest
    takes on hand-in, one whose class list or race list is empty because its page says ``Class: NONE`` or
-   ``Race: NONE``: nobody may use or wear it, or a hand weapon that names a skill but has no damage or no delay,
+   ``Race: NONE``, or leaves the line blank, or writes words that are no code: nobody may use or wear it, and the text
+   says which of the three the page shows, ``class NONE``, ``class left blank`` or ``class not understood``, or a hand weapon that names a skill but has no damage or no delay,
    see :func:`trioforge.data.normalize.weapon_incomplete`: the model could not score it and would read it as a
    non-weapon; the text of the reason names the causes that apply, such as ``race NONE``), ``not-for-default-kits``
    (a deity-locked item), ``wiki-marked-revamped`` (the page carries ``{{revamped}}``: its stats or
@@ -742,15 +743,37 @@ def _reason(code: str, seal: str, text: str) -> dict[str, str]:
     return {"code": code, "seal": seal, "text": text[:MAX_TEXT].rstrip()}
 
 
-def _not_for_bis_text(*, temporary: bool, handed_in: bool, no_class: bool, no_race: bool, unscorable: bool) -> str:
-    """Why an item is not for best-in-slot, naming only the causes that apply (at least one must)."""
+def _empty_list(item: Mapping[str, Any], list_field: str, warned_field: str) -> str | None:
+    """Why the class list or race list of an item is empty, in the words the note uses, or None when it is not empty: ``"NONE"`` when the page says NONE (or when nothing
+    says otherwise), ``"left blank"`` when the line has nothing after it, ``"not understood"`` when it has words that no code is. The lists are empty in all three
+    cases (nobody may use or wear the item), but the page shows different things, and the note says what the page shows: the reader's warnings tell them apart
+    (``no-classes`` for a stated NONE, ``unknown-code`` and ``bad-value`` for words that are no code, ``bad-value`` alone for a blank line)."""
+    if item.get(list_field) != []:
+        return None
+    warned = {(w.get("code"), w.get("field")) for w in item.get("parse_warnings") or () if isinstance(w, Mapping)}
+    if ("no-classes", warned_field) in warned:
+        return "NONE"
+    if ("unknown-code", warned_field) in warned:
+        return "not understood"
+    if ("bad-value", warned_field) in warned:
+        return "left blank"
+    return "NONE"
+
+
+def _not_for_bis_text(
+    *, temporary: bool, handed_in: bool, no_class: str | bool | None, no_race: str | bool | None, unscorable: bool
+) -> str:
+    """Why an item is not for best-in-slot, naming only the causes that apply (at least one must). ``no_class`` and ``no_race`` are falsy when the list is not empty,
+    else what the page shows (:func:`_empty_list`; ``True`` is ``"NONE"``)."""
     causes = []
     if temporary:
         causes.append("temporary")
     if handed_in:
         causes.append("taken by a quest on hand-in")
     if no_class or no_race:
-        named = " and ".join(label for label, empty in (("class NONE", no_class), ("race NONE", no_race)) if empty)
+        named = " and ".join(
+            f"{kind} {'NONE' if how is True else how}" for kind, how in (("class", no_class), ("race", no_race)) if how
+        )
         causes.append(f"open to no class or race ({named})")
     if unscorable:
         causes.append("a hand weapon that cannot be scored")
@@ -1138,8 +1161,8 @@ def classify(item: Mapping[str, Any], ctx: Context, report: Report | None = None
     causes = {
         "temporary": "temporary" in flags,
         "handed_in": name_key in ctx.quests.consumed and name_key not in ctx.ambiguous_names,
-        "no_class": item.get("classes") == [],  # the page says Class: NONE
-        "no_race": item.get("races") == [],  # the page says Race: NONE
+        "no_class": _empty_list(item, "classes", "class"),  # the page says Class: NONE, or leaves the line blank
+        "no_race": _empty_list(item, "races", "race"),  # the page says Race: NONE, or leaves the line blank
         "unscorable": weapon_incomplete(item.get("weapon"), item.get("slots") or ()),
     }
     if any(causes.values()):

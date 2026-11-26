@@ -480,7 +480,7 @@ describe("stop() and the farm paths that wait their turn", () => {
 
 describe("the watchdog and the checks, with a scripted worker", () => {
   const OWNED = [["w90001@4", 1], ["w90007@4", 2], ["w80113@0", 1]];
-  const scenarioOf = () => ({ race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" });
+  const scenarioOf = () => ({ race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" });
   const request = (over = {}) => ({ v: 1, kind: "scenario", trio: SLUG, level: 50, mode: "farm-path", scenario: scenarioOf(), owned: OWNED.map((pair) => [...pair]), tierMode: { ...READY4 }, steps: 3, budgetMs: 1000, ...over });
   const wear = (...entries) => {
     const kit = new Array(22).fill(null);

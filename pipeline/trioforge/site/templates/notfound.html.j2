@@ -1,8 +1,8 @@
 {% extends "base.html.j2" %}
 {#- This page is sent, with a 404, for every address the site has no file for, so it names none. Its script (notfound.js) moves a trio address in another order, case or form to the page of the
     trio, from the list in data-trios, and has a hint to show for the addresses of an item or a trio that lead nowhere. It replaces the page script of the frame: the code that takes a kit link
-    out of the address stays out of this page, and so does any analytics beacon, which its own policy (a meta element in the head, which adds to the header's: no script of another site, no
-    connection of any kind) would refuse as well. build.NOTFOUND_POLICY is that policy, and check_budgets requires it. -#}
+    out of the address stays out of this page, and so does the page counter, which that code adds: the page has no data for it, and its own policy (a meta element in the head, which adds to the header's:
+    no script of another site, no connection of any kind) would refuse it as well. build.NOTFOUND_POLICY is that policy, and check_budgets requires it. -#}
 {% from "base.html.j2" import scene with context %}
 {% block page_script %}
 <script type="module" src="{{ assets.notfound }}"></script>
@@ -10,6 +10,7 @@
 {% block head_policy %}
 <meta http-equiv="Content-Security-Policy" content="script-src 'self'; connect-src 'none'">
 {% endblock %}
+{% block counter_data %}{% endblock %}
 {% block main %}
 <main id="main" tabindex="-1" class="wrap prose" data-page="notfound" data-trios="{{ live|map(attribute='slug')|join(' ') }}">
 <h1>Page not found</h1>

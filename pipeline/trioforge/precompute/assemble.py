@@ -366,9 +366,10 @@ def new_snapshot_id() -> str:
 #: tiers a trio has. (The chunks are made under the other code hash, :func:`trioforge.precompute.grid._code_hash`: a change here writes the files of a finished
 #: trio again from its chunks and solves nothing.) A test follows what these files import and fails for a module that is neither hashed nor explained.
 WRITER_FILES = (
-    "data/jsonio.py", "effects/__init__.py", "effects/derive.py", "effects/donors.py", "effects/files.py", "effects/judgment.py", "effects/layer.py", "effects/plan.py",
-    "effects/spells.py", "export/browser.py", "precompute/__init__.py", "precompute/engine.py", "precompute/kitwhy.py", "precompute/seals.py", "precompute/shards.py", "scope.py",
+    "data/jsonio.py", "export/browser.py", "precompute/__init__.py", "precompute/engine.py", "precompute/kitwhy.py", "precompute/seals.py", "precompute/shards.py", "scope.py",
 )  # fmt: skip
+# (The effects layer is not listed: the weapon procs of the score are made from it, so its files are in the code of the chunks, :data:`trioforge.precompute.grid.CODE_DIRS`, and a change there
+# redoes the chunks and so writes every file again. A module is in one of the two lists.)
 
 
 def writer_files() -> list[Path]:

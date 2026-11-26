@@ -5,8 +5,8 @@
  *
  * The page flow, from the page script's side (the rest of it is in the header of input/kitcode.js):
  *   1. The page script runs `takeKitFromLocation()` first. A `#k=` payload goes into `history.state` (which survives a reload) and the fragment is removed from the address.
- *   2. The result is kept in one place for the analytics of a later phase: the page script writes `document.documentElement.dataset.kitFragment` ("cleared" when the fragment was
- *      taken out of the address before any other script ran, "kept" when it is still there; absent when the address had no kit fragment). See app.js.
+ *   2. The result is kept in one place for the page counter (counter.js, which is never added to a page opened from a kit link): the page script writes `document.documentElement.dataset.kitFragment`
+ *      ("cleared" when the fragment was taken out of the address before any other script ran, "kept" when it is still there; absent when the address had no kit fragment). See first.js and app.js.
  *   3. The page hands the payload to the code of the Upgrade section, which decodes it once the item table is in.
  */
 
@@ -85,7 +85,7 @@ function storedPayload(history) {
 
 /**
  * Takes a shared kit out of the page's address. Run it first in the page module, so the URL is clean
- * before any other script (the analytics beacon) can read it. Never throws, navigates or requests anything.
+ * before any other script (the page counter, which is not added to a page that holds a kit) can read it. Never throws, navigates or requests anything.
  *
  * - A `#k=` fragment: the payload goes into `history.state` and the fragment is removed, in one
  *   `history.replaceState`. The state keeps its other keys when it is a plain object (otherwise it

@@ -3,6 +3,7 @@
 Rules built in memory use the invented id ``x.y``.
 """
 
+import hashlib
 import json
 import math
 import re
@@ -25,7 +26,8 @@ SEALS = {"client", "developer", "measured", "player", "model"}
 
 # What a source may be. Written out here, like SEALS, so these tests do not
 # trust the schema they are checking.
-SOURCE_KINDS = {"url", "client-file", "public-text", "private-measured", "private-player"}
+SOURCE_KINDS = {"url", "client-file", "game-client", "public-text", "private-measured", "private-player"}
+GAME_CLIENT_LABEL = "EverQuest Legends client, build of 2026-11-17: the client's own calculation"  # the only ref a game-client source may carry (Part T)
 PRIVATE_LABEL = "maintainer's private observation"  # the only ref a private-* source may carry
 CLIENT_FILES = {
     "Resources/ZoneNames.txt",
@@ -60,6 +62,8 @@ EXPECTED_IDS = (
     "ac.sheet.spell_ac_div",
     "ac.sheet.agi_div",
     "ac.softcap.past_cap_rate",
+    "ac.softcap.base_floor",
+    "ac.softcap.rate_floor",
     "ac.softcap.combat_stability_pct",
     "ac.softcap.physical_enhancement_pct",
     "ac.softcap.pe_for_caster_only_trios",
@@ -73,11 +77,13 @@ EXPECTED_IDS = (
     "haste.cap_pct_with_monk",
     "haste.worn_per_tier",
     "haste.unbound_alacrity",
+    "haste.assume_spell",
     "regen.gear_caps",
     "regen.per_tier",
     "regen.value_minutes",
     "resist.cap",
     "tier.stat_rule",
+    "tier.unscaled_stats",
     "tier.weight_floor",
     "tier.weight_pct",
     "tier.weapon_damage_pct",
@@ -93,12 +99,17 @@ EXPECTED_IDS = (
     "packrat.pct_per_rank",
     "race.iksar_ac_bonus",
     "race.iksar_ac_placement",
+    "stance.berserker",
     "buffs.min_duration_minutes",
     "buffs.max_slots",
     "roles.templates",
-    "roles.balanced",
+    "roles.ranged_template",
+    "roles.weapon_factor",
+    "weapons.fallback_bonus",
     "weapons.damage_weight",
     "weapons.dual_wield_factor",
+    "weapons.ranged_factor",
+    "defaults.race_close_pct",
     "effects.focus_value",
     "effects.spell_weight",
     "effects.cast_categories",
@@ -120,6 +131,11 @@ EXPECTED_IDS = (
     "effects.restricted_targets",
     "effects.unverified_names",
     "effects.rows_kept",
+    "effects.proc_per_minute",
+    "effects.proc_reference_dex",
+    "effects.proc_landing",
+    "effects.proc_own_cut",
+    "effects.proc_score_kinds",
 )
 
 # The rules that carry an `alternatives` list.
@@ -137,6 +153,7 @@ BASEDATA = ("client-file", "Resources/basedata.txt")
 PRIVATE_MEASURED = ("private-measured", PRIVATE_LABEL)
 PRIVATE_PLAYER = ("private-player", PRIVATE_LABEL)
 JUDGMENT = ("public-text", "TrioForge judgment")
+GAME_CLIENT = ("game-client", GAME_CLIENT_LABEL)  # a rule taken from the game client's own calculation (Part T)
 
 EXPECTED_SOURCES = {
     "level.current": [("public-text", "developer announcements (level cap until Rulers of Kunark)")],
@@ -155,28 +172,32 @@ EXPECTED_SOURCES = {
     "ac.sheet.defense_div": [EQEMU, PRIVATE_MEASURED],
     "ac.sheet.spell_ac_div": [EQEMU, PRIVATE_MEASURED],
     "ac.sheet.agi_div": [EQEMU],
-    "ac.softcap.past_cap_rate": [("client-file", "Resources/ACMitigation.txt")],
+    "ac.softcap.past_cap_rate": [("client-file", "Resources/ACMitigation.txt"), GAME_CLIENT],
+    "ac.softcap.base_floor": [GAME_CLIENT],
+    "ac.softcap.rate_floor": [GAME_CLIENT],
     "ac.softcap.combat_stability_pct": [EQEMU, PRIVATE_PLAYER],
     "ac.softcap.physical_enhancement_pct": [EQEMU, PRIVATE_PLAYER],
     "ac.softcap.pe_for_caster_only_trios": [("url", "https://eqlwiki.com/"), ("public-text", "in-game AA list")],
     "ac.shield.offhand_raises_cap": [TOOLS_COMBAT, PRIVATE_MEASURED],
-    "stats.knee": [TOOLS_ATTRIBUTES, PRIVATE_PLAYER],
+    "stats.knee": [TOOLS_ATTRIBUTES, GAME_CLIENT],  # (T5: the only knee at 255 is stamina into hit points)
     "stats.hard_cap": [TOOLS_ATTRIBUTES, PRIVATE_PLAYER],
     "stats.str_to_atk": [EQEMU],
     "stats.agi_to_ac": [EQEMU],
-    "stats.dex_post255_slope": [PRIVATE_PLAYER],
-    "haste.cap_pct": [PRIVATE_PLAYER],
-    "haste.cap_pct_with_monk": [("public-text", "patch notes, Unbound Alacrity"), PRIVATE_PLAYER],
+    "stats.dex_post255_slope": [GAME_CLIENT],
+    "haste.cap_pct": [GAME_CLIENT, PRIVATE_PLAYER],
+    "haste.cap_pct_with_monk": [GAME_CLIENT, ("public-text", "patch notes, Unbound Alacrity"), PRIVATE_PLAYER],
     "haste.worn_per_tier": [PRIVATE_PLAYER],
     "haste.unbound_alacrity": [
         ("public-text", 'patch notes 2026-07-28, Unbound Alacrity ("increase in your current and maximum haste value")'),
         ("url", "https://eqlwiki.com/Haste_Guide"),
     ],
+    "haste.assume_spell": [JUDGMENT],
     "regen.gear_caps": [PRIVATE_PLAYER],
     "regen.per_tier": [WIKI_UPGRADES, PRIVATE_PLAYER],
     "regen.value_minutes": [JUDGMENT],
-    "resist.cap": [JUDGMENT],
-    "tier.stat_rule": [WIKI_UPGRADES],
+    "resist.cap": [GAME_CLIENT],
+    "tier.stat_rule": [WIKI_UPGRADES, GAME_CLIENT],  # (the client's calculation agrees at whole tiers: the wiki stays beside it)
+    "tier.unscaled_stats": [GAME_CLIENT],
     "tier.weight_floor": [WIKI_UPGRADES],
     "tier.weight_pct": [PRIVATE_MEASURED],  # settled by in-game readings; the two public pages did not support the formula
     "tier.weapon_damage_pct": [CLIENT_READS, WIKI_UPGRADES_INDEX],
@@ -186,18 +207,23 @@ EXPECTED_SOURCES = {
     "tier.max_fresh_drop": [("public-text", "developer hotfix notes 2026-07-29"), PRIVATE_MEASURED],
     "tier.exp_needed": [("url", "https://eqlwiki.com/Mote_Guide")],
     "tier.void_mote": [PRIVATE_MEASURED],  # read in game by the maintainer
-    "tier.negatives_scale": [PRIVATE_MEASURED],
+    "tier.negatives_scale": [GAME_CLIENT, PRIVATE_MEASURED],
     "monk.weight_curve": [TOOLS_COMBAT],
-    "monk.bonus_placement": [TOOLS_COMBAT],
+    "monk.bonus_placement": [GAME_CLIENT, EQEMU],
     "packrat.pct_per_rank": [("client-file", "dbstr_us.txt")],
     "race.iksar_ac_bonus": [TOOLS_COMBAT],
-    "race.iksar_ac_placement": [TOOLS_COMBAT],
+    "race.iksar_ac_placement": [GAME_CLIENT, PRIVATE_MEASURED],
+    "stance.berserker": [GAME_CLIENT, ("public-text", "patch notes 2026-10-22, Berserker stance")],
     "buffs.min_duration_minutes": [JUDGMENT],
     "buffs.max_slots": [JUDGMENT],
     "roles.templates": [JUDGMENT],
-    "roles.balanced": [JUDGMENT],
+    "roles.ranged_template": [JUDGMENT],
+    "roles.weapon_factor": [JUDGMENT],
+    "weapons.fallback_bonus": [GAME_CLIENT],
     "weapons.damage_weight": [JUDGMENT],
     "weapons.dual_wield_factor": [("url", "https://eqlwiki.com/Skill_Dual_Wield")],
+    "weapons.ranged_factor": [JUDGMENT],
+    "defaults.race_close_pct": [JUDGMENT],
     "effects.focus_value": [JUDGMENT],
     "effects.spell_weight": [JUDGMENT],
     "effects.cast_categories": [JUDGMENT],
@@ -219,14 +245,19 @@ EXPECTED_SOURCES = {
     "effects.restricted_targets": [JUDGMENT],
     "effects.unverified_names": [JUDGMENT],
     "effects.rows_kept": [JUDGMENT],
+    "effects.proc_per_minute": [JUDGMENT],
+    "effects.proc_reference_dex": [JUDGMENT],
+    "effects.proc_landing": [JUDGMENT],
+    "effects.proc_own_cut": [JUDGMENT],
+    "effects.proc_score_kinds": [JUDGMENT],
 }
 
 # The sources of each alternative, per rule, in list order. monk.bonus_placement's
-# alternative cites EQEmu's ACSum, the same address the other ACSum rules cite.
+# alternative is the reading the client's own calculation replaced (on top of the cap, EQL Tools).
 EXPECTED_ALTERNATIVE_SOURCES = {
     "tier.weapon_damage_pct": [[WIKI_UPGRADES]],
     "monk.weight_curve": [[TOOLS_COMBAT]],
-    "monk.bonus_placement": [[EQEMU]],
+    "monk.bonus_placement": [[TOOLS_COMBAT]],  # (the reading that the client replaced: on top of the cap)
 }
 
 
@@ -339,7 +370,7 @@ def raw():
 def test_real_rules_file_loads_and_validates():
     rules = load(RULES_PATH)
     assert isinstance(rules, Rules)
-    assert rules.version == "2026-10-13"
+    assert rules.version == "2026-11-19"  # (the label of the builds: results made under the rules before them are told from these by it)
 
 
 def test_schema_is_draft_2020_12_and_accepts_the_real_file_on_its_own(raw):
@@ -757,6 +788,7 @@ GOOD_SOURCE_LISTS = [
     pytest.param([source("public-text", "observation of reserved words")], id="lowercase-rva-inside-a-word"),
     pytest.param([private("private-measured")], id="private-measured"),
     pytest.param([private("private-player")], id="private-player"),
+    pytest.param([source("game-client", GAME_CLIENT_LABEL)], id="game-client"),
     pytest.param(
         [source("url", "https://eqltools.com/combat"), private("private-player"), source()],
         id="several-sources",
@@ -834,6 +866,11 @@ BAD_SOURCE_LISTS = [
     pytest.param(
         [source("private-measured", PRIVATE_LABEL.upper())], [REF, PRIVATE_LABEL], id="private-label-in-capitals"
     ),
+    # game-client: exactly the one fixed label (the formulas are used; no address, offset or program name reaches the file)
+    pytest.param([source("game-client", "the client's own calculation")], [REF, "EverQuest Legends client"], id="game-client-with-another-label"),
+    pytest.param([source("game-client", GAME_CLIENT_LABEL.upper())], [REF, "EverQuest Legends client"], id="game-client-label-in-capitals"),
+    pytest.param([source("game-client", "")], [REF, "EverQuest Legends client"], id="game-client-without-a-label"),
+    pytest.param([source("game-client", GAME_CLIENT_LABEL + " at 0x1400")], [REF, "EverQuest Legends client"], id="game-client-label-with-an-address"),
 ]
 
 
@@ -1082,10 +1119,17 @@ def test_monk_weight_curve_is_read_through_the_loader_at_both_levels():
         rules.get("monk.weight_threshold")
 
 
-def test_iksar_ac_placement_is_open_until_test_b17(raw):
-    placement = rules_by_id(raw)["race.iksar_ac_placement"]
-    assert placement["test"] == "B17"
-    assert placement["status"] == "open"
+def test_the_monk_and_iksar_placements_are_the_clients_inside_the_cap_and_the_old_reading_is_the_alternative(raw):
+    """T3: the game client adds the Monk worn-weight bonus and the Iksar racial armor class to X before the soft cap; the placement is a rule, so that the robustness pass can flip it to the old reading."""
+    for rule_id in ("monk.bonus_placement", "race.iksar_ac_placement"):
+        placement = rules_by_id(raw)[rule_id]
+        assert placement["value"] == "inside X before the cap" and (placement["status"], placement["seal"]) == ("active", "measured"), rule_id
+        assert "test" not in placement, rule_id  # (no in-game test is waiting for it)
+    assert rules_by_id(raw)["race.iksar_ac_placement"]["source"] == [
+        {"kind": "game-client", "ref": GAME_CLIENT_LABEL}, {"kind": "private-measured", "ref": PRIVATE_LABEL}
+    ]
+    (old,) = rules_by_id(raw)["monk.bonus_placement"]["alternatives"]
+    assert old["value"] == "on top of the capped sheet AC (bypasses the softcap), valued per sheet point" and old["seal"] == "developer"
 
 
 def test_rule_sources_match_the_expected_sources(raw):
@@ -1142,7 +1186,7 @@ def test_the_void_mote_rule_says_a_mote_raises_one_item_one_whole_tier_at_any_ti
     assert not any(ch.isnumeric() for ch in notes)
     for words in ("one whole tier", "any tier", "top tier", "no limit"):
         assert words in notes, words
-    assert raw["version"] == "2026-10-13"  # the rules file's version label is not bumped: the results were made under it
+    assert raw["version"] == "2026-11-19"  # the rules file's version label was given a new value when the builds changed the templates: results of the earlier rules are told by it
     assert load().seal("tier.void_mote") == "measured"  # and the loader takes the file as it is
     ids = [r["id"] for r in raw["rules"]]
     assert ids.index("tier.void_mote") == ids.index("tier.exp_needed") + 1  # in the tier group, after the experience a tier needs
@@ -1169,21 +1213,22 @@ def test_dual_wield_factor_is_a_model_value_for_each_kind_of_trio_open_until_tes
 
 
 def test_weapon_damage_weight_is_a_model_value_open_until_test_b18(raw):
-    # roles.weights_for multiplies it by each role template's ATK weight (the Caster template uses 0); in-game test
+    # roles.weights_for multiplies it by each build's ATK weight and its weapon factor (roles.weapon_factor: 0 for the builds whose weapon only carries stats); in-game test
     # B18 (a melee parse with two weapons of known damage index at the same ATK) will settle it.
     rule = rules_by_id(raw)["weapons.damage_weight"]
     assert (rule["value"], rule["unit"], rule["seal"]) == (
-        600, "HP-equivalents per damage-index point per unit of the role's ATK weight", "model"
+        450, "HP-equivalents per damage-index point per unit of the build's ATK weight and of its weapon damage factor", "model"
     )  # fmt: skip
     assert (rule["status"], rule["test"]) == ("open", "B18")
     assert rule["source"] == [{"kind": "public-text", "ref": "TrioForge judgment"}]
     assert rule["notes"] == (
-        "Multiplied by each role template's ATK weight; the Caster role uses 0. "
-        "One ATK point is taken as worth about a tenth of a percent of melee damage."
+        "A judgment. Multiplied by each build's attack weight and then by the rule Weapon damage factor of each build. "
+        "2026-11-19: 600 became 450 when the attack weight of Melee damage rose from 3 to 4, so that the weapon weight of Melee damage stays at 1800 "
+        "(a third more attack weight, a quarter less per point). One ATK point is taken as worth about a tenth of a percent of melee damage."
     )
     assert not has_private_source(rule)  # so the digit in the notes is allowed
     loaded = load(RULES_PATH)
-    assert (loaded.get("weapons.damage_weight"), loaded.seal("weapons.damage_weight")) == (600, "model")
+    assert (loaded.get("weapons.damage_weight"), loaded.seal("weapons.damage_weight")) == (450, "model")
 
 
 def test_naked_cap_is_the_string_none_and_still_active(raw):
@@ -1203,10 +1248,10 @@ def test_the_softcap_rate_is_read_per_class_from_the_client_table_it_is_not_one_
     # the rate past the softcap is one of the columns of ACMitigation.txt, and it differs by class: the profile reads the
     # table, so the rule says where it comes from and keeps the number only as an example
     rule = rules_by_id(raw)["ac.softcap.past_cap_rate"]
-    assert rule["value"] == "per class from Resources/ACMitigation.txt: the rate of the class with the best softcap"
+    assert rule["value"] == "per class from Resources/ACMitigation.txt: the best rate of the trio's classes, and at least ac.softcap.rate_floor"
     assert (rule["unit"], rule["seal"], rule["status"]) == ("text", "client", "active")
-    assert rule["notes"] == "For example 0.33 for the Paladin at level 50."
-    assert rule["source"] == [{"kind": "client-file", "ref": "Resources/ACMitigation.txt"}]
+    assert rule["notes"].startswith("For example 0.33 for the Paladin at level 50.")
+    assert rule["source"] == [{"kind": "client-file", "ref": "Resources/ACMitigation.txt"}, {"kind": "game-client", "ref": GAME_CLIENT_LABEL}]
     assert not has_private_source(rule)  # so the digits in the notes are allowed
     assert load(RULES_PATH).get("ac.softcap.past_cap_rate") == rule["value"]
 
@@ -1685,3 +1730,41 @@ def test_the_rules_files_cite_no_private_planning_document():
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             hits.extend(f"{path.name}:{number}: {found.group()!r}" for found in PRIVATE_DOCUMENT_WORDS.finditer(line))
     assert hits == [], "\n".join(hits)
+
+
+# ---- the label is held to the content ------------------------------------------------------------------------------------------------------------------
+
+#: the version of the rules file and the SHA-256 of its content (the version field left out; keys sorted and whitespace dropped, so that neither the order of keys nor the layout matters).
+#: A rule edited under a version that was released changes the numbers under the same label: the version moves with the content, or, while nothing was released under it, this hash does
+PINNED_VERSION = "2026-11-19"
+PINNED_HASH = "2b084032c1d5a85a4c05962da8ecc52fcc6f4fc7b6ea41458359cf45cdfe5654"
+
+
+def content_hash(document):
+    body = {key: value for key, value in document.items() if key != "version"}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def test_the_content_of_the_rules_file_is_pinned_beside_its_version():
+    document = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    found = content_hash(document)
+    if document["version"] == PINNED_VERSION:
+        assert found == PINNED_HASH, f"rules changed: bump the version, or, if nothing was released under this version, update this hash (it is now {found})"
+    else:
+        raise AssertionError(f"the version is now {document['version']}: pin it with the hash of the content, {found}, as PINNED_VERSION and PINNED_HASH")
+
+
+def test_the_hash_does_not_depend_on_the_order_of_keys_or_on_layout_and_does_depend_on_every_other_change():
+    document = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    shuffled = json.loads(json.dumps({"rules": document["rules"], "version": "1999-01-01"}, indent=4))  # (the version is left out; the order of the top keys is the other way round)
+    assert content_hash(shuffled) == content_hash(document)
+    changed = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    changed["rules"][0]["notes"] = changed["rules"][0].get("notes", "") + "."
+    assert content_hash(changed) != content_hash(document)
+
+
+def test_the_unit_of_the_weapon_damage_weight_names_the_factor_of_the_build_and_the_tank_note_names_attack(raw):
+    rule = rules_by_id(raw)["weapons.damage_weight"]
+    assert "ATK weight" in rule["unit"] and "factor" in rule["unit"] and "role" not in rule["unit"]  # (the weight is multiplied by the build's attack weight and by its weapon damage factor)
+    tank = rules_by_id(raw)["roles.templates"]["notes"].split("Shield caster:")[0]
+    assert "attack" in tank and "2.67" in tank  # (the Tank's template has an attack weight, and the note that scores its weapon says so)

@@ -17,7 +17,7 @@ The families
 ``upgrade/``    16 Upgrade sessions: Equip now, three farm steps, the best 2 and 3 sets and Every slot, with owned counts,
                 duplicates, owned-item tier upgrades, deity-locked owned items and the new-item row; and three invented
                 sessions for Every slot
-``pmb36/``      the neutral PAL/MNK/BER 36: three roles, tiers 0, 4 and 10, own and group buffs, wiki and strict proxy
+``pmb36/``      the neutral PAL/MNK/BER 36: two builds, tiers 0, 4 and 10, own, group and raid buffs, wiki and strict proxy
 ``evaluate/``   5,000 random kits with their exact breakdowns, across the profiles of the matrix and pmb36 scenarios
 ``profiles/``   the browser bundle of five trio types, the profile of every race, role and buff key, and 500 compositions
                 of the weight overrides
@@ -95,13 +95,14 @@ A **case** (``kind`` ``case``) holds, in this order:
                 gets another copy); an owned item that is not a candidate is a swap for a place only while its owned count
                 (``inputs.owned``) is greater than the copies the kit wears in the other places, so none of these gains
 
-**Which profile a case carries.** The profile of a matrix, pmb36 or upgrade case is made with no solve pool to read
-(``make_profile`` without ``items``), so its weapon ``setups`` are the fallback ones, a shield assumed, at any evidence level of
-the case. ``assemble`` of the bundle reads the same setups only with no evidence level; given a level it reads the
-``setups_by_evidence`` of that level's solve pool, which can leave out ``1h-shield`` (the strict pool of the public catalog has
-no shield). So the ``strict-proxy`` cases (their profile is labelled ``strict``) are the profile that ``assemble`` gives with no
-evidence level, and not necessarily the one it gives at the ``strict`` level. The later parity tests (the ports of the builder
-and of the evaluator) take a case's profile from ``case.inputs.profile``, and never assemble it.
+**Which profile a case carries.** The profile of a matrix or pmb36 case is made given the solve pool of its evidence level (``make_profile`` with
+``items``), which is what ``assemble`` of the bundle gives at that level: its weapon ``setups`` are those the pool offers. A ``wiki`` case has the
+wiki pool of the public catalog, which has a shield; a ``strict-proxy`` case (its profile is labelled ``strict``) has the pool of the ``strict``
+level, which is empty (the catalog has no strict item: one that has is refused), so it has no shield setup and no bow, and the plan never puts a
+strict-proxy scenario on a setup that pool does not offer (a bow, so the Ranged role, is named by the pool alone, and a matrix case of it is a wiki one).
+The profile of an upgrade case is made with no pool to read (``make_session``), so its setups are the fallback ones, a shield assumed and no bow,
+at either evidence level: it is what ``assemble`` gives with no evidence level. The later parity tests (the ports of the builder and of the
+evaluator) take a case's profile from ``case.inputs.profile``, and never assemble it.
 
 **What a solve is compared with.** ``F`` is the exact value of the canonical kit, and the solver accepts that kit only when
 its value equals the optimum of the first stage. An engine that solves ``model`` under the options of the Python solver (no
@@ -109,8 +110,9 @@ relative gap, an absolute gap of 1e-9, presolve off) therefore reaches ``const +
 ``model_F`` is the value the model reports at the point the canonical solve ended in; when ``tie_stage`` is ``applied``
 that is the point of the tie stage, which keeps every kit with ``F >= F* - 1e-7 max(1, |F*|)`` and minimizes a rank, so
 ``model_F`` is never above ``F`` (to 1e-6) and at most 1e-7 relative under it. It describes the Python run and is not a value
-to match: compare an engine's first stage with ``F``, and its canonical kit with ``kit`` (the same unless two kits share a total
-rank, which no engine promises to break the same way).
+to match: compare an engine's first stage with ``F``, and its canonical kit with ``kit`` (the very kit: two kits of the same value
+that share a total rank are told apart by the last stage of ``solve_canonical``, the order of the kits that the head of
+``trioforge.solver.solve`` states, and the browser engine runs the same stage).
 
 Invented items (``synthetic`` cases) have keys that start with ``it`` and are never keys of the catalog. Fixtures come only
 from the public catalog: a catalog with a strict item is refused, and "strict" in a fixture means the hash proxy of the wiki
@@ -126,6 +128,7 @@ filler and the owned items, and every random choice comes from a ``random.Random
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import gzip
 import hashlib
 import json
@@ -157,17 +160,21 @@ from trioforge.export.fixture_cases import (
     upgrade_case,
 )
 from trioforge.export.fixture_plan import (
+    RANGED_EVERY,
     REQUIRED_STRATA,
     SAMPLE_SESSIONS,
     SCALES,
     UPGRADE_REQUIRED,
     Scale,
     UpgradeSpec,
+    bow_plan,
     brute_plan,
     count_tags,
     matrix_plan,
     pick_cover,
     pmb36_plan,
+    procs_brute_plan,
+    ranged_brute_plan,
     upgrade_plan,
 )
 from trioforge.export.fixture_tables import (
@@ -178,6 +185,7 @@ from trioforge.export.fixture_tables import (
     profile_docs,
     weight_docs,
 )
+from trioforge.model import procs as procs_module
 from trioforge.model.items import ItemVec, at_tier
 from trioforge.model.profile import Profile
 from trioforge.model.tables import REPO
@@ -216,7 +224,7 @@ INVENTED_KEY = re.compile(r"^it[a-z0-9-]*$")
 #: underscore), never as a part of another: ``seen-in-game-notes`` is not ``seen-in-game``. Community reports are public and have no word here.
 FORBIDDEN_WORDS = ("seen-in-game", "seen_keys", "seen-flags")
 PER_LINE = frozenset(
-    {"records", "solves", "evaluations", "profiles", "items", "compositions", "modes", "costs", "files", "races", "buff_table"}
+    {"records", "solves", "evaluations", "profiles", "items", "compositions", "modes", "costs", "files", "races", "buff_table", "buff_table_haste"}
 )
 KIND_OF_DEF = {
     "manifest": "manifest", "case": "case", "evaluate-profiles": "evaluateProfiles", "evaluate-kits": "evaluateKits",
@@ -388,15 +396,21 @@ def generate(
 
     matrix: list[Any] = []
     pmb: list[Any] = []
+    bow: list[Any] = []
     if any(name in wanted for name in ("matrix", "evaluate")):
         matrix = list(matrix_plan(seed, tables))
         if chosen.cover is not None:
             matrix = pick_cover(matrix, *chosen.cover)
+        if chosen.bow:  # (the scenarios of the bow setup come after the plan and are no part of the cover: the others are what they were)
+            bow = bow_plan(seed, tables)
+            matrix = [*matrix, *bow]
     if any(name in wanted for name in ("pmb36", "evaluate")):
         pmb = _take(pmb36_plan(tables), chosen.pmb36)
 
     if "brute" in wanted:
         numbers = brute_plan()[: chosen.brute]
+        if chosen.bow:  # the bow instances come after the plain ones (RANGED_BASE and up), which are drawn as they always were, and the instances with a table of procs after them (PROCS_BASE and up)
+            numbers = [*numbers, *ranged_brute_plan(chosen.brute), *procs_brute_plan(chosen.brute)]
         for done, number in enumerate(numbers, start=1):
             writer.write(f"brute/brute-{number:03d}.json", brute_case(inputs, seed, number))
             report("brute", done, len(numbers))
@@ -431,13 +445,15 @@ def generate(
         coverage["upgrade"] = count_tags(tag_lists)
 
     if "evaluate" in wanted:
-        scenarios = [make_scenario(inputs, spec) for spec in [*matrix, *pmb]]
-        docs, tags = evaluate_docs(inputs, scenarios, chosen.evaluate, seed)
+        bow_ids = {spec.id for spec in bow}
+        scenarios = [make_scenario(inputs, spec) for spec in [*matrix, *pmb] if spec.id not in bow_ids]
+        extra = [make_scenario(inputs, spec) for spec in bow]
+        docs, tags = evaluate_docs(inputs, scenarios, chosen.evaluate, seed, bow_scenarios=extra, bow_count=chosen.evaluate // RANGED_EVERY if extra else 0)
         for path, doc in docs:
             writer.write(path, doc)
-        counts["evaluate"] = chosen.evaluate
+        counts["evaluate"] = chosen.evaluate + (chosen.evaluate // RANGED_EVERY if extra else 0)
         coverage["evaluate"] = tags
-        report("evaluate", chosen.evaluate, chosen.evaluate)
+        report("evaluate", counts["evaluate"], counts["evaluate"])
 
     if "profiles" in wanted:
         docs = profile_docs(inputs, chosen.profile_trios, chosen.profile_races, level_55=chosen.name == "full")
@@ -542,9 +558,12 @@ def build_solve(case: Mapping[str, Any], index: int = 0) -> Milp:
     items = load_items(case)
     solve = case["solves"][index]
     inputs = case["inputs"]
+    options = options_from_json(solve["options"])
+    if inputs.get("procs") is not None:  # (a case with a table of weapon procs: the builder counts them)
+        options = dataclasses.replace(options, procs=procs_module.from_doc(inputs["procs"], inputs["trio"]))
     return build_milp(
         Profile.from_dict(inputs["profile"]), [items[name] for name in solve["pool"]], inputs["setup"],
-        buffset_from_doc(inputs["buffset"]), options_from_json(solve["options"]),
+        buffset_from_doc(inputs["buffset"]), options,
     )
 
 
@@ -918,7 +937,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--sample", action="store_true", help="write the small sample that is committed under fixtures/parity")
     parser.add_argument("--scale", choices=sorted(SCALES), help="full (default), mini (a few of each, for tests) or sample")
     parser.add_argument("--families", help=f"a comma-separated subset of {','.join(FAMILIES)}")
-    parser.add_argument("--catalog", type=Path, help="the catalog file (default: derived/catalog.json)")
+    parser.add_argument(
+        "--catalog", type=Path,
+        help="the catalog file (default: $TRIOFORGE_CATALOG, else derived/catalog.json of --root, else the one of the main checkout of its git)",
+    )
     parser.add_argument("--root", type=Path, default=REPO, help="the repository with derived/ and rules/")
     parser.add_argument("--validate", action="store_true", help="check the folder in --out instead of writing it")
     return parser
@@ -931,7 +953,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.validate:
             inputs = shared_inputs(args.root, args.catalog)
             problems = validate_directory(args.out, inputs.items_by_key)
-            problems += check_release(read_document(args.out / MANIFEST), inputs.data_release, inputs.rules_version)
+            try:
+                manifest = read_document(args.out / MANIFEST)
+            except (OSError, ValueError):
+                manifest = None  # (validate_directory has said why it cannot be read)
+            if isinstance(manifest, dict):  # the release is checked of a manifest that is an object only: a list, a number or none has no release to check
+                problems += check_release(manifest, inputs.data_release, inputs.rules_version)
             for problem in problems[:50]:
                 print(problem, file=sys.stderr)
             print(f"{args.out}: {'valid' if not problems else str(len(problems)) + ' problems'}")

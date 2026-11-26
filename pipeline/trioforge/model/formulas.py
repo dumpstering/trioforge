@@ -24,14 +24,16 @@ MONK       ``AC / (4/3)`` x the Monk worn-weight bonus, when it sits on top of t
 IKSAR      ``AC / (4/3)`` x the racial armor class, when it sits on top of the cap
 EVASION    ``AC`` x 0.2222 x AGI (AGI counted from 0 to 510)
 ATK        ``ATK`` x (0.666667 x STR (0 to 510) + item ATK + buff ATK)
-DEX        ``DEX`` x (DEX to 255, a tenth of a point per point from 255 to 510)
+DEX        ``DEX`` x (DEX to 510: a point a point, with no break at 255)
 HASTE      ``HASTE`` x the haste counted (below)
 REGEN      sum of ``HPREG`` / ``MANAREG`` / ``ENDREG`` x (gear regen up to its cap + buff regen)
 RESISTS    per school (FIRE COLD MAGIC POISON DISEASE) ``SV_<school>`` (else ``SV``) x min(gear + buff, cap)
 CHA        ``CHA`` x CHA (0 to 510)
-WEAPON     ``DMG`` x the sum of the weapon index of the PRIMARY and the SECONDARY item under the setup
-           (:func:`weapon_index`: the bonus is the primary hand's; a hand the setup does not allow, and the
-           ``stick`` setup, score 0)
+WEAPON     ``DMG`` x the sum of the weapon index of the PRIMARY and the SECONDARY item under the setup, and of the
+           RANGE item under the ``ranged`` setup (:func:`weapon_index`: the bonus is the primary hand's; a hand the
+           setup does not allow, and the ``stick`` setup, score 0; the ``ranged`` setup scores the bow in the range
+           place on its own damage per delay, with no damage bonus, times the profile's ``ranged_factor``, and nothing else). With a table of procs
+           (``evaluate(..., procs=...)``, :mod:`trioforge.model.procs`) each hand that swings adds ``DMG`` x the proc it counts / 600, with no haste factor
 =========  =============================================================================================
 
 * A stat curve is ``pwl`` from total 0: a total at or below zero is worth 0, and every stat stops at 510.
@@ -39,8 +41,8 @@ WEAPON     ``DMG`` x the sum of the weapon index of the PRIMARY and the SECONDAR
   is a shield **and sits in the SECONDARY place** is the off-hand shield: a shield in an Any place counts as
   worn armor. AGI in the sheet term is counted to 510. Spell AC is the buff totals' ``AC``.
 * **Bonuses on the sheet.** The Monk bonus (the sum of every worn item's ``weight10`` through
-  :func:`monk_bonus`) and the Iksar racial armor class sit either **on top** (``placement`` ``"top"``: added
-  after the cap, valued at the sheet-point weight) or **inside** (``"inside"``: added to X before the cap).
+  :func:`monk_bonus`) and the Iksar racial armor class sit either **inside** (``placement`` ``"inside"``: added to X before the cap, which is
+  the client's reading and the default of a profile) or **on top** (``"top"``: added after the cap, valued at the sheet-point weight, the alternative).
 * **Haste.** Only the best worn haste counts. ``counted = min(cap, spell + best worn)`` with
   ``worn counted = min(best worn, max(0, cap - spell))``, so a spell haste at or above the cap leaves no room. The
   ``spell`` here is the best buff haste plus ``haste_bonus``, the flat haste of Unbound Alacrity (10 for a trio with a
@@ -100,6 +102,7 @@ from fractions import Fraction
 from typing import Any, NamedTuple
 
 from trioforge.classes import CLASS_CODES
+from trioforge.model import procs as procs_module
 from trioforge.model.items import SLOT_INSTANCES, ItemVec, WeaponVec
 from trioforge.model.tables import Tables
 
@@ -136,6 +139,7 @@ __all__ = [
     "evaluate",
     "evaluate_truthful",
     "fr",
+    "haste_cap_at",
     "hp_total",
     "mana_total",
     "monk_bonus",
@@ -146,6 +150,7 @@ __all__ = [
     "sheet_ac",
     "sheet_ac_parts",
     "stat_window",
+    "fallback_bonus",
     "weapon_index",
 ]
 
@@ -153,7 +158,7 @@ __all__ = [
 
 ATTRIBUTES = ("STR", "STA", "AGI", "DEX", "WIS", "INT", "CHA")
 SCHOOLS = ("FIRE", "COLD", "MAGIC", "POISON", "DISEASE")  # CORRUPTION is never scored
-SETUPS = (None, "1h-shield", "2h", "dw", "stick")
+SETUPS = (None, "1h-shield", "2h", "dw", "stick", "ranged")
 
 STAT_KNEE = 255  # stats.knee
 STAT_CAP = 510  # stats.hard_cap
@@ -166,15 +171,29 @@ END_BREAKS = (100, 201)  # the END conversion: x to 100, 2.5 a point to 201, 1.2
 END_SLOPES = (Fraction(1), Fraction(5, 2), Fraction(5, 4))
 STR_TO_ATK = Fraction("0.666667")  # stats.str_to_atk
 AGI_TO_AC = Fraction("0.2222")  # stats.agi_to_ac
-DEX_PAST_KNEE = Fraction("0.1")  # stats.dex_post255_slope
+DEX_PAST_KNEE = Fraction(1)  # stats.dex_post255_slope (the client has no break at 255 for dexterity)
 SHEET_ITEM_MULT = Fraction(4, 3)  # ac.sheet.item_mult (the rules file prints it to ten digits)
 SHEET_DEFENSE_DIV = 3  # ac.sheet.defense_div
 SHEET_SPELL_AC_DIV = 4  # ac.sheet.spell_ac_div
 SHEET_AGI_DIV = 20  # ac.sheet.agi_div
-STANDARD_CAPS = {"regen": {"HP": 30, "MANA": 15, "END": 15}, "resist": 200}  # regen.gear_caps, resist.cap
+STANDARD_CAPS = {"regen": {"HP": 30, "MANA": 15, "END": 15}, "resist": 1000}  # regen.gear_caps, resist.cap
 HAND_PLACES = ("PRIMARY", "SECONDARY")
+_RANGE_PLACE = "RANGE"  # the place a bow stands in, scored under the ``ranged`` setup
+_BOW_SKILL = "archery"  # the skill of a bow (weapons.BOW_SKILL, read without regard to case)
 
 _ZERO = Fraction(0)
+
+
+def haste_cap_at(level: int) -> int:
+    """The cap of the total haste at ``level``, the game client's own calculation (``haste.cap_pct``): ``max(level, 30) + 25`` up to level 50 (75 at 50), 85 for levels 51 to 59 and 100 from level 60.
+    A trio with a Monk adds the 10 of Unbound Alacrity (``haste.cap_pct_with_monk``)."""
+    if type(level) is not int or level < 1:
+        raise ValueError(f"level must be a whole number of at least 1, not {level!r}")
+    if level >= 60:
+        return 100
+    if level > 50:
+        return 85
+    return max(level, 30) + 25
 
 
 # ---- exact arithmetic ----------------------------------------------------------------------
@@ -446,7 +465,7 @@ def sheet_ac_parts(
 
     ``X = 4/3 x (worn + shield) + defense/3 + spell_ac/4 + agi/20 (+ inside)``; ``Y = floor(softcap x (100 + cs + pe)
     / 100) + shield``; the result is ``min(X, rate x X + (1 - rate) x Y)``. ``inside`` is a bonus that rides in X
-    before the cap (the Monk or Iksar alternative placement).
+    before the cap (where the game client puts the Monk worn-weight bonus and the Iksar racial armor class; ``"top"``, after the cap, is the alternative the robustness pass tries).
     """
     rate = fr(past_cap_rate)
     if not 0 <= rate <= 1:
@@ -533,40 +552,64 @@ def monk_bonus(level: int, worn_weight10: int, curve: Mapping[str, Any] | None) 
 # ---- weapons -------------------------------------------------------------------------------
 
 
-def weapon_index(weapon: WeaponVec, hand: str, setup: str | None, haste_assumed: Any, dw_factor: Any) -> Fraction:
+def _ranged_skill(weapon: WeaponVec) -> bool:
+    """A weapon of the archery skill or of a throwing skill (``Throwing``, ``Throwingv1``, ``Throwingv2``), in any case."""
+    skill = (weapon.skill or "").casefold()
+    return skill == _BOW_SKILL or skill.startswith("throwing")
+
+
+# the damage bonus of a main hand when the item lists none (``weapons.fallback_bonus``): the definition of :mod:`trioforge.model.weapons` written out again
+_BONUS_FROM_LEVEL, _BONUS_LEVEL_DIV, _BONUS_DELAY_CAP, _BONUS_DELAY_DIV = 28, 100, 50, 40
+_BONUS_FACTORS = {False: Fraction(4, 5), True: Fraction(11, 10)}  # a one-hander's and a two-hander's
+
+
+def fallback_bonus(damage: Any, delay: Any, two_handed: bool, level: int) -> Fraction:
+    """``(level / 100) x max(damage, level) x f x min(delay, 50) / 40``, f 0.8 for a one-hander and 1.1 for a two-hander, and 0 below level 28 (exact: the client rounds it down when it shows it)."""
+    if level < _BONUS_FROM_LEVEL:
+        return _ZERO
+    return Fraction(level, _BONUS_LEVEL_DIV) * max(fr(damage), level) * _BONUS_FACTORS[bool(two_handed)] * min(fr(delay), _BONUS_DELAY_CAP) / _BONUS_DELAY_DIV
+
+
+def weapon_index(
+    weapon: WeaponVec, hand: str, setup: str | None, haste_assumed: Any, dw_factor: Any, ranged_factor: Any = 1, level: int = 50
+) -> Fraction:
     """One hand's damage index under a setup, the definition of :mod:`trioforge.model.weapons` written out again.
 
-    * The **primary** hand scores ``(dmg + bonus) / delay x (1 + haste/100)``: the bonus is the one the page lists,
-      else half the delay for a one-hander and 0.67 x the delay (at most 50) for a two-hander (a listed bonus of 0
-      counts as not listed). The bonus belongs to the primary hand alone.
+    * The **primary** hand scores ``(dmg + bonus) / delay x (1 + haste/100)``: the bonus is the one the page lists, else the client's formula of the level (:func:`fallback_bonus`: at
+      level 50 half the delay for a one-hander and 0.6875 x the delay, at most 50, for a two-hander, where the damage is no more than the level) (a listed bonus of 0 counts as not
+      listed). The bonus belongs to the primary hand alone.
     * The **secondary** hand scores ``dmg / delay x (1 + haste/100) x dw_factor``: no bonus, and only dual wield
       puts a weapon there.
     * A hand the setup does not allow scores **0**: ``2h`` takes a two-hander in the primary hand and nothing in the
       secondary; ``dw`` takes a one-hander in either hand; ``1h-shield`` takes a one-hander in the primary hand (the
       secondary hand takes a shield, which has no weapon). The ``stick`` setup, and no setup (``None``), score no
       weapon damage at all. A weapon with no damage or no delay scores 0.
+    * The **range** place scores under the ``ranged`` setup alone, and only a bow (a weapon of the archery skill) in it: its own
+      ``dmg / delay x (1 + haste/100)`` times ``ranged_factor`` (the rule ``weapons.ranged_factor``), with no damage bonus (a bonus
+      is a main hand's, and nothing says archery gets it) and no arrow damage. Under ``ranged`` the two hands score nothing.
     """
-    if hand not in HAND_PLACES:
-        raise ValueError(f"a hand is PRIMARY or SECONDARY, not {hand!r}")
+    if hand not in (*HAND_PLACES, _RANGE_PLACE):
+        raise ValueError(f"a hand is PRIMARY, SECONDARY or RANGE, not {hand!r}")
     if setup in (None, "stick") or not weapon.dmg > 0 or not weapon.delay > 0:
         return _ZERO
-    if setup == "2h":
+    if setup == "ranged":
+        allowed = hand == _RANGE_PLACE and (weapon.skill or "").casefold() == _BOW_SKILL
+    elif hand == _RANGE_PLACE:
+        allowed = False
+    elif setup == "2h":
         allowed = hand == "PRIMARY" and weapon.two_handed
     elif setup == "dw":
         allowed = not weapon.two_handed
     else:  # "1h-shield"
         allowed = hand == "PRIMARY" and not weapon.two_handed
-    if not allowed:
+    if not allowed or (hand != _RANGE_PLACE and _ranged_skill(weapon)):  # (a bow or a thrown weapon is never scored in a hand: the builder refuses it the hand, weapons.allowed_in_hand)
         return _ZERO
     haste = 1 + fr(haste_assumed) / 100
     if hand == "SECONDARY":
         return fr(weapon.dmg) / weapon.delay * haste * fr(dw_factor)
-    if weapon.bonus:
-        bonus = fr(weapon.bonus)
-    elif weapon.two_handed:
-        bonus = Fraction(67, 100) * min(weapon.delay, 50)
-    else:
-        bonus = Fraction(1, 2) * weapon.delay
+    if hand == _RANGE_PLACE:  # a bow's own damage per delay: no damage bonus (a main hand's), no arrow damage
+        return fr(weapon.dmg) / weapon.delay * haste * fr(ranged_factor)
+    bonus = fr(weapon.bonus) if weapon.bonus else fallback_bonus(weapon.dmg, weapon.delay, weapon.two_handed, level)
     return (fr(weapon.dmg) + bonus) / weapon.delay * haste
 
 
@@ -579,6 +622,13 @@ WEIGHT_KEYS = frozenset(
 BUFF_KEYS = frozenset(set(ATTRIBUTES) | {"AC", "HP", "MANA", "END", "ATK", "HPREG", "MANAREG", "ENDREG", "HASTE", "SV"})
 ITEM_STATS = frozenset(set(ATTRIBUTES) | {"AC", "HP", "MANA", "END", "ATK", "HPREG", "MANAREG", "ENDREG"})  # not HASTE
 PLACEMENTS = ("top", "inside")
+
+
+def _default_placement() -> dict[str, str]:
+    """Where a profile that is given no placement puts the Monk bonus and the Iksar racial armor class: inside X before the cap, as the game client does (the rules ``monk.bonus_placement``
+    and ``race.iksar_ac_placement``, which :func:`trioforge.model.profile.placements` reads; a test holds the two together)."""
+    return {"monk": "inside", "iksar": "inside"}
+
 
 
 def _pool_spec(entry: Any) -> PoolSpec:
@@ -610,9 +660,11 @@ class EvalProfile:
     to "nothing": ``buff_totals`` (the always-on buffs), ``haste_cap``, ``softcap`` = ``(cap, rate past it)``,
     ``cs_pct`` and ``pe_pct`` (percent added to the softcap), ``defense_cap``, ``monk`` (a curve for
     :func:`monk_bonus`, or None), ``iksar_ac``, ``placement`` (``"top"`` or ``"inside"`` for ``monk`` and
-    ``iksar``), ``caps`` (``{"regen": {"HP", "MANA", "END"}, "resist": n}``), ``bands`` (the mana band curve,
-    None for the rule default), ``dw_factor`` (the multiplier of the second hand under dual wield) and
-    ``haste_bonus`` (the flat haste of Unbound Alacrity, added to the buff haste; 0 by default).
+    ``iksar``; both ``"inside"`` by default, the client's), ``caps`` (``{"regen": {"HP", "MANA", "END"}, "resist": n}``), ``bands`` (the mana band curve,
+    None for the rule default), ``dw_factor`` (the multiplier of the second hand under dual wield), ``ranged_factor`` (the
+    multiplier of a bow in the range place under the ``ranged`` setup; 1 by default),
+    ``haste_bonus`` (the flat haste of Unbound Alacrity, added to the buff haste; 0 by default) and ``stance`` (None, or ``{"swing_factor", "agi_share"}``: the Berserker stance,
+    whose factor multiplies the swing of the two hands after the haste cap, and whose share of AGI is what counts of it in the sheet armor class and the evasion).
     """
 
     level: int
@@ -627,13 +679,15 @@ class EvalProfile:
     defense_cap: Any = 0
     monk: Mapping[str, Any] | None = None
     iksar_ac: Any = 0
-    placement: Mapping[str, str] = field(default_factory=lambda: {"monk": "top", "iksar": "top"})
+    placement: Mapping[str, str] = field(default_factory=_default_placement)
     caps: Mapping[str, Any] = field(
         default_factory=lambda: {"regen": dict(STANDARD_CAPS["regen"]), "resist": STANDARD_CAPS["resist"]}
     )
     bands: Any = None
     dw_factor: Any = 1
     haste_bonus: Any = 0
+    ranged_factor: Any = 1
+    stance: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         def put(name: str, value: Any) -> None:
@@ -661,8 +715,16 @@ class EvalProfile:
         put("softcap", (_non_negative("softcap", cap), fr(rate)))
         if not 0 <= self.softcap[1] <= 1:
             raise ValueError(f"the rate past the softcap must be from 0 to 1, not {rate!r}")
-        for name in ("cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor", "haste_bonus"):
+        for name in ("cs_pct", "pe_pct", "defense_cap", "iksar_ac", "dw_factor", "haste_bonus", "ranged_factor"):
             put(name, _non_negative(name, getattr(self, name)))
+        if self.stance is not None:
+            stance = self.stance
+            if not isinstance(stance, Mapping) or set(stance) != {"swing_factor", "agi_share"}:
+                raise ValueError(f"stance is None or a swing_factor and an agi_share, not {stance!r}")
+            swing, share = fr(stance["swing_factor"]), fr(stance["agi_share"])
+            if not swing > 0 or not 0 <= share <= 1:
+                raise ValueError(f"stance is a swing_factor above 0 and an agi_share from 0 to 1, not {dict(stance)!r}")
+            put("stance", {"swing_factor": swing, "agi_share": share})
         if self.monk is not None and not {"softcap_stones", "hardcap_stones"} <= set(self.monk):
             raise ValueError("a monk curve names softcap_stones and hardcap_stones")
         if set(self.placement) != {"monk", "iksar"} or any(v not in PLACEMENTS for v in self.placement.values()):
@@ -810,14 +872,18 @@ class Breakdown:
 
 def evaluate(
     profile: Any, kit: Sequence[ItemVec | None], buffs: Mapping[str, Any] | None = None, *, setup: str | None = None,
-    haste_assumed: Any = 0, legacy: LegacyTerms | None = None,
+    haste_assumed: Any = 0, legacy: LegacyTerms | None = None, procs: Any = None,
 ) -> Breakdown:
     """The value F of ``kit`` under ``profile`` and the buff totals ``buffs`` (the profile's own when None).
 
-    ``setup`` (None, ``"1h-shield"``, ``"2h"``, ``"dw"`` or ``"stick"``) decides which hands score weapon damage
+    ``setup`` (None, ``"1h-shield"``, ``"2h"``, ``"dw"``, ``"stick"`` or ``"ranged"``) decides which places score weapon damage
     and how (:func:`weapon_index`; ``None`` and ``"stick"`` score none); ``haste_assumed`` is the haste percent the
     weapon index assumes (a constant of the scenario, not the kit's own haste). ``legacy`` (default None) values the
-    kit by the legacy objective instead (see the module docstring). Raises ``ValueError`` for a kit of the wrong
+    kit by the legacy objective instead (see the module docstring). ``procs`` (default None: no proc counts, and the result is what it was before procs)
+    is the :class:`trioforge.model.procs.ProcTable` of the trio: the hands that swing add the proc they count to their index, **with no haste factor**
+    (:mod:`trioforge.model.procs`), to the part ``WEAPON``, and ``totals["procs"]`` then says what each hand counts
+    (``{"PRIMARY": entry or None, "SECONDARY": entry or None, "index": the index the procs add, "part": their share of WEAPON}``); the legacy objective counts none.
+    Raises ``ValueError`` for a kit of the wrong
     length, an unknown setup, an unknown buff key or a profile that cannot be read, and for legacy terms next to a
     Monk or Iksar bonus or without a sheet while the AC weight is above 0.
     """
@@ -856,7 +922,7 @@ def evaluate(
                 raise ValueError(f"item {entry.key}: unknown resist {school!r}")
         best_haste = max(best_haste, entry.haste)
         weight10 += entry.weight10
-        if place in HAND_PLACES:
+        if place in HAND_PLACES or place == _RANGE_PLACE:
             hands[place] = entry
 
     total = {stat: p.naked[stat] + b.get(stat, 0) + gear.get(stat, 0) for stat in ATTRIBUTES}
@@ -880,10 +946,12 @@ def evaluate(
     inside = (monk if p.placement["monk"] == "inside" else 0) + (iksar if p.placement["iksar"] == "inside" else 0)
     on_top_monk = monk if p.placement["monk"] == "top" else 0
     on_top_iksar = iksar if p.placement["iksar"] == "top" else 0
+    swing = p.stance["swing_factor"] if p.stance is not None else 1  # (the Berserker stance: the swing of the hands is faster, after the haste cap)
+    agi_share = p.stance["agi_share"] if p.stance is not None else 1  # (and agility counts for nothing in the armor class and the evasion)
     cap, rate = p.softcap
     if legacy is None:
         sheet = sheet_ac_parts(
-            worn_ac, shield_ac, p.defense_cap, b.get("AC", 0), min(total["AGI"], STAT_CAP), cap, rate, p.cs_pct,
+            worn_ac, shield_ac, p.defense_cap, b.get("AC", 0), min(total["AGI"], STAT_CAP) * agi_share, cap, rate, p.cs_pct,
             p.pe_pct, inside=inside,
         )
         per_sheet_point = w.get("AC", 0) / SHEET_ITEM_MULT
@@ -903,7 +971,7 @@ def evaluate(
     parts["IKSAR"] = per_sheet_point * on_top_iksar
 
     if legacy is None:
-        parts["EVASION"] = w.get("AC", 0) * AGI_TO_AC * pwl(total["AGI"], (STAT_CAP,), (1, 0))
+        parts["EVASION"] = w.get("AC", 0) * AGI_TO_AC * pwl(total["AGI"], (STAT_CAP,), (1, 0)) * agi_share
         atk = STR_TO_ATK * pwl(total["STR"], (STAT_CAP,), (1, 0)) + gear.get("ATK", 0) + b.get("ATK", 0)
         parts["DEX"] = w.get("DEX", 0) * pwl(total["DEX"], (STAT_KNEE, STAT_CAP), (1, DEX_PAST_KNEE, 0))
         parts["CHA"] = w.get("CHA", 0) * pwl(total["CHA"], (STAT_CAP,), (1, 0))
@@ -929,9 +997,24 @@ def evaluate(
         resists[school] = {"gear": gear_sv[school], "buff": buff_sv, "counted": counted}
         parts["RESISTS"] += w.get(f"SV_{school}", w.get("SV", 0)) * counted
 
+    swinging: dict[str, ItemVec] = {}
     for place, entry in hands.items():
         if entry.weapon is not None:
-            parts["WEAPON"] += w.get("DMG", 0) * weapon_index(entry.weapon, place, setup, haste_assumed, p.dw_factor)
+            index = weapon_index(entry.weapon, place, setup, haste_assumed, p.dw_factor, p.ranged_factor, p.level)
+            if place in HAND_PLACES:
+                index *= swing  # (the stance's factor: after the haste, on the hands that swing and not on a bow)
+            parts["WEAPON"] += w.get("DMG", 0) * index
+            if index and place in HAND_PLACES:
+                swinging[place] = entry  # (a hand that swings: a weapon in an Any place, or under the stick or the bow, scores no index and carries no proc)
+    proc_totals = None
+    if procs is not None and legacy is None:
+        lore = getattr(procs, "lore_keys", frozenset())
+        worn_lore = frozenset(item.key for item in kit if item is not None and item.key in lore)  # (the Lore items the kit wears anywhere: their copy is not a donor for a hand they are not in)
+        main, off = procs.best(swinging.get("PRIMARY"), swinging.get("SECONDARY"), p.dw_factor, worn_lore) if w.get("DMG", 0) else (None, None)
+        proc_index = (main.value if main else _ZERO) / procs_module.PER_MINUTE_TO_INDEX + (off.value if off else _ZERO) * p.dw_factor / procs_module.PER_MINUTE_TO_INDEX
+        proc_part = w.get("DMG", 0) * proc_index  # (no haste factor: a proc is paced by the minute, and the swing's index keeps its own)
+        parts["WEAPON"] += proc_part
+        proc_totals = {"PRIMARY": main, "SECONDARY": off, "index": proc_index, "part": proc_part}
 
     totals = {
         "attributes": total,
@@ -948,17 +1031,20 @@ def evaluate(
         "weight10": weight10,
         "atk": atk,
     }
+    if proc_totals is not None:
+        totals["procs"] = proc_totals
     return Breakdown(F=sum(parts.values(), _ZERO), parts=parts, totals=totals)
 
 
 def evaluate_truthful(
     profile: Any, kit: Sequence[ItemVec | None], buffs: Mapping[str, Any] | None = None, *, setup: str | None = None,
-    legacy: LegacyTerms | None = None,
+    legacy: LegacyTerms | None = None, procs: Any = None,
 ) -> Breakdown:
     """:func:`evaluate` with the weapon index taken at the haste the kit itself counts (``totals["haste"]["counted"]``) and
     not at a haste the caller assumes: the value of a kit as it is, the one the solver's truthful optimum (see
-    :mod:`trioforge.solver.haste`) is the maximum of. A kit that counts no haste, or that scores no weapon, is valued once."""
-    first = evaluate(profile, kit, buffs, setup=setup, haste_assumed=0, legacy=legacy)
+    :mod:`trioforge.solver.haste`) is the maximum of. A kit that counts no haste, or that scores no weapon, is valued once. The procs (``procs``, see :func:`evaluate`)
+    have no haste factor, so the haste scales the swing's share of ``WEAPON`` and leaves the proc's share as it is."""
+    first = evaluate(profile, kit, buffs, setup=setup, haste_assumed=0, legacy=legacy, procs=procs)
     counted = first.totals["haste"]["counted"]
     if counted == 0 or first.parts["WEAPON"] == 0:  # (the index is its value at 0 haste times 1 + haste / 100)
         return first
@@ -967,5 +1053,6 @@ def evaluate_truthful(
     # nothing but the weapon part depends on the assumed haste, and each weapon's index is its value at 0 haste times 1 + haste / 100
     # (the same rational numbers as a second evaluation at the counted haste, to the last bit: tests hold that), so the kit is not evaluated twice
     weapon = first.parts["WEAPON"]
-    scaled = weapon * (1 + fr(counted) / 100)
+    proc_part = first.totals["procs"]["part"] if "procs" in first.totals else _ZERO
+    scaled = (weapon - proc_part) * (1 + fr(counted) / 100) + proc_part
     return Breakdown(F=first.F - weapon + scaled, parts={**first.parts, "WEAPON": scaled}, totals=first.totals)

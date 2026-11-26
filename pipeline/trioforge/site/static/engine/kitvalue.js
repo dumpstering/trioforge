@@ -19,6 +19,11 @@
 //   (and no shield in the off hand) makes it "stick", the setup that takes anything in either hand and scores no weapon damage. The setups are tried in that order, and the first
 //   that lets both hands stand as they are is the kit's; when none does, the one that refuses the fewest (the earlier of two) is, and what it refuses is left out.
 //
+//   A kit made for the Bow setup says so in its link (the optional setup marker, input/kitcode.js): its bow stands in the range place, which the hands do not show. The caller passes
+//   the marker as `madeFor`, and it is accepted for "ranged" only, only if the bundle lists that setup for some role at the evidence level (the trio offers it) and only if the kit has a
+//   bow in its range place; anything else is ignored, and the kit is valued exactly as it is with no marker. An accepted marker makes the setup "ranged" (the hands are stat sticks,
+//   the bow is scored on its own damage per delay) and the answer has `named: true`; the answer of a kit with no accepted marker has the keys it always had.
+//
 //   The hands are the model's own: `allowedInHand` of model.js decides what a setup lets into a hand (a two-hander is never in the off hand, "2h" takes a two-hander in the main
 //   hand, "dw" a one-hander in either, "1h-shield" a one-hander and a shield, "stick" anything), and a two-hander in the main hand leaves the off hand empty (the row "two_hander" of
 //   the builder). An item the rules refuse is left out, with the reason "hands".
@@ -56,6 +61,14 @@
 //   bestBuffsOfKit({bundle, records, race, role, buffs, evidence, deity, weights, setup, places, searchLimit}) -> {buffs, exact, F}: the best choice of the optional buffs for a kit as the page
 //       shows it (the setup and the weights of the view given, not read from the hands), searched as valueOfKit searches them
 //
+//   ratesOfKit({bundle, records, race, role, buffs, evidence, deity, weights, setup, places, searchLimit}) -> {F, exact, rates}: what one more point of a stat is worth on a kit as the page shows it
+//
+// The rates are the exchange rates under the control of the priorities: the kit (given as for `bestBuffsOfKit`: the setup and the weights of the view, not read from the hands) is valued with the
+// best optional buffs it has (the same search), and again with one more point of a stat on its first worn item that is no weapon and no shield; the difference is the rate, in the units of the kit's
+// value (hit points). `rates` is `{STA, STR, WIS, INT, AC, DEX, MANA, END, HASTE, schools: {FIRE, COLD, MAGIC, POISON, DISEASE}, resist}` (`resist` is the best of the five schools: the resist whose next point is
+// worth most), or null for a kit with no such item to carry the point. A rate is for the one point, as the evaluator counts it: a stat past a cap, or one the weights give no value, is 0. `HASTE` is for one more point of worn haste on the piece that has the most of it
+// (worn haste counts the best single piece, so a point on any other piece would count for nothing), or on the carrier when no piece has any.
+//
 //   loadKitBundle({manifest, trio, level, fetchImpl, base, stallMs, bodyMs}) -> the parsed bundle of the trio and the level
 //
 // The bundle is fetched as the worker fetches it (scenario.js): the manifest of the trio at the address the main manifest (`manifest`, as parseManifest gives it) lists for the trio, then
@@ -70,9 +83,10 @@ import { DATA_FILE, EngineFault, fetchBytes, sameOriginUrl, sha256Hex } from "./
 import { SLOT_INSTANCES, evaluateTruthful } from "./evaluate.js";
 import { atTier } from "./items.js";
 import { ManifestReleaseError, fetchTextWithin, parseTrioManifest, trioManifestPath } from "./manifest.js";
-import { allowedInHand, readItem } from "./model.js";
+import { allowedInHand, isBow } from "./model.js";
 import { MoteError, createMoteWalk } from "./motes.js";
-import { assembleProfile, readBundle } from "./profile.js";
+import { procsOf } from "./procs.js";
+import { assembleProfile, buffsetOf as bundleBuffset, readBundle } from "./profile.js";
 import { LIMITS, STARTUP_COMPILE_MS, STARTUP_STALL_MS } from "./protocol.js";
 import { viewProfile } from "./view.js";
 
@@ -82,8 +96,20 @@ const ANY = "ANY";
 const KIT_PLACES = new Set(SLOT_INSTANCES.filter((name) => name !== ANY));
 const PRIMARY = SLOT_INSTANCES.indexOf("PRIMARY");
 const SECONDARY = SLOT_INSTANCES.indexOf("SECONDARY");
+const RANGE = SLOT_INSTANCES.indexOf("RANGE");
 /** The most calls to the evaluator that the search for the optional buffs makes (see the header for what that costs and what it needs). */
 export const BUFF_SEARCH_LIMIT = 6000;
+
+/** The records and the places of a view are what the page gives. */
+function checkView(records, places) {
+  if (!(records instanceof Map)) throw new TypeError("records is the item table's Map from a key to a record");
+  if (!Array.isArray(places)) throw new TypeError("places is a list of {slotIndex, key, tier}");
+}
+
+/** The most calls to the evaluator that a search for the buffs of a kit may make. */
+function checkLimit(limit) {
+  if (!Number.isInteger(limit) || limit < 1) throw new RangeError("searchLimit is the most calls to the evaluator, a whole number from 1");
+}
 /** The bundles that were read, by the document they were read from (a bundle is read once for the page), with the buff sets made of them. */
 const READ = new WeakMap();
 
@@ -99,7 +125,7 @@ function bundleOf(raw) {
 function buffsetOf(entry, key) {
   let made = entry.buffsets.get(key);
   if (made === undefined) {
-    made = Object.freeze({ set: entry.read.buffs[key].set, table: entry.read.buff_table });
+    made = Object.freeze(bundleBuffset(entry.read, key));
     entry.buffsets.set(key, made);
   }
   return made;
@@ -116,22 +142,33 @@ function reasonOf(item, slotIndex, trio, race, deity) {
 }
 
 /**
+ * An item as `atTier` gives it, in the form the rules of the hands in model.js read (`slots` a Set, the weapon with `twoHanded`, `isShield`). The item was read by `atTier` already, so nothing is
+ * checked again here: the builder's reader of items (`readItem`, which checks every field of a pool's item) is not in the evaluator's script for the sake of two questions about a hand.
+ */
+const forHands = (item) => ({
+  slots: new Set(item.slots),
+  isShield: item.is_shield,
+  weapon: item.weapon ? { dmg: item.weapon.dmg, delay: item.weapon.delay, twoHanded: item.weapon.two_handed, skill: item.weapon.skill ?? null } : null,
+});
+
+/**
  * The weapon setup of the hands of a kit of items that can be worn, and the hands the rules refuse under it (see the header): `{setup, refused}`, `refused` the places (the main hand's,
  * the off hand's) whose item the setup does not let stand there.
  */
-function handsOf(kit) {
-  const [main, off] = [kit[PRIMARY], kit[SECONDARY]].map((item) => (item === null ? null : readItem(item, 0)));
+function handsOf(kit, named = null) {
+  const [main, off] = [kit[PRIMARY], kit[SECONDARY]].map((item) => (item === null ? null : forHands(item)));
   const twoHanded = main !== null && main.weapon !== null && main.weapon.twoHanded;
-  const order = [];
-  if (twoHanded) order.push("2h");
-  if (off !== null && off.isShield) order.push("1h-shield");
-  order.push("dw", "stick");
   const refusedBy = (setup) => {
     const refused = [];
     if (main !== null && !allowedInHand(main, "PRIMARY", setup)) refused.push(PRIMARY);
     if (off !== null && (twoHanded || !allowedInHand(off, "SECONDARY", setup))) refused.push(SECONDARY); // (a two-hander in the main hand leaves the off hand empty)
     return refused;
   };
+  if (named !== null) return { setup: named, refused: refusedBy(named) }; // (the setup the link names: the hands are what it lets them be, and it is taken whatever they are)
+  const order = [];
+  if (twoHanded) order.push("2h");
+  if (off !== null && off.isShield) order.push("1h-shield");
+  order.push("dw", "stick");
   let chosen = null;
   for (const setup of order) {
     const refused = refusedBy(setup);
@@ -250,13 +287,15 @@ function bestBuffs(profile, kit, options, buffset, limit) {
   return { chosen: [...best.ids].sort((a, b) => a - b), F: best.F, exact, evaluations: calls };
 }
 
-export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity = null, places, searchLimit = BUFF_SEARCH_LIMIT, ...unasked }) {
+/** Whether the bundle lists the Bow setup for some role at the evidence level (none given: with no pool to read): the trio offers it. */
+const offersBow = (read, evidence) => Object.values(read.roles).some((row) => (typeof evidence === "string" ? row.setups_by_evidence[evidence] : row.setups).includes("ranged"));
+
+export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity = null, places, searchLimit = BUFF_SEARCH_LIMIT, madeFor = null, ...unasked }) {
   for (const name of ["setup", "hasteAssumed"]) {
     if (name in unasked) throw new TypeError(`valueOfKit takes no ${name}: the setup is read from the kit's hands and the haste is the one the kit counts`);
   }
-  if (!(records instanceof Map)) throw new TypeError("records is the item table's Map from a key to a record");
-  if (!Array.isArray(places)) throw new TypeError("places is a list of {slotIndex, key, tier}");
-  if (!Number.isInteger(searchLimit) || searchLimit < 1) throw new RangeError("searchLimit is the most calls to the evaluator, a whole number from 1");
+  checkView(records, places);
+  checkLimit(searchLimit);
   const entry = bundleOf(bundle);
   const read = entry.read;
   const profile = assembleProfile(read, { race, role, buffs, evidence, deity });
@@ -286,7 +325,9 @@ export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity
   }
 
   // the hands: the setup the kit's hands are, and what its rules refuse; then the second copy of a lore item
-  const { setup, refused } = handsOf(worn);
+  // a link may name the Bow setup: taken when the trio offers it and the kit has a bow where its bow stands, ignored otherwise
+  const named = madeFor === "ranged" && offersBow(read, evidence) && worn[RANGE] !== null && isBow(forHands(worn[RANGE]));
+  const { setup, refused } = handsOf(worn, named ? "ranged" : null);
   for (const slotIndex of refused) {
     left.push({ slotIndex, reason: "hands" });
     worn[slotIndex] = null;
@@ -305,7 +346,7 @@ export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity
   left.sort((a, b) => a.slotIndex - b.slotIndex);
 
   const counted = kit.filter((item) => item !== null);
-  const options = { setup, monkBins: read.monk_bins === null ? undefined : read.monk_bins };
+  const options = { setup, monkBins: read.monk_bins === null ? undefined : read.monk_bins, procs: procsOf(read) ?? undefined };
   const buffset = buffsetOf(entry, buffs);
   const found = bestBuffs(profile, kit, options, buffset, searchLimit);
   const hasteAssumed = Number(evaluateTruthful(profile, kit, found.chosen, { ...options, buffset }).breakdown.totals.haste.counted.floor());
@@ -319,6 +360,7 @@ export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity
     hasteAssumed,
     exact: found.exact,
     evaluations: found.evaluations,
+    ...(named ? { named: true } : {}), // (the setup is the link's: the page says so; an answer for a kit with no accepted marker has the keys it had)
   };
 }
 
@@ -327,8 +369,7 @@ export function valueOfKit({ bundle, records, race, role, buffs, evidence, deity
  * with the weights), the setup is given, and every item is made at its tier by `itemAt`, which remembers what it made.
  */
 function viewKit({ bundle, records, race, role, buffs, evidence, deity = null, weights, setup, places }) {
-  if (!(records instanceof Map)) throw new TypeError("records is the item table's Map from a key to a record");
-  if (!Array.isArray(places)) throw new TypeError("places is a list of {slotIndex, key, tier}");
+  checkView(records, places);
   const entry = bundleOf(bundle);
   const read = entry.read;
   const profile = viewProfile(read, { race, role, buffs, evidence, deity, setup }, weights);
@@ -352,19 +393,47 @@ function viewKit({ bundle, records, race, role, buffs, evidence, deity = null, w
     seen.add(slotIndex);
     kit[slotIndex] = itemAt(key, tier);
   }
-  return { entry, profile, kit, itemAt, options: { setup, monkBins: read.monk_bins === null ? undefined : read.monk_bins }, buffset: buffsetOf(entry, buffs) };
+  return { entry, profile, kit, itemAt, options: { setup, monkBins: read.monk_bins === null ? undefined : read.monk_bins, procs: procsOf(read) ?? undefined }, buffset: buffsetOf(entry, buffs) };
 }
 
 export function moteWalkOf({ chosen = [], motes = null, ...view }) {
   const { profile, kit, itemAt, options, buffset } = viewKit(view);
-  return createMoteWalk({ profile, kit, itemAt, setup: options.setup, monkBins: options.monkBins, buffset, buffs: chosen, motes });
+  return createMoteWalk({ profile, kit, itemAt, setup: options.setup, monkBins: options.monkBins, procs: options.procs, buffset, buffs: chosen, motes });
 }
 
 export function bestBuffsOfKit({ searchLimit = BUFF_SEARCH_LIMIT, ...view }) {
-  if (!Number.isInteger(searchLimit) || searchLimit < 1) throw new RangeError("searchLimit is the most calls to the evaluator, a whole number from 1");
+  checkLimit(searchLimit);
   const { profile, kit, options, buffset } = viewKit(view);
   const found = bestBuffs(profile, kit, options, buffset, searchLimit);
   return { buffs: found.chosen, exact: found.exact, F: found.F.toString() };
+}
+
+/** One more point, the stats the rates are for, and the five schools of resist (a resist of any school is one rate: the best of the five). */
+const POINT = 1;
+const RATE_STATS = ["STA", "STR", "WIS", "INT", "AC", "DEX", "MANA", "END"];
+const RATE_SCHOOLS = ["FIRE", "COLD", "MAGIC", "POISON", "DISEASE"];
+
+export function ratesOfKit({ searchLimit = BUFF_SEARCH_LIMIT, ...view }) {
+  checkLimit(searchLimit);
+  const { profile, kit, options, buffset } = viewKit(view);
+  const found = bestBuffs(profile, kit, options, buffset, searchLimit);
+  const carrier = kit.findIndex((item) => item !== null && item.weapon === null && item.is_shield === false);
+  if (carrier < 0) return { F: found.F.toString(), exact: found.exact, rates: null };
+  const item = kit[carrier];
+  const worth = (field, name) => {
+    const trial = kit.slice();
+    trial[carrier] = { ...item, [field]: { ...item[field], [name]: (item[field][name] ?? 0) + POINT } };
+    return evaluateTruthful(profile, trial, found.chosen, { ...options, buffset }).F.sub(found.F).toNumber() / POINT;
+  };
+  const rates = Object.fromEntries(RATE_STATS.map((name) => [name, worth("stats", name)]));
+  // worn haste is the best single piece, so a point of it counts on that piece alone: the piece with the most (the first of them), or the carrier of the others when no piece has any
+  const hasty = kit.reduce((best, item, at) => (item !== null && item.haste > (kit[best]?.haste ?? -1) ? at : best), carrier);
+  const trial = kit.slice();
+  trial[hasty] = { ...kit[hasty], haste: kit[hasty].haste + POINT };
+  rates.HASTE = evaluateTruthful(profile, trial, found.chosen, { ...options, buffset }).F.sub(found.F).toNumber() / POINT;
+  rates.schools = Object.fromEntries(RATE_SCHOOLS.map((name) => [name, worth("sv", name)]));
+  rates.resist = Math.max(...Object.values(rates.schools));
+  return { F: found.F.toString(), exact: found.exact, rates };
 }
 
 const fault = (message) => new EngineFault("engine-load", message);

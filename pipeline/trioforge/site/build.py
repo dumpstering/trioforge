@@ -10,7 +10,7 @@ sources manifest and the changelog, and writes a folder Cloudflare Pages can ser
   that the pages are found without a script. ``404.html`` is the page for an address with no
   file (Cloudflare Pages answers 404 with it; without one it answers every unknown address with the home page and a 200). It has a script of its own in place of the page script
   (``assets/notfound-<HASH>.js``, made of three files and checked by :func:`check_notfound_script`) that takes an address of a trio in another order, case or form to the page of the trio, from
-  the list of the build in the page (``data-trios``), keeping the query and the fragment. The page has no analytics beacon and none of the code that takes a kit link out of the address, since
+  the list of the build in the page (``data-trios``), keeping the query and the fragment. The page has no data for the page counter and none of the code that takes a kit link out of the address, since
   it hands that address on, and it gives a policy of its own (:data:`NOTFOUND_POLICY`, a meta element in its head: no script of another site and no connection of any kind, whoever
   put the script there); :func:`check_budgets` holds all three to the file;
 * ``item/<key>/index.html``: the page of each item that has one, which is every wearable whose evidence level in the item table of the results is strict or wiki
@@ -55,7 +55,13 @@ sources manifest and the changelog, and writes a folder Cloudflare Pages can ser
   worker checks the type, the size and the SHA-256 of what it fetches against the manifests before it parses a byte. The build refuses a
   bundle over 64 KB, an item table over 4 MB (512 KB gzipped), a main manifest over 64 KB and a manifest of a trio over 8 KB, naming the file;
 * ``_headers`` (the committed ``site/_headers``, plus ``X-Robots-Tag: noindex`` in its first block for a ``--noindex``
-  build), ``robots.txt`` and, for an indexable build, ``sitemap.xml``.
+  build), ``robots.txt`` and, for an indexable build, ``sitemap.xml``;
+* two things that a build makes only when it is asked to (neither is committed, and neither name nor token is in the repository): with an **analytics token**
+  (``--analytics-token`` or ``$TRIOFORGE_ANALYTICS_TOKEN``: 32 lower-case hex characters, Cloudflare Web Analytics) every page but the 404 page carries the token as inert data, a
+  ``<meta name="trioforge-counter">`` in its head (no page has a script for the counter: the page script adds it, once, to a page that was opened with no kit link), and the header policy names the two
+  hosts of the counter (:func:`counter_meta`, :data:`ANALYTICS_CSP`, :func:`check_counter`); with a **Search Console file name** (``--google-verification`` or ``$TRIOFORGE_GOOGLE_VERIFICATION``:
+  ``google`` and 16 hex digits and ``.html``) the file of that name is written at the site root with the one line Google expects. Without a token the pages carry no data and no mark of a counter and
+  the header names no host; the page script is the same file in both builds and does nothing without the data.
 
 The number of files is a budget as well: Cloudflare Pages takes at most 20,000, and the build refuses a site of more than 15,000
 (:data:`LIMITS`). :func:`site_files` gives the exact list of the files of a site from what the build is given (the trios with their roles and
@@ -125,6 +131,9 @@ __all__ = [
     "REPORT_VIEW",
     "BudgetError",
     "BuildError",
+    "ANALYTICS_CSP",
+    "ANALYTICS_ENV",
+    "ANALYTICS_SCRIPT_SRC",
     "CSP",
     "DISCLAIMER",
     "ENGINE_DATA_DIR",
@@ -134,8 +143,14 @@ __all__ = [
     "SiteBuild",
     "TrioFiles",
     "build",
+    "VERIFICATION_ENV",
+    "COUNTER_META",
+    "check_analytics_token",
+    "counter_meta",
+    "check_counter",
     "check_budgets",
     "check_file_budget",
+    "check_verification_file",
     "check_scope",
     "check_scopes",
     "page_code_files",
@@ -242,13 +257,60 @@ LICENCE_SENTENCE = (
     "which are Daybreak's and fall outside that licence. The code is licensed MIT."
 )
 
-#: the content security policy of the site (no analytics host yet: it is added when analytics are switched on).
-#: site/_headers must carry exactly this.
+#: the content security policy of the site: no host but its own. site/_headers must carry exactly this; a build with an analytics token (:data:`ANALYTICS_CSP`) adds the two hosts of the beacon.
 CSP = (
     "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; "
     "style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; "
     "require-trusted-types-for 'script'; trusted-types trioforge"
 )
+
+#: Cloudflare Web Analytics (page counts), switched on by a build setting: the host the counter's script is loaded from, the host it sends its data to, and the script (the page script adds it, to a page
+#: opened with no kit link: static/counter.js; its address is written in static/tt-record.js, which a test holds to this one). A token is the 32 lower-case hex characters the service gives the site; it
+#: is public (it is in every page of a counting build, as data) and is not committed: the build is given it (``--analytics-token`` or ``$TRIOFORGE_ANALYTICS_TOKEN``).
+ANALYTICS_SCRIPT_HOST = "https://static.cloudflareinsights.com"
+ANALYTICS_CONNECT_HOST = "https://cloudflareinsights.com"
+ANALYTICS_SCRIPT_SRC = ANALYTICS_SCRIPT_HOST + "/beacon.min.js"
+ANALYTICS_ENV = "TRIOFORGE_ANALYTICS_TOKEN"
+_ANALYTICS_TOKEN = re.compile(r"[0-9a-f]{32}")
+#: the name of the <meta> element that gives a page the token (static/counter.js reads it); a page carries it in a counting build and in no other
+COUNTER_META = "trioforge-counter"
+
+
+def _analytics_csp(csp: str) -> str:
+    """``csp`` with exactly the two hosts of the beacon added: the script host to ``script-src`` and the data host to ``connect-src``, and nothing else changed."""
+    script, connect = "script-src 'self' 'wasm-unsafe-eval'", "connect-src 'self'"
+    assert csp.count(script) == 1 and csp.count(connect) == 1
+    return csp.replace(script, f"{script} {ANALYTICS_SCRIPT_HOST}").replace(connect, f"{connect} {ANALYTICS_CONNECT_HOST}")
+
+
+#: the policy of a build with an analytics token
+ANALYTICS_CSP = _analytics_csp(CSP)
+
+#: The ownership file of Google Search Console, switched on by a build setting too (``--google-verification`` or ``$TRIOFORGE_GOOGLE_VERIFICATION``): the name Google gives the site, written at
+#: the root with the one line Google expects. It is no page: it is not in the sitemap, nothing links to it and the page counts do not hold it. The name is not committed.
+VERIFICATION_ENV = "TRIOFORGE_GOOGLE_VERIFICATION"
+_VERIFICATION_FILE = re.compile(r"google[0-9a-f]{16}\.html")
+
+
+def check_analytics_token(value: object) -> str:
+    """The analytics token, checked: 32 lower-case hex characters and nothing else (a build is refused otherwise, before anything is made; what was given is not repeated in the message, since it
+    may be a secret pasted into the wrong place). Cloudflare's tokens are lower case, so one in capitals is a mistyped one, and would count nothing, silently."""
+    if not isinstance(value, str) or _ANALYTICS_TOKEN.fullmatch(value) is None:
+        raise BuildError("the analytics token is 32 lower-case hex characters, the one Cloudflare Web Analytics gives the site")
+    return value
+
+
+def check_verification_file(value: object) -> str:
+    """The name of the Search Console ownership file, checked: ``google``, 16 hex digits (lower case) and ``.html``, and nothing else (no folder, no other file of the site)."""
+    if not isinstance(value, str) or _VERIFICATION_FILE.fullmatch(value) is None:
+        raise BuildError("the Search Console verification file is named google and 16 hex digits and .html (the file Google gives the site)")
+    return value
+
+
+def counter_meta(token: str) -> str:
+    """The token as inert data: the one element a counting build puts in the head of a page (the template writes the same text; :func:`check_counter` holds the pages to it). It is no script, and it
+    loads nothing: the page script reads it, and adds the counter's script when the page was opened with no kit link."""
+    return f'<meta name="{COUNTER_META}" content="{check_analytics_token(token)}">'
 
 #: the one caching rule of site/_headers: the stylesheet and the scripts under /assets/ carry a hash of their content in their
 #: names, so a copy never goes stale and may be kept for a year. The pages and the data files are not cached beyond the
@@ -912,6 +974,41 @@ def render_manifest(engine: EngineAssets, data_files: EngineData) -> bytes:
     return _canonical(document)
 
 
+# The line breaks that the template leaves between two tags of the main part of a trio page, left out where no browser draws them: after (or before) the tag of a
+# block, a list item, a table cell, an option, a summary (a select is inline, so its tag is not one of them). They are the markup that the page pays for its controls with (the largest trio page is a few bytes under
+# its limit), so a break stays where a gap would be drawn: between two inline tags (two spans, a link and a link) and in the head, the scripts and the footer.
+_BLOCK_TAGS = "li|ul|ol|p|div|section|summary|fieldset|legend|option|optgroup|table|thead|tbody|tr|th|td|caption|dl|dt|dd|h[1-6]"
+# (the opening tag of a folded block is one of them, its closing tag is not: the end of such a block stays the end of a line, which is where the tests and the tools that
+# measure a section of a page read it)
+_BLOCK_GAP = re.compile(rb"(<details(?=[\s>])[^<>]*>|</?(?:" + _BLOCK_TAGS.encode() + rb")(?=[\s>])[^<>]*>)\n(?=<)")
+# (and the break before the closing tag of a block, whatever tag it follows but a span: it is the end of a line, which a browser does not draw; the end of the span of a
+# choice stays a line of its own, as the tests that measure what a control adds to the page read it)
+_BLOCK_END = re.compile(rb"(?<!</span)(>)\n(?=</(?:" + _BLOCK_TAGS.encode() + rb"|details)>)")
+
+
+# The text of the main part, between a tag and the next: the template's autoescape writes an apostrophe as &#39; and a quote as &#34; (five bytes for one), and a trio page has some 150 of them in its
+# words. In a text they are the characters themselves; in a tag (a title, a data attribute, where a quote would end the value) they stay as they are, and so does everything outside the main part.
+_TEXT = re.compile(rb"(?<=>)([^<>]*&#3[49];[^<>]*)(?=<)")
+
+
+def _plain_quotes(match: re.Match[bytes]) -> bytes:
+    return match.group(1).replace(b"&#39;", b"'").replace(b"&#34;", b'"')
+
+
+def tighten_main(html: bytes) -> bytes:
+    """The page with the line breaks between two tags that no browser draws left out of its ``<main>`` (see ``_BLOCK_GAP``), and the apostrophes and quotes of its texts written as themselves
+    (``_TEXT``); what is outside it is as it was."""
+    start = html.find(b"<main")
+    end = html.find(b"</main>", start)
+    if start < 0 or end < 0:
+        return html
+    # (the slice takes the "<" of the closing tag too: the pattern looks for a "<" after a line break)
+    main = _BLOCK_END.sub(rb"\1", _BLOCK_GAP.sub(rb"\1", html[start : end + 1]))
+    if b"<script" not in main and b"<style" not in main:  # (the text of a script or a style is not read for entities: a page's main part has none, and one would be left as it is)
+        main = _TEXT.sub(_plain_quotes, main)
+    return html[:start] + main + html[end + 1 :]
+
+
 def render_trio_manifest(slug: str, data_files: EngineData) -> bytes:
     """``engine-trios/<trio>.json`` (:func:`trio_manifest_name`), version 1: the bundle of the trio at each of its levels, with its path, sizes and
     SHA-256, and the release of the data, which the worker checks against the main manifest's. Canonical JSON, and as strict as the browser's
@@ -1012,8 +1109,9 @@ def _header_blocks(text: str) -> list[tuple[str, list[tuple[int, str, str]]]]:
     return blocks
 
 
-def render_headers(text: str, *, noindex: bool) -> str:
-    """The committed ``site/_headers``, checked against the policy this program expects, plus the noindex header if asked.
+def render_headers(text: str, *, noindex: bool, analytics: bool = False) -> str:
+    """The committed ``site/_headers``, checked against the policy this program expects, plus the noindex header if asked, and with the two hosts of the beacon in the policy
+    (:data:`ANALYTICS_CSP`) for a build with an analytics token (``analytics``): the committed file stays the policy with no host, and is refused if it names one.
 
     The first block (``/*``) is what every path gets and must carry the content security policy. The only caching rule is
     the one for ``/assets/*`` (:data:`ASSET_CACHE`); no other path may set ``Cache-Control``, so the pages and the data
@@ -1035,6 +1133,8 @@ def render_headers(text: str, *, noindex: bool) -> str:
                 )
     if not text.endswith("\n"):
         text += "\n"
+    if analytics:
+        text = text.replace(CSP, ANALYTICS_CSP)  # (the file has the policy once, checked above)
     if noindex:
         lines = text.splitlines()
         after = blocks[0][1][-1][0] if blocks[0][1] else 0  # the last header line of the first block
@@ -1048,7 +1148,8 @@ def render_headers(text: str, *, noindex: bool) -> str:
 
 #: what the messages of :func:`check_budgets` call the entry pages
 ENTRY_PAGE_NAMES = {"home": "home page", "notfound": "404 page"}
-#: the entry pages that may carry no analytics beacon, and what marks one (the host it is loaded from, the script's name and the attribute that holds its token), in lower case
+#: the entry pages that run no page script and may carry no data for the counter, and what marks a script for it (the host it is loaded from, the script's name and the attribute that holds its token: no
+#: page of any build has one, the page script adds the counter), in lower case
 NO_BEACON = ("notfound",)
 BEACON_MARKERS = ("cloudflareinsights", "beacon.min.js", "data-cf-beacon")
 
@@ -1073,6 +1174,35 @@ def _policy_problem(text: str) -> str | None:
     return None
 
 
+def check_counter(pages: Mapping[str, bytes], token: str | None) -> None:
+    """Hold the pages of a build to its setting for page counts; raise :class:`BuildError` naming each page that breaks it.
+
+    No page of any build carries a script for the counter, or any other mark of one (:data:`BEACON_MARKERS`): the page script adds it. With no ``token`` no page carries data for it either (the build
+    is what it was). With one, every page but ``404.html`` carries :func:`counter_meta` once, in its head, and mentions the counter's data nowhere else; ``404.html`` carries none (it does not run
+    the page script, and :func:`check_budgets` holds the rest of what is asked of it)."""
+    problems: list[str] = []
+    expected = None if token is None else counter_meta(token)
+    for name, content_bytes in sorted(pages.items()):
+        text = content_bytes.decode("utf-8", errors="replace")
+        lowered = text.lower()
+        marked = next((marker for marker in BEACON_MARKERS if marker in lowered), None)
+        if marked is not None:
+            problems.append(f"{name} carries an analytics beacon ({marked}): the page script adds the counter, no page carries a script for it")
+        data = lowered.count(COUNTER_META)
+        if expected is None:
+            if data:
+                problems.append(f"{name} has counter data in a build with no token")
+        elif name == "404.html":
+            if data:
+                problems.append(f"{name} has counter data, and the 404 page has none")
+        elif text.count(expected) != 1 or data != 1:
+            problems.append(f"{name} has {text.count(expected)} counter data of the token of this build ({data} in all), and needs exactly one")
+        elif "</head>" in text and text.index(expected) > text.index("</head>"):
+            problems.append(f"{name} has its counter data not in the head")
+    if problems:
+        raise BuildError("; ".join(problems))
+
+
 def _gzip_size(content_bytes: bytes) -> int:
     return len(gzip.compress(content_bytes, 9, mtime=0))
 
@@ -1085,7 +1215,8 @@ def check_budgets(
     item_pages: Sequence[str] = (),
     entry_pages: Mapping[str, str] | None = None,
 ) -> dict[str, int]:
-    """Measure the page budgets; raise :class:`BudgetError` naming each that is broken.
+    """Measure the page budgets; raise :class:`BudgetError` naming each that is broken. Every page has two scripts, the boot script and the page script, in every build: the counter's script is added
+    by the page script and is in no page (:func:`check_counter` holds the pages to that).
 
     Returns the sizes of the largest trio page: ``trio_html`` (raw), the gzip sizes of its HTML, stylesheet and scripts
     (``first_load_*``; WebAssembly is not loaded on a first view) and the raw size of its scripts (``first_load_js``), what is loaded on
@@ -1101,7 +1232,7 @@ def check_budgets(
     ``entry_pages`` are the two pages that have a first load of their own, by label: ``{"home": "index.html", "notfound": "404.html"}``. Each is held to the limits of its label
     (``home_html``, ``home_html_gzip``; ``notfound_html``, ``notfound_html_gzip``) and to the budgets of a first load, and loads the files ``first_load_assets`` gives it and nothing else, in two
     scripts: a page that named another file, or carried a script of its own, would load more than its first load. The 404 page has its own script in place of the page script, and may carry no
-    analytics beacon (:data:`BEACON_MARKERS`): it has no guard for a kit link in its address, which the beacon would see. It must also give its own policy, :data:`NOTFOUND_POLICY`, once, in a
+    analytics beacon (:data:`BEACON_MARKERS`), and no data for the page counter: it does not run the page script, which is what adds the counter. It must also give its own policy, :data:`NOTFOUND_POLICY`, once, in a
     meta element before the first stylesheet or script, which keeps a beacon that the host puts into it from loading or sending anything even where the header would allow it. Sizes are reported as ``<label>_html``, ``<label>_html_gzip`` and
     ``<label>_first_load_gzip`` (the page's HTML, stylesheet and scripts, gzipped).
 
@@ -1289,7 +1420,7 @@ def check_budgets(
         if label in NO_BEACON:
             beacon = next((marker for marker in BEACON_MARKERS if marker in text.lower()), None)
             if beacon is not None:
-                problems.append(f"{what} {page} carries an analytics beacon ({beacon}): it has no guard for a kit link in its address, which a beacon would see")
+                problems.append(f"{what} {page} carries an analytics beacon ({beacon}): it does not run the page script, which is what adds the counter")
             policy = _policy_problem(text)
             if policy is not None:
                 problems.append(f"{what} {page} {policy}")
@@ -1550,7 +1681,7 @@ class TrioFiles:
 
 
 def site_files(
-    trios: Iterable[TrioFiles], *, assets: Sequence[str], item_pages: Iterable[str] = (), noindex: bool = False
+    trios: Iterable[TrioFiles], *, assets: Sequence[str], item_pages: Iterable[str] = (), noindex: bool = False, verification: str | None = None
 ) -> list[str]:
     """The exact list of the files of a built site, from what the build is given, and not from a smaller build.
 
@@ -1560,11 +1691,13 @@ def site_files(
     pages, ``_headers``, ``robots.txt``, the manifest of the optimizer and its item table are always there. A name that carries the digest of
     its file (an engine data file) is given with :data:`HASH_PLACEHOLDER` in its place. No name is in the list twice: a trio, an item or an asset
     given twice is a :class:`BuildError`, and so is a trio that no build could have. The number of files is ``len`` of the list, and
-    :func:`check_file_budget` holds it to the budget of the site."""
+    :func:`check_file_budget` holds it to the budget of the site. ``verification`` is the name of the Search Console file of a build that has one (one file more, at the root)."""
     names = list(FIXED_PAGES)
     names += ["_headers", "robots.txt", MANIFEST_FILE]
     if not noindex:
         names.append("sitemap.xml")
+    if verification is not None:
+        names.append(check_verification_file(verification))
     if not assets:
         raise BuildError("a site has files of the page code, and no file of the page code is given")
     for asset in assets:
@@ -1933,12 +2066,20 @@ def build(
     scopes: Mapping[str, Sequence[int]] | None = None,
     catalog: Path | None = None,
     without_item_catalog: bool = False,
+    analytics_token: str | None = None,
+    verification_file: str | None = None,
 ) -> SiteBuild:
     """Build the site (see the module docstring). ``scopes`` names, by slug, the tiers an indexable build needs a trio to have, where they are not
     those of a full run of it (:func:`check_scopes`); a preview needs none. The command line gives none. ``catalog`` is the catalog the results were made from, for the pictures of
     the armor and the instruments (:func:`load_icon_extras`): ``derived/catalog.json`` unless one is given, and it must be the catalog the results were made from, or the build stops (a
     :class:`BuildError`). ``without_item_catalog`` is the one way to build without it (the command line's ``--no-item-catalog``): the pictures of the armor and the instruments are then left out,
-    the build says so, and a release is never built with it."""
+    the build says so, and a release is never built with it. ``analytics_token`` (32 lower-case hex characters) switches page counts on: every page but the 404 page gets the token as data in its head and the
+    header policy names the two hosts of the counter; ``verification_file`` (``google`` and 16 hex digits and ``.html``) writes the Search Console ownership file at the root. Both are off by default, and a value that is not
+    what it should be stops the build before anything is read."""
+    if analytics_token is not None:
+        analytics_token = check_analytics_token(analytics_token)
+    if verification_file is not None:
+        verification_file = check_verification_file(verification_file)
     results, out = Path(results), Path(out)
     rules = Path(rules) if rules else REPO_ROOT / "rules" / "rules.json"
     sources_manifest = Path(sources_manifest) if sources_manifest else REPO_ROOT / "derived" / "sources-manifest.json"
@@ -1955,7 +2096,8 @@ def build(
     if not slugs:
         raise BuildError(f"no results: {results} has no trio folder with shards")
     owner = check_owner(owner, noindex=noindex)
-    trios = [data.load_trio(results / slug) for slug in slugs]
+    book = content.load_rulebook(rules)  # (read first: the results are held to the version of THIS rules file, which --rules may make another than the checkout's)
+    trios = [data.load_trio(results / slug, rules_version=book.version) for slug in slugs]
     items = data.load_items(results, trios)
     partial = tuple(t.meta.slug for t in trios if t.meta.partial)
     if partial and not noindex:
@@ -1965,7 +2107,6 @@ def build(
         )
     if not noindex:
         check_scopes(trios, scopes)  # a run of any tiers is a full one, so what an indexable site is made of is checked here
-    book = content.load_rulebook(rules)
     manifest = content.load_manifest(sources_manifest)
     races = content.load_racials(racials)  # (the racial abilities of each race, read from the race pages of the wiki: shown, never scored)
     blocks = content.load_changelog(changelog)
@@ -1985,7 +2126,7 @@ def build(
                 f"but {rules.name} is version {book.version}; run the precompute again"
             )
         check_defaults(trio)
-    exalt = data.load_exalt(results, trios, items.document)  # (None for results made before the effects layer: no trio page then has the section; read after the defaults are checked, as it is held to them)
+    exalt = data.load_exalt(results, trios, items.document, rules_version=book.version)  # (None for results made before the effects layer: no trio page then has the section; read after the defaults are checked, as it is held to them)
     shown = {item.key: item for trio in trios for item in data.used_items(trio)}
     missing = sorted(set(shown) - set(manifest.items) - set(manifest.eqlt))  # (an item read from EQ Legends Tools alone has no wiki revision, and its page credits that site)
     if missing:
@@ -2018,7 +2159,7 @@ def build(
     uncredited = sorted(key for key in keys if view.has_wiki_page(records[key]) and key not in manifest.items)
     if uncredited:
         raise BuildError(f"{sources_manifest.name} has no wiki page for {len(uncredited)} item(s) with a page of their own, first {uncredited[0]}: an item page credits its wiki page")
-    headers_text = render_headers(headers.read_text(encoding="utf-8"), noindex=noindex)
+    headers_text = render_headers(headers.read_text(encoding="utf-8"), noindex=noindex, analytics=analytics_token is not None)
     rules_obj = rules_module.load(rules)
     # the stats of an item at a tier, as the model sees it (the same ``at_tier`` the pages of the items use), for the rows of Wear this
     vecs = view.tier_vecs(records, table["defaults"], rules_obj)
@@ -2055,6 +2196,7 @@ def build(
             partial=bool(partial),
             reports_not_open=REPORTS_NOT_OPEN,
             report_url=_report_url(owner, site_url, path, subject, report, report_view),
+            analytics_token=analytics_token,  # (the frame puts the token in the head as data, in a block that the 404 page empties)
         )
         context.update(extra)
         return env.get_template(template).render(**context).encode("utf-8")
@@ -2073,15 +2215,17 @@ def build(
             raise BuildError(str(error)) from None
         path = f"/trio/{trio.meta.slug}/"
         name = f"trio/{trio.meta.slug}/index.html"
-        pages[name] = render(
-            "trio.html.j2",
-            path,
-            title=page.title,
-            description=page.description,
-            subject=f"the {page.name} page",
-            report="wrong-item.yml",
-            report_view=page.default,
-            page=page,
+        pages[name] = tighten_main(
+            render(
+                "trio.html.j2",
+                path,
+                title=page.title,
+                description=page.description,
+                subject=f"the {page.name} page",
+                report="wrong-item.yml",
+                report_view=page.default,
+                page=page,
+            )
         )
         trio_files.append(name)
         live.append(SimpleNamespace(slug=trio.meta.slug, name=page.name, level=trio.meta.level))
@@ -2214,6 +2358,8 @@ def build(
     for slug in sorted(engine_data.bundles):
         files[trio_manifest_name(slug)] = render_trio_manifest(slug, engine_data)
     files["_headers"] = headers_text.encode("utf-8")
+    if verification_file is not None:
+        files[verification_file] = f"google-site-verification: {verification_file}".encode("ascii")  # (the one line Google expects: no page, no link to it, not in the sitemap)
     files["robots.txt"] = (
         ("User-agent: *\nDisallow: /\n") if noindex else f"User-agent: *\nAllow: /\n\nSitemap: {site_url}/sitemap.xml\n"
     ).encode("utf-8")
@@ -2232,6 +2378,7 @@ def build(
     sizes = check_budgets(
         files, trio_pages=trio_files, first_load_assets=first_load, item_pages=item_files, entry_pages={"home": "index.html", "notfound": "404.html"}
     )
+    check_counter(pages, analytics_token)
     sizes.update({f"checked_{name}": count for name, count in engine_checked.items()})
 
     # 4. write
@@ -2383,6 +2530,17 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
     parser.add_argument("--racials", type=Path, help="the racial abilities of the races, derived/racials.json (default derived/)")
     parser.add_argument("--changelog", type=Path, help="the changelog (default docs/CHANGELOG.md)")
     parser.add_argument("--headers", type=Path, help="the headers file (default site/_headers)")
+    parser.add_argument(
+        "--analytics-token",
+        help=f"switch on page counts (Cloudflare Web Analytics): its token, 32 lower-case hex characters ({ANALYTICS_ENV} gives it when the option is not, and the option wins; a --noindex preview takes no token from "
+        f"the environment, only from this option). Every page but the 404 page then carries the "
+        "token as data in its head, the page script adds the counter to a page opened with no kit link, and the header policy names the two hosts of the counter. Off by default: the build has no data and no host but the site's own. The token is public, and is not committed",
+    )
+    parser.add_argument(
+        "--google-verification",
+        help=f"write the Google Search Console ownership file at the root of the site: its name, google and 16 hex digits and .html ({VERIFICATION_ENV} gives it when the option is not; the option wins). "
+        "Not in the sitemap, not linked, not counted as a page. No file without it. The name is not committed",
+    )
     catalogs = parser.add_mutually_exclusive_group()
     catalogs.add_argument(
         "--catalog", type=Path,
@@ -2394,6 +2552,17 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
     )
     options = parser.parse_args(argv)
     try:
+        # (the settings are checked before a build is begun; an empty variable is no setting, and what is wrong is never repeated in the message)
+        from_environment = options.analytics_token is None and bool(os.environ.get(ANALYTICS_ENV))
+        if from_environment and options.noindex:
+            # (a preview that counts says so, with the option: the environment is where a release's setting lives, and a preview built by hand in a shell that holds it would count every visit unasked)
+            raise BuildError(f"a preview (--noindex) takes no token from ${ANALYTICS_ENV}: unset it, or give --analytics-token if the preview is meant to count (the value is not repeated here)")
+        analytics_token = options.analytics_token if options.analytics_token is not None else (os.environ.get(ANALYTICS_ENV) or None)
+        verification_file = options.google_verification if options.google_verification is not None else (os.environ.get(VERIFICATION_ENV) or None)
+        if analytics_token is not None:
+            analytics_token = check_analytics_token(analytics_token)
+        if verification_file is not None:
+            verification_file = check_verification_file(verification_file)
         result = build(
             results=options.results,
             out=options.out,
@@ -2406,6 +2575,8 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
             headers=options.headers,
             owner=options.owner,
             scopes=scopes,
+            analytics_token=analytics_token,
+            verification_file=verification_file,
             **({"catalog": options.catalog} if options.catalog is not None else {}),
             **({"without_item_catalog": True} if options.no_item_catalog else {}),
         )
@@ -2415,6 +2586,9 @@ def main(argv: Sequence[str] | None = None, *, scopes: Mapping[str, Sequence[int
         return 2
     sizes = result.sizes
     print(f"built {len(result.pages)} pages, {result.files} files into {result.out}{' (noindex)' if options.noindex else ''}")
+    print(f"page counts: {'on (Cloudflare Web Analytics; every page but the 404 page)' if analytics_token is not None else 'off'}")
+    if verification_file is not None:
+        print("Search Console ownership file: written at the root")
     if result.icon_note:
         print(f"warning: {result.icon_note}")
     for slug in result.partial:

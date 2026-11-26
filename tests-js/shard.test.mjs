@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseRunnerups, parseShard } from "../pipeline/trioforge/site/static/shard.js";
+import { LISTED_FIRST, SETUP_ORDER, parseRunnerups, parseShard } from "../pipeline/trioforge/site/static/shard.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONTRACT = resolve(HERE, "../fixtures/site/contract/data");
@@ -48,16 +48,16 @@ describe("Shard.has: does the shard hold a row for this race, role and tier", ()
   }
 
   it("is true for a cell with a row and false for a cell of known parts that has none", () => {
-    const shard = cells(["OGR", "balanced", 4], ["TRL", "tank", 10]);
-    expect(shard.has("OGR", "balanced", 4)).toBe(true);
-    expect(shard.has("TRL", "tank", 10)).toBe(true);
+    const shard = cells(["OGR", "tank", 4], ["TRL", "melee", 10]);
+    expect(shard.has("OGR", "tank", 4)).toBe(true);
+    expect(shard.has("TRL", "melee", 10)).toBe(true);
     // every part is one the shard knows, and no row has them together
     expect([...shard.races].sort()).toEqual(["OGR", "TRL"]);
-    expect([...shard.roles].sort()).toEqual(["balanced", "tank"]);
+    expect([...shard.roles].sort()).toEqual(["melee", "tank"]);
     expect([...shard.tiers].sort((a, b) => a - b)).toEqual([4, 10]);
     expect(shard.has("OGR", "tank", 10)).toBe(false);
-    expect(shard.has("OGR", "balanced", 10)).toBe(false);
-    expect(shard.has("TRL", "balanced", 4)).toBe(false);
+    expect(shard.has("OGR", "tank", 10)).toBe(false);
+    expect(shard.has("TRL", "tank", 4)).toBe(false);
     expect(shard.has("TRL", "tank", 4)).toBe(false);
   });
 
@@ -72,7 +72,7 @@ describe("Shard.has: does the shard hold a row for this race, role and tier", ()
 
   it("does not take the parts of one cell for the parts of another when they run together", () => {
     const doc = fixture("strict-own");
-    doc.rows = doc.rows.filter((row) => row[0] === "OGR" && row[1] === "balanced" && row[2] === 4);
+    doc.rows = doc.rows.filter((row) => row[0] === "OGR" && row[1] === "tank" && row[2] === 4);
     for (const row of doc.rows) {
       row[0] = "A|B";
       row[1] = "C";
@@ -180,9 +180,9 @@ function runnerupRefusal(document) {
 
 describe("a runner-up file as the generator writes it: the file of a role, a view for each race at each tier", () => {
   it("is read, and gives the swaps of a race at a tier of the file", () => {
-    const doc = runnerups("balanced");
+    const doc = runnerups("tank");
     const file = parseRunnerups(doc);
-    expect(file.role).toBe("balanced");
+    expect(file.role).toBe("tank");
     expect(file.tiers).toEqual([0, 4, 10]);
     expect(file.release).toBe(doc.release);
     expect(file.items).toHaveLength(doc.items.length);
@@ -208,7 +208,7 @@ describe("a runner-up file as the generator writes it: the file of a role, a vie
   });
 
   it("does not take the tier and the race of one view for those of another when they run together", () => {
-    const doc = runnerups("balanced");
+    const doc = runnerups("tank");
     doc.tiers = [1, 10];
     doc.views = [
       [1, "0|A", "dw", doc.views[0][3]],
@@ -223,7 +223,7 @@ describe("a runner-up file as the generator writes it: the file of a role, a vie
 
   it("is refused, with an Error of the reader's own and not a TypeError, when it is not what the generator writes", () => {
     const edit = (change) => () => {
-      const doc = runnerups("balanced");
+      const doc = runnerups("tank");
       change(doc);
       return doc;
     };
@@ -274,6 +274,34 @@ describe("a runner-up file as the generator writes it: the file of a role, a vie
   });
 
   it("still reads the unchanged files, so that each case above is the one change that is refused", () => {
-    for (const role of ["balanced", "tank", "melee"]) expect(runnerupRefusal(runnerups(role)), role).toBeNull();
+    for (const role of ["tank", "melee"]) expect(runnerupRefusal(runnerups(role)), role).toBeNull();
+  });
+});
+
+describe("the order of the setups of a build", () => {
+  /** The fixture's Tank rows of one cell, copied as the rows of a Caster that plays the stat stick and the shield setup (and the Tank's others). */
+  function withCaster() {
+    const doc = fixture("strict-own");
+    const tank = doc.rows.filter((row) => row[0] === "OGR" && row[1] === "tank" && row[2] === 4);
+    expect(tank.length).toBeGreaterThan(1);
+    doc.rows = [...doc.rows, ...tank.filter((row) => row[3] === "1h-shield").map((row) => ["OGR", "caster", 4, "1h-shield", ...row.slice(4)]), ["OGR", "caster", 4, "stick", ...tank[0].slice(4)]];
+    return parseShard(doc);
+  }
+
+  it("is the order of the page, with the setup a build lists first in front: the Caster's stat stick, which wins a tie", () => {
+    const shard = withCaster();
+    expect(shard.setupsFor("caster")).toEqual(["stick", "1h-shield"]);
+    expect(shard.setupsFor("tank")).toEqual(SETUP_ORDER.filter((setup) => shard.setupsFor("tank").includes(setup))); // (every other build: the order of the page)
+  });
+
+  it("takes the first of two setups of equal value as the best: for the Caster that is the stick", () => {
+    const shard = withCaster();
+    const stick = shard.scenario("OGR", "caster", 4, "stick");
+    const shield = shard.scenario("OGR", "caster", 4, "1h-shield");
+    expect(stick.value === shield.value ? shard.bestSetup("OGR", "caster", 4) : "unequal").toBe(stick.value === shield.value ? "stick" : "unequal");
+  });
+
+  it("has the builds that list a setup first that model/weapons.py has (a test of the pipeline holds the two lists equal)", () => {
+    expect(LISTED_FIRST).toEqual({ caster: "stick" });
   });
 });

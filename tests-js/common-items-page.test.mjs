@@ -145,11 +145,11 @@ describe("the section drawn from the shard of the fixture", () => {
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
     const want = wanted("strict-own", "OGR", 4);
     expect(want.every.length).toBeGreaterThan(0);
-    expect(want.most.length).toBeGreaterThan(0);
-    expect(SUMMARY()).toBe(`Get these first: ${want.every.length} items every role wears, ${want.most.length} most roles wear`);
+    expect(want.most).toEqual([]); // (the fixture trio has two builds, the Tank and Melee damage: an item is worn by both or by one, and "most" needs more than half and not all; the hand-made shards below have three roles)
+    expect(SUMMARY()).toBe(`Get these first: ${want.every.length} items every role wears`);
     expect(names("every")).toEqual(want.every);
     expect(names("most")).toEqual(want.most);
-    expect(headings()).toEqual(["Every role", "Most roles"]);
+    expect(headings()).toEqual(["Every role"]);
     expect($("#common").hidden).toBe(false);
     expect($("#common").open).toBe(true); // (the visitor's own opening is left as it is)
   });
@@ -180,7 +180,7 @@ describe("the section drawn from the shard of the fixture", () => {
     const elf = wanted("strict-own", "ELF", 10);
     expect(names("every")).toEqual(elf.every);
     expect(names("most")).toEqual(elf.most);
-    expect(SUMMARY()).toBe(`Get these first: ${elf.every.length} items every role wears, ${elf.most.length} most roles wear`);
+    expect(SUMMARY()).toBe(`Get these first: ${elf.every.length} items every role wears`);
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
   });
 
@@ -218,7 +218,7 @@ describe("the section drawn from the shard of the fixture", () => {
     const at10 = wanted("strict-own", "OGR", 10);
     expect($("#common").open).toBe(false);
     expect(names("every")).toEqual(at10.every);
-    expect(SUMMARY()).toBe(`Get these first: ${at10.every.length} items every role wears, ${at10.most.length} most roles wear`);
+    expect(SUMMARY()).toBe(`Get these first: ${at10.every.length} items every role wears`);
     const list = document.querySelector("#common-body ul");
     await settle(app);
     expect(document.querySelector("#common-body ul")).toBe(list); // (opening it draws nothing again)
@@ -330,7 +330,7 @@ describe("the words of the summary and the rows", () => {
     await settle(app);
     expect(rows("every").map((li) => li.textContent)).toEqual([expect.not.stringContaining("not ")]);
     const [row] = rows("most");
-    expect(row.querySelector(".common-miss").textContent).toBe("not Melee");
+    expect(row.querySelector(".common-miss").textContent).toBe("not Melee damage");
     expect(rows("every")[0].querySelector(".common-miss")).toBeNull();
   });
 

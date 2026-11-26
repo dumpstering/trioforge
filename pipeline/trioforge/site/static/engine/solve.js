@@ -36,17 +36,28 @@
 //               the chosen optional buffs, and the evaluator's breakdown. All null (buffs empty) when there is no kit. F is always the evaluator's:
 //               never the model's value, and for a `time_limit` it is a lower bound of the optimum.
 //   modelF, gap, nodes, bound   what the model and HiGHS said (the model's own value of the kit; HiGHS's relative gap, node count and dual bound).
-//   canonical, tieStage   with `canonical: true` and an optimal first stage, the tie stage runs: "applied" (its kit is the answer, canonical true) or
-//               "kept-first" (it was worse by the exact evaluator, or did not finish: the first stage's kit stands). Both null/false otherwise.
+//   canonical, tieStage   with `canonical: true` and an optimal first stage, the tie stage runs: "applied" (its kit is the answer; canonical true when the last stage,
+//               below, ran to its end) or "kept-first" (it was worse by the exact evaluator, or did not finish: the first stage's kit stands). Both null/false otherwise.
 //   hasteAssumed, highsStatus, limitMs, timings   the haste the weapon index assumed, the model status HiGHS ended with, the time the first stage's
 //               HiGHS was given, and the milliseconds the stages took.
 //   start       what the first stage began from: null (nothing), "solution" (the last solution, as it was) or "kit" (the item and buff columns of a kit).
 //
 // With `canonical: true` the answer is the kit of Python's `solve_canonical` (placement and tie stage). That is for tests and for checking a precomputed
 // scenario. A browser's answer is `canonical: false`: placement only. Each of the two stages has the whole `budgetMs` to itself, as each solve of Python
-// has its time limit, so that a canonical call can take about three times `budgetMs` (the first stage, the proof below, the tie stage). The tie stage is cut down when the band of kits it chooses
+// has its time limit, so that a canonical call can take about four times `budgetMs` (the first stage, the proof below, the tie stage, and the last stage's solve that finds nothing more tied, with one more for each kit of a tie). The tie stage is cut down when the band of kits it chooses
 // from wears one set of items, which a cheaper proof shows (`itemsAreSettled`): it then looks only for the buffs, with the items fixed, or for nothing at all where the
 // scenario has no optional buff. The answer is the same either way, and `tieShortcut: false` (a test hook) runs the whole tie stage always.
+//
+// The last stage (`_settle_ties` in solve.py: its head has the whole account). Kits of the same exact value and the same total rank are not told apart by the rank (items ranked 1 and 4
+// against 2 and 3), and which of them a solver names was its own path's, not the same in the two engines. Once the tie stage has a kit of the least total rank R, the program is
+// solved again, maximizing the value (the program's own objective, which bounds a kit best: with the rank as the objective the same proof took some seven times the time of the tie stage,
+// and it is a maximum, so that it is no tie program) over the kits with the rows `total rank <= R` and "not the worn items (copies counted) and chosen buffs of the kits found so far",
+// with the cutoff of the proof of the shortcut's kind at `TIE_PROOF_TOLERANCE` under the best value (a solve of its own, as the proof is, with the whole allowance), until one has no kit
+// worth the cutoff: the proof that the tie has no more members. The answer is the member
+// first in the order of the kits (`compareKits`): the canonical kits place by place in the order of the 22 places, an item before an empty place and the lower (key, tier) first (the
+// key by code point), the first place that differs deciding; when every place is alike, the chosen buff ids as sorted lists, the lower first. A kit of a higher exact value, or of the
+// same value and a lower rank, takes the place of the answer first (the value, the rank, the order of the kits). `canonical` is true when the proof ran to its end; a solve of the stage
+// that stops at its limit, or a tie of more than `MAX_TIED_KITS` kits (`tiedKits`, a test hook, sets another number), ends the stage with the best kit it has and `canonical` false.
 //
 // Where the worn items stand (`place_canonically` in solve.py). Only the two hands make the place of an item matter to the value (the weapon index of what is in
 // them, the shield bonus of an off-hand shield), so the kit is placed by a rule that looks at the items alone. Among the arrangements of the worn items
@@ -66,8 +77,9 @@
 // evaluator disagree, which is a bug and never a rounding. A model value below the evaluator's is not an error: a kit from a time limit or from the tie
 // stage need not sit at its best continuous values.
 
-import { CONSTANTS, evaluate, profileOf } from "./evaluate.js";
+import { CONSTANTS, RANGE_GROUP, evaluate, profileOf } from "./evaluate.js";
 import { buildMilpWithItems, compareText, ident, LevelPrograms, readOptions } from "./model.js";
+import { ProcTable } from "./procs.js";
 import { LABEL_NO_INCUMBENT, LABEL_TIME_LIMIT } from "./protocol.js";
 import { SOLVER_OPTIONS, toModelData } from "./highs-data.js";
 
@@ -75,6 +87,10 @@ import { SOLVER_OPTIONS, toModelData } from "./highs-data.js";
 export const EXACTNESS_TOLERANCE = 1e-6;
 /** The second stage keeps every kit within this relative distance of the best value (`TIE_TOLERANCE` in solve.py). */
 export const TIE_TOLERANCE = 1e-7;
+/** The most kits of one tie that the last stage sets apart one by one (`MAX_TIED_KITS` in solve.py). */
+export const MAX_TIED_KITS = 200;
+/** How far under the best value (relative) the last stage's cutoff is: a tenth of the tie stage's band (`TIE_PROOF_TOLERANCE` in solve.py). */
+export const TIE_PROOF_TOLERANCE = 1e-8;
 /** How far from a whole number a column of a whole kind may be (`_integral` in model.py). */
 const INTEGRAL_TOLERANCE = 1e-6;
 const MS_PER_SECOND = 1000;
@@ -133,14 +149,13 @@ const GROUP_ORDER = new Map(SLOT_GROUPS.map(([name], at) => [name, at]));
 const PLACE_GROUPS = SLOT_GROUPS.flatMap(([name, places]) => new Array(places).fill(name));
 const PLACES = PLACE_GROUPS.length;
 const HANDS = [...CONSTANTS.handPlaces];
-const HAND_SET = new Set(HANDS);
-/** A pair of one item, one copy in each hand, needs this many copies of it. */
-const COPIES_FOR_BOTH_HANDS = 2;
+/** The groups whose occupant the value depends on, and so the places the canonical rule arranges (`_arranged` in solve.py): the two hands, and under the bow setup the range place too. */
+const arrangedFor = (setup) => (setup === "ranged" ? [...HANDS, RANGE_GROUP] : HANDS);
 const SETUP_SET = new Set(CONSTANTS.setups);
-const SESSION_KEYS = new Set(["highs", "profile", "setup", "buffset", "monkBins", "options", "now"]);
+const SESSION_KEYS = new Set(["highs", "profile", "setup", "buffset", "monkBins", "procs", "options", "now"]);
 const SESSION_OPTION_KEYS = new Set(["any_rule", "haste_assumed"]);
-const SOLVE_KEYS = new Set(["scenario", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "cutoff", "tieShortcut"]);
-const TRUTHFUL_KEYS = new Set(["name", "items", "options", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "bound", "needTime", "tieShortcut"]);
+const SOLVE_KEYS = new Set(["scenario", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "cutoff", "tieShortcut", "tiedKits"]);
+const TRUTHFUL_KEYS = new Set(["name", "items", "options", "budgetMs", "deadline", "canonical", "highsOptions", "onProgress", "start", "bound", "needTime", "tieShortcut", "floor"]);
 /** The two stages of a solve, as the progress events name them. */
 const STAGE_SOLVE = "solve";
 const STAGE_TIE = "tie";
@@ -233,6 +248,27 @@ export function canonicalKit(groups) {
 }
 
 /**
+ * The order of the kits that the last stage settles (`kit_order` in solve.py): -1, 0 or 1 for two kits of 22 places with their chosen buff ids (sorted). The places in turn, an item
+ * before an empty place, two items by key (by code point) and then tier; when every place is alike, the buff ids as lists, the lower first (a list before the list it begins).
+ */
+export function compareKits(kitA, buffsA, kitB, buffsB) {
+  for (let at = 0; at < PLACES; at += 1) {
+    const a = kitA[at];
+    const b = kitB[at];
+    if (a === null && b === null) continue;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    const order = compareText(a.key, b.key) || a.tier - b.tier;
+    if (order !== 0) return order < 0 ? -1 : 1;
+  }
+  const shared = Math.min(buffsA.length, buffsB.length);
+  for (let at = 0; at < shared; at += 1) {
+    if (buffsA[at] !== buffsB[at]) return buffsA[at] < buffsB[at] ? -1 : 1;
+  }
+  return Math.sign(buffsA.length - buffsB.length);
+}
+
+/**
  * Whether every item (`options[i]` are the groups item `i` may stand in) can have a place, given the places `room` (a Map) still left in each group: a
  * matching of items to places, found by augmenting paths (`_all_placed` in solve.py).
  */
@@ -271,13 +307,13 @@ function compareHand(a, b) {
   return byKeyThenTier(a, b);
 }
 
-/** The places the model has a column for: `{outside, inHand}`, `outside` a Map from an item's ident to its groups outside the hands in slot order, `inHand` for each hand the set of idents (`_columns` in solve.py). */
-function columnsOf(model) {
+/** The places the model has a column for: `{outside, inHand}`, `outside` a Map from an item's ident to its groups outside the hands in slot order, `inHand` for each hand (and the range place under the bow setup) the set of idents (`_columns` in solve.py). */
+function columnsOf(model, arranged) {
   const outside = new Map();
-  const inHand = new Map(HANDS.map((hand) => [hand, new Set()]));
+  const inHand = new Map(arranged.map((hand) => [hand, new Set()]));
   for (const [, group, key, tier] of model.item_cols) {
     const name = ident(key, tier);
-    if (HAND_SET.has(group)) {
+    if (inHand.has(group)) {
       inHand.get(group).add(name);
     } else {
       if (!outside.has(name)) outside.set(name, []);
@@ -292,10 +328,10 @@ function columnsOf(model) {
  * The items that are not in a hand as a Map {group: [items]}, each in the earliest group of the slot order that the model has a column for it in and that has a
  * place left, provided every item after it can still be given a place; taken in the order of (key, tier) (`_place_outside` in solve.py).
  */
-function placeOutside(items, outside) {
+function placeOutside(items, outside, arranged) {
   const movable = [...items].sort(byKeyThenTier);
   const options = movable.map((item) => outside.get(nameOf(item)) ?? []);
-  const room = new Map(SLOT_GROUPS.filter(([group]) => !HAND_SET.has(group)));
+  const room = new Map(SLOT_GROUPS.filter(([group]) => !arranged.includes(group)));
   const placed = new Map();
   movable.forEach((item, number) => {
     let done = false;
@@ -315,24 +351,25 @@ function placeOutside(items, outside) {
   return placed;
 }
 
-/** A kit with `main` and `off` in the hands and `rest` in the other places in any order (the evaluator reads only what stands in the hands from the place). */
-function kitOf(rest, main, off) {
+/** A kit with `chosen` in the arranged places (the hands, and the range place under the bow setup) and `rest` in the other places in any order (the evaluator reads only what stands in the arranged places from the place). */
+function kitOf(rest, chosen, arranged) {
   let next = 0;
-  return PLACE_GROUPS.map((group) => (group === HANDS[0] ? main : group === HANDS[1] ? off : next < rest.length ? rest[next++] : null));
+  return PLACE_GROUPS.map((group) => (arranged.includes(group) ? chosen[arranged.indexOf(group)] : next < rest.length ? rest[next++] : null));
 }
 
 /**
  * `placeCanonically` and, when it had to compare arrangements, the exact value of the solver's own (else null) (`_place` in solve.py). `value(kit)` is the exact
- * value of a kit of 22 places (a Rational).
+ * value of a kit of 22 places (a Rational). `setup` is the one of the model: under "ranged" the range place is arranged with the hands.
  */
-function placeHands(model, groups, value) {
-  for (const hand of HANDS) {
+function placeHands(model, groups, value, setup = null) {
+  const arranged = arrangedFor(setup);
+  for (const hand of arranged) {
     const held = groups.get(hand) ?? [];
     if (held.length > 1) throw fail(`${held.length} items in ${hand}, which has one place`);
   }
-  const { outside, inHand } = columnsOf(model);
+  const { outside, inHand } = columnsOf(model, arranged);
   const worn = [...groups.values()].flat();
-  const solver = HANDS.map((hand) => (groups.get(hand) ?? [])[0] ?? null);
+  const solver = arranged.map((hand) => (groups.get(hand) ?? [])[0] ?? null);
   const copies = new Map();
   const byName = new Map();
   for (const item of worn) {
@@ -341,42 +378,53 @@ function placeHands(model, groups, value) {
     if (!byName.has(name)) byName.set(name, item);
   }
   const names = [...byName.values()].sort(byKeyThenTier);
-  const stand = new Map(SLOT_GROUPS.filter(([group]) => !HAND_SET.has(group)));
+  const stand = new Map(SLOT_GROUPS.filter(([group]) => !arranged.includes(group)));
 
-  const restWithout = (main, off) => {
+  const restWithout = (...taken) => {
     const left = new Map(copies);
-    for (const item of [main, off]) if (item !== null) left.set(nameOf(item), left.get(nameOf(item)) - 1);
+    for (const item of taken) if (item !== null) left.set(nameOf(item), left.get(nameOf(item)) - 1);
     return names.flatMap((item) => new Array(left.get(nameOf(item))).fill(byName.get(nameOf(item))));
   };
-  /** What is left for the places outside the hands when `main` and `off` stand in the hands, or null when that is not an arrangement the builder allows. */
-  const legal = (main, off) => {
-    if (main !== null && off !== null) {
-      if (nameOf(main) === nameOf(off) && copies.get(nameOf(main)) < COPIES_FOR_BOTH_HANDS) return null;
-      if (isTwoHander(main)) return null; // a two-hander leaves the off hand empty
-    }
-    const rest = restWithout(main, off);
+  /** What is left for the places outside the arranged ones when `choice` stands in them, or null when that is not an arrangement the builder allows. */
+  const legal = (choice) => {
+    const used = new Map();
+    for (const item of choice) if (item !== null) used.set(nameOf(item), (used.get(nameOf(item)) ?? 0) + 1);
+    for (const [name, count] of used) if (count > copies.get(name)) return null; // an item stands in two places only if it is worn twice
+    if (choice[0] !== null && choice[1] !== null && isTwoHander(choice[0])) return null; // a two-hander leaves the off hand empty
+    const rest = restWithout(...choice);
     return allPlaced(rest.map((item) => outside.get(nameOf(item)) ?? []), stand) ? rest : null;
   };
 
-  const mains = [...names.filter((item) => inHand.get(HANDS[0]).has(nameOf(item))), null];
-  const offs = [...names.filter((item) => inHand.get(HANDS[1]).has(nameOf(item))), null];
-  const before = (main, off) => compareHand(main, solver[0]) || compareHand(off, solver[1]); // below 0: before the solver's arrangement in the order
+  const options = arranged.map((hand) => [...names.filter((item) => inHand.get(hand).has(nameOf(item))), null]);
+  const before = (choice) => {
+    for (let at = 0; at < choice.length; at += 1) {
+      const order = compareHand(choice[at], solver[at]);
+      if (order !== 0) return order;
+    }
+    return 0;
+  }; // below 0: before the solver's arrangement in the order
   let solverValue = null;
   let chosen = solver;
-  search: for (const main of mains) {
-    for (const off of offs) {
-      if (before(main, off) >= 0) break search; // the solver's own arrangement is reached: none before it was as good, and it stands
-      const rest = legal(main, off);
-      if (rest === null) continue;
-      if (solverValue === null) solverValue = value(kitOf(restWithout(...solver), ...solver));
-      if (value(kitOf(rest, main, off)).equals(solverValue)) {
-        chosen = [main, off];
-        break search;
+  const walk = (at, choice) => {
+    if (at === options.length) {
+      if (before(choice) >= 0) return "stop"; // the solver's own arrangement is reached: none before it was as good, and it stands
+      const rest = legal(choice);
+      if (rest === null) return "go on";
+      if (solverValue === null) solverValue = value(kitOf(restWithout(...solver), solver, arranged));
+      if (value(kitOf(rest, choice, arranged)).equals(solverValue)) {
+        chosen = [...choice];
+        return "stop";
       }
+      return "go on";
     }
-  }
-  const placed = placeOutside(restWithout(...chosen), outside);
-  HANDS.forEach((hand, at) => {
+    for (const item of options[at]) {
+      if (walk(at + 1, [...choice, item]) === "stop") return "stop";
+    }
+    return "go on";
+  };
+  walk(0, []);
+  const placed = placeOutside(restWithout(...chosen), outside, arranged);
+  arranged.forEach((hand, at) => {
     if (chosen[at] !== null) placed.set(hand, [chosen[at]]);
   });
   return { placed: new Map([...placed].map(([group, items]) => [group, [...items].sort(byKeyThenTier)])), solverValue };
@@ -391,9 +439,9 @@ function placeHands(model, groups, value) {
  * the model has a column for it in (outside the hands) and that has a place left, provided every item after it can still be given a place. The result depends
  * on the set of items alone, not on where the solver put them. A SolveError if no place can be found (`groups` is not a placement of the model).
  */
-export function placeCanonically(model, groups, value) {
-  if (typeof value !== "function") throw fail("placeCanonically needs the function that values a kit exactly: placeCanonically(model, groups, value)");
-  return placeHands(model, groups, value).placed;
+export function placeCanonically(model, groups, value, setup = null) {
+  if (typeof value !== "function") throw fail("placeCanonically needs the function that values a kit exactly: placeCanonically(model, groups, value, setup)");
+  return placeHands(model, groups, value, setup).placed;
 }
 
 /**
@@ -416,6 +464,9 @@ export function checkRearranged(before, after, valueBefore, valueAfter) {
     throw new PlacementError(`the canonical placement changed the value of the kit from ${valueBefore.toString()} to ${valueAfter.toString()}`);
   }
 }
+
+/** Whether the tie stage's kit replaces the first stage's: its exact value (a Rational) is not less (`second_is_taken` in solve.py: one rule). */
+export const secondIsTaken = (first, second) => second.compare(first) >= 0;
 
 /**
  * The rank of every column the tie stage prices, as a Map from the column: an item column costs its item's place among the sorted eligible items
@@ -449,7 +500,8 @@ export function createSession(config) {
   for (const key of Object.keys(config)) {
     if (!SESSION_KEYS.has(key)) throw fail(`createSession has an option (${show(key)}) that it does not read (it reads ${[...SESSION_KEYS].join(", ")})`);
   }
-  const { highs, setup = null, buffset = null, monkBins = undefined, options = {}, now = defaultNow } = config;
+  const { highs, setup = null, buffset = null, monkBins = undefined, procs = null, options = {}, now = defaultNow } = config;
+  if (procs !== null && !(procs instanceof ProcTable)) throw fail("procs is the table of procs of the trio (readProcs of engine/procs.js), or null");
   if (!isRecord(highs) || typeof highs.createModel !== "function" || !isRecord(highs.constants) || typeof highs.infinity !== "number") {
     throw fail("createSession needs the loaded solver (highs)");
   }
@@ -472,6 +524,7 @@ export function createSession(config) {
     setup,
     buffset: buffset === null ? null : frozenCopy(buffset, "the buff set"),
     monkBins: monkBins === undefined || monkBins === null ? undefined : frozenCopy(monkBins, "the Monk bins"),
+    procs,
     options: Object.freeze({ any_rule: read.anyRule, haste_assumed: read.hasteAssumed }),
     now,
     scenarios: new Map(),
@@ -579,7 +632,7 @@ export function setScenario(session, name, items, options = {}) {
   if (options === null || options === undefined) options = {};
   if (!isRecord(options)) throw fail("the options are an object, the builder's");
   const built = session.now();
-  const withBins = session.monkBins !== undefined && !Object.prototype.hasOwnProperty.call(options, "monk_bins") ? { ...options, monk_bins: session.monkBins } : options;
+  const withBins = builderOptions(session, options);
   const { model, eligible } = buildMilpWithItems(session.profile, items, session.setup, session.buffset, withBins);
   return installScenario(session, name, items, { model, eligible }, built);
 }
@@ -802,8 +855,9 @@ function valueOf(session, scenario, x) {
       hasteAssumed: model.info.haste_assumed,
       monkBins: session.monkBins,
       buffset: session.buffset ?? undefined,
+      procs: session.procs ?? undefined,
     });
-  const { placed, solverValue } = placeHands(model, decoded.groups, (kit) => evaluateKit(kit).F);
+  const { placed, solverValue } = placeHands(model, decoded.groups, (kit) => evaluateKit(kit).F, session.setup);
   const kit = canonicalKit(placed);
   const evaluated = evaluateKit(kit);
   checkRearranged(decoded.groups, placed, solverValue, evaluated.F);
@@ -905,6 +959,96 @@ function answerOf(session, scenario, found, extra) {
   };
 }
 
+/** A copy of a model that binary columns and rows can be added to (the proof of the shortcut and the last stage make programs of their own from the scenario's). */
+class Editor {
+  constructor(model) {
+    this.model = model;
+    this.c = [...model.c];
+    this.col_lb = [...model.col_lb];
+    this.col_ub = [...model.col_ub];
+    this.integrality = [...model.integrality];
+    this.col_names = [...model.col_names];
+    this.A = { start: [...model.A.start], index: [...model.A.index], value: [...model.A.value] };
+    this.row_lb = [...model.row_lb];
+    this.row_ub = [...model.row_ub];
+    this.row_names = [...model.row_names];
+  }
+
+  addBinary(name) {
+    this.c.push(0);
+    this.col_lb.push(0);
+    this.col_ub.push(1);
+    this.integrality.push(1);
+    this.col_names.push(name);
+    return this.c.length - 1;
+  }
+
+  addRow(name, terms, lb, ub) {
+    for (const [column, value] of terms) {
+      this.A.index.push(column);
+      this.A.value.push(value);
+    }
+    this.A.start.push(this.A.index.length);
+    this.row_lb.push(lb);
+    this.row_ub.push(ub);
+    this.row_names.push(name);
+    return this.row_lb.length - 1;
+  }
+
+  /** The model as it is now, with `changes` (a new objective, a sense) on top. */
+  made(changes = {}) {
+    const { c, col_lb, col_ub, integrality, col_names, A, row_lb, row_ub, row_names } = this;
+    return { ...this.model, c, col_lb, col_ub, integrality, col_names, A, row_lb, row_ub, row_names, ...changes };
+  }
+}
+
+/** The columns of each item of a model, in a Map from its ident. */
+function columnsByItem(model) {
+  const byItem = new Map();
+  for (const [column, , key, tier] of model.item_cols) {
+    const name = ident(key, tier);
+    if (!byItem.has(name)) byItem.set(name, []);
+    byItem.get(name).push(column);
+  }
+  return byItem;
+}
+
+/**
+ * Add to `editor` the row that says "not the worn items (copies counted) of the solution `x`, and, when `buffColumns` is given (`[column, id]` pairs), not its chosen buffs either" (the row
+ * `tie.other` of the proof of the shortcut says it of the items alone, `itemsAreSettled`, whose head has the account of how the row works, and the last stage says it of the buffs too).
+ * A buff counts for the row when it is on and the kit has it off, or off and the kit has it on: `(1 - y)` for a buff that the kit has on, so the row's lower bound is 1 less for each.
+ * `label` keeps the names of the rows and columns of one kit apart from those of another.
+ */
+function addDifferenceRow(editor, byItem, x, buffColumns, label) {
+  const differs = []; // the terms of the row that says the worn items are not the kit's
+  let lower = 1;
+  for (const [name, own] of byItem) {
+    const worn = Math.round(own.reduce((sum, column) => sum + x[column], 0));
+    if (worn === 0) {
+      for (const column of own) differs.push([column, 1]);
+      continue;
+    }
+    const reach = own.reduce((sum, column) => sum + editor.col_ub[column], 0);
+    if (reach > worn) {
+      const more = editor.addBinary(`tie.more[${label}${name}]`); // 1 only if the item is worn more often than the kit wears it
+      editor.addRow(`tie.more.row[${label}${name}]`, [...own.map((column) => [column, 1]), [more, -(worn + 1)]], 0, null);
+      differs.push([more, 1]);
+    }
+    const fewer = editor.addBinary(`tie.fewer[${label}${name}]`); // 1 only if the item is worn less often
+    editor.addRow(`tie.fewer.row[${label}${name}]`, [...own.map((column) => [column, 1]), [fewer, reach - worn + 1]], null, reach);
+    differs.push([fewer, 1]);
+  }
+  for (const [column] of buffColumns ?? []) {
+    if (Math.round(x[column]) === 1) {
+      differs.push([column, -1]);
+      lower -= 1;
+    } else {
+      differs.push([column, 1]);
+    }
+  }
+  editor.addRow(`tie.other${label === "" ? "" : `[${label.slice(0, -1)}]`}`, differs, lower, null);
+}
+
 /**
  * Whether the band of the tie stage holds one set of worn items (`{settled, nodes}`, the nodes of the proof): no other set of items (copies counted), whatever buffs are chosen, has a model value of at least
  * `best - 1e-7 max(1, |best|)`. The tie stage chooses among the kits of that band, and it is a hard program (the rank is a dense objective that the relaxation bounds badly);
@@ -932,58 +1076,9 @@ function itemsAreSettled(session, scenario, first, { deadline, startedAt, highsO
   const columns = model.c.length;
   const best = first.value.modelF;
   const cutoff = best - TIE_TOLERANCE * Math.max(1, Math.abs(best));
-  const byItem = new Map();
-  for (const [column, , key, tier] of model.item_cols) {
-    const name = ident(key, tier);
-    if (!byItem.has(name)) byItem.set(name, []);
-    byItem.get(name).push(column);
-  }
-  const c = [...model.c];
-  const col_lb = [...model.col_lb];
-  const col_ub = [...model.col_ub];
-  const integrality = [...model.integrality];
-  const col_names = [...model.col_names];
-  const A = { start: [...model.A.start], index: [...model.A.index], value: [...model.A.value] };
-  const row_lb = [...model.row_lb];
-  const row_ub = [...model.row_ub];
-  const row_names = [...model.row_names];
-  const addBinary = (name) => {
-    c.push(0);
-    col_lb.push(0);
-    col_ub.push(1);
-    integrality.push(1);
-    col_names.push(name);
-    return c.length - 1;
-  };
-  const addRow = (name, terms, lb, ub) => {
-    for (const [column, value] of terms) {
-      A.index.push(column);
-      A.value.push(value);
-    }
-    A.start.push(A.index.length);
-    row_lb.push(lb);
-    row_ub.push(ub);
-    row_names.push(name);
-  };
-  const differs = []; // the terms of the row that says the worn items are not the first stage's
-  for (const [name, own] of byItem) {
-    const worn = Math.round(own.reduce((sum, column) => sum + first.x[column], 0));
-    if (worn === 0) {
-      for (const column of own) differs.push([column, 1]);
-      continue;
-    }
-    const reach = own.reduce((sum, column) => sum + col_ub[column], 0);
-    if (reach > worn) {
-      const more = addBinary(`tie.more[${name}]`); // 1 only if the item is worn more often than the kit wears it
-      addRow(`tie.more.row[${name}]`, [...own.map((column) => [column, 1]), [more, -(worn + 1)]], 0, null);
-      differs.push([more, 1]);
-    }
-    const fewer = addBinary(`tie.fewer[${name}]`); // 1 only if the item is worn less often
-    addRow(`tie.fewer.row[${name}]`, [...own.map((column) => [column, 1]), [fewer, reach - worn + 1]], null, reach);
-    differs.push([fewer, 1]);
-  }
-  addRow("tie.other", differs, 1, null);
-  const other = { ...model, c, col_lb, col_ub, integrality, col_names, A, row_lb, row_ub, row_names };
+  const editor = new Editor(model);
+  addDifferenceRow(editor, columnsByItem(model), first.x, null, ""); // the worn items are not the first stage's
+  const other = editor.made();
   const solver = createSolver(session, other);
   try {
     const found = run(session, solver, other, {
@@ -1011,7 +1106,7 @@ function itemsAreSettled(session, scenario, first, { deadline, startedAt, highsO
  * the objective "minimize the total rank" (`tieRanks`), on a model of its own so that the scenario's solver is left as it was. Returns the kit of the
  * second stage, or null when it did not end optimal.
  */
-function tieStage(session, scenario, first, { deadline, allowance, highsOptions, onProgress, startedAt, shortcut }) {
+function tieStage(session, scenario, first, { deadline, allowance, highsOptions, onProgress, startedAt, shortcut, tiedKits }) {
   const { highs } = session;
   const { model } = scenario;
   let settled = false; // the items are the first stage's in every kit of the band: the tie stage keeps the copies of each item as they are
@@ -1065,10 +1160,67 @@ function tieStage(session, scenario, first, { deadline, allowance, highsOptions,
   try {
     const found = run(session, solver, tie, { deadline, start: { colValue: first.x }, highsOptions, onProgress, startedAt, stage: STAGE_TIE, shown: best });
     if (found.status !== "optimal" || found.x === null) return null;
-    return { ...found, nodes: found.nodes + proofNodes, value: valueOf(session, scenario, found.x) };
+    const second = { ...found, nodes: found.nodes + proofNodes, value: valueOf(session, scenario, found.x) };
+    if (!secondIsTaken(first.value.F, second.value.F)) return second; // (the caller keeps the first stage's kit: nothing to settle)
+    return settleTies(session, scenario, tie, cost, second, { allowance, highsOptions, onProgress, startedAt, tiedKits, shown: best });
   } finally {
     solver.dispose();
   }
+}
+
+/**
+ * The last stage (`_settle_ties` in solve.py, and the head of this file): `second` is the kit of the tie stage, `tie` its program and `cost` the ranks of its columns. Returns the member of
+ * the tie that is first in the order of the kits, as `second` with `x`, `value` and `nodes` of its own, and `complete`, whether the proof that nothing more ties ran to its end. Each
+ * solve has the whole `allowance` (a deadline of its own). The program is the tie stage's with the objective the scenario's own (a maximum of the value, so that it is no tie program of the
+ * tests, which count the programs that minimize), the band of its row narrowed to `TIE_PROOF_TOLERANCE`, the cutoff of that band as the solver's `objective_bound`, and two things added: the row
+ * `total rank <= R`, and for each kit found so far a row that leaves it out. A run that ends infeasible, or optimal with a kit worth less than the cutoff, is the proof.
+ */
+function settleTies(session, scenario, tie, cost, second, { allowance, highsOptions, onProgress, startedAt, tiedKits, shown }) {
+  const { model } = scenario;
+  const columns = model.c.length;
+  const byItem = columnsByItem(model);
+  if (byItem.size === 0 && model.buff_cols.length === 0) return { ...second, complete: true }; // (no column carries a rank: one kit)
+  const ranked = [];
+  cost.forEach((rank, column) => {
+    if (rank !== 0) ranked.push([column, rank]);
+  });
+  const rankOf = (x) => Math.round(ranked.reduce((sum, [column, rank]) => sum + rank * x[column], 0));
+  const editor = new Editor(tie);
+  editor.c = [...model.c]; // (the value, not the rank)
+  const floor = shown - TIE_PROOF_TOLERANCE * Math.max(1, Math.abs(shown)); // the lowest value (the constant included) of a kit that can tie
+  editor.row_lb[model.row_lb.length] = floor - model.const; // (the row of the band that the tie stage added, narrowed)
+  const options = { ...highsOptions, objective_bound: -(floor - model.const) }; // (the program is a maximum and the solver minimizes the negative)
+  const rankRow = editor.addRow("tie.rank", ranked, null, null);
+  const limit = tiedKits ?? MAX_TIED_KITS;
+  let best = second;
+  let bestRank = rankOf(second.x);
+  let nodes = second.nodes;
+  addDifferenceRow(editor, byItem, second.x, model.buff_cols, "0:");
+  for (let found = 1; found <= limit; found += 1) {
+    editor.row_ub[rankRow] = bestRank;
+    const program = editor.made({ sense: "max" });
+    const solver = createSolver(session, program);
+    let probe;
+    try {
+      probe = run(session, solver, program, { deadline: session.now() + allowance, start: null, highsOptions: options, onProgress, startedAt, stage: STAGE_TIE, shown });
+    } finally {
+      solver.dispose();
+    }
+    nodes += probe.nodes;
+    if (probe.status === "infeasible") return { ...best, nodes, complete: true };
+    if (probe.status !== "optimal" || probe.x === null) return { ...best, nodes, complete: false };
+    const x = probe.x.slice(0, columns);
+    const value = valueOf(session, scenario, x);
+    if (value.modelF < floor) return { ...best, nodes, complete: true }; // (the kit the solver came across is worth less than the cutoff: none of the band is left)
+    const rank = rankOf(x);
+    const byValue = value.F.compare(best.value.F);
+    if (byValue > 0 || (byValue === 0 && (rank < bestRank || (rank === bestRank && compareKits(value.kit, value.buffs, best.value.kit, best.value.buffs) < 0)))) {
+      best = { ...probe, x, value };
+      bestRank = rank;
+    }
+    addDifferenceRow(editor, byItem, x, model.buff_cols, `${found}:`);
+  }
+  return { ...best, nodes, complete: false };
 }
 
 /**
@@ -1088,8 +1240,9 @@ export function solve(session, request) {
   for (const key of Object.keys(request)) {
     if (!SOLVE_KEYS.has(key)) throw fail(`the request has an option (${show(key)}) that solve does not read (it reads ${[...SOLVE_KEYS].join(", ")})`);
   }
-  const { budgetMs, deadline, canonical = false, highsOptions, onProgress, start: given, cutoff, tieShortcut = true } = request;
+  const { budgetMs, deadline, canonical = false, highsOptions, onProgress, start: given, cutoff, tieShortcut = true, tiedKits } = request;
   if (typeof tieShortcut !== "boolean") throw fail("tieShortcut is true or false");
+  if (tiedKits !== undefined && (!Number.isInteger(tiedKits) || tiedKits < 1)) throw fail("tiedKits is the most kits of a tie that the last stage sets apart, a whole number from 1");
   if (cutoff !== undefined && (typeof cutoff !== "number" || !Number.isFinite(cutoff))) throw fail("cutoff is a value of the model (the constant included) that a kit must reach, a number");
   if (typeof budgetMs !== "number" || !Number.isFinite(budgetMs) || budgetMs < 0) throw fail("budgetMs is the time of the call in milliseconds, a number from 0");
   if (deadline !== undefined && (typeof deadline !== "number" || !Number.isFinite(deadline))) throw fail("deadline is a moment on the clock of the session, in milliseconds");
@@ -1137,15 +1290,15 @@ export function solve(session, request) {
   } else if (canonical && found.status === "optimal" && !(cutoff !== undefined && found.value !== undefined && found.value.modelF < cutoff)) {
     // (with a cutoff, a kit worth less than it is what the solver came across, not the best there is: there is nothing to separate)
     const tied = session.now();
-    const second = tieStage(session, scenario, found, { deadline: tied + budgetMs, allowance: budgetMs, highsOptions, onProgress, startedAt, shortcut: tieShortcut });
+    const second = tieStage(session, scenario, found, { deadline: tied + budgetMs, allowance: budgetMs, highsOptions, onProgress, startedAt, shortcut: tieShortcut, tiedKits });
     const tieMs = session.now() - tied;
-    if (second !== null && second.value.F.equals(found.value.F)) {
-      // the band is a net for float noise, not a licence to lose value: the kit is accepted only if it is exactly as good
+    if (second !== null && secondIsTaken(found.value.F, second.value.F)) {
+      // the band is a net for float noise, not a licence to lose value: the kit is accepted unless it is worth less (a better kit than the first stage's is the better answer, as in Python)
       answer = answerOf(
         session,
         scenario,
         { ...second, gap: found.gap, nodes: found.nodes + second.nodes, bound: found.bound, limitMs: found.limitMs, ms: found.ms, startKind: found.startKind },
-        { canonical: true, tieStage: "applied" },
+        { canonical: second.complete !== false, tieStage: "applied" },
       );
       used = second;
     } else {
@@ -1171,9 +1324,11 @@ export function solve(session, request) {
  * session, and stays there between calls (the scenario of a path keeps its models). An option `haste_assumed` fixes one haste, as it always did: one program, no levels; a
  * scenario that scores no weapon (no damage weight, or a setup that scores none) has one program too.
  *
- * `request` is `{name, items, options, budgetMs, deadline, canonical, start, highsOptions, onProgress, bound, needTime}`: the builder's pool and options as `setScenario`
+ * `request` is `{name, items, options, budgetMs, deadline, canonical, start, highsOptions, onProgress, bound, needTime, floor}`: the builder's pool and options as `setScenario`
  * takes them, and what `solve` takes; `budgetMs` is the time of the whole call (with a `deadline`, the call ends by it, and the budget is what was left of it), `bound: false` solves every level, and `needTime: true` begins no solve when the time is gone by
- * the moment the first model is made (the call then returns null, with the model made: a path that has spent its budget starts nothing). It returns the answer of `solve` for the winning level with
+ * the moment the first model is made (the call then returns null, with the model made: a path that has spent its budget starts nothing), and `floor` (a number, a value of the kit) says that only a kit worth at least that is
+ * looked for: the levels whose relaxation cannot reach it are left out, the others are searched with the cutoff of the first stage's kind, and when no kit is worth it the answer is the one of no kit at all (`infeasible`,
+ * `kit` null, proven): the look for an earlier equal addition of the farm path asks for no more than that, and it is far cheaper than the best kit. It returns the answer of `solve` for the winning level with
  * `F`, `kit`, `buffs` and `breakdown` those of the winner at the haste it counts, `hasteAssumed` that haste, `level` the level whose program the kit came from, `levels`
  * every level of the scenario, `program` the name of the scenario of the session that holds the program of the winner, `runs` what became of each (`{level, outcome: "solved" | "bound" | "infeasible" | "time", status, F, counted, bound}`), `nodes` the nodes of every
  * solve added up, `timings` the milliseconds of the solves added up, `build` what `setScenario` said, added up (`{buildMs, syncMs, reused, columns, rows}`), and
@@ -1185,7 +1340,8 @@ export function solveScenario(session, request) {
   for (const key of Object.keys(request)) {
     if (!TRUTHFUL_KEYS.has(key)) throw fail(`the request has an option (${show(key)}) that solveScenario does not read (it reads ${[...TRUTHFUL_KEYS].join(", ")})`);
   }
-  const { name, items, budgetMs, deadline, canonical = false, start, highsOptions, onProgress, bound = true, needTime = false, tieShortcut = true } = request;
+  const { name, items, budgetMs, deadline, canonical = false, start, highsOptions, onProgress, bound = true, needTime = false, tieShortcut = true, floor } = request;
+  if (floor !== undefined && (typeof floor !== "number" || !Number.isFinite(floor))) throw fail("floor is the least value of a kit that is looked for, a number");
   const options = request.options === undefined || request.options === null ? {} : request.options;
   if (typeof budgetMs !== "number" || !Number.isFinite(budgetMs) || budgetMs < 0) throw fail("budgetMs is the time of the call in milliseconds, a number from 0");
   if (typeof bound !== "boolean") throw fail("bound is true or false");
@@ -1205,9 +1361,15 @@ export function solveScenario(session, request) {
   // one program: a fixed haste, or no weapon to score
   if (opts.hasteAssumed !== null || !scoresWeapons) {
     const fixed = opts.hasteAssumed !== null;
-    const program = solveProgram(session, name, items, fixed ? options : { ...options, haste_assumed: 0 }, null, { left, call, start, needTime });
+    const cutoff = floor === undefined ? undefined : floor - EXACTNESS_TOLERANCE * Math.max(1, Math.abs(floor));
+    const program = solveProgram(session, name, items, fixed ? options : { ...options, haste_assumed: 0 }, null, { left, call, start, needTime, cutoff });
     if (program === null) return null;
     const { build, answer } = program;
+    if (cutoff !== undefined && (answer.status === "infeasible" || (answer.status === "optimal" && (answer.kit === null || answer.modelF < cutoff)))) {
+      // (with a cutoff, a kit worth less than it is what the solver came across, not the best there is: no kit is worth the floor)
+      const level = answer.hasteAssumed;
+      return finish(infeasibleAnswer(level), { build, level, levels: [level], program: name, runs: [{ level, outcome: "bound", status: answer.status, F: null, counted: null, bound: null }] });
+    }
     if (!fixed && answer.kit !== null) {
       // no weapon is scored, so the value is the same at any haste: the answer says the haste the kit counts
       const counted = Number(answer.breakdown.totals.haste.counted.floor());
@@ -1220,7 +1382,7 @@ export function solveScenario(session, request) {
     return finish(answer, { build, level, levels: [level], program: name, runs: [{ level, outcome: "solved", status: answer.status, F: answer.F, counted: null, bound: null }] });
   }
 
-  const withBins = session.monkBins !== undefined && !Object.prototype.hasOwnProperty.call(options, "monk_bins") ? { ...options, monk_bins: session.monkBins } : options;
+  const withBins = builderOptions(session, options);
   const build = { buildMs: 0, syncMs: 0, reused: true, columns: 0, rows: 0 };
   // (the build is timed on the real clock: the session's clock is looked at for the budget, and a look is a look)
   const sharedAt = performance.now();
@@ -1256,29 +1418,31 @@ export function solveScenario(session, request) {
   }
   if (bound && levels.length > 1) programs.sort((a, b) => (b.ceiling ?? Infinity) - (a.ceiling ?? Infinity) || b.level - a.level);
   for (const { level, scenarioName, ceiling } of programs) {
-    if (won !== null && ceiling !== undefined) {
-      const best = won.answer.F.toNumber();
+    if ((won !== null || floor !== undefined) && ceiling !== undefined) {
+      const best = won !== null ? won.answer.F.toNumber() : floor;
       if (ceiling < best - EXACTNESS_TOLERANCE * Math.max(1, Math.abs(best))) {
         runs.push({ level, outcome: "bound", status: null, F: null, counted: null, bound: ceiling });
         continue; // (a level the bound rules out is finished, whatever the time)
       }
     }
-    const modelAt = performance.now();
-    const model = shared.programFor(level);
-    build.buildMs += performance.now() - modelAt;
-    const made = installScenario(session, scenarioName, items, { model, eligible: shared.eligible }, session.now()); // (only a level the bound does not rule out has a scenario)
     if (won !== null && left() <= 0) {
-      // the time is gone: the levels that could still win are not looked at
+      // the time is gone: the levels that could still win are not looked at, and their programs are not built
       runs.push({ level, outcome: "time", status: null, F: null, counted: null, bound: ceiling ?? null });
       stopped = true;
       continue;
     }
+    const modelAt = performance.now();
+    const model = shared.programFor(level);
+    build.buildMs += performance.now() - modelAt;
+    const made = installScenario(session, scenarioName, items, { model, eligible: shared.eligible }, session.now()); // (only a level the bound does not rule out, and the time allows, has a scenario)
     const started = won !== null ? { kit: won.answer.kit, buffs: won.answer.buffs } : start;
     // a level is only worth looking for a kit of at least the best value found: the search is told so (a level that has none ends "infeasible", and is "bound")
     let cutoff;
     if (bound && won !== null && !stopped) {
       const best = won.answer.F.toNumber();
       cutoff = best - EXACTNESS_TOLERANCE * Math.max(1, Math.abs(best));
+    } else if (floor !== undefined && won === null) {
+      cutoff = floor - EXACTNESS_TOLERANCE * Math.max(1, Math.abs(floor)); // (no kit is worth less than the floor: a level that has none is "bound")
     }
     const solved = solveProgram(session, scenarioName, items, null, made, { left, call, start: started, needTime: needTime && !begun, cutoff });
     if (solved === null) return null;
@@ -1352,7 +1516,15 @@ function evaluateAt(session, kit, buffs, haste) {
     hasteAssumed: haste,
     monkBins: session.monkBins,
     buffset: session.buffset ?? undefined,
+    procs: session.procs ?? undefined,
   });
+}
+
+/** The builder's options of a call, with the Monk bins and the table of procs of the session in them (what the caller gave stands). */
+export function builderOptions(session, options) {
+  const has = (name) => Object.prototype.hasOwnProperty.call(options, name);
+  const withBins = session.monkBins !== undefined && !has("monk_bins") ? { ...options, monk_bins: session.monkBins } : options;
+  return session.procs !== null && session.procs !== undefined && !has("procs") ? { ...withBins, procs: session.procs } : withBins;
 }
 
 /** Add what `setScenario` said about a program to the account of the call. */

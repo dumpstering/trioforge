@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import json
 import math
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -93,17 +94,31 @@ SLOT_LABELS: tuple[str, ...] = (
 )  # fmt: skip
 assert len(SLOT_LABELS) == data.KIT_SIZE
 
-ROLE_LABELS = {"balanced": "Balanced", "tank": "Tank", "melee": "Melee", "caster": "Caster (healing or nuking)"}
-ROLE_HINTS = {
-    "balanced": "An equal blend of staying alive and doing damage, for this trio's classes.",
-    "tank": "Staying alive first: armour class, hit points and haste.",
-    "melee": "Damage first: attack, haste and dexterity, then hit points.",
-    "caster": "Mana first, for healing or nuking.",
+ROLE_LABELS = {
+    "tank": "Tank", "shield": "Shield caster", "melee": "Melee damage", "ranged": "Archer", "castertank": "Caster tank", "caster": "Caster",
 }
-SETUP_LABELS = {"1h-shield": "1H + shield", "2h": "Two-hander", "dw": "Dual wield", "stick": "Stat stick"}
-SETUP_PHRASES = {"1h-shield": "1H + shield", "2h": "two-hander", "dw": "dual wield", "stick": "stat stick"}
+ROLE_HINTS = {
+    "tank": "In front: armour class first, then hit points, haste and a weapon.",
+    "shield": "A tank class that casts: a shield and armour class, then mana and resists.",
+    "melee": "Damage first: attack, haste and dexterity, then hit points.",
+    "ranged": "Damage from a bow first: attack, dexterity and haste, then hit points.",
+    "castertank": "No tank class: armour class and a shield, mana as a second health bar.",
+    "caster": "Mana first, for healing or nuking, with something else in front.",
+}
+#: what the page says of the bow setup, beside the range line: it is in the markup of a page whose first answer is the bow's and is made by the page code (trio.js has the
+#: same words) when the bow setup is first shown, so that the markup of a trio page pays for the controls of the setup and for nothing else
+BOW_NOTE = "In the Bow setup the range place holds a bow, scored on its own damage per delay, with no main-hand bonus; arrow damage is not counted."
+#: what a row of the table of runner-ups says when its slot has no swap: the page is made with it in those rows only, and the page code (trio.js has the same words) makes it where another view
+#: leaves a slot without one, so that the 22 rows of a page do not each carry a hidden copy
+NO_ALTERNATIVES = "No close alternatives"
+SETUP_LABELS = {"1h-shield": "1H + shield", "2h": "Two-hander", "dw": "Dual wield", "stick": "Stat stick", "ranged": "Bow"}
+SETUP_PHRASES = {"1h-shield": "1H + shield", "2h": "two-hander", "dw": "dual wield", "stick": "stat stick", "ranged": "bow"}
 BUFF_LABELS = {"own": "Your own buffs", "group": "Common group buffs", "raid": "Full raid"}
 BUFF_PHRASES = {"own": "your own buffs", "group": "common group buffs", "raid": "full raid buffs"}
+#: what the Assumptions line calls a build that plays the Berserker stance (``stance.berserker``): the stance is one of the assumptions, in the folded line and under Weapons
+STANCE_PHRASE = "Berserker stance"
+#: the end of the key of a buff set that keeps the haste of the spells (the bundle's ``own+haste``; ``HASTE_SUFFIX`` of ``export/browser.py``)
+HASTE_TWIN = "+haste"
 #: the choices of the Buffs assumption: the two buff sets the precompute has answers for, and the raid, which the optimizer works out for the visitor (with an Enchanter in the group the
 #: page code makes a fourth set of the two, "group+enchanter", a checkbox of its own)
 BUFF_CHOICES = (*data.BUFFS, "raid")
@@ -146,6 +161,23 @@ def tier_label(tier: int) -> str:
     return f"+{tier}"
 
 
+def stance_sentence(stance: Mapping[str, Any], *, bow: bool = False) -> str:
+    """What the page says of the Berserker stance the Melee build plays, in plain words: the factor of the swing (the rule's own number), that it is applied after the haste cap, on top of whatever haste counts
+    (the haste note says what counts: worn haste with a spell up is only what the cap leaves, so this sentence does not call it uncapped), and what agility stops giving (said only when the stance's
+    share of agility is not all of it). ``bow`` is the sentence of the bow setup, to which the factor does not apply. The page code has no copy of either sentence: it shows or hides the one that fits the setup."""
+    factor = f"{float(stance['swing_factor']):g}"
+    share = float(stance["agi_share"])  # (what counts of the agility in the sheet armor class and the evasion: 0 under the client's stance)
+    if share >= 1:
+        agility = ""
+    elif share <= 0:
+        agility = ", and agility gives no armor class or evasion"
+    else:
+        agility = f", and only {share:.0%} of agility counts toward armor class and evasion"
+    if bow:  # (the factor is the swing of the hands: the model does not apply it to a bow's shot, so the sentence of the bow says so; it has no figure of its own, which the note of the hands carries with the link of its rule)
+        return f"The Berserker stance speeds up the swing of the hands, not a bow's shot{agility}."
+    return f"The Berserker stance is on: the weapons swing {factor} times as fast, applied after the haste cap and on top of whatever haste counts{agility}."
+
+
 def haste_text(percent: int) -> str:
     """The haste the weapons were scored at, as the Assumes line shows it."""
     return f"{percent}%"
@@ -179,20 +211,21 @@ def flips_more(notes: Sequence[str]) -> int:
     return max(0, len(notes) - MAX_FLIPS)
 
 
-def aa_text(rank: int, enhancement: bool) -> str:
+def aa_text(rank: int, enhancement: bool, durability: int) -> str:
     """The AA choices of the default view, as the Assumes line words them."""
-    return ", ".join(label for label, _ in _aa_labels(rank, enhancement))
+    return ", ".join(label for label, _ in _aa_labels(rank, enhancement, durability))
 
 
-def _aa_labels(rank: int, enhancement: bool) -> tuple[tuple[str, str], ...]:
-    """``(words, rule id)`` for the two AA choices: Combat Stability by rank, and Physical Enhancement, which a trio of casters only
-    has only if the open rule says so."""
+def _aa_labels(rank: int, enhancement: bool, durability: int) -> tuple[tuple[str, str], ...]:
+    """``(words, rule id)`` for the three AA choices the model makes: Combat Stability by rank, Physical Enhancement, which a trio of casters only
+    has only if the open rule says so, and Natural Durability by rank (the percent of the hit points that come from STA, which the HP model applies to every pool)."""
     return (
         (f"Combat Stability {rank}" if rank else "no Combat Stability", "ac.softcap.combat_stability_pct"),
         (
             "Physical Enhancement" if enhancement else "no Physical Enhancement",
             "ac.softcap.physical_enhancement_pct" if enhancement else "ac.softcap.pe_for_caster_only_trios",
         ),
+        (f"Natural Durability {durability}" if durability else "no Natural Durability", "hp.natural_durability_pct"),
     )
 
 
@@ -214,7 +247,7 @@ class RaceOption:
     name: str
     legal: bool  # can a new character start as one of the trio's classes in this race?
     best: bool
-    tied: bool = False  # a legal race within TIE_BAND of the best one, on a page that says the races are tied: the dropdown marks it like the best race
+    close: bool = False  # a race on the data's list of close races (``close_races`` of the defaults file: the creation-legal races within the rule ``defaults.race_close_pct`` of the best, the default first): the dropdown says it is close
 
 
 def race_options(codes: list[str] | tuple[str, ...], *, trio: tuple[str, ...], best: str) -> list[RaceOption]:
@@ -227,26 +260,10 @@ def race_options(codes: list[str] | tuple[str, ...], *, trio: tuple[str, ...], b
     return sorted(options, key=lambda o: (not o.best, not o.legal, o.name))
 
 
-#: races within this share of the best race's F are tied with it: the model scores no racial but the Iksar's AC, so a gap this small is not a ranking
-TIE_BAND = 0.005
-
-
-def tied_races(rows: Sequence[tuple[str, bool, float]], best: str) -> list[str]:
-    """The race codes tied with ``best``. ``rows`` are (code, legal, F) of every race in the default view. Tied are the legal races other than ``best`` whose F is at least
-    ``F(best) * (1 - TIE_BAND)``, by F descending and then by code. Nothing is tied when the best F is zero or below (a band of a share has no meaning there)."""
-    best_f = next(f for code, _, f in rows if code == best)
-    if best_f <= 0:
-        return []
-    floor = best_f * (1 - TIE_BAND)
-    tied = [(code, f) for code, legal, f in rows if legal and code != best and f >= floor]
-    return [code for code, _ in sorted(tied, key=lambda row: (-row[1], row[0]))]
-
-
-def join_names(names: Sequence[str]) -> str:
-    """Names with commas and a final "and": "A", "A and B", "A, B and C"."""
-    if len(names) <= 1:
-        return "".join(names)
-    return ", ".join(names[:-1]) + " and " + names[-1]
+def close_percent(book: RuleBook) -> str:
+    """The rule ``defaults.race_close_pct`` as the line words it ("1%"): the races within it of the best one are close, and the model scores no racial but the Iksar's AC, so a gap this small is not a ranking."""
+    value = book.get("defaults.race_close_pct").value
+    return f"{value}%"
 
 
 # ---- what each race gets you ----------------------------------------------------------------------------------------------------
@@ -261,7 +278,7 @@ RACIALS_PAGES = "/sources/#races-box"
 SCORED_RACIALS = {("IKS", "Increased Armor Class"): "race.iksar_ac_bonus"}
 #: how many differences of totals a race's line names; the rest are counted
 TOTALS_SHOWN = 5
-#: the cards of the section: the best race and the closest of the races tied with it; a page that has more says how many are left out (the best-race line still names them all)
+#: the cards of the section: the best race and the closest of the races close to it; a page that has more says how many are left out (the best-race line still names them all)
 MAX_RACE_CARDS = 6
 #: the totals of a kit as a line of the page says them, in the order of the table of totals: (word, the field of the model's :class:`Totals`, the place in a tuple field or None)
 _TOTAL_WORDS = (
@@ -336,7 +353,7 @@ class RaceCard:
 
     code: str
     name: str
-    tag: str  # "best race", "tied with Ogre" or "runner-up" (never "in this view": the section describes the view the page was built for, and a switch changes the view shown)
+    tag: str  # "best race", "close to Ogre" or "runner-up" (never "in this view": the section describes the view the page was built for, and a switch changes the view shown)
     value: str  # F of its best setup in the default view, whole
     versus: str  # its gap to the best race's value, in hit-point equivalents (the intro says so) and as a share
     totals: str  # what its best kit's totals change against the best race's best kit's
@@ -379,24 +396,25 @@ def race_cards(
     default_value: Mapping[str, float],
     names: Mapping[str, str],
     best: str,
-    tied: Sequence[str],
+    close: Sequence[str],
     runner_up: str,
     book: RuleBook,
     racials: content.Racials,
     *,
     slug: str,
     view_words: str,
+    close_pct: str,
 ) -> tuple[tuple[RaceCard, ...], str, str]:
-    """The cards of "What each race gets you" and the line that opens the section. The races are the best one and the ones tied with it, or the best one and the runner-up when none is tied.
+    """The cards of "What each race gets you" and the line that opens the section. The races are the best one and the ones close to it, or the best one and the runner-up when none is close.
 
-    Every number is the model's: a race's value is ``default_value`` (its best setup in the default view, the F that :func:`tied_races` judged by), the totals are those of that
+    Every number is the model's: a race's value is ``default_value`` (its best setup in the default view, the F that the list of close races was judged by), the totals are those of that
     setup's scenario in the default shard against the best race's own scenario, and the starting stats are those of ``rules/races.json``."""
     best_value = default_value[best]
     said: set[tuple[str, str]] = set()
     cards = [
         RaceCard(best, names[best], "best race", fmt_int(display_int(best_value)), "", "", "", _racial_rows(best, book, racials, slug, said))
     ]
-    shown = list(tied[: MAX_RACE_CARDS - 1]) if tied else [runner_up]  # (the best race and the closest of the tied ones: the others are counted, and the race control picks them)
+    shown = list(close[: MAX_RACE_CARDS - 1]) if close else [runner_up]  # (the best race and the closest of the close ones: the others are counted, and the race control picks them)
     for code in shown:
         role, tier = best_scenario.role, best_scenario.tier
         scenario = shard.scenario(code, role, tier, shard.best_setup(code, role, tier))
@@ -406,7 +424,7 @@ def race_cards(
             RaceCard(
                 code=code,
                 name=names[code],
-                tag=f"tied with {names[best]}" if tied else "runner-up",
+                tag=f"close to {names[best]}" if close else "runner-up",
                 value=fmt_int(display_int(default_value[code])),
                 versus=versus,
                 totals=totals_diff_text(scenario.totals, best_scenario.totals),
@@ -421,15 +439,15 @@ def race_cards(
         )
     describes = "This section describes that view; the switches do not change it."
     own_kits = "Each race is judged with its own best kit, so the differences include item choices as well as the race."
-    if tied:
+    if close:
         intro = (
-            f"In the {view_words}, these races are within {TIE_BAND * 100:g}% of the best, so the page calls them tied. {describes} "
+            f"In the {view_words}, these races are within {close_pct} of the best, so the page calls them close. {describes} "
             f"Each is compared with {names[best]}. {own_kits} Values are in hit-point equivalents."
         )
     else:
         intro = f"In the {view_words}, the runner-up is compared with the best race, {names[best]}. {describes} {own_kits} Values are in hit-point equivalents."
-    left = len(tied) - len(shown) if tied else 0
-    more = f"{left} more tied race{'s' if left != 1 else ''} {'are' if left != 1 else 'is'} not shown; the Race control picks {'them' if left != 1 else 'it'}." if left > 0 else ""
+    left = len(close) - len(shown) if close else 0
+    more = f"{left} more close race{'s' if left != 1 else ''} {'are' if left != 1 else 'is'} not shown; the Race control picks {'them' if left != 1 else 'it'}." if left > 0 else ""
     return tuple(cards), intro, more
 
 
@@ -443,6 +461,8 @@ class RoleOption:
     hint: str
     setups: tuple[str, ...]
     checked: bool
+    rule: RuleRef | None = None  # the rule of the weights of the role besides the templates (the Ranged role's: the factors on the Melee template), for the page code to cite with them
+    stance: str = ""  # the phrase of the stance the build plays (:data:`STANCE_PHRASE`), or nothing: the page code says it in the Assumptions when the role is chosen (``data-stance``)
 
 
 @dataclass(frozen=True)
@@ -514,6 +534,7 @@ class TotalsRow:
     cap_rules: tuple[tuple[str, RuleRef], ...] = ()
     cap_seal: RuleRef | None = None
     note: str = ""  # a short note under the rule of the row (the haste row says which worn haste counts)
+    also: tuple[RuleRef, ...] = ()  # the other rules the value is made from (the hit points: the AA that raises the part that comes from STA), each cited with its own seal
 
 
 @dataclass(frozen=True)
@@ -537,6 +558,7 @@ class Caps:
     regen: tuple[int, int, int]  # HP, mana, endurance
     haste_rule: str
     cs_rank: int  # the Combat Stability rank the softcap assumes (the top rank by default)
+    nd_rank: int  # the Natural Durability rank the hit points assume (the top rank by default)
     pe: bool  # whether it assumes Physical Enhancement (a trio with a melee class has it)
     haste_per_tier: int  # the worn haste a piece gains a tier (the rule haste.worn_per_tier: a whole number): the page code makes the chip of a row an answer of the optimizer fills from it
 
@@ -551,9 +573,8 @@ class TrioPage:
     best_name: str
     runner_up_name: str
     margin: str
-    tied_names: tuple[str, ...]  # the names of the legal races within :data:`TIE_BAND` of the best race, best value first: when there are any, the line says they are tied and gives no margin
-    tied_text: str  # ``tied_names`` as a sentence part ("Dwarf and Ogre"), empty when there are none
-    tie_band: str  # :data:`TIE_BAND` as the line words it ("0.5%")
+    close_names: tuple[str, ...]  # the names of the close races, from the data's list (``close_races`` of the defaults file), the default race first: when there are any, the line says "close:" and names them, and gives no margin
+    close_pct: str  # the rule ``defaults.race_close_pct`` as the line words it ("1%")
     flips: str
     races: tuple[RaceOption, ...]
     roles: tuple[RoleOption, ...]
@@ -580,7 +601,10 @@ class TrioPage:
     w_main: str
     w_off: str
     w_others: tuple[str, ...]
+    w_range: str
+    bow_note: str
     weapons_rule: RuleRef
+    bow_rule: RuleRef  # the rule behind the bow's score (the link of the bow note, with its seal)
     roles_rule: RuleRef
     runnerups: tuple[RunnerRow, ...]
     runnerups_available: bool
@@ -605,14 +629,23 @@ class TrioPage:
     exalt_files: tuple[str, str] | None = None  # the addresses of the shared effects file and of the trio's exalt file when the results have them (the section Effects to exalt), else None: no section
     race_cards: tuple[RaceCard, ...] = ()  # the section "What each race gets you" of the expander "How the best race was judged": the best race and the races tied with it (or the runner-up when none is), none when the page was given no racials
     race_intro: str = ""  # what the section says first, and why those races are shown
-    race_more: str = ""  # the line that says how many tied races the section leaves out (empty when it leaves none out)
+    race_more: str = ""  # the line that says how many close races the section leaves out (empty when it leaves none out)
     haste_per_tier: int = 0  # the step of worn haste a tier, for the page code (``data-haste-tier``)
+    stance_note: str = ""  # what the Weapons assumption says of the stance (in plain words, with the factor), or nothing when no build of the trio plays one: then the page has no word of it
+    stance_note_bow: str = ""  # the same for the bow setup, to which the stance's factor does not apply (hidden until the page code shows it for that setup; short, and without the rule's link, which the note of the hands has: the page may not grow)
+    stance_rules: tuple[RuleRef, ...] = ()  # the rule of the stance, linked with its seal beside the note
+    haste_spells_json: str = ""  # the best haste spell of each buff choice as JSON ({"own": [name, percent], ...}), for the page code to write the haste notes with; empty when no choice has one
+    haste_free: int = 0  # the worn haste that counts without a spell (the cap of the page less the flat haste of Unbound Alacrity)
+    haste_bonus: int = 0  # the flat haste of Unbound Alacrity that the cap of the page includes
+    haste_box_note: str = ""  # the note beside the box "I have a haste spell" for the buffs the page opens on, or nothing
+    assume_stance: str = ""  # the stance of the build the page opens on (:data:`STANCE_PHRASE`), or nothing
     race_rules: tuple[RuleRef, ...] = ()  # the rules the figures of the section follow (the value and the gap, the totals of a kit, the starting stats): the section names them, and the page links each with its seal
     naked_rule: RuleRef | None = None  # the rule the starting stats follow, linked with its seal under the cards
     racials_site: str = RACIALS_SITE  # the credit under the section: the wiki, its licence and the part of the sources page that lists the pages (the template has no context but the page)
     racials_licence_name: str = RACIALS_LICENCE_NAME
     racials_licence_url: str = RACIALS_LICENCE_URL
     racials_pages: str = RACIALS_PAGES
+    no_alternatives: str = NO_ALTERNATIVES  # (the template has no context but the page)
 
 
 def rule_ref(book: RuleBook, rule_id: str) -> RuleRef:
@@ -649,8 +682,9 @@ def _tables():
 def trio_caps(trio: tuple[str, ...], level: int, rules: Any) -> Caps:
     """The caps a trio's totals are shown against, from the model's own profile (so the page never re-derives them)."""
     from trioforge.model.profile import make_profile
+    from trioforge.model.roles import roles_for
 
-    profile = make_profile("HUM", trio, level, "balanced", None, None, _tables(), rules)
+    profile = make_profile("HUM", trio, level, roles_for(trio, bow=None)[0], None, None, _tables(), rules)
     regen = profile.caps["regen"]
     return Caps(
         softcap=profile.effective_softcap,
@@ -659,6 +693,7 @@ def trio_caps(trio: tuple[str, ...], level: int, rules: Any) -> Caps:
         regen=(int(regen["HP"]), int(regen["MANA"]), int(regen["END"])),
         haste_rule="haste.cap_pct_with_monk" if "MNK" in trio else "haste.cap_pct",
         cs_rank=int(profile.aa["combat_stability"]),
+        nd_rank=int(profile.aa["natural_durability"]),
         pe=bool(profile.aa["physical_enhancement"]),
         haste_per_tier=_whole_step(rules.get("haste.worn_per_tier")),
     )
@@ -679,11 +714,13 @@ WHY_REASON_TEXT = {
     "regen-cap": "past the regen cap",
     "haste-cap": "past the haste cap",
     "haste-covered": "another piece gives as much haste",
-    "ac-softcap": "past the AC softcap",
+    "ac-softcap": "past the AC softcap, where it adds nothing at this role's weights",
 }
 WHY_NO_REASON = "not valued in this view"
 WHY_TOP = 3  # the losses a row names, the largest first
 #: the rules the figures of a row follow: the stat rule and the steps of haste and regeneration, the weight and the weapon damage a tier, and the weights that value a stat
+#: the roles whose weights have a rule of their own besides ``roles.templates``: the Ranged role's is the Melee template with the factors of this rule
+ROLE_RULES = {"ranged": "roles.ranged_template"}
 STAT_RULES = ("tier.stat_rule", "haste.worn_per_tier", "regen.per_tier", "tier.weight_pct", "tier.weapon_damage_pct", "roles.templates")
 
 
@@ -724,6 +761,45 @@ def haste_chip(vec: Any) -> str:
 HASTE_NOTE = "Only the highest worn haste counts."
 
 
+def haste_spells(doc: Mapping[str, Any]) -> dict[str, tuple[str, int]]:
+    """The best haste spell of each buff choice of the page (own, group, group+enchanter, raid), by name and percent, from the bundle of the trio: the set that keeps the haste of the spells (``own+haste``) holds
+    the buffs of the choice, and the entry of the table of those buffs has the percent. A choice with no haste spell is left out; of equal spells the first by name."""
+    table = doc.get("buff_table_haste") or {}
+    found: dict[str, tuple[str, int]] = {}
+    for key, row in doc.get("buffs", {}).items():
+        if not key.endswith(HASTE_TWIN):
+            continue
+        entries = [table[str(i)] for i in (*row["set"]["always_on"], *row["set"]["optional"]) if str(i) in table]
+        best = min(((entry["name"], entry["vec"].get("HASTE", 0)) for entry in entries if entry["vec"].get("HASTE", 0) > 0), key=lambda pair: (-pair[1], pair[0]), default=None)
+        if best is not None:
+            found[key.removesuffix(HASTE_TWIN)] = best
+    return found
+
+
+def haste_notes(name: str, percent: int, cap: int, bonus: int, *, ticked: bool = False, pending: bool = False) -> tuple[str, str]:
+    """What the page says of the two answers about haste, in plain words, as the note beside the haste figure and as the note beside the box "I have a haste spell": without a spell the best worn haste
+    counts in full, up to the cap; with the trio's spell only the cap minus the spell counts (the numbers are given), so a smaller haste item is enough and its slot goes to stats. ``cap`` is the cap of the
+    page, ``bonus`` the flat haste of Unbound Alacrity that it includes (0 or 10), so worn haste counts up to ``cap - bonus`` without a spell. ``ticked`` says the box is ticked: then the kit below is the one
+    chosen with the spell, but only once that kit is drawn: ``pending`` says it is not yet (the solve is out, or failed), and the notes then say that the kit below is still the one without the spell.
+    The page code (``trio.js``, ``hasteNotes``) writes the same words, and a test holds the two to each other."""
+    free = cap - bonus
+    room = max(0, free - percent)
+    flat = f" Unbound Alacrity adds a flat {bonus} on top." if bonus else ""
+    if ticked:
+        row_tail = box_tail = "The kit below is still the one without the spell." if pending else "The kit below is chosen with the spell."
+    else:
+        row_tail, box_tail = 'Tick "I have a haste spell" to see that kit.', "Tick the box to see that kit."
+    unit, verb = ("point", "counts") if room == 1 else ("points", "count")
+    if room > 0:
+        row_with = f"only {room} {unit} of worn haste {verb} ({free} minus {percent}), so a smaller haste item reaches the cap and its slot goes to stats."
+        box = f"{name} gives {percent}% haste, so worn haste counts only up to {room} {unit}: a smaller haste item is enough, and its slot goes to stats."
+    else:  # (a spell at or above what counts: nothing is left, and no subtraction is printed that would come out below zero)
+        row_with = f"no worn haste counts (the spell alone reaches the {free} that count), so the slot of a haste item goes to stats."
+        box = f"{name} gives {percent}% haste, so no worn haste counts: the slot of a haste item goes to stats."
+    row = f"{HASTE_NOTE} With no haste spell it counts in full, up to {free}%. With {name} ({percent}% haste) {row_with}{flat} {row_tail}"
+    return row, f"{box}{flat} Without a spell the best worn haste counts in full, up to {free}%. {box_tail}"
+
+
 def _term_figure(term: str, vec: Any) -> str:
     """How a term of the why is named: the stat with its figure at the tier, or the weapon's damage and delay."""
     if term == "DAMAGE":
@@ -741,17 +817,23 @@ def why_text(place: data.WhyPlace, vec: Any, swaps: Sequence[data.Swap] = ()) ->
     costs = [t for t in place.terms if t.loss < 0]
     sentences = []
     if gains:
-        sentences.append("Lost without it: " + "; ".join(f"{_term_figure(t.stat, vec)}: {fmt_int(display_int(t.loss))}" for t in gains) + ".")
+        sentences.append("Lost without it: " + "; ".join(f"{_term_figure(t.stat, vec)}: {_under_one(t.loss)}" for t in gains) + ".")
     if nothing:
         named = "; ".join(f"{_term_figure(t.stat, vec)} ({WHY_REASON_TEXT.get(t.reason, WHY_NO_REASON)})" for t in nothing[:WHY_TOP])
         more = f" and {len(nothing) - WHY_TOP} more" if len(nothing) > WHY_TOP else ""
         sentences.append(f"Worth nothing here: {named}{more}.")
     if costs:
         worst = costs[-1]
-        sentences.append(f"Costs: {_term_figure(worst.stat, vec)} takes {fmt_int(display_int(-worst.loss))} off.")
+        sentences.append(f"Costs: {_term_figure(worst.stat, vec)} takes {_under_one(-worst.loss)} off.")
     better = next((swap for swap in swaps if swap.item.deity is None), None)
     sentences.append(f"Next best: {better.item.name}, {_less(better.delta)}." if better is not None else "No close alternative.")
     return " ".join(sentences)
+
+
+def _under_one(amount: float) -> str:
+    """A loss of the why line as a figure of the page: whole, rounded half up, and ``under 1`` for one that is something but rounds to nothing (``0`` would say it is worth nothing)."""
+    shown = display_int(amount)
+    return fmt_int(shown) if shown != 0 else "under 1"
 
 
 def _less(delta: float) -> str:
@@ -824,7 +906,7 @@ def kit_rows(
     return tuple(rows)
 
 
-def totals_rows(scenario: data.Scenario, caps: Caps, book: RuleBook) -> tuple[TotalsRow, ...]:
+def totals_rows(scenario: data.Scenario, caps: Caps, book: RuleBook, haste_note: str = HASTE_NOTE) -> tuple[TotalsRow, ...]:
     t = scenario.totals
     ref = lambda rule_id: rule_ref(book, rule_id)  # noqa: E731
     resist_rule = ref("resist.cap")
@@ -839,13 +921,13 @@ def totals_rows(scenario: data.Scenario, caps: Caps, book: RuleBook) -> tuple[To
     )
     rows = [
         TotalsRow(
-            "ac", "Sheet AC", fmt_int(t.ac), f"{fmt_int(caps.softcap)} softcap", ref("ac.softcap.past_cap_rate"),
+            "ac", "Sheet AC", fmt_int(t.ac), f"{fmt_int(caps.softcap)} softcap, reduced rate past it", ref("ac.softcap.past_cap_rate"),
             cap_rules=softcap_rules, cap_seal=weakest([r for _, r in softcap_rules]),
         ),  # fmt: skip
-        TotalsRow("hp", "Hit points", fmt_int(t.hp), none, ref("hp.pools_counted")),
+        TotalsRow("hp", "Hit points", fmt_int(t.hp), none, ref("hp.pools_counted"), also=(ref("hp.natural_durability_pct"),)),
         TotalsRow("mana", "Mana", fmt_int(t.mana), none, ref("mana.pools_counted")),
         TotalsRow("end", "Endurance", fmt_int(t.end), none, ref("end.formula")),
-        TotalsRow("haste", "Haste", f"{t.haste}%", f"{caps.haste}%", ref(caps.haste_rule), note=HASTE_NOTE),
+        TotalsRow("haste", "Haste", f"{t.haste}%", f"{caps.haste}%", ref(caps.haste_rule), note=haste_note),
         TotalsRow("atk", "Attack", fmt_int(t.atk), none, ref("stats.str_to_atk")),
     ]
     for field_name, label, value in zip(("mr", "fr", "cr", "dr", "pr"), ("Magic", "Fire", "Cold", "Disease", "Poison"), t.resists):
@@ -862,6 +944,11 @@ def _hand_names(scenario: data.Scenario) -> tuple[str, str]:
     return (main.name if main else "Empty", off.name if off else "Empty")
 
 
+def _range_name(scenario: data.Scenario) -> str:
+    item = scenario.kit[data.SLOT_INSTANCES.index("RANGE")]
+    return item.name if item else "Empty"
+
+
 def other_setups(shard: data.Shard, scenario: data.Scenario) -> tuple[str, ...]:
     lines = []
     for setup in shard.setups_for(scenario.role):
@@ -873,6 +960,9 @@ def other_setups(shard: data.Shard, scenario: data.Scenario) -> tuple[str, ...]:
         pair = main.name if main else "nothing"
         if off is not None:
             pair += f" + {off.name}"
+        if setup == "ranged":  # the bow setup's answer is the bow in the range place and, as for the others, the hands (stat sticks: an off-hand shield counts its armor class)
+            bow = other.kit[data.SLOT_INSTANCES.index("RANGE")]
+            pair = f"{bow.name if bow else 'nothing'} with {pair}"
         lines.append(f"{SETUP_LABELS[setup]}: {pair} ({fmt_signed(display_int(other.value - scenario.value))})")
     return tuple(lines)
 
@@ -983,20 +1073,30 @@ def trio_page(
         values = [sc.value for sc in (shard.scenario(code, role, tier, st) for st in shard.setups_for(role)) if sc is not None]
         if values:
             default_value[code] = max(values)
-    tied = tied_races([(o.code, o.legal, default_value[o.code]) for o in race_opts if o.code in default_value], race)
-    tied_names = tuple(race_names[code] for code in tied)
-    race_opts = [dataclasses.replace(o, tied=True) if o.code in tied else o for o in race_opts]
+    close = defaults.close_races  # (the data's list: the creation-legal races within the rule of the best, the default first, or empty when the best stands alone; the page judges nothing of its own)
+    others = [code for code in close if code != race]
+    close_names = tuple(race_names[code] for code in close)
+    close_pct = close_percent(book)
+    race_opts = [dataclasses.replace(o, close=True) if o.code in close else o for o in race_opts]
     cards, intro, more = (), "", ""
-    totals = totals_rows(scenario, caps, book)
+    spells = haste_spells(results.bundle.document)
+    bonus = int(results.bundle.document["profile_common"]["haste_bonus"])
+    spell = spells.get(defaults.buffs)
+    haste_row, haste_box = haste_notes(*spell, caps.haste, bonus) if spell is not None else (HASTE_NOTE, "")
+    totals = totals_rows(scenario, caps, book, haste_row)
     naked = rule_ref(book, "naked.rule")
     if racials is not None:
         cards, intro, more = race_cards(
-            shard, scenario, default_value, race_names, race, tied, defaults.runner_up, book, racials, slug=meta.slug,
-            view_words=f"{ROLE_LABELS[role]} view at {tier_label(tier)} with {BUFF_PHRASES[defaults.buffs]}",
+            shard, scenario, default_value, race_names, race, others, defaults.runner_up, book, racials, slug=meta.slug,
+            view_words=f"{ROLE_LABELS[role]} view at {tier_label(tier)} with {BUFF_PHRASES[defaults.buffs]}", close_pct=close_pct,
         )
-    margin_rules = tuple(rule_ref(book, rule_id) for rule_id in ("roles.balanced", "roles.templates"))
+    margin_rules = tuple(rule_ref(book, rule_id) for rule_id in ("roles.templates", *(("defaults.race_close_pct",) if close else ())))
     race_rules = tuple({ref.id: ref for ref in (*margin_rules, *(row.rule for row in totals), naked)}.values())
     role_setups = {r: shard.setups_for(r) for r in shard.roles}  # what the default level offers, which the page shows first
+    stances = {r: results.bundle.document["roles"][r].get("stance") for r in shard.roles}  # (the builds that play a stance: ``stance.berserker``)
+    played = next((s for s in stances.values() if s is not None), None)
+    stance_note = "" if played is None else stance_sentence(played)
+    stance_note_bow = "" if played is None else stance_sentence(played, bow=True)
     # The page code shows the choices of whichever evidence level is picked next, and a level can have a setup the default level
     # has not (the shield setup, while the strict pool has no shield): every setup of any level gets a choice in the page, and
     # the ones the default level does not offer are hidden.
@@ -1017,14 +1117,14 @@ def trio_page(
         best_name=race_names[race],
         runner_up_name=race_names[defaults.runner_up],
         margin=fmt_signed(display_int(defaults.margin)),
-        tied_names=tied_names,
-        tied_text=join_names(tied_names),
-        tie_band=f"{TIE_BAND * 100:g}%",
+        close_names=close_names,
+        close_pct=close_pct,
         flips=flip_text(defaults.flips),
         flips_more=flips_more(defaults.flips),
         races=tuple(race_opts),
         roles=tuple(
-            RoleOption(r, ROLE_LABELS[r], ROLE_HINTS[r], role_setups[r], r == role) for r in shard.roles
+            RoleOption(r, ROLE_LABELS[r], ROLE_HINTS[r], role_setups[r], r == role, ROLE_RULES.get(r) and rule_ref(book, ROLE_RULES[r]), STANCE_PHRASE if stances[r] else "")
+            for r in shard.roles
         ),
         tiers=tuple(
             TierOption(t, tier_label(t), tier_label(t) + (" (endgame)" if t == data.MAX_TIER else ""), t == tier)
@@ -1044,7 +1144,7 @@ def trio_page(
         assume_buffs=BUFF_PHRASES[defaults.buffs],
         assume_setup=SETUP_PHRASES[setup],
         assume_haste=haste_text(scenario.haste_assumed),
-        summary_assumes=f"{SETUP_PHRASES[setup]}, {BUFF_PHRASES[defaults.buffs]}",
+        summary_assumes=", ".join([SETUP_PHRASES[setup], *([STANCE_PHRASE] if stances[role] else []), BUFF_PHRASES[defaults.buffs]]),
         runnerups_assumes=f"{BUFF_PHRASES[defaults.buffs]}, the role's best weapon setup and the role's own weights",
         rows=kit_rows(scenario, pages, vecs, defaults.why, runner_view, icons),
         value=fmt_int(value),
@@ -1054,7 +1154,10 @@ def trio_page(
         w_main=_hand_names(scenario)[0],
         w_off=_hand_names(scenario)[1],
         w_others=other_setups(shard, scenario),
+        w_range=_range_name(scenario),
+        bow_note=BOW_NOTE,
         weapons_rule=rule_ref(book, "weapons.damage_weight"),
+        bow_rule=rule_ref(book, "weapons.ranged_factor"),
         roles_rule=rule_ref(book, "roles.templates"),
         runnerups=runner_rows(runner_view),
         runnerups_available=runner_view is not None,
@@ -1067,9 +1170,9 @@ def trio_page(
         margin_rules=margin_rules,
         tier_rules=tuple(rule_ref(book, rule_id) for rule_id in ("tier.stat_rule", "tier.arrival", "tier.exp_needed")),
         haste_rules=tuple(rule_ref(book, rule_id) for rule_id in (caps.haste_rule, "haste.worn_per_tier")),
-        delta_rules=tuple(rule_ref(book, rule_id) for rule_id in ("roles.balanced", "roles.templates")),
-        aa=tuple((label, rule_ref(book, rule_id)) for label, rule_id in _aa_labels(caps.cs_rank, caps.pe)),
-        aa_seal=weakest([rule_ref(book, rule_id) for _, rule_id in _aa_labels(caps.cs_rank, caps.pe)]),
+        delta_rules=tuple(rule_ref(book, rule_id) for rule_id in ("roles.templates",)),
+        aa=tuple((label, rule_ref(book, rule_id)) for label, rule_id in _aa_labels(caps.cs_rank, caps.pe, caps.nd_rank)),
+        aa_seal=weakest([rule_ref(book, rule_id) for _, rule_id in _aa_labels(caps.cs_rank, caps.pe, caps.nd_rank)]),
         race_picture=art.race_picture(race),
         items_base=ITEM_BASE if pages is not None else "",
         kit_stats=vecs is not None,
@@ -1080,6 +1183,14 @@ def trio_page(
         race_intro=intro,
         race_more=more,
         haste_per_tier=caps.haste_per_tier,
+        stance_note=stance_note,
+        stance_note_bow=stance_note_bow,
+        stance_rules=(rule_ref(book, "stance.berserker"),) if stance_note else (),
+        haste_spells_json=json.dumps({key: list(pair) for key, pair in spells.items()}, separators=(",", ":")) if spells else "",
+        haste_free=caps.haste - bonus,
+        haste_bonus=bonus,
+        haste_box_note=haste_box,
+        assume_stance=STANCE_PHRASE if stances[role] else "",
         race_rules=race_rules if cards else (),
         naked_rule=naked if cards else None,
     )

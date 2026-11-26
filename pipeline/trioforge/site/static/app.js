@@ -1,6 +1,7 @@
 // The one script every page loads (as a module, after the page has been read).
 // (first.js comes first: it takes a shared kit out of the address before the modules below are evaluated)
-import { kit } from "./first.js";
+import { kit, loadedAddress } from "./first.js";
+import { addCounter } from "./counter.js";
 import { initPicker } from "./picker.js";
 import { bindThemeToggle, getStorage } from "./theme.js";
 import { initTrio } from "./trio.js";
@@ -27,6 +28,8 @@ function start() {
   const page = document.getElementById("main")?.dataset.page;
   if (page === "trio") initTrio({ document, window, fetch: window.fetch.bind(window), kit, exaltAhead: true });
   if (page === "home") initPicker(document);
+  // last: a page whose script failed before this is not counted, and a page that was opened from a kit link never is (counter.js has the rules)
+  addCounter({ document, window, kit, loaded: loadedAddress, trustedTypes: window.trustedTypes });
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

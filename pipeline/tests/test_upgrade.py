@@ -33,6 +33,7 @@ from trioforge import upgrade as UP
 from trioforge.model import formulas as fm
 from trioforge.model.items import SLOT_INSTANCES, WeaponVec
 from trioforge.model.tiers import cost_to_reach
+from trioforge.model.procs import ProcDonor, ProcEffect, ProcTable
 from trioforge.solver.model import BuildOptions, build_milp
 
 TRIO = ("PAL", "MNK", "BER")
@@ -184,6 +185,37 @@ def test_an_upgrade_converts_exactly_one_copy_and_is_charged_from_the_tier_of_th
     assert cost_to_reach(record, 0, 4)["exp"] == 15  # not from +0: the owned tier is the base
     one = UP.farm_path(PROFILE, {old: 1}, [new], "stick", None, 3, opts())
     assert [(s.kind, s.source_tier) for s in one] == [("upgrade", 2), ("copy", None)]  # the +2 copy became the +4 one
+
+
+def test_a_step_of_additions_worth_exactly_the_same_takes_the_first_by_key_whatever_the_solve_mode():
+    """R14: two additions of the same exact value were chosen by the solve: by the canonical solve's total rank and order of kits in Python, by the solver's own path in the browser, so the
+    two paths could differ after the first step. The step takes the first of the additions of exactly the best value, by key and then tier, canonical solve or not. Here a (HEAD) and b (NECK) each
+    have a +0 copy and a +2 candidate that adds 10: the kits {a+2, b+0} and {a+0, b+2} tie on value and on total rank, and the canonical order of kits takes b+2 first."""
+    a0, a2 = item("a", 10, slots=("HEAD",)), item("a", 20, tier=2, slots=("HEAD",))
+    b0, b2 = item("b", 10, slots=("NECK",)), item("b", 20, tier=2, slots=("NECK",))
+    for canonical in (True, False):
+        steps = UP.farm_path(PROFILE, {a0: 1, b0: 1}, [a2, b2], "stick", None, 2, opts(), canonical=canonical)
+        assert [(s.item.key, s.kind, s.gain) for s in steps] == [("a", "upgrade", 10), ("b", "upgrade", 10)], canonical
+        assert steps[0].solution.kit[SLOT_INSTANCES.index("HEAD")].tier == 2 and steps[0].solution.kit[SLOT_INSTANCES.index("NECK")].tier == 0
+    # three that tie: the first of them, and a gain a hair less is no tie
+    c0, c2 = item("c", 10, slots=("CHEST",)), item("c", 20, tier=2, slots=("CHEST",))
+    for canonical in (True, False):
+        steps = UP.farm_path(PROFILE, {c0: 1, a0: 1, b0: 1}, [c2, b2, a2], "stick", None, 3, opts(), canonical=canonical)
+        assert [s.item.key for s in steps] == ["a", "b", "c"], canonical
+    worse = item("a", 19, tier=2, slots=("HEAD",))
+    for canonical in (True, False):
+        steps = UP.farm_path(PROFILE, {a0: 1, b0: 1}, [worse, b2], "stick", None, 1, opts(), canonical=canonical)
+        assert [s.item.key for s in steps] == ["b"], canonical
+
+
+def test_the_first_of_the_equal_additions_may_be_a_new_item_or_a_copy_as_well_as_an_upgrade():
+    new, copy, band = item("c-ring", 10), item("d-ear", 10, slots=("EAR",)), item("z-band", 10, slots=("WRIST",))
+    band_up = item("z-band", 20, tier=2, slots=("WRIST",))
+    for canonical in (True, False):
+        steps = UP.farm_path(PROFILE, {copy: 1, band: 1}, [band_up, copy, new], "stick", None, 1, opts(), canonical=canonical)
+        assert [(s.item.key, s.kind) for s in steps] == [("c-ring", "new")], canonical
+        steps = UP.farm_path(PROFILE, {copy: 1, band: 1}, [band_up, copy], "stick", None, 1, opts(), canonical=canonical)
+        assert [(s.item.key, s.kind) for s in steps] == [("d-ear", "copy")], canonical
 
 
 def test_an_owned_tier_upgrade_wins_when_it_beats_every_new_item_and_loses_when_a_new_item_is_better():
@@ -826,3 +858,48 @@ def test_the_real_pal_mnk_ber_ogre_farm_path_is_the_same_with_and_without_prunin
         print(f"\n{len(owned)} owned items ({sum(owned.values())} copies), {len(candidates)} candidates, hastes {[s.haste_assumed for s in pruned]}")
         print(f"farm path of 3 steps: pruned {timings['pruned'][0]:.1f}s, whole pool {timings['whole pool'][0]:.1f}s; kinds {kinds}")
         print("gains", [round(float(s.gain), 3) for s in pruned])
+
+
+# ---- F6: the swaps and the answers of Upgrade with a table of procs ------------------------------------------------------------------------------------------------
+
+
+PROC_PROFILE = H.make_profile(TRIO, "OGR", {"HP": 1, "DMG": 600})  # a proc of value V adds exactly V to the value of the kit
+PROC_TABLE = ProcTable(
+    TRIO, 4,
+    (ProcEffect("e-frost", "Frost", F(300)), ProcEffect("e-borrowed", "Borrowed", F(900))),
+    (
+        ProcDonor("e-frost", "blade", frozenset({"PRIMARY"}), frozenset(TRIO), False, False),
+        ProcDonor("e-borrowed", "far-off", frozenset({"PRIMARY"}), frozenset(TRIO), False, False),
+    ),
+)  # fmt: skip
+
+
+def blade(tier, **more):
+    return make_item("blade", {"PRIMARY"}, weapon=SWORD, tier=tier, **more)
+
+
+def test_every_slot_values_a_swap_to_the_socket_tier_with_the_jump_of_the_best_hosted_proc():
+    """A swap of the sword at +3 for the same sword at +4 gains what it does with no table and 600 more: at +4 the sword counts the best proc it can host (900), at +3 its own (300)."""
+    kit = kit_of(primary=[blade(3)])
+    for tier, jump in ((4, 600), (5, 600)):
+        with_procs = UP.every_slot(PROC_PROFILE, kit, [blade(tier)], "1h-shield", None, opts(procs=PROC_TABLE))
+        without = UP.every_slot(PROC_PROFILE, kit, [blade(tier)], "1h-shield", None, opts())
+        got, plain = [r for r in with_procs if r.place == "PRIMARY"][0].swaps[0], [r for r in without if r.place == "PRIMARY"][0].swaps[0]
+        assert got.delta - plain.delta == jump, tier
+        held = fm.evaluate(PROC_PROFILE, kit_of(primary=[blade(tier)]), None, setup="1h-shield", haste_assumed=0, procs=PROC_TABLE).F
+        base = fm.evaluate(PROC_PROFILE, kit, None, setup="1h-shield", haste_assumed=0, procs=PROC_TABLE).F
+        assert got.delta == held - base
+    low = UP.every_slot(PROC_PROFILE, kit_of(primary=[blade(1)]), [blade(2)], "1h-shield", None, opts(procs=PROC_TABLE))
+    plain_low = UP.every_slot(PROC_PROFILE, kit_of(primary=[blade(1)]), [blade(2)], "1h-shield", None, opts())
+    assert [r.swaps[0].delta for r in low if r.place == "PRIMARY"] == [r.swaps[0].delta for r in plain_low if r.place == "PRIMARY"]  # (below the socket tier the proc does not change)
+
+
+def test_equip_now_best_sets_and_farm_path_count_the_procs_the_options_carry():
+    """The answers that choose a kit read the table the options carry: Equip now picks the sword whose hosted proc is worth more even where another sword swings harder."""
+    big = make_item("big", {"PRIMARY"}, weapon=WeaponVec("1H Slashing", 60, 30, None, False), tier=0)
+    owned = {big: 1, blade(4): 1}
+    plain = UP.equip_now(PROC_PROFILE, owned, "1h-shield", None, opts())
+    held = UP.equip_now(PROC_PROFILE, owned, "1h-shield", None, opts(procs=PROC_TABLE))
+    assert [i.key for i in plain.kit if i is not None] == ["big"]  # the harder swing wins with no proc
+    assert [i.key for i in held.kit if i is not None] == ["blade"]  # and the hosted proc (900 at +4) outweighs it with the table
+    assert held.breakdown.F == fm.evaluate(PROC_PROFILE, list(held.kit), None, setup="1h-shield", haste_assumed=0, procs=PROC_TABLE).F

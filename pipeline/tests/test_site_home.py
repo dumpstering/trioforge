@@ -36,7 +36,7 @@ from trioforge.site import build, content, data, view
 REPO = Path(__file__).resolve().parents[2]
 #: five trios in the order of their codes, which is the order the home page and the 404 page list them in. None has a class that Wood Elf (the fixture's third race) can start, so the
 #: default race of the fixture still holds for each; each has a class that Ogre and Troll can start, which makes them legal races for it.
-FIVE = ("clr-pal-shd", "clr-shd-ber", "mnk-shm-ber", "pal-mnk-ber", "pal-shd-ber")
+FIVE = ("clr-pal-shd", "clr-shd-ber", "clr-shd-mnk", "pal-mnk-ber", "pal-shd-ber")  # (copies of the fixture's Tank: each of these opens on the Tank, as its defaults.json says)
 
 
 def many_trios(root: Path, slugs: tuple[str, ...] = FIVE) -> Path:
@@ -154,7 +154,7 @@ def test_the_search_box_takes_as_many_characters_as_the_picker_reads_which_is_mo
     limit = int(re.search(r"export const MAX_QUERY_LENGTH = (\d+);", source).group(1))
     assert search.get("maxlength") == str(limit)  # the box and the script hold one number
     # a link as the Share button makes one, and the longest the page takes (the codec reads 2,048 characters of kit): with a long address and the longest query of a view, it fits
-    longest = "https://trioforge.pages.dev/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=10&setup=1h-shield&ev=strict&buffs=group#k=" + "A" * 2048
+    longest = "https://trioforge.pages.dev/trio/pal-mnk-ber/?race=OGR&role=tank&tier=10&setup=1h-shield&ev=strict&buffs=group#k=" + "A" * 2048
     assert len(longest) <= limit <= 4096
 
 

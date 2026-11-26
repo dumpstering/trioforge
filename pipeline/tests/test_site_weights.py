@@ -130,7 +130,7 @@ def test_the_weights_code_is_a_chunk_of_its_own_that_the_page_script_loads_only_
     app = next(p for p in assets.glob("app-*.js"))
     app_text = app.read_text(encoding="utf-8")
     chunk_text = chunks[0].read_text(encoding="utf-8")
-    words = ["Working out the kit for these settings", "Back to the precomputed answer", "Exact value (F)", "Reset weights", "Armor class", "Regeneration"]
+    words = ["Working out the kit for these settings", "Back to the precomputed answer", "Exact value (F)", "Reset weights", "Attack and haste", "Regeneration"]
     for word in words:
         assert word in chunk_text, word
         assert word not in app_text, word  # none of its words are in the first load
@@ -187,6 +187,20 @@ def test_the_real_bundle_is_held_to_the_check(tmp_path):
     build.check_weights_chunk(meta)  # (bundle_assets runs it too: a bundle that failed it would not have been made)
     holders = [name for name, info in meta["outputs"].items() if any(path.endswith(WEIGHTS) for path in info.get("inputs", {}))]
     assert len(holders) == 1 and Path(holders[0]).name.startswith("weights-")
+
+
+def test_no_chunk_of_the_page_holds_the_evaluator_and_the_readers_of_the_data_share_a_leaf_module(tmp_path):
+    """F13: the item reader, the tier rules and the profile reader imported evaluate.js only for ``safe``, so the lazy chunks of the sliders and of the Upgrade section (and the chunk they share)
+    carried a part of the evaluator the page loads from its own script (kitvalue.js) when it needs it. ``safe`` and ``isPlainObject`` are in plain.js, with no import."""
+    need_node()
+    meta: dict = {}
+    build.bundle_assets(keep_metafile=meta)
+    holders = [Path(name).name for name, info in meta["outputs"].items() if any(path.endswith("engine/evaluate.js") for path in info.get("inputs", {}))]
+    assert holders == [], f"the evaluator is in {holders}: a reader of the data imports it again"
+    leaf = [Path(name).name for name, info in meta["outputs"].items() if any(path.endswith("engine/plain.js") for path in info.get("inputs", {}))]
+    assert leaf, "the leaf module of plain data is in no chunk"
+    source = (REPO / "pipeline" / "trioforge" / "site" / "static" / "engine" / "plain.js").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*import", source, re.M), "plain.js is a leaf: it imports nothing"
 
 
 # ---- the real results -------------------------------------------------------------------------------------------------------------

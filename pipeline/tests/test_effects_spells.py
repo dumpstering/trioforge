@@ -202,6 +202,59 @@ def test_dot_magnitude_is_total_over_duration():
     assert c["magnitude"] == 120 and c["unit"] == "hp_total"
 
 
+# ---- a spell with a direct hit and a lasting part is sized by its whole (E2) ------------------------------------------------------------------
+
+
+def test_a_direct_hit_with_a_lasting_part_is_sized_by_the_whole():
+    """Strong Poison has the shape: SPA 79 (one time) and SPA 0 (each tick). The size is the one-time part plus the lasting part for every tick, as :func:`sp._over_time` reads a lasting spell."""
+    c = classify([fx(79, -30), fx(0, -14)], beneficial=0, duration_ticks=20)
+    assert c == {"category": "dot", "magnitude": 310, "unit": "hp_total", "once": 30, "lasting": 280}  # 30 + 14 x 20, and not the larger single number (30); the two parts are kept apart (F1)
+    c = classify([fx(0, -14), fx(79, -30)], beneficial=0, duration_ticks=20)
+    assert c == {"category": "dot", "magnitude": 310, "unit": "hp_total", "once": 30, "lasting": 280}  # (the order of the effects makes no difference)
+
+
+def test_the_parts_of_a_spell_add_up_by_what_they_are():
+    assert classify([fx(79, -30), fx(79, -20)], beneficial=0, duration_ticks=20) == {"category": "damage", "magnitude": 50, "unit": "hp", "once": 50, "lasting": 0}  # (two one-time parts: a direct hit of both)
+    assert classify([fx(0, -10), fx(0, -4)], beneficial=0, duration_ticks=10) == {"category": "dot", "magnitude": 140, "unit": "hp_total", "once": 0, "lasting": 140}  # (two lasting parts: each for every tick)
+    assert classify([fx(79, 40), fx(0, 5)], duration_ticks=12) == {"category": "heal_over_time", "magnitude": 100, "unit": "hp_total", "once": 40, "lasting": 60}  # (a heal with a lasting part is a heal over time of the whole)
+    assert classify([fx(0, -100), fx(0, -50)], beneficial=0) == {"category": "damage", "magnitude": 150, "unit": "hp", "once": 150, "lasting": 0}  # (an instant spell: every part is one time)
+
+
+def test_a_permanent_spell_keeps_its_number_for_each_tick_and_its_one_time_part_apart():
+    """F1: a number of each tick and a number of one time are not added under the unit hp_per_tick: the magnitude is the tick's, the one-time part is its own field."""
+    c = classify([fx(0, -6), fx(79, -10)], beneficial=0, permanent=True)
+    assert c == {"category": "dot", "magnitude": 6, "unit": "hp_per_tick", "once": 10, "lasting": 6}
+    assert classify([fx(0, -6)], beneficial=0, permanent=True) == {"category": "dot", "magnitude": 6, "unit": "hp_per_tick", "once": 0, "lasting": 6}
+
+
+def test_the_kind_of_a_mixed_spell_follows_its_larger_part():
+    """H4: a spell with a one-time part and a lasting part is of the kind of the larger of the two (the one-time total against the lasting total, a tie to the one-time kind); the two parts stay apart as F1
+    made them and the size is still the whole. The Cleric's two fast heals have the shape of the first two cases: 310 at once and 165 over one tick, 640 and 260 (65 and 71 percent direct)."""
+    heal = classify([fx(79, 310), fx(100, 165)], duration_ticks=1, cast_ms=1500)
+    assert heal == {"category": "heal", "magnitude": 475, "unit": "hp_total", "once": 310, "lasting": 165}  # (a heal that lasts a tick is a heal)
+    assert classify([fx(79, 640), fx(100, 260)], duration_ticks=1, cast_ms=1500)["category"] == "heal"
+    assert classify([fx(79, 40), fx(0, 5)], duration_ticks=12)["category"] == "heal_over_time"  # (40 at once and 60 over time: the lasting part is larger)
+    assert classify([fx(79, 50), fx(100, 5)], duration_ticks=10)["category"] == "heal"  # (a tie of 50 and 50: the one-time kind)
+    assert classify([fx(79, -155), fx(0, -78)], beneficial=0, duration_ticks=1)["category"] == "damage"  # (a hit of 155 and 78 over one tick: a direct hit)
+    assert classify([fx(79, -30), fx(0, -14)], beneficial=0, duration_ticks=20)["category"] == "dot"  # (Strong Poison: 30 against 280)
+    assert classify([fx(79, -500), fx(0, -50)], beneficial=0, duration_ticks=5) == {"category": "damage", "magnitude": 750, "unit": "hp_total", "once": 500, "lasting": 250}  # (the parts and the size are as they were)
+    assert classify([fx(0, -6), fx(79, -10)], beneficial=0, permanent=True)["category"] == "dot"  # (a permanent spell has no end to its total: it is over time whatever its one-time part)
+    assert classify([fx(0, -10), fx(79, -500)], beneficial=0, target=13, duration_ticks=10)["category"] == "lifetap"  # (a lifetap is a lifetap)
+
+
+def test_the_sign_of_a_mixed_spell_is_that_of_its_larger_whole():
+    c = classify([fx(79, -30), fx(0, 5)], duration_ticks=20)  # 30 down once, 100 up over the duration
+    assert c["category"] == "heal_over_time" and c["magnitude"] == 100
+    c = classify([fx(79, -300), fx(0, 5)], beneficial=0, duration_ticks=20)
+    assert c["category"] == "damage" and c["magnitude"] == 300  # (the lasting part of the other sign is not netted off: it is a different effect)
+
+
+def test_a_lifetap_and_the_hit_points_spent_for_mana_keep_their_rules_with_a_mixed_spell():
+    assert classify([fx(0, -100), fx(79, -20)], beneficial=0, target=13) == {"category": "lifetap", "magnitude": 120, "unit": "hp", "once": 120, "lasting": 0}
+    assert classify([fx(0, -10), fx(79, -20)], beneficial=0, target=13, duration_ticks=10) == {"category": "lifetap", "magnitude": 120, "unit": "hp_total", "once": 20, "lasting": 100}  # (a lifetap with a lasting part: the parts apart, F1)
+    assert classify([fx(0, -50), fx(15, 16)], target=6)["category"] == "mana"
+
+
 def test_unknown_spa_is_other():
     assert classify([fx(9999, 1)])["category"] == "other"
 

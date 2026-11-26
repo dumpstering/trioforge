@@ -61,7 +61,7 @@ describe("the parity test of the worker's best kit, run on results named by TRIO
   it("passes on results that are what the worker finds, and says how many views it held to their shards", () => {
     const { status, out } = parityOn(FIXTURE);
     expect(status, out.slice(-1500)).toBe(0);
-    expect(out).toMatch(/best-kit parity: 80 views in 40 chunks, 0 differ/);
+    expect(out).toMatch(/best-kit parity: 112 views in 56 chunks, 0 differ/);
   });
 
   it("fails on a view whose kit differs from its shard, as it fails on a view whose buffs, haste or value differ, and says which", () => {

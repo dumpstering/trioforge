@@ -88,10 +88,10 @@ def test_the_rules_version_the_plans_are_built_with_is_a_label_and_changes_no_pl
     one = files.build(catalog, sp.SpellBook.load(), j, "fixture")
     other = files.build(catalog, sp.SpellBook.load(), j, "2026-10-13")
     kit = fixtures.random_kit(random.Random(3), one.items, ["PAL", "MNK", "BER"])
-    kits = {role: kit for role in ("balanced", "tank", "melee")}
+    kits = {role: kit for role in ("tank", "melee")}
     a = files.trio_document(one, "pal-mnk-ber", "OGR", 4, kits)
     b = files.trio_document(other, "pal-mnk-ber", "OGR", 4, kits)
     assert a["rules_version"] == "fixture" and b["rules_version"] == "2026-10-13"
     assert {k: v for k, v in a.items() if k != "rules_version"} == {k: v for k, v in b.items() if k != "rules_version"}
     assert files.shared_document(one)["effects"] == files.shared_document(other)["effects"]
-    assert a["roles"]["balanced"]["plan"]  # (and the plans are not empty ones)
+    assert a["roles"]["tank"]["plan"]  # (and the plans are not empty ones)

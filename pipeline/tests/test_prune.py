@@ -454,11 +454,11 @@ def test_a_slowing_item_counts_for_no_haste_at_all():
 
 def test_a_dominated_resist_is_dropped_and_a_resist_in_another_school_is_not():
     p = prof({"SV": 1})
-    ears = (("fire", "FIRE", 150), ("cold", "COLD", 150), ("less", "FIRE", 100))
+    ears = (("fire", "FIRE", 750), ("cold", "COLD", 750), ("less", "FIRE", 500))  # (T4: five times what they were, for the cap of 1000 where it was 200)
     fire, cold, less = (make_item(k, {"EAR"}, sv={s: n}) for k, s, n in ears)
     assert agree(p, [fire, cold, less]) == ["cold", "fire"]
-    # a resist stops at 200: two of one school give 200, one of each school give 300, so both are worn
-    assert close(optimum(p, [fire, cold, less]), empty_value(p) + 150 + 150)
+    # a resist stops at 1000: two of one school give 1000, one of each school give 1500, so both are worn
+    assert close(optimum(p, [fire, cold, less]), empty_value(p) + 750 + 750)
     assert sees("ignore_resists", p, [fire, cold])
     assert agree(prof({"SV_FIRE": 1}), [fire, cold, less]) == ["fire"]  # only the fire resist is scored
 
@@ -495,7 +495,7 @@ def test_items_that_exclude_the_scenario_race_are_dropped_first_and_replace_noth
 
 def test_a_real_profile_is_read_by_attribute_for_its_deity_and_its_spell_haste():
     tables = load()
-    profile = make_profile("OGR", ("PAL", "MNK", "BER"), 50, "balanced", None, None, tables, deity="Karana")
+    profile = make_profile("OGR", ("PAL", "MNK", "BER"), 50, "tank", None, None, tables, deity="Karana")
     assert profile.deity == "Karana"
     plain = make_item("plain", {"HEAD"}, stats={"HP": 10})
     blessed = make_item("blessed", {"HEAD"}, stats={"HP": 90}, deity={"Karana"})
@@ -1178,7 +1178,7 @@ def test_the_real_pal_mnk_ber_ogre_wiki_pools_at_plus_four_prune_exactly(capsys)
     trio = ("PAL", "MNK", "BER")
     spells = json.loads((REPO / "derived" / "client" / "spells-l50.json").read_text(encoding="utf-8"))
     buffset = resolve([*own_buffs(trio, 50, spells, rules), *group_preset(spells)], rules)
-    profile = make_profile("OGR", trio, 50, "balanced", buffset, None, tables, evidence="wiki")
+    profile = make_profile("OGR", trio, 50, "tank", buffset, None, tables, evidence="wiki")
     catalog = json.loads(path.read_text(encoding="utf-8"))["items"]
     # the wiki level: strict items are wiki items by definition; temporary items and hand-in items are not candidates
     wanted = [

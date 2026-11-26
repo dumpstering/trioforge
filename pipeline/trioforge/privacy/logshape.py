@@ -7,8 +7,9 @@ line cannot make the scanner slow. A name is a capital letter followed by at lea
 
 * The ``log-*`` rules describe the lines the game client writes to its log: a time stamp in
   brackets, chat, loot, a ``/who`` row, a group change, and the player's own chat.
-* ``local-path`` finds a path into a user's profile folder (on Windows, in Git Bash or WSL, or
-  on Linux); the placeholders ``<user>`` and ``<name>`` are not a user.
+* ``local-path`` finds a path into a user's profile folder (on Windows, in Git Bash or WSL, on
+  Linux or on macOS, and the share that Windows gives a WSL distribution's home folder); the
+  placeholders ``<user>`` and ``<name>`` are not a user.
 * ``provenance`` finds words that point at the game client's own program file: its name, a dump
   of its code, an address inside it, a section name. Nothing public may cite those.
 
@@ -26,6 +27,9 @@ _NAME = r"[A-Z][A-Za-z]{2,}"
 # A folder name that starts with one of these placeholders is not a private user name.
 _NOT_A_PLACEHOLDER = r"(?!<(?:user|name)>)"
 _HOME = "/" + "home" + "/"
+_USERS = "/" + "Users" + "/"
+_DATA_VOLUME = "/System/Volumes/Data"  # (the volume that holds the users' folders on a current macOS: a path that a tool prints in full has it before the folder for users)
+_NOT_SHARED = r"(?!Shared(?![\w.-]))"  # (the folder that every user of the machine shares: a name that is "Shared" and then anything that is not part of a name, a slash, a quote, a comma, a bracket, a colon, white space or the end; "SharedBy", "Shared.name" and "Shared-x" are user names)
 
 RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
@@ -64,6 +68,24 @@ RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("local-path", re.compile(r"/[A-Za-z]/(?i:users)/" + _NOT_A_PLACEHOLDER + r"[^/\s]+")),
     # Linux. Not after a word character, so the path part of a web address does not count.
     ("local-path", re.compile(r"(?<![\w.~-])" + _HOME + _NOT_A_PLACEHOLDER + r"[^/\s]+")),
+    # macOS: the folder for users, in the case the system writes it (a route of an interface is
+    # in lower case), not after a word character either, and not after a drive letter (that is the
+    # Windows rule's); it is also where the system's data volume has it. The folder every user
+    # shares is no one's.
+    (
+        "local-path",
+        re.compile(r"(?:(?<![\w.~-])(?<![A-Za-z]:)|(?<=" + _DATA_VOLUME + r"))" + _USERS + _NOT_A_PLACEHOLDER + _NOT_SHARED + r"[^/\s]+"),
+    ),
+    # The home folder of a WSL distribution, as Windows shows it: a share of the host ``wsl$`` or
+    # ``wsl.localhost``, the distribution, then the Linux folder for homes and a name.
+    (
+        "local-path",
+        re.compile(
+            r"[\\/]{2}(?i:wsl)(?:\$|\.(?i:localhost))[\\/][^\\/\s]+[\\/](?i:home)[\\/]"
+            + _NOT_A_PLACEHOLDER
+            + r"[^\\/\s]+"
+        ),
+    ),
     (
         "provenance",
         re.compile(
@@ -79,7 +101,7 @@ RULE_NAMES = tuple(dict.fromkeys(name for name, _pattern in RULES))
 # line) is cleared by a few plain substring tests, without running the patterns. The first group
 # is tested on the line as it is, the second on its lower-case form.
 _ADDRESS = "R" + "VA"
-_LOWER_FRAGMENTS = ("users", "eq" + "game", "disas" + "sembl", "." + "rdata")
+_LOWER_FRAGMENTS = ("users", "wsl", "eq" + "game", "disas" + "sembl", "." + "rdata")
 
 
 def find(text: str) -> list[tuple[str, int, int]]:

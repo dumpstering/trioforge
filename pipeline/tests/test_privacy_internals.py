@@ -5,6 +5,7 @@ like log lines are built at run time."""
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import random
 import re
@@ -594,11 +595,160 @@ def test_the_worktree_reader_refuses_special_files_and_untracked_links(monkeypat
 
 
 def test_package_lock_integrity_values_are_hashes_not_words():
-    integrity = "sha512-aBcDeZorblaxQwErTyUiOpAsDfGhJkL12345678901234567890xyz=="
+    integrity = "sha512-" + base64.b64encode(hashlib.sha512(b"an invented package").digest()).decode()  # (a real sha512 value: 86 characters, whose last one is one that a digest can end in)
+    assert len(integrity.removeprefix("sha512-").rstrip("=")) == 86
     assert scan('"integrity": "' + integrity + '"') == []
     assert scan('"integrity": "' + integrity.upper() + '"') == []
     # The word before the dash is not blanked, and a name next to a hash is still found.
     assert [f.rule for f in scan("sha512 Zorblax " + integrity)] == ["denylist"]
+
+
+def _integrity(algorithm, body_length, padding, name="Zorblax"):
+    """An integrity value of the shape a lock file has (``sha<N>-`` and base64), with the invented name inside it. At the length of the algorithm the body is the base64 of exactly as many bytes as
+    its digest has (it ends in a character that a digest can end in, and decodes and encodes back to itself), so it is a value that a digest of that algorithm could be."""
+    body = "a" * (body_length - len(name) - 1) + name + "A"
+    if body_length == _DIGEST_BODY[algorithm]:
+        full = body + "=" * (-len(body) % 4)
+        assert len(base64.b64decode(full)) == hashlib.new(algorithm).digest_size and base64.b64encode(base64.b64decode(full)).decode() == full, "the fixture is the base64 of a digest's bytes"
+    return f"{algorithm}-" + body + padding
+
+
+_DIGEST_BODY = {"sha1": 27, "sha224": 38, "sha256": 43, "sha384": 64, "sha512": 86}
+
+
+@pytest.mark.parametrize(
+    "algorithm,length,padding", [("sha1", 27, "="), ("sha256", 43, "="), ("sha384", 64, ""), ("sha512", 86, "==")], ids=["sha1", "sha256", "sha384", "sha512"]
+)
+def test_an_integrity_value_of_every_length_a_lock_file_has_is_a_hash_not_words(algorithm, length, padding):
+    value = _integrity(algorithm, length, padding)
+    assert scan(value) == []  # (at the end of the text)
+    assert scan('"integrity": "' + value + '"') == []  # (a lock file)
+    assert scan('<script integrity="' + value + '" src="x.js">') == []  # (an attribute)
+    assert scan("integrity: " + value + " # the lock") == []  # (before a space)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "notes/sha256-cache/Zorblax/notes.txt",  # a folder named after the algorithm, a name in the next one
+        "https://example.invalid/sha1-fix/Zorblax/report",
+        "Marsha1-ZorblaxNotesAreHere",  # no left boundary: a word that ends in sha1
+        "docs/sha512-" + "A" * 30 + "/Zorblax/notes.txt",  # long enough, but the run goes on after a dot
+        "sha256-" + "a" * 10 + "Zorblax",  # too short for any digest
+        "notes sha256-" + "a" * 30 + "Zorblax-and-more",  # the run is followed by a hyphen: it is a name in a slug
+    ],
+    ids=["folder", "url", "left-boundary", "dot-after", "too-short", "hyphen-after"],
+)
+def test_text_that_only_starts_like_an_integrity_value_does_not_hide_a_name(text):
+    assert [f.rule for f in scan(text)] == ["denylist"]
+
+
+def test_a_path_with_an_integrity_lookalike_is_masked_when_it_is_printed():
+    for path in ("notes/sha256-cache/Zorblax/notes.txt", "Marsha1-ZorblaxNotesAreHere"):
+        masked = S.mask_path(path, KEY, set(DENY))
+        assert "Zorblax" not in masked and f"[private:{tag('zorblax')}]" in masked, path
+
+
+ALGORITHMS = [("sha1", 27, "="), ("sha224", 38, "=="), ("sha256", 43, "="), ("sha384", 64, ""), ("sha512", 86, "==")]
+#: what a real value is written in: a lock file's quotes, a pnpm lock's braces, a list, a statement, a markdown link, an attribute with no quotes, an entity for a quote, a code span
+FOLLOWED_BY = ['"{}"', "'{}'", "{{integrity: {}}}", "{},", "{};", "({})", "[{}]", "<script integrity={}>", "&quot;{}&quot;", "`{}`", "integrity: {}", "{} # the lock", "{}."]
+
+
+@pytest.mark.parametrize("algorithm,length,padding", ALGORITHMS, ids=[a[0] for a in ALGORITHMS])
+def test_a_real_integrity_value_is_a_hash_whatever_follows_it_that_is_not_base64(algorithm, length, padding):
+    for written in (padding, padding[:-1], ""):  # (a tool may drop the padding, or a part of it)
+        value = _integrity(algorithm, length, written)
+        for context in FOLLOWED_BY:
+            text = context.format(value)
+            assert scan(text) == [], (algorithm, written, context)
+            assert scan(text.upper().replace("&QUOT;", "&quot;")) == [], (algorithm, "upper case", written, context)
+
+
+@pytest.mark.parametrize("algorithm,length,padding", ALGORITHMS, ids=[a[0] for a in ALGORITHMS])
+def test_a_body_of_another_length_or_one_that_goes_on_is_no_integrity_value_and_a_name_in_it_is_found(algorithm, length, padding):
+    for body in (length - 1, length + 1, length + 10):
+        assert [f.rule for f in scan('"integrity": "' + _integrity(algorithm, body, padding) + '"')] == ["denylist"], (algorithm, body)
+    bare = _integrity(algorithm, length, "")
+    for more in ("A", "Q", "9", "+", "/", "=" * (len(padding) + 1)):  # (another base64 character, or one sign of padding too many; not a lower-case letter, which would be one word with the name before it)
+        assert [f.rule for f in scan("integrity: " + bare + more)] == ["denylist"], (algorithm, more)
+
+
+def real_digest_value(algorithm, seed=0, *, slash=True):
+    """``sha<N>-`` and the base64 of the real digest of an invented input (hashlib); with ``slash`` false, of the first input whose base64 has no slash in it."""
+    while True:
+        text = base64.b64encode(hashlib.new(algorithm, f"an invented package {seed}".encode()).digest()).decode()
+        if slash or "/" not in text:
+            return f"{algorithm}-{text}"
+        seed += 1
+
+
+@pytest.mark.parametrize("algorithm,length,padding", ALGORITHMS, ids=[a[0] for a in ALGORITHMS])
+def test_a_real_digest_of_every_algorithm_is_blanked_wherever_a_lock_file_or_a_page_writes_it(algorithm, length, padding):
+    for seed in range(4):
+        value = real_digest_value(algorithm, seed)
+        assert len(value.split("-", 1)[1].rstrip("=")) == length
+        for context in FOLLOWED_BY:
+            assert scan(context.format(value)) == [], (algorithm, seed, context)
+        # a name glued to a real value's text is found: it is not part of it
+        assert [f.rule for f in scan("integrity: " + value + " Zorblax")] == ["denylist"]
+
+
+@pytest.mark.parametrize("algorithm,length,padding", ALGORITHMS, ids=[a[0] for a in ALGORITHMS])
+def test_a_body_that_no_digest_ends_in_is_no_integrity_value_and_a_name_in_it_is_found(algorithm, length, padding):
+    """The last character of the base64 of a digest has bits that are always zero (two for sha1 and sha256, four for sha224 and sha512, none for sha384): a run that ends in another one is no digest's value."""
+    canonical = {"sha1": "AEIMQUYcgkosw048", "sha224": "AQgw", "sha256": "AEIMQUYcgkosw048", "sha384": None, "sha512": "AQgw"}[algorithm]
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    head = "a" * (length - 9) + "Zorblax" + "9"  # (a digit after the name: a letter would make one word of the name and what follows, which no rule about hashes decides)
+    if canonical is None:  # (sha384: every last character is canonical, and every one is blanked)
+        for last in alphabet:
+            assert scan('"integrity": "' + f"{algorithm}-" + head + last + '"') == [], (algorithm, last)
+        return
+    for last in alphabet:
+        found = scan('"integrity": "' + f"{algorithm}-" + head + last + padding + '"')
+        assert (found == []) == (last in canonical), (algorithm, last)
+        if last not in canonical:
+            assert [f.rule for f in found] == ["denylist"], (algorithm, last)
+
+
+def test_a_value_that_directly_follows_a_slash_with_a_slash_in_its_body_is_a_path_and_a_name_in_it_is_found_and_masked():
+    """The review's inputs: a folder named after an algorithm, a name, and a file whose name makes the run the exact length of a value; the paths and the addresses are masked when they are printed."""
+    canonical_last = {"sha1": "A", "sha224": "A", "sha256": "A", "sha384": "A", "sha512": "A"}  # (a last character that no length rule can tell from a digest's)
+    cases = [
+        "docs/sha256-refs/Zorblax/" + "x" * 30 + ".txt",
+        "docs/sha1-refs/Zorblax/" + "x" * 14 + "-v2/x",
+        "https://example.invalid/sha512-" + "a" * 70 + "/Zorblax/" + "a" * 6 + canonical_last["sha512"] + "?q=1",
+        '"cache/sha224-refs/Zorblax/' + "a" * 24 + canonical_last["sha224"] + '"',
+        "docs/sha256-refs/Zorblax/" + "A" * 30 + ".txt",  # the same, and the last character is one a digest can end in: only the slash before the value tells it from one
+        "docs/sha384-" + "a" * 50 + "/Zorblax/" + "a" * 4 + "A",  # (sha384: 64 characters, every last one is a digest's)
+    ]
+    for text in cases:
+        assert [f.rule for f in scan(text)] == ["denylist"], text
+        assert [f.rule for f in scan("x", path=text.strip('"'))] == ["denylist"], text
+        masked = S.mask_path(text.strip('"'), KEY, set(DENY))
+        assert "Zorblax" not in masked and f"[private:{tag('zorblax')}]" in masked, text
+
+
+def test_a_real_value_after_a_slash_with_no_slash_in_it_is_still_a_hash():
+    """A hash in the last segment of an address (a content address): after a slash, with no slash of its own."""
+    for algorithm in ("sha256", "sha512"):
+        value = real_digest_value(algorithm, slash=False)
+        assert scan("https://cdn.example.invalid/blobs/" + value + "?x=1") == [], algorithm
+
+
+def test_a_path_or_an_address_with_a_folder_named_after_an_algorithm_does_not_hide_the_name_in_the_next_folder():
+    """The body of a value is its digest and nothing else, so a folder and a name after the algorithm are no value, whatever the length and wherever the path ends."""
+    paths = [
+        "docs/sha256-referencematerial/Zorblax/LICENSE",  # 33 characters in all
+        "cache/sha256-abcdefghijklmnopqrstu/Zorblax",
+        "docs/sha512-" + "a" * 40 + "/Zorblax/x",
+    ]
+    for path in paths:
+        assert [f.rule for f in scan("x", path=path)] == ["denylist"], path
+        masked = S.mask_path(path, KEY, set(DENY))
+        assert "Zorblax" not in masked and f"[private:{tag('zorblax')}]" in masked, path
+    text = "see https://example.invalid/sha384-buildartifacts/Zorblax/2026/notes for more"
+    assert [f.rule for f in scan(text)] == ["denylist"]
+    assert [f.rule for f in scan('"cache/sha256-abcdefghijklmnopqrstu/Zorblax"')] == ["denylist"]
 
 
 def test_only_short_base64_runs_are_cached():

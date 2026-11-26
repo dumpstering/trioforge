@@ -55,6 +55,7 @@ seconds; the song toggle lives in the browser) and a spell file of another level
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import itertools
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -65,6 +66,7 @@ from trioforge.classes import CLASS_CODES
 from trioforge.sources.client_spells import LIMIT_SPA
 
 __all__ = [
+    "BUFF_SETS",
     "COMPONENTS",
     "DECODES",
     "DEFAULT_LONG_MINUTES",
@@ -76,6 +78,8 @@ __all__ = [
     "Buff",
     "BuffSet",
     "Dropped",
+    "assumes_spell_haste",
+    "buffsets",
     "enchanter_preset",
     "exclusion_reason",
     "exclusions",
@@ -83,6 +87,7 @@ __all__ = [
     "own_buffs",
     "raid_preset",
     "resolve",
+    "without_spell_haste",
 ]
 
 Number = int | float
@@ -125,6 +130,9 @@ PRESET_NAMES = (
 )  # fmt: skip
 
 DECODES = ("raw", "mod1000")
+
+#: the buff sets of a trio: its own buffs; plus the 13 group buffs; plus the Enchanter's haste; the full raid
+BUFF_SETS = ("own", "group", "group+enchanter", "raid")
 
 # giving up: the number of recursive calls an exact independent-set search may make before the reduction is skipped
 _SEARCH_BUDGET = 200_000
@@ -384,6 +392,56 @@ def raid_preset(spells: Any, level: int, *, rules: Any = None) -> list[Buff]:
         and exclusion_reason(record, CLASS_CODES, level, minutes) is None
     ]
     return [*group, *extra]
+
+
+# ---- the haste rule ----------------------------------------------------------------------------------------
+
+
+def assumes_spell_haste(rules: Any, level: int | None = None) -> bool:
+    """Whether a kit is chosen as if a haste spell were on: the rule ``haste.assume_spell`` (false: gear haste alone). Refuses a rule that is not true or false."""
+    value = rules.get("haste.assume_spell") if level is None else rules.get("haste.assume_spell", level)
+    if not isinstance(value, bool):
+        raise ValueError(f"haste.assume_spell is true or false, not {value!r}")
+    return value
+
+
+def without_spell_haste(buffs: Iterable[Buff]) -> list[Buff]:
+    """The buffs with their spell haste taken out (the haste component set to 0; every other component stays).
+
+    A buff whose only effect was haste is then inert and :func:`resolve` drops it; two haste spells no longer exclude each other on that account.
+    The buffs themselves are not changed: a buff that has no haste is the same object."""
+    result = []
+    for buff in buffs:
+        if buff.haste:
+            vec = list(buff.vec)
+            vec[_HASTE] = 0
+            buff = dataclasses.replace(buff, vec=tuple(vec))
+        result.append(buff)
+    return result
+
+
+def buffsets(
+    trio: Sequence[str], level: int, spells: Any, rules: Any, names: Iterable[str] = BUFF_SETS, *, spell_haste: bool | None = None
+) -> dict[str, BuffSet]:
+    """The resolved buff sets of ``trio`` that ``names`` ask for (:data:`BUFF_SETS`), by name: the one place a buff set is made for a kit to be chosen with.
+
+    ``spell_haste`` says whether the haste of the spells is in the sets: None takes the rule ``haste.assume_spell`` (:func:`assumes_spell_haste`), True keeps
+    every buff as the spell file has it (the haste a buff set gives, which the browser's "I have a haste spell" solves with) and False takes the haste out of
+    every buff (:func:`without_spell_haste`) before the sets are resolved, so the profile of a scenario, the solver and the evaluator all see no spell haste.
+    """
+    wanted = list(dict.fromkeys(names))
+    unknown = [name for name in wanted if name not in BUFF_SETS]
+    if unknown:
+        raise ValueError(f"unknown buff set {unknown[0]!r}; use one of {', '.join(BUFF_SETS)}")
+    keep = assumes_spell_haste(rules) if spell_haste is None else bool(spell_haste)
+    own = own_buffs(trio, level, spells, rules)
+    makers = {
+        "own": lambda: own,
+        "group": lambda: [*own, *group_preset(spells, level=level)],
+        "group+enchanter": lambda: [*own, *group_preset(spells, level=level), *enchanter_preset(spells, level, rules=rules)],
+        "raid": lambda: [*own, *raid_preset(spells, level, rules=rules)],
+    }
+    return {name: resolve(makers[name]() if keep else without_spell_haste(makers[name]()), rules) for name in wanted}
 
 
 # ---- stacking --------------------------------------------------------------------------------------------

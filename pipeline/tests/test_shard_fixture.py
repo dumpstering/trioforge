@@ -49,14 +49,14 @@ def test_the_shards_hold_the_whole_narrow_grid_and_were_solved_with_the_tie_stag
         assert pairs >= 4 and set(shard["setups"]) == set(ROLES)
         assert all(setup in weapons.SETUPS for setups in shard["setups"].values() for setup in setups)
         assert len(shard["scenarios"]) == len(RACES) * pairs * len(TIERS), name
-        assert {(row[0], row[2], row[3]) for row in shard["scenarios"] if row[1] == "balanced"} == {
-            (race, tier, setup) for race in RACES for tier in TIERS for setup in shard["setups"]["balanced"]
+        assert {(row[0], row[2], row[3]) for row in shard["scenarios"] if row[1] == "tank"} == {
+            (race, tier, setup) for race in RACES for tier in TIERS for setup in shard["setups"]["tank"]
         }
 
 
 def test_the_default_view_is_there_and_the_answer_names_two_races():
     defaults = json.loads((RESULTS / SLUG / "defaults.json").read_text(encoding="utf-8"))
-    assert defaults["view"] == {"role": "balanced", "tier": 4, "evidence": "strict", "buffs": "own"}
+    assert defaults["view"] == {"role": "tank", "tier": 4, "evidence": "strict", "buffs": "own"}
     assert sorted(row["race"] for row in defaults["races"]) == sorted(RACES) and {defaults["race"], defaults["runner_up_race"]} == set(RACES)
 
 

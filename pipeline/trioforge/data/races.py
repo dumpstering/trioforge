@@ -2,13 +2,15 @@
 
 ``rules/races.json`` holds three things:
 
-* the **base attributes** of the 15 playable races and the **modifiers** of the 16 classes, from
-  EQL Tools' published attributes table (https://eqltools.com/attributes). Each class adds
-  exactly 30 points in total, so any trio is worth 90 to any race;
+* the **base attributes** of the 16 playable races and the **modifiers** of the 16 classes, from
+  EQL Tools' published attributes table (https://eqltools.com/attributes), and, for the Half Dark
+  Elf, from its page on eqlwiki (revision of 2026-11-05). Each class adds exactly 30 points in
+  total, so any trio is worth 90 to any race;
 * the **primary classes** of each race, from the race pages of eqlwiki, which agree with the
   developers' FAQ and the patch notes. A race restricts only the first class of a trio. One
   entry is disputed: Kerran Druid, which counts as not legal until it is confirmed;
-* whether each race is ``active``.
+* whether each race is ``active``;
+* an optional ``note`` of a race: a racial that is recorded and **not scored** (the Half Dark Elf's Cursed Heritage).
 
 Read the file with :func:`load`::
 
@@ -31,7 +33,8 @@ carry, and duplicate keys or numbers that are not finite (strict JSON). The file
 may never mention a client program, an address inside one, or an offset; that is checked too.
 
 Codes follow the project's constants: races ``HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS
-KER FRG``, and classes ``WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER`` in
+KER FRG HDE`` (the order is the order of the kit codes of the site: a race is only ever added at the
+end), and classes ``WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER`` in
 class-id order 1 to 16.
 
 The package is run straight from the repository (``PYTHONPATH=pipeline``), so the default file is
@@ -83,6 +86,7 @@ RACE_NAMES = {
     "IKS": "Iksar",
     "KER": "Kerran",
     "FRG": "Froglok",
+    "HDE": "Half Dark Elf",
 }
 RACE_CODES = tuple(RACE_NAMES)
 
@@ -92,6 +96,7 @@ SOURCE_KINDS = ("url", "public-text")
 TOP_LEVEL_KEYS = ("version", "seal", "sources", "notes", "stat_order", "races", "classes")
 SOURCE_TABLES = ("stats", "primary_classes")
 RACE_KEYS = ("code", "name", "active", "base", "primary", "disputed")
+OPTIONAL_RACE_KEYS = ("note",)  # a racial that the file records and that nothing scores
 CLASS_KEYS = ("code", "id", "name", "mods")
 
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?![\s\S])")
@@ -251,8 +256,8 @@ def _code_problems(label: str, entries: list[Any], expected: tuple[str, ...]) ->
     return problems
 
 
-def _keys_problems(label: str, entry: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
-    problems = [f"{label}: unexpected key {key!r}" for key in sorted(set(entry) - set(keys))]
+def _keys_problems(label: str, entry: dict[str, Any], keys: tuple[str, ...], optional: tuple[str, ...] = ()) -> list[str]:
+    problems = [f"{label}: unexpected key {key!r}" for key in sorted(set(entry) - set(keys) - set(optional))]
     problems += [f"{label}: missing key {key!r}" for key in keys if key not in entry]
     return problems
 
@@ -279,7 +284,9 @@ def _race_problems(races: Any) -> list[str]:
         if not isinstance(race, dict):
             problems.append(f"races[{index}] must be an object")
             continue
-        problems.extend(_keys_problems(label, race, RACE_KEYS))
+        problems.extend(_keys_problems(label, race, RACE_KEYS, OPTIONAL_RACE_KEYS))
+        if "note" in race and (not isinstance(race["note"], str) or not race["note"].strip()):
+            problems.append(f"{label} note: must be non-blank text")
         if isinstance(code, str) and code in RACE_NAMES and "name" in race and race["name"] != RACE_NAMES[code]:
             problems.append(f"{label}: name must be {RACE_NAMES[code]!r}")
         if "active" in race and not isinstance(race["active"], bool):

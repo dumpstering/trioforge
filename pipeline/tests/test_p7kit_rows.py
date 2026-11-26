@@ -105,7 +105,7 @@ def test_a_negative_stat_is_shown_with_its_sign_at_the_value_the_model_gives_it(
         "evidence": {"level": "strict"}, "source": {},
     }
     vecs = view.tier_vecs({"rnegative": record}, world.table["defaults"], world.rules)
-    for tier in (0, 4, 10):
+    for tier in (0, 1, 4):  # (T6: a negative stat shrinks toward zero with the tier, -6 to -5 and -2, and is gone at +6: the tiers shown are those where it is still there)
         want = at_tier(browser.item_to_catalog(record, world.table["defaults"]), tier, world.rules)
         text = view.item_stat_text(vecs("rnegative", tier))
         got = read_stats(text)
@@ -194,6 +194,16 @@ def test_a_runner_up_that_needs_a_deity_is_not_the_next_best_item():
 def test_a_negative_term_says_what_it_costs():
     text = view.why_text(place(("AC", 40.0, None), ("AGI", -12.4, None)), Vec({"AGI": -6, "AC": 20}), [])
     assert f"Costs: AGI {MINUS}6 takes 12 off." in text and text.startswith("Lost without it: AC +20: 40.")
+
+
+def test_a_loss_that_rounds_to_nothing_says_under_one_and_not_a_figure_of_zero():
+    """E7: every figure of the page is a whole number, so a loss of 0.3 would read "HP +40: 0", which says the stat is worth nothing when it is worth a little."""
+    vec = Vec({"STA": 18, "HP": 40, "AGI": -2, "AC": 20})
+    text = view.why_text(place(("STA", 214.4, None), ("HP", 0.3, None), ("AC", 0.49, None), ("AGI", -0.2, None)), vec, [])
+    assert "HP +40: under 1" in text and "AC +20: under 1" in text and ": 0;" not in text and ": 0." not in text
+    assert f"Costs: AGI {MINUS}2 takes under 1 off." in text and " takes 0 off" not in text
+    assert text.startswith("Lost without it: STA +18: 214; HP +40: under 1; AC +20: under 1.")
+    assert "AC +20: 1" in view.why_text(place(("AC", 0.5, None)), vec, [])  # (half rounds up, as every figure of the page does: a figure of 1)
 
 
 def test_rows_have_no_stats_and_no_why_when_the_page_is_given_no_figures_or_the_results_have_no_why(world):

@@ -628,6 +628,9 @@ def _parse_sold_by(wikitext: str) -> list[dict]:
     return _unique(sold)
 
 
+_TAG_TEXT = re.compile(r"</?[A-Za-z][^<>\n]{0,40}>")  # the text of one HTML tag (bounded, so it cannot rescan a long run)
+
+
 def _quest_entries(content: str) -> list[tuple[str, str]]:
     """``(name, label)`` for each quest in one line of a related-quests list.
 
@@ -659,6 +662,8 @@ def _quest_entries(content: str) -> list[tuple[str, str]]:
     if entries:
         return entries
     text = _collapse(_neutralize(html.unescape("".join(_flatten_node(node) for node in loose))))
+    if not _TAG_TEXT.sub(" ", text).strip():
+        return []  # a line of nothing but tags (the closing ones a list leaves behind) names no quest
     return [(text, "")] if text else []
 
 
@@ -708,6 +713,7 @@ _IN_LINE = re.compile(r"[\s:*#;]*in\b\s*:?(.*)", re.IGNORECASE | re.DOTALL)
 _COMBINE_LINE = re.compile(r"[\s:*#;]*combine\b", re.IGNORECASE)
 _NON_TRADESKILL = re.compile(r"[\s:*#;\[]*non[- ]?tradeskill\b", re.IGNORECASE)
 _QUANTITY = re.compile(r"(?<![\w.])\d+\s*x\s*(?=\[\[)", re.IGNORECASE)
+_YIELD_OR_RETURN_LINE = re.compile(r"\W*(?:yields?|on failure|returns?)\b", re.IGNORECASE)  # a line that is one, from its start (a note at the end of an ingredient line is no such line)
 _TRIVIAL = re.compile(r"\(\s{0,20}trivial\b", re.IGNORECASE)
 _YIELD = re.compile(r"\byields?\b", re.IGNORECASE)
 _RETURNS = re.compile(r"\b(?:on failure|returns?)\b", re.IGNORECASE)
@@ -745,6 +751,8 @@ def _craft_kind(content: str) -> str:
         return "container"
     if _COMBINE_LINE.match(content):
         return "combine"
+    if _YIELD_OR_RETURN_LINE.match(content):
+        return "yield"  # (before the quantity: "Yield: 1 x [[Name]]" and "On Failure Returns: 1 x [[Name]]" have one, and are no ingredients)
     if _QUANTITY.search(content):
         return "ingredient"
     if _NON_TRADESKILL.match(content):

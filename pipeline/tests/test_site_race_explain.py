@@ -60,8 +60,8 @@ def test_the_sources_page_lists_every_race_page_with_its_revision(built):
     box = doc.by_id("races-box")
     racials = content.load_racials(RACIALS)
     rows = box.find("tbody").find_all("tr")
-    assert len(rows) == len(racials.pages) == 15
-    assert box.find("summary").text() == "Race pages and revisions used (15)"
+    assert len(rows) == len(racials.pages) == 16
+    assert box.find("summary").text() == "Race pages and revisions used (16)"
     ogre = next(row for row in rows if row.find("th").text() == "Ogre")
     link = ogre.find("a")
     assert link.get("href") == "https://eqlwiki.com/index.php?title=Ogre&oldid=153426" and link.text() == "153426" and link.get("rel") == "noopener noreferrer"

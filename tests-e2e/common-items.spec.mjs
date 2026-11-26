@@ -140,8 +140,8 @@ test("it follows the tier and the race, closed or open, and not the role or the 
   const wasSetup = await page.locator('[data-f="v-setup"]').textContent();
   await pick(page, other);
   await expect(page.locator('[data-f="v-setup"]')).not.toHaveText(wasSetup);
-  await pick(page, "role-balanced");
-  await expect(page.locator("#kit-caption")).toContainText("Balanced");
+  await pick(page, "role-tank");
+  await expect(page.locator("#kit-caption")).toContainText("Tank");
   await expect(page.locator("#common-body ul").first()).toHaveAttribute("data-mark", "drawn");
   expect(await page.locator("#common-body").textContent()).toBe(before);
   expect(watch.problems()).toEqual([]);
@@ -166,8 +166,9 @@ test("a shard that does not load when the section is opened closes it again with
 });
 
 test("the summary keeps its height when it is filled and when it is emptied while a shard loads, so that nothing under it moves, at the widths of a phone and up @once", async ({ page }) => {
-  // the longest shape of the words ("Get these first: 13 items every role wears, 6 most roles wear" in the fixture) wraps on a phone: its room has to be there from the start
-  const SHAPE = /^Get these first: \d+ items every role wears, \d+ most roles wear$/;
+  // the longest shape of the words ("Get these first: 13 items every role wears, 6 most roles wear") wraps on a phone: its room has to be there from the start (the fixture's trio offers two builds, so
+  // no item is worn by most roles but not all, and the words are the short shape)
+  const SHAPE = /^Get these first: \d+ items every role wears(?:, \d+ most roles wear)?$/;
   const height = () => page.locator("#common > summary").evaluate((node) => node.getBoundingClientRect().height);
   const near = (a, b, why) => expect(Math.abs(a - b), `${why}: ${a} and ${b}`).toBeLessThan(0.5);
   for (const width of [320, 360, 390, 600, 640, 1280]) {

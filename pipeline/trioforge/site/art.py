@@ -60,7 +60,7 @@ SLOT_ICONS: dict[str, str] = {
 #    the own picture of an archery weapon, as the sword is of a sword. HANDS had none while its picture was a near twin of the shoulders'; the pictures of the hands are now in four materials, and
 #    the leather ones are the place's)
 
-#: the crest beside a role's choice; the roles that have none (balanced: no picture fits "a blend"; caster: the crossed swords would be a false picture) get none
+#: the crest beside a build's choice; the builds that have none (the Shield caster, the Caster tank and the Caster, the casting ones: the crossed swords would be a false picture, and the Archer has no crest either) get none
 ROLE_CRESTS: dict[str, str] = {"tank": "crest-tank", "melee": "crest-damage"}
 
 

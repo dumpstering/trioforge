@@ -83,6 +83,27 @@ def test_a_quest_written_as_plain_text_or_as_a_link_to_a_section_of_this_page_is
     assert result.quests == ["A plain quest", "The Part"] and result.quest_labels == []
 
 
+def test_the_closing_tags_that_a_list_leaves_behind_are_no_quest_names():
+    """The wiki's list markup (a ``<ul>`` of ``<li>`` lines) leaves a line of nothing but tags, which was a quest named ``</li></ul>`` (29 items of the catalog)."""
+    result = real("Unadorned Breastplate")
+    assert result.quests == [
+        "Bard Skyshrine Armor Quests", "Cleric Skyshrine Armor Quests", "Paladin Skyshrine Armor Quests", "Shadowknight Skyshrine Armor Quests",
+        "Warrior Skyshrine Armor Quests",
+    ]  # fmt: skip
+    assert [label["title"] for label in result.quest_labels] == result.quests  # (a label for each of the five links, and none for the tags)
+
+
+@pytest.mark.parametrize("debris", ["</li></ul>", "</ul>", "</li>", "<ul>", "<div>", "</div>", "<b>", "</ul></div>", "<ul> </ul>"])
+def test_a_line_of_only_tags_is_no_quest_whatever_the_tags_are(debris):
+    assert parsed(relatedquests=f"* [[Zorblax Quest]]\n{debris}\n* [[Quuxen Quest]]").quests == ["Zorblax Quest", "Quuxen Quest"]
+    assert parsed(relatedquests=debris).quests == []
+
+
+@pytest.mark.parametrize("line,expected", [("<b>Plain Quest</b>", ["Plain Quest"]), ("Plain Quest <ul>", ["Plain Quest <ul>"]), ("a < b and c > d", ["a < b and c > d"])])
+def test_text_with_tags_in_it_is_still_a_name_as_it_was(line, expected):
+    assert parsed(relatedquests=f"* {line}").quests == expected
+
+
 def test_the_related_quests_section_is_read_the_same_way():
     page_text = template(itemname="Zorblax Ring", statsblock="Slot: EAR") + "\n== Related quests ==\n* [[Zorblax Tests|Test of Courage]]\n"
     result = parse_page(page(page_text))

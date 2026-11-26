@@ -1,7 +1,7 @@
 {
  "version": 1,
  "data_release": "data-2026-10-14",
- "rules_version": "2026-10-13",
+ "rules_version": "2026-11-19",
  "inputs": "d324c2b2e855a540fed5cb9810e5bcd1016c71391d347f72dac2ed31cd8e82d7",
  "count": 48,
  "defaults": {"key":null,"match_name":null,"classes":["ALL"],"races":["ALL"],"deity":null,"lore":false,"stats":{},"sv":{},"weapon":null,"item_type":null,"item_type_source":null,"aliases":[],"owned_only":false},

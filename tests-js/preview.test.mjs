@@ -4,7 +4,8 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import config from "../playwright.config.mjs";
-import { DEFAULT_DIST, RELEASE_DIST, distFolder, exaltResults } from "../scripts/preview-plan.mjs";
+import { ANALYTICS_TOKEN } from "../playwright.config.mjs";
+import { BUILD_SETTING_VARIABLES, DEFAULT_DIST, PREVIEW_ANALYTICS_VARIABLE, RELEASE_DIST, buildSettings, distFolder, exaltResults } from "../scripts/preview-plan.mjs";
 
 const ROOT = resolve("/the/repository");
 const inRoot = (folder) => resolve(ROOT, folder);
@@ -33,7 +34,38 @@ describe("where a preview is built", () => {
     const folders = config.webServer.map((server) => distFolder(ROOT, server.env));
     expect(new Set(folders).size, "two servers must not build into one folder").toBe(folders.length);
     expect(folders).not.toContain(inRoot(RELEASE_DIST));
-    expect(config.webServer.map((server) => server.env.TRIOFORGE_PREVIEW_DIST)).toEqual(["site/dist-e2e", "site/dist-exalt"]);
+    expect(config.webServer.map((server) => server.env.TRIOFORGE_PREVIEW_DIST)).toEqual(["site/dist-e2e", "site/dist-exalt", "site/dist-analytics"]);
+  });
+});
+
+describe("the settings a preview gives the site build", () => {
+  const token = "0123456789abcdef0123456789abcdef";
+
+  it("are none by default: a preview has no page counts, whatever the shell holds for a release", () => {
+    const given = { PATH: "p", TRIOFORGE_ANALYTICS_TOKEN: "fedcba9876543210fedcba9876543210", TRIOFORGE_GOOGLE_VERIFICATION: "google0123456789abcdef.html" };
+    const made = buildSettings(given);
+    expect(made.args).toEqual([]);
+    expect(made.env).toEqual({ PATH: "p" });
+    expect(Object.keys(made.env).filter((name) => BUILD_SETTING_VARIABLES.includes(name))).toEqual([]);
+    expect(given.TRIOFORGE_ANALYTICS_TOKEN, "the given environment is not changed").toBeDefined();
+    expect(buildSettings({ [PREVIEW_ANALYTICS_VARIABLE]: "" }).args).toEqual([]);
+  });
+
+  it("are the token of $TRIOFORGE_PREVIEW_ANALYTICS_TOKEN, which only the third server of the browser tests sets", () => {
+    expect(buildSettings({ [PREVIEW_ANALYTICS_VARIABLE]: token }).args).toEqual(["--analytics-token", token]);
+    expect(config.webServer.map((server) => server.env[PREVIEW_ANALYTICS_VARIABLE])).toEqual([undefined, undefined, token]);
+    expect(ANALYTICS_TOKEN).toBe(token);
+  });
+
+  it("refuse a token that is not 32 lower-case hex characters (the build refuses capitals too), without repeating it", () => {
+    for (const value of ["abc", `${token}0`, token.slice(1), "g".repeat(32), ` ${token}`, `${token}\n`, token.toUpperCase(), `${token.slice(1)}A`]) {
+      expect(() => buildSettings({ [PREVIEW_ANALYTICS_VARIABLE]: value }), JSON.stringify(value)).toThrow(/32 lower-case hex/);
+      try {
+        buildSettings({ [PREVIEW_ANALYTICS_VARIABLE]: value });
+      } catch (error) {
+        expect(error.message).not.toContain(value.trim() || "\u0000");
+      }
+    }
   });
 });
 

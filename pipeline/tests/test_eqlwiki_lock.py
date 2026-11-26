@@ -26,7 +26,7 @@ class NoNetwork:
 def client():
     from trioforge.sources.http import PoliteClient
 
-    return PoliteClient("TrioForge-extractor/0.1 (non-commercial fan project; 1 request/s)", transport=NoNetwork())
+    return PoliteClient("TrioForge-extractor/0.1 (non-commercial fan project; 1 request/s)", transport=NoNetwork(), honour_robots=False)
 
 
 def run(tmp_path, monkeypatch, lock_path):

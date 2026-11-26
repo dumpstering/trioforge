@@ -95,14 +95,14 @@ test("the rows of Wear this show the picture of their item, or of their place, a
   await openSwitches(page);
   const shownRole = page.locator('[data-f="v-role"]').first(); // (the page says which role the table is drawn for, once it is)
   const first = await shownRole.textContent();
-  const other = (await page.locator('input[name="role"]').evaluateAll((radios) => radios.map((radio) => radio.value))).find((value) => value !== "balanced") ?? "balanced";
+  const other = (await page.locator('input[name="role"]').evaluateAll((radios) => radios.map((radio) => radio.value))).find((value) => value !== "tank") ?? "tank";
   await pick(page, `role-${other}`);
   await expect(shownRole).not.toHaveText(first ?? "");
   const now = await readRows(page);
   expect(now.map((row) => row.picture)).toEqual(expected(now, known)); // the rows drawn in the browser have the pictures the data gives their items
   expect(now.every((row) => row.marks <= 1 && row.hidden)).toBe(true);
 
-  await pick(page, "role-balanced");
+  await pick(page, "role-tank");
   await expect(shownRole).toHaveText(first ?? "");
   expect((await readRows(page)).map((row) => row.picture)).toEqual(baked); // and back to the pictures the page was made with
   expect(watch.problems()).toEqual([]);

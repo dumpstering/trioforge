@@ -336,7 +336,7 @@ def test_the_build_refuses_a_donor_whose_source_column_in_the_shards_is_not_amon
 def test_the_build_refuses_it_in_a_runner_up_table_too(tmp_path):
     need_node()
     results, catalog, wanted = make_results(tmp_path)
-    document = json.loads((results / "pal-mnk-ber" / "runnerups" / "balanced.json").read_text(encoding="utf-8"))
+    document = json.loads((results / "pal-mnk-ber" / "runnerups" / "tank.json").read_text(encoding="utf-8"))
     key = next(row[0] for row in document["items"] if wanted.get(row[0]))  # (a donor with texts that the runner-ups name)
     retext(results, key, "Somewhere Else (a stranger)", shards_too=False)  # (the shards say what the catalog says; the runner-up tables say another)
     with pytest.raises(build.BuildError, match=key):
@@ -474,12 +474,13 @@ def test_source_texts_is_the_wording_of_each_source_of_an_item_in_the_order_of_t
 
 #: SHA-256 of the lines "key<TAB>text" of source_summary over every item of the committed catalog, made with the function as it was before the wording of one source was shared (facf875), for
 #: four sets of live sources: the item's own, none, the kinds only (quest, vendor, craft, foraged: no zone) and the zone of the last drop. The summary is in every shard of a release, and
-#: the release's writer hash covers shards.py: what it says for an item must not change.
+#: the release's writer hash covers shards.py: what it says for an item must not change. Pinned again on 2026-11-24 for the refreshed catalog (the digests are of the catalog's data too): the
+#: unchanged function gave the earlier digests on the earlier catalog, and its summaries differ only for items whose sources or evidence changed in the refresh.
 SUMMARY_DIGESTS = {
-    "own": "2d029f8a297ea736d9cd98581cb81a34113af32665bfe8e432891f7314aeab00",
-    "none": "9144bd127508d3ddc9cc92009ab6a72fa6c19dbdcbe13bf438bd5ae17dac2ffc",
-    "kinds": "bfcedbf50885d6b289cbbc4290b789679f57c32dae55d23dc8d504a79a7918bc",
-    "last": "41d3f58f7a603e74db9635ab26e78a8e650f212ed31f1a581934e034dd47f9e3",
+    "own": "09604f5c0ad72f7855e7f9dd39cee12a9647920f18dffdce026891ae5e866aa8",
+    "none": "dea488bbae7dd7cdb8f48376f3e5c8e871a78bd9cd4fcaf93bc20af9ef413cd6",
+    "kinds": "4a3ca5bdc7d177313af8a6a8ebfc6fdc521da601aee045c4132a859c4f42cb47",
+    "last": "924c2a00c8c03120c20fe76dce79d1e926c0cea26584ca28c9f20c29518f7184",
 }
 
 

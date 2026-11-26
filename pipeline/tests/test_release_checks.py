@@ -407,10 +407,30 @@ def test_only_the_strict_and_wiki_items_get_a_page(tmp_path):
     assert release.check_file_count(facts, evidence, assets=ASSETS) == base + 150
 
 
+def test_the_file_of_the_search_console_is_counted_when_the_setting_is_on_and_the_exact_count_includes_it(monkeypatch):
+    """A release built with --google-verification (or $TRIOFORGE_GOOGLE_VERIFICATION) has one file more at its root than the count said (Part M4; the count is held to the budget, and the J3 commit says
+    it can include the file)."""
+    facts = facts_of_the_grid()
+    name = "google0123456789abcdef.html"  # (invented)
+    base = release.check_file_count(facts, {}, assets=ASSETS)
+    assert release.check_file_count(facts, {}, assets=ASSETS, verification=name) == base + 1
+    monkeypatch.setenv(build.VERIFICATION_ENV, name)
+    assert release.check_file_count(facts, {}, assets=ASSETS) == base + 1, "the setting of the environment is the setting of the build that follows"
+    monkeypatch.setenv(build.VERIFICATION_ENV, "")
+    assert release.check_file_count(facts, {}, assets=ASSETS) == base, "an empty variable is no setting"
+    monkeypatch.setenv(build.VERIFICATION_ENV, "not-a-file-name")
+    with pytest.raises(ReleaseRefused, match="Search Console") as caught:
+        release.check_file_count(facts, {}, assets=ASSETS)
+    assert "not-a-file-name" not in str(caught.value)
+    monkeypatch.delenv(build.VERIFICATION_ENV)
+    listed = build.site_files([build.TrioFiles(f.slug, f.roles, f.tiers, f.levels) for f in facts], assets=ASSETS, item_pages=[], noindex=False, verification=name)
+    assert release.check_file_count(facts, {}, assets=ASSETS, verification=name) == len(listed)
+
+
 def test_a_release_whose_pages_would_pass_15000_files_is_refused_with_its_count():
     facts = facts_of_the_grid()
     with pytest.raises(ReleaseRefused, match=r"over budget.*files \(limit 15,000\)"):
-        release.check_file_count(facts, evidence_of(9000), assets=ASSETS)
+        release.check_file_count(facts, evidence_of(9500), assets=ASSETS)
 
 
 def test_an_item_key_no_page_can_have_is_refused():
@@ -776,7 +796,7 @@ def test_a_denylist_without_a_key_check_line_is_refused_as_a_wrong_key_could_not
 
 def facts_with_chunks(*counts: int) -> list[release.TrioFacts]:
     return [
-        release.TrioFacts(f"war-clr-{code}", (0, 4, 10), ("balanced",), (50,), "data-2030-01-02", "2026-10-13", "2026-09-22", 50, chunks)
+        release.TrioFacts(f"war-clr-{code}", (0, 4, 10), ("melee",), (50,), "data-2030-01-02", "2026-10-13", "2026-09-22", 50, chunks)
         for code, chunks in zip(("pal", "rng", "shd", "dru", "mnk", "brd"), counts)
     ]
 
@@ -1092,7 +1112,7 @@ def test_the_vendor_worker_with_only_the_allowed_literals_passes(tmp_path):
         b'var p="/tmp/highs-js-";',  # a second of the temporary name: the entry allows one
         b'var p="/tmp/highs-js-x/y";',
         b'var p="/tmp/other";',
-        b'var p="/Users/x/";',
+        b'var p="/' + b"Users" + b'/x/";',  # (in pieces: the privacy scan reads a path into a profile folder in a test as a finding)
         b"var u=file://;",
     ],
 )

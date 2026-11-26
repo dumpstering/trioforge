@@ -5,7 +5,7 @@
 //
 // `build()` gives the kit to share, `{kit: {v: 1, trio, race, level, slots}, left}` (`left` how many items of it have no place in a link), or null when there is none. The link is the
 // address of the page (its own address: the origin and the path, with no query and no fragment of the page's) and `#k=` and the canonical text of the kit (input/kitcode.js,
-// encodeKit); it lists the items of the kit, each with its place and its tier, and nothing else: not what the visitor owns, not how many, not where it is, not a value, not a word.
+// encodeKit); it lists the items of the kit, each with its place and its tier, and, for a kit made for the Bow setup (the kit's `setup`), that setup, and nothing else: not what the visitor owns, not how many, not where it is, not a value, not a word.
 // The words beside the button say so ("This link lists the items in this kit.").
 //
 // The link is copied on the click of the button and at no other time. When the browser has no clipboard or refuses it, the link is shown in a read-only text field, selected, with

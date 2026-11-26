@@ -32,10 +32,11 @@ from hypothesis import strategies as st
 
 from trioforge.classes import CLASS_CODES
 from trioforge.model import formulas, roles, weapons
+from trioforge.model import profile as profile_module
 from trioforge.model.buffs import Buff, own_buffs, resolve
 from trioforge.model.formulas import EvalProfile, PoolSpec, compile_profile, evaluate
 from trioforge.model.items import SLOT_INSTANCES, ItemVec, WeaponVec
-from trioforge.model.profile import Profile, eval_buffs, fixed_pools, make_profile
+from trioforge.model.profile import HASTE_CAP_MONK_TEXT, HASTE_CAP_TEXT, Profile, eval_buffs, fixed_pools, make_profile
 from trioforge.model.tables import load
 from trioforge.rules import Rules
 
@@ -79,11 +80,11 @@ def tables_with(**changes):
     return dataclasses.replace(TABLES, **changes)
 
 
-def build(race="OGR", trio=PBM, role="balanced", level=50, buffset="own", aa=None, tables=TABLES, rules=None, **kw):
-    """A profile; ``buffset="own"`` is the trio's own buffs from the committed spell file."""
+def build(race="OGR", trio=PBM, role=None, level=50, buffset="own", aa=None, tables=TABLES, rules=None, **kw):
+    """A profile; ``buffset="own"`` is the trio's own buffs from the committed spell file; ``role`` None is the first build the trio is offered."""
     if isinstance(buffset, str):
         buffset = own_set(tuple(trio), level)
-    return make_profile(race, trio, level, role, buffset, aa, tables, rules, **kw)
+    return make_profile(race, trio, level, role or roles.roles_for(trio)[0], buffset, aa, tables, rules, **kw)
 
 
 def fx(slot, spa, value):
@@ -145,11 +146,11 @@ def test_naked_stats_are_the_race_base_plus_the_three_class_modifiers():
         assert dict(build("TRL", trio).naked) == formulas.naked("TRL", trio, TABLES)
 
 
-def test_the_weights_are_the_role_weights_and_balanced_carries_the_mean():
-    p = build("OGR", PBM, "balanced")
-    assert p.weights["AC"] == (6 + 1.5) / 2 == 3.75
-    assert build("OGR", PBM, "tank").weights["AC"] == 6
+def test_the_weights_are_the_role_weights_and_there_is_no_blend():
+    assert build("OGR", PBM, "tank").weights["AC"] == 12
     assert build("OGR", PBM, "melee").weights["AC"] == 1.5
+    with pytest.raises(ValueError, match="role"):
+        build("OGR", PBM, "balanced")  # (the build of an earlier release, which no longer exists)
     for trio in TRIOS:
         for role in roles.roles_for(trio):
             assert dict(build("OGR", trio, role).weights) == roles.weights_for(trio, role, RULES)
@@ -162,12 +163,54 @@ def test_a_trio_with_no_mana_class_has_no_mana_pool_and_no_mana_weight():
     assert build("HUM", PBM).pools["MANA"] != ()
 
 
-def test_the_haste_cap_is_75_and_85_with_a_monk():
+def test_the_berserker_stance_is_the_melee_builds_of_a_trio_with_a_berserker_and_of_no_other():
+    """T8: the swing-speed factor 2.1 and no AGI in mitigation or evasion, for the builds the rule names (the Melee damage build), in a trio that has a Berserker."""
+    assert RULES.get("stance.berserker") == {"swing_factor": 2.1, "agi_counts": False, "builds": ["melee"]}
+    stanced = build("OGR", PBM, "melee")
+    assert dict(stanced.stance) == {"agi_share": 0, "swing_factor": 2.1}
+    assert build("OGR", PBM, "tank").stance is None  # (the Tank is not in the list of builds)
+    assert build("HUM", ("WAR", "MNK", "ROG"), "melee").stance is None  # (no Berserker in the trio)
+    assert build("OGR", PBM, "melee", rules=rules_with(**{"stance.berserker": {"swing_factor": 2.1, "agi_counts": False, "builds": ["tank", "melee"]}})).stance is not None
+    assert build("OGR", PBM, "tank", rules=rules_with(**{"stance.berserker": {"swing_factor": 2.1, "agi_counts": False, "builds": ["tank", "melee"]}})).stance is not None
+    assert build("OGR", PBM, "melee", rules=rules_with(**{"stance.berserker": {"swing_factor": 1, "agi_counts": True, "builds": []}})).stance is None
+
+
+@pytest.mark.parametrize("value", [2.1, "2.1", {"swing_factor": 0, "agi_counts": False, "builds": ["melee"]}, {"swing_factor": 2.1, "agi_counts": 0, "builds": ["melee"]}, {"swing_factor": 2.1, "agi_counts": False, "builds": ["wizard"]}, {"swing_factor": 2.1, "agi_counts": False}])
+def test_a_stance_rule_the_model_does_not_implement_is_refused(value):
+    with pytest.raises(ValueError, match="stance.berserker"):
+        build("OGR", PBM, "melee", rules=rules_with(**{"stance.berserker": value}))
+
+
+def test_the_haste_cap_is_75_and_85_with_a_monk_at_level_50_as_it_was_and_follows_the_level():
+    """T7: the cap has a level dimension; at level 50, the level of today, no result changes (75, and 85 with a Monk); the level 55 tables use 85 (95 with a Monk)."""
     assert build("OGR", PBM).haste_cap == 85
     assert build("HUM", ("WAR", "MNK", "ROG")).haste_cap == 85
     assert build("OGR", SCS).haste_cap == 75
     assert build("OGR", WME).haste_cap == 75
-    assert (RULES.get("haste.cap_pct"), RULES.get("haste.cap_pct_with_monk")) == (75, 85)
+    assert build("OGR", PBM, level=55).haste_cap == 95 and build("OGR", SCS, level=55).haste_cap == 85
+    assert RULES.get("haste.cap_pct") == HASTE_CAP_TEXT and RULES.get("haste.cap_pct_with_monk") == HASTE_CAP_MONK_TEXT
+
+
+@pytest.mark.parametrize(
+    ("level", "cap"),
+    [(1, 55), (20, 55), (30, 55), (31, 56), (40, 65), (49, 74), (50, 75), (51, 85), (55, 85), (59, 85), (60, 100), (65, 100), (99, 100)],
+)
+def test_the_haste_cap_has_a_level_dimension(level, cap):
+    """T7: max(level, 30) + 25 up to level 50, 85 for levels 51 to 59, 100 from level 60 (the game client's own calculation)."""
+    assert formulas.haste_cap_at(level) == cap
+
+
+@pytest.mark.parametrize("level", [0, -1, 50.0, "50", None, True])
+def test_the_haste_cap_asks_for_a_whole_level(level):
+    with pytest.raises(ValueError, match="level"):
+        formulas.haste_cap_at(level)
+
+
+@pytest.mark.parametrize("rule", ["haste.cap_pct", "haste.cap_pct_with_monk"])
+@pytest.mark.parametrize("value", [75, 85, "100 from level 60", ""])
+def test_a_haste_cap_the_model_does_not_implement_is_refused(rule, value):
+    with pytest.raises(ValueError, match=rule):
+        build(rules=rules_with(**{rule: value}))
 
 
 def test_only_the_iksar_has_racial_armor_class():
@@ -179,14 +222,21 @@ def test_only_the_iksar_has_racial_armor_class():
 
 
 def test_the_racial_and_monk_bonuses_reach_the_value_of_an_empty_kit_at_the_sheet_point_weight():
-    per_point = F(str(build().weights["AC"])) / F(4, 3)  # 3.75 / (4/3) = 2.8125
-    plain = evaluate(build("OGR", PBM), kit_of())
+    per_point = F(str(build("OGR", PBM, "tank").weights["AC"])) / F(4, 3)  # 12 / (4/3) = 9
+    top = "on top of the capped sheet AC (bypasses the softcap), valued per sheet point"
+    on_top = rules_with(**{"monk.bonus_placement": top, "race.iksar_ac_placement": top})
+    plain = evaluate(build("OGR", PBM, rules=on_top), kit_of())
     assert plain.totals["sheet"]["monk_bonus"] == 73  # an empty kit weighs nothing: the full bonus
     assert plain.parts["MONK"] == per_point * 73
     assert plain.parts["IKSAR"] == 0
-    iksar = evaluate(build("IKS", PBM), kit_of())
+    iksar = evaluate(build("IKS", PBM, rules=on_top), kit_of())
     assert iksar.parts["IKSAR"] == per_point * 35
-    assert evaluate(build("OGR", SCS), kit_of()).parts["MONK"] == 0  # no Monk, no bonus
+    assert evaluate(build("OGR", SCS, rules=on_top), kit_of()).parts["MONK"] == 0  # no Monk, no bonus
+    # T3: as the rules have them (inside X before the cap) the two bonuses are in the sheet value, and the parts that sit on top are empty
+    inside = evaluate(build("IKS", PBM), kit_of())
+    assert inside.totals["sheet"]["monk_bonus"] == 73 and inside.totals["sheet"]["iksar"] == 35
+    assert inside.parts["MONK"] == 0 and inside.parts["IKSAR"] == 0
+    assert inside.totals["sheet"]["X"] - evaluate(build("IKS", PBM, rules=on_top), kit_of()).totals["sheet"]["X"] == 73 + 35
 
 
 # ---- the AA defaults and the evidence level: inputs that are not model rows -----------------------------------
@@ -273,7 +323,7 @@ def test_the_deity_is_none_by_default_so_deity_locked_items_are_left_out():
     [
         (PBM, 50, 392, 0.33, 439),  # 392 x 1.12 = 439.04
         (SCS, 50, 392, 0.33, 439),
-        (WME, 50, 328, 0.25, 360),  # 328 x 1.10 = 360.8: no Physical Enhancement, floored
+        (WME, 50, 350, 0.3, 385),  # 328 and 0.25 are under the floors (350 and 0.3): 350 x 1.10 = 385, no Physical Enhancement
         (("WAR", "CLR", "DRU"), 50, 410, 0.35, 459),  # 410 x 1.12 = 459.2
         (PBM, 55, 402, 0.33, 450),  # 402 x 1.12 = 450.24
     ],
@@ -285,11 +335,24 @@ def test_the_softcap_is_the_best_class_cap_and_its_rate_times_the_aas_floored(tr
     assert effective == int(raw * (100 + p.cs_pct + p.pe_pct) // 100)
 
 
-def test_the_best_softcap_takes_the_larger_cap_and_on_a_tie_the_larger_rate():
+def test_the_softcap_takes_the_best_cap_and_the_best_rate_of_the_trio_each_by_itself():
+    """T2: the client takes the best cap and the best multiplier of the three classes, which can be two classes (it used to take the rate of the class with the best cap)."""
     softcap = dict(TABLES.softcap)
-    softcap[("PAL", 50)], softcap[("MNK", 50)], softcap[("BER", 50)] = (400, 0.2), (400, 0.4), (390, 0.9)
+    softcap[("PAL", 50)], softcap[("MNK", 50)], softcap[("BER", 50)] = (400, 0.2), (380, 0.4), (390, 0.9)
     p = build(tables=tables_with(softcap=MappingProxyType(softcap)))
-    assert tuple(p.softcap) == (400, 0.4)
+    assert tuple(p.softcap) == (400, 0.9)  # the cap of the Paladin, the rate of the Berserker
+
+
+def test_the_softcap_is_never_below_the_floors_of_the_rules():
+    """T2: a cap under ac.softcap.base_floor is read as the floor, and a rate under ac.softcap.rate_floor as the floor (a trio of casters: 328 and 0.25 become 350 and 0.3)."""
+    assert RULES.get("ac.softcap.base_floor") == 350 and RULES.get("ac.softcap.rate_floor") == 0.3
+    softcap = dict(TABLES.softcap)
+    softcap[("PAL", 50)], softcap[("MNK", 50)], softcap[("BER", 50)] = (300, 0.1), (320, 0.2), (340, 0.29)
+    low = tables_with(softcap=MappingProxyType(softcap))
+    assert tuple(build(tables=low).softcap) == (350, 0.3)
+    other = rules_with(**{"ac.softcap.base_floor": 360, "ac.softcap.rate_floor": 0.2})
+    assert tuple(build(tables=low, rules=other).softcap) == (360, 0.29)  # (the best class rate is above this rule's floor)
+    assert build("HUM", WME).effective_softcap == 385 and build("HUM", WME, aa={"physical_enhancement": True}).effective_softcap == 392
 
 
 def test_the_defense_cap_is_the_best_defense_skill_cap_of_the_trio_at_the_level():
@@ -314,13 +377,56 @@ def test_the_monk_curve_is_there_for_a_monk_trio_only_and_follows_the_level():
     assert build("OGR", WME).monk is None
 
 
-def test_both_bonuses_ride_on_top_of_the_cap_as_the_rules_say():
-    assert dict(build().placement) == {"monk": "top", "iksar": "top"}
-    inside = "inside X before the cap"
-    p = build(rules=rules_with(**{"monk.bonus_placement": inside}))
-    assert dict(p.placement) == {"monk": "inside", "iksar": "top"}
-    q = build("IKS", rules=rules_with(**{"race.iksar_ac_placement": inside}))
-    assert dict(q.placement) == {"monk": "top", "iksar": "inside"}
+def test_the_public_texts_give_the_soft_cap_of_a_trio_of_casters_the_model_makes():
+    """R8: the note of ``ac.softcap.base_floor`` and the changelog said "392 and not 367" for a trio of casters; the model gives 385 (it was 360) with Combat Stability 3, because a trio of casters is not
+    given Physical Enhancement (``ac.softcap.pe_for_caster_only_trios`` is false), and 392 (it was 367) with it. The texts say the model's numbers."""
+    casters = build("HUM", WME)
+    with_pe = build("HUM", WME, aa={"physical_enhancement": True})
+    best_class_cap = max(TABLES.softcap[(code, 50)][0] for code in WME)
+    assert best_class_cap == 328 and RULES.get("ac.softcap.base_floor", 50) == 350 and RULES.get("ac.softcap.pe_for_caster_only_trios", 50) is False
+    assert (casters.effective_softcap, with_pe.effective_softcap) == (385, 392)
+    assert (int(best_class_cap * F(110, 100)), int(best_class_cap * F(112, 100))) == (360, 367)  # what the old cap was, without and with Physical Enhancement
+    note = next(rule for rule in RAW["rules"] if rule["id"] == "ac.softcap.base_floor")["notes"]
+    assert "385 and not 360" in note and "392 and not 367" in note and "Physical Enhancement" in note.split("392")[1]  # (the 392 is the one with Physical Enhancement, and says so)
+    changelog = (REPO / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "385 and not 360" in changelog and "(392 and not 367 at level 50)" not in changelog
+    decisions = (REPO / "docs" / "DECISIONS.md").read_text(encoding="utf-8")
+    assert "had a cap of 360 with Combat Stability 3 and now has 385" in decisions and "a cap of 367 with Combat Stability 3 and Physical Enhancement and now has 392" not in decisions
+
+
+def test_both_bonuses_ride_inside_the_sheet_value_before_the_cap_as_the_rules_say():
+    """T3: the client adds the Monk worn-weight term and the Iksar level term to X, before the soft cap."""
+    assert dict(build().placement) == {"monk": "inside", "iksar": "inside"}
+    top = "on top of the capped sheet AC (bypasses the softcap), valued per sheet point"
+    p = build(rules=rules_with(**{"monk.bonus_placement": top}))
+    assert dict(p.placement) == {"monk": "top", "iksar": "inside"}
+    q = build("IKS", rules=rules_with(**{"race.iksar_ac_placement": top}))
+    assert dict(q.placement) == {"monk": "inside", "iksar": "top"}
+
+
+def test_an_evaluator_profile_given_no_placement_has_the_placement_the_rules_give():
+    """R3: the default of ``EvalProfile`` was ``top`` for both, which the rules no longer say; it follows them (and a change of the rules is a change of this test)."""
+    made = build("OGR", PBM).eval_profile
+    bare = EvalProfile(level=50, naked=made.naked, weights={}, pools=made.pools)
+    assert dict(bare.placement) == dict(made.placement) == {"monk": "inside", "iksar": "inside"}
+    assert bare.placement is not EvalProfile(level=50, naked=made.naked, weights={}, pools=made.pools).placement  # (a mapping of its own for each profile)
+    assert profile_module.placements(RULES, 50) == dict(bare.placement)
+    top = "on top of the capped sheet AC (bypasses the softcap), valued per sheet point"
+    assert profile_module.placements(rules_with(**{"monk.bonus_placement": top}), 50) == {"monk": "top", "iksar": "inside"}
+
+
+def test_past_the_cap_the_weight_of_a_heavy_item_costs_a_monk_only_the_rate_of_its_bonus():
+    """T3, in numbers: the Monk bonus rides in X, so a heavy item that takes some of it away moves X by all of that and the sheet by only the rate past the cap."""
+    p = build("OGR", PBM)
+    light = vec("chest-light", {"AC": 400}, weight10=10, slots=("CHEST",))
+    heavy = dataclasses.replace(light, key="chest-heavy", weight10=400)
+    a, b = (evaluate(p, kit_of(("CHEST", item))).totals["sheet"] for item in (light, heavy))
+    drop = a["monk_bonus"] - b["monk_bonus"]
+    assert drop > 0 and a["X"] - b["X"] == drop and a["X"] > a["Y"] and b["X"] > b["Y"]  # (both past the cap, and the whole bonus is in X)
+    assert a["capped"] - b["capped"] == F(str(p.softcap[1])) * drop  # (what counts past the cap is the rate of it)
+    top = "on top of the capped sheet AC (bypasses the softcap), valued per sheet point"
+    c, d = (evaluate(build("OGR", PBM, rules=rules_with(**{"monk.bonus_placement": top})), kit_of(("CHEST", item))).totals["sheet"] for item in (light, heavy))
+    assert (c["total"] - d["total"]) - (c["monk_bonus"] - d["monk_bonus"]) == c["capped"] - d["capped"] == 0  # (on top, the sheet is the same and the bonus is the whole change)
 
 
 def test_the_profile_reads_the_rule_that_an_off_hand_shield_raises_the_softcap():
@@ -353,9 +459,9 @@ def test_a_placement_the_model_does_not_implement_is_refused(rule, text):
 def test_the_caps_the_bands_and_the_dual_wield_factor_are_the_rules():
     p = build()
     assert {k: dict(v) if isinstance(v, MappingProxyType) else v for k, v in p.caps.items()} == {
-        "regen": {"HP": 30, "MANA": 15, "END": 15}, "resist": 200,
+        "regen": {"HP": 30, "MANA": 15, "END": 15}, "resist": 1000,
     }  # fmt: skip
-    assert RULES.get("regen.gear_caps") == {"HP": 30, "MANA": 15, "END": 15} and RULES.get("resist.cap") == 200
+    assert RULES.get("regen.gear_caps") == {"HP": 30, "MANA": 15, "END": 15} and RULES.get("resist.cap") == 1000
     bands = RULES.get("mana.wis_bands")
     assert list(p.bands["breaks"]) == bands["breaks"] and list(p.bands["slopes"]) == bands["slopes"]
     assert p.dw_factor == 0.83 == RULES.get("weapons.dual_wield_factor")["with_monk"]  # PAL/MNK/BER has a Monk
@@ -541,17 +647,17 @@ def test_the_setups_are_the_roles_setups_at_the_level():
             assert build("OGR", trio, role).setups == tuple(weapons.setups_for(trio, role, TABLES, level=50))
     assert build("OGR", PBM, "melee").setups == ("2h", "dw")
     assert build("OGR", PBM, "tank").setups == ("1h-shield", "2h", "dw")
-    assert build("OGR", WME).setups == ("1h-shield", "2h", "stick")  # with no pool a shield is assumed to exist
-    assert build("OGR", SCS, "caster").setups == ("stick",)
+    assert build("OGR", WME).setups == ("1h-shield", "stick")  # with no pool a shield is assumed to exist (the Caster tank: the first build of three casters)
+    assert build("OGR", SCS, "caster").setups == ("stick", "1h-shield")  # (the Caster lists the stick first: the first setup wins a tie)
 
 
 def test_the_pool_given_to_the_profile_decides_the_shield_setup():
     everyone = vec("shield-a", {"AC": 10}, shield=True, slots=("SECONDARY",))
     fighters = dataclasses.replace(vec("shield-b", {"AC": 10}, shield=True, slots=("SECONDARY",)), classes=frozenset({"WAR", "PAL"}))
     held = vec("focus", {"AC": 10}, slots=("SECONDARY",))  # armor class in the off hand, but not a shield
-    assert build("OGR", WME, items=[everyone]).setups == ("1h-shield", "2h", "stick")
-    assert build("OGR", WME, items=[fighters, held]).setups == ("2h", "stick")
-    assert build("OGR", WME, items=[]).setups == ("2h", "stick")
+    assert build("OGR", WME, items=[everyone]).setups == ("1h-shield", "stick")
+    assert build("OGR", WME, items=[fighters, held]).setups == ("stick",)
+    assert build("OGR", WME, items=[]).setups == ("stick",)
     assert build("OGR", PBM, "tank", items=[fighters]).setups == ("1h-shield", "2h", "dw")
     assert build("OGR", PBM, "tank", items=[held]).setups == ("2h", "dw")
     # the pool is not part of the profile: the same setups, the same profile
@@ -614,8 +720,8 @@ def test_a_profile_is_hashable_and_equal_profiles_share_one_text_and_one_hash():
     p, q = build(), build()
     assert p == q and hash(p) == hash(q) and p.to_json() == q.to_json()
     assert len({p, q}) == 1 and {p: 1}[q] == 1
-    assert build(role="tank") != p and build(role="tank").to_json() != p.to_json()
-    assert len({build(role=r) for r in roles.roles_for(PBM)}) == 3
+    assert build(role="melee") != p and build(role="melee").to_json() != p.to_json()
+    assert len({build(role=r) for r in roles.roles_for(PBM)}) == 2
 
 
 def test_numbers_equal_in_value_are_one_number_in_the_record():
@@ -789,13 +895,14 @@ def test_the_buffs_of_a_choice_enter_through_the_evaluators_buffs_argument():
 
 def test_a_damage_weight_in_the_rules_reaches_the_value_of_a_weapon():
     # the sword of SMALL_KIT has the index (20 + 15) / 30 = 7/6 at no haste; the shield beside it scores no damage
-    real = build()
-    assert real.weights["DMG"] == 1500  # the real rules: 600 x the ATK weight, the mean of Tank (2) and Melee (3)
-    assert evaluate(real, SMALL_KIT, setup="1h-shield", haste_assumed=0).parts["WEAPON"] == 1500 * F(7, 6) == 1750
-    weighted = build(rules=rules_with(**{"weapons.damage_weight": 5}))
-    assert weighted.weights["DMG"] == 12.5  # the mean of 5 x 2 (Tank) and 5 x 3 (Melee)
-    assert evaluate(weighted, SMALL_KIT, setup="1h-shield", haste_assumed=0).parts["WEAPON"] == F(25, 2) * F(7, 6)
-    caster = build("OGR", WME)  # the Caster template scores no weapon damage
+    real = build("OGR", PBM, "melee")
+    assert real.weights["DMG"] == 1800  # the real rules: 450 x the ATK weight (4) x the weapon factor of Melee damage (1)
+    assert evaluate(real, SMALL_KIT, setup="1h-shield", haste_assumed=0).parts["WEAPON"] == 1800 * F(7, 6) * F("2.1") == 4410  # (T8: the Melee build of a trio with a Berserker swings at the stance's factor 2.1)
+    assert build("OGR", PBM, "tank").weights["DMG"] == pytest.approx(450 * 2.67 * 0.5)  # the Tank counts the weapon at half
+    weighted = build("OGR", PBM, "melee", rules=rules_with(**{"weapons.damage_weight": 5}))
+    assert weighted.weights["DMG"] == 20  # 5 x 4
+    assert evaluate(weighted, SMALL_KIT, setup="1h-shield", haste_assumed=0).parts["WEAPON"] == F(20) * F(7, 6) * F("2.1")  # (T8: the stance's factor)
+    caster = build("OGR", WME, "caster")  # the Caster build scores no weapon damage
     assert caster.weights["DMG"] == 0
     assert evaluate(caster, SMALL_KIT, setup="1h-shield", haste_assumed=0).parts["WEAPON"] == 0
 
@@ -814,17 +921,17 @@ def test_haste_assumed_reads_the_profiles_cap_and_spell_haste():
 
 
 def test_f_of_the_empty_kit_is_the_naked_plus_buff_value_worked_by_hand():
-    # A Human WIZ/MAG/ENC at level 50, Balanced (= the Caster template), one invented permanent buff
+    # A Human WIZ/MAG/ENC at level 50, the Caster build, one invented permanent buff
     # (STR +10, AC +20, HP +100, mana +50, mana regen +4, fire resist +15) and nothing worn.
     ward = buff(
         1, "Ward Delta", [(1, "STR", 10), (2, "AC", 20), (3, "HP", 100), (4, "MANA", 50), (5, "MANAREG", 4), (6, "FIRE", 15)]
     )
-    p = build("HUM", WME, buffset=resolve([ward], RULES), aa={"natural_durability": 0})  # (the AA's percent on the HP factor is worked in test_natural_durability.py)
+    p = build("HUM", WME, "caster", buffset=resolve([ward], RULES), aa={"natural_durability": 0})  # (the AA's percent on the HP factor is worked in test_natural_durability.py)
     result = evaluate(p, kit_of())
 
     # totals: Human 75 each; the three classes add STA 15 + 15, INT 15 x 3, CHA 15; the buff adds STR 10
     assert result.totals["attributes"] == {"STR": 85, "STA": 105, "AGI": 75, "DEX": 75, "WIS": 75, "INT": 120, "CHA": 90}
-    # weights (Caster template): HP 1, AC 1.2, MANA 4, ATK 0.3, DEX 0.1, HASTE 0, END 0.05, CHA 0.05, SV 0.4 a school,
+    # weights (Caster template): HP 1, AC 1.2, MANA 4, ATK 0.3, DEX 0.1, HASTE 0, END 0.05, CHA 0.05, SV 0.8 a school,
     # regen = 10 x 3 x the resource: mana regen 30 x 4 = 120
     parts = result.parts
     # HP: two pools of 5 + 1200 + 4.0 x 105 = 1625, plus 100 from the buff
@@ -833,20 +940,20 @@ def test_f_of_the_empty_kit_is_the_naked_plus_buff_value_worked_by_hand():
     assert parts["MANA"] == 4 * (2 * F(1575) + 50) == 12800
     # END: A = (85 + 105 + 75 + 75) / 4 = 85 (under the knee at 100); two pools of 260 + 1.25 x 85 = 366.25
     assert parts["END"] == F("0.05") * (2 * F("366.25")) == F("36.625")
-    # AC: X = 200/3 (Defense 200) + 20/4 (spell AC) + 75/20 (AGI) = 905/12, under Y = floor(328 x 1.10) = 360, so the
+    # AC: X = 200/3 (Defense 200) + 20/4 (spell AC) + 75/20 (AGI) = 905/12, under Y = floor(350 x 1.10) = 385 (T2: the floor of the cap), so the
     # sheet reads X; each sheet point is worth 1.2 / (4/3) = 0.9
-    assert result.totals["sheet"]["Y"] == 360 and result.totals["sheet"]["capped"] == F(905, 12)
+    assert result.totals["sheet"]["Y"] == 385 and result.totals["sheet"]["capped"] == F(905, 12)
     assert parts["AC"] == F(9, 10) * F(905, 12) == F("67.875")
     assert parts["EVASION"] == F("1.2") * F("0.2222") * 75 == F("19.998")
     assert parts["ATK"] == F("0.3") * F("0.666667") * 85 == F("17.0000085")
     assert parts["DEX"] == F("0.1") * 75 == F("7.5")
     assert parts["CHA"] == F("0.05") * 90 == F("4.5")
     assert parts["REGEN"] == 120 * 4 == 480
-    assert parts["RESISTS"] == F("0.4") * 15 == 6
+    assert parts["RESISTS"] == F("0.8") * 15 == 12
     assert parts["HASTE"] == parts["WEAPON"] == parts["MONK"] == parts["IKSAR"] == 0
     assert result.F == (
-        F(3350) + 12800 + F("36.625") + F("67.875") + F("19.998") + F("17.0000085") + F("7.5") + F("4.5") + 480 + 6
+        F(3350) + 12800 + F("36.625") + F("67.875") + F("19.998") + F("17.0000085") + F("7.5") + F("4.5") + 480 + 12
     )
-    assert result.F == F("16789.4980085")
+    assert result.F == F("16795.4980085")
     # the profile's own buff totals and the explicit ones are the same evaluation
     assert evaluate(p, kit_of(), eval_buffs(resolve([ward], RULES).totals(()))).F == result.F

@@ -72,7 +72,7 @@ class FakeWiki:
         self.extra_pages = {}  # title -> api page object (for the record command)
 
     def client(self):
-        return PoliteClient(UA, transport=self, clock=self.time.clock, sleep=self.time.sleep)
+        return PoliteClient(UA, transport=self, clock=self.time.clock, sleep=self.time.sleep, honour_robots=False)
 
     def __call__(self, url, headers):
         query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
@@ -203,6 +203,25 @@ def test_list_category_follows_two_continue_pages_and_keeps_order():
     assert all(q["list"] == "categorymembers" for q in wiki.category_requests)
 
 
+def test_list_category_keeps_the_first_of_a_page_that_two_continue_pages_both_give():
+    """The sort key of a page can move across the cursor while a category of some twenty pages of the listing is read, so the page comes on two of them."""
+    wiki = FakeWiki(member_count=4, page_size=2)
+    first, second, third, fourth = wiki.members
+    wiki.members = [first, second, {**second, "title": "Zorblax Item 001 renamed"}, third]  # the second page of the listing starts with the last of the first
+    members = list_category(wiki.client(), "Category:Items")
+    assert members == [
+        {"pageid": first["pageid"], "title": first["title"]},
+        {"pageid": second["pageid"], "title": second["title"]},  # (the first of the two: the one that was listed in its turn)
+        {"pageid": third["pageid"], "title": third["title"]},
+    ]
+    assert len(wiki.category_requests) == 2
+
+
+def test_list_category_keeps_the_order_and_every_page_when_none_comes_twice():
+    wiki = FakeWiki(member_count=5, page_size=2)
+    assert [member["pageid"] for member in list_category(wiki.client(), "Category:Items")] == [1000, 1001, 1002, 1003, 1004]
+
+
 def test_list_category_asks_for_main_namespace_pages_only():
     wiki = FakeWiki(member_count=2)
     list_category(wiki.client(), "Category:Items")
@@ -288,7 +307,7 @@ def test_fetch_pages_follows_a_continuation_before_calling_anything_missing():
         sent.append(dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query)))
         return 200, {}, json.dumps(first if len(sent) == 1 else second).encode()
 
-    client = PoliteClient(UA, transport=transport, clock=wiki.time.clock, sleep=wiki.time.sleep)
+    client = PoliteClient(UA, transport=transport, clock=wiki.time.clock, sleep=wiki.time.sleep, honour_robots=False)
     records = list(fetch_pages(client, [1000, 1001]))
     assert [r.get("missing") for r in records] == [None, None]
     assert records[1]["content"].startswith("{{Itempage")
@@ -516,6 +535,26 @@ def test_resume_refuses_a_directory_holding_another_category(tmp_path, capsys):
     assert run_cli(wiki, "fetch", "--out", str(out), "--resume", "--category", "Category:Spells") == 2
     assert wiki.requests == []
     assert "Category:Items" in capsys.readouterr().err
+
+
+def test_a_refused_resume_leaves_the_manifest_and_every_file_as_they_were(tmp_path):
+    """The manifest was deleted before the category was checked, so a --resume with the wrong --category left a directory with no manifest, which the catalog build then refuses."""
+    out = clean_run(tmp_path, member_count=60)
+    before = tree(out)
+    manifest = (out / "manifest.json").read_bytes()
+    wiki = FakeWiki(member_count=60)
+    assert run_cli(wiki, "fetch", "--out", str(out), "--resume", "--category", "Category:Spells") == 2
+    assert wiki.requests == []
+    assert (out / "manifest.json").read_bytes() == manifest and tree(out) == before
+
+
+def test_a_resume_of_the_right_category_still_has_no_manifest_while_the_run_is_unfinished(tmp_path):
+    out = clean_run(tmp_path, member_count=120)
+    assert (out / "manifest.json").exists()
+    wiki = FakeWiki(member_count=120, interrupt_after=0)  # a damaged batch is asked for again, and Ctrl-C comes at once
+    (out / "raw" / "batch-0000.json.gz").write_bytes(b"garbage")
+    assert run_cli(wiki, "fetch", "--out", str(out), "--resume") == 130
+    assert not (out / "manifest.json").exists()
 
 
 def test_a_run_without_resume_fetches_everything_again(tmp_path):

@@ -143,6 +143,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Node processes the shard parity is divided between, each doing its part of all the work, side by side (default: half the cores, at most 12; 1 is one process)",
     )  # fmt: skip
     parser.add_argument("--build-dir", type=Path, help="the build folder (default: build/); it must be git-ignored, or outside every repository")
+    parser.add_argument(
+        "--google-verification",
+        help="the name of the Google Search Console file that the site of this release is built with (google and 16 hex digits and .html), for the exact count of its files; the site build takes the same name from --google-verification or $TRIOFORGE_GOOGLE_VERIFICATION, and so does this (the option wins)",
+    )
     return parser
 
 
@@ -158,6 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             tag=args.tag, root=REPO, privacy_key=args.privacy_key.resolve(), processes=args.processes, trios=args.trios,
             trial=args.trios is not None, catalog=args.catalog.resolve() if args.catalog else None, build_dir=args.build_dir.resolve() if args.build_dir else None,
             previous=args.previous, parity_stride=args.parity_stride, parity_processes=args.parity_processes, say=lines.say,
+            verification=args.google_verification,
         )  # fmt: skip
     except ReleaseRefused as error:
         print(f"refused: {error}", file=sys.stderr)

@@ -1,12 +1,13 @@
 {
- "version": "2026-10-13",
+ "version": "2026-11-19",
  "seal": "player",
- "sources": {"stats":[{"kind":"url","ref":"https://eqltools.com/attributes"}],"primary_classes":[{"kind":"public-text","ref":"eqlwiki race pages; developer FAQ and patch notes"}]},
+ "sources": {"stats":[{"kind":"url","ref":"https://eqltools.com/attributes"},{"kind":"url","ref":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325"}],"primary_classes":[{"kind":"public-text","ref":"eqlwiki race pages; developer FAQ and patch notes"},{"kind":"url","ref":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325"}]},
  "notes": [
   "Starting attributes: a race's base plus the modifiers of the three chosen classes. Each class adds exactly 30 points in total. Nothing is capped here.",
   "Ogre stamina 127 and Troll stamina 114 are this table's values; the classic game lists 122 and 109.",
   "A race restricts only the first (primary) class of a trio; the second and third are open to every race.",
-  "Kerran Druid is disputed: the sources disagree whether a Kerran can start as a Druid, so it is not counted as legal until it is confirmed."
+  "Kerran Druid is disputed: the sources disagree whether a Kerran can start as a Druid, so it is not counted as legal until it is confirmed.",
+  "The Half Dark Elf (HDE, the sixteenth race) is an unlocked race: its stats and primary classes are from its page on eqlwiki, revision of 2026-11-05 (CC BY-SA 4.0, the eqlwiki contributors), where the classes are those of the guild masters of its starting city. It is last in the list, so that no kit link made before it changes."
  ],
  "stat_order": [
   "STR",
@@ -32,7 +33,8 @@
   {"code":"GNM","name":"Gnome","active":true,"base":{"STR":60,"STA":70,"AGI":85,"DEX":85,"WIS":67,"INT":98,"CHA":60},"primary":["WAR","CLR","PAL","SHD","ROG","NEC","WIZ","MAG","ENC"],"disputed":[]},
   {"code":"IKS","name":"Iksar","active":true,"base":{"STR":70,"STA":70,"AGI":90,"DEX":85,"WIS":80,"INT":75,"CHA":55},"primary":["WAR","SHD","MNK","SHM","NEC","BST"],"disputed":[]},
   {"code":"KER","name":"Kerran","active":true,"base":{"STR":90,"STA":75,"AGI":90,"DEX":70,"WIS":70,"INT":65,"CHA":65},"primary":["WAR","DRU","BRD","ROG","SHM","BST","BER"],"disputed":["DRU"]},
-  {"code":"FRG","name":"Froglok","active":true,"base":{"STR":70,"STA":80,"AGI":100,"DEX":100,"WIS":75,"INT":75,"CHA":50},"primary":["WAR","CLR","PAL","SHD","MNK","ROG","SHM","NEC","WIZ"],"disputed":[]}
+  {"code":"FRG","name":"Froglok","active":true,"base":{"STR":70,"STA":80,"AGI":100,"DEX":100,"WIS":75,"INT":75,"CHA":50},"primary":["WAR","CLR","PAL","SHD","MNK","ROG","SHM","NEC","WIZ"],"disputed":[]},
+  {"code":"HDE","name":"Half Dark Elf","active":true,"base":{"STR":75,"STA":75,"AGI":80,"DEX":80,"WIS":55,"INT":95,"CHA":70},"primary":["RNG","SHD","BRD","ROG","NEC","ENC","BER"],"disputed":[],"note":"Cursed Heritage: lifetaps and runes are 10% more effective, and base health regeneration is 20% lower outdoors in the day (eqlwiki, Half Dark Elf, revision of 2026-11-05). Recorded, not scored."}
  ],
  "classes": [
   {"code":"WAR","id":1,"name":"Warrior","mods":{"STR":10,"STA":15,"AGI":5,"DEX":0,"WIS":0,"INT":0,"CHA":0}},

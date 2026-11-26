@@ -694,6 +694,87 @@ select {
   font-size: 0.9rem;
 }
 
+/* the priorities: a select for each of eight stats at the end of the choices, drawn by the page script. The page is made without them (its markup may not grow), so until the script has drawn them
+   the stylesheet keeps the room they take, the same height as the control's own (one variable for both: `--prio-h`; wherever the choices are in sight without the Change button, the eight selects
+   are four rows of two in a window narrower than 45rem and two rows of four in a wider one, where a label of the longest word has room on one line), and the script gives the room up by marking the section (data-prio) in the same moment it draws: nothing under them moves when the code starts. */
+.controls {
+  --prio-h: 24.8rem;
+}
+
+@media (min-width: 45rem) {
+  .controls {
+    --prio-h: 14.1rem;
+  }
+}
+
+@media (scripting: enabled) {
+  .controls:not([data-prio])::after {
+    content: "";
+    display: block;
+    flex-basis: 100%;
+    min-height: var(--prio-h);
+  }
+}
+
+/* the room is given up when the page script has not drawn the control in a few seconds (it failed, or the browser does not run it): the boot script marks the page (data-prio-off) and the gap goes */
+html[data-prio-off] .controls:not([data-prio])::after {
+  display: none;
+}
+
+.prio {
+  flex-basis: 100%;
+  min-height: var(--prio-h);
+}
+
+.prio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 0.75rem;
+}
+
+@media (min-width: 45rem) {
+  .prio-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.prio select {
+  width: 100%;
+}
+
+/* a stat that the build does not weigh: its select is disabled, and the note under it says why */
+.prio-note {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* a disabled select or button looks it, in both themes: faded, with a dashed edge and no bevel to press (a disabled control is exempt from the contrast rule, and its words stay readable) */
+.prio select:disabled,
+.prio-foot .btn-quiet:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.prio-foot .btn-quiet:disabled {
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.prio-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin-top: 0.6rem;
+}
+
+.prio-foot #prio-rates-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
 /* the assumptions are one folded line under the three choices (Race, Role and Tier): its summary says what is assumed, and says in its first word when one of them is not the page's own (the
    page code sets data-changed, and the mark does not move anything). Opened, it holds the three assumptions as they were, one under another, and the AA line. */
 .assumes {
@@ -863,6 +944,11 @@ select {
 
 .solve .btn {
   margin-top: 0.1rem;
+}
+
+.solve .btn-quiet {
+  margin: 0 0 0 0.5rem;
+  min-height: 2.25rem;
 }
 
 .trio.solving #kit,
@@ -1135,7 +1221,8 @@ tbody th {
   padding-left: 1.2rem;
 }
 
-.delta {
+.delta,
+[data-f="r-delta"] {
   color: var(--muted);
   white-space: nowrap;
 }
@@ -2164,6 +2251,7 @@ main .shared > h2:not(.sr-only) {
 .totals .muted,
 .kit .delta,
 .runnerups .delta,
+.runnerups [data-f="r-delta"],
 .equip .muted,
 .cap-rules {
   color: var(--win-muted);

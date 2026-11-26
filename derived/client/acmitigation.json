@@ -1,5 +1,5 @@
 {
- "provenance": {"inputs":[{"file":"Resources/ACMitigation.txt","sha256":"faa532429452014e7ebf796a3568eb4fd3f9429d0c1506a602435ca0841bc93a","date":"2026-05-11"}],"generator":"trioforge.sources.client_tables 0.0.1","generated":"2026-10-13"},
+ "provenance": {"inputs":[{"file":"Resources/ACMitigation.txt","sha256":"faa532429452014e7ebf796a3568eb4fd3f9429d0c1506a602435ca0841bc93a","date":"2026-05-11"}],"generator":"trioforge.sources.client_tables 0.0.1","generated":"2026-11-24"},
  "rows": [
   {"class":1,"level":1,"ac_cap":312,"past_cap_rate":0.35},
   {"class":1,"level":2,"ac_cap":314,"past_cap_rate":0.35},

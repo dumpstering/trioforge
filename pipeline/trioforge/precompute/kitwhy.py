@@ -76,16 +76,17 @@ def _reason(term: str, item: ItemVec, kit: Sequence[ItemVec | None], index: int,
 
 
 def why_places(
-    profile: Any, kit: Sequence[ItemVec | None], buffs: Mapping[str, Any] | None, setup: str | None
+    profile: Any, kit: Sequence[ItemVec | None], buffs: Mapping[str, Any] | None, setup: str | None, procs: Any = None
 ) -> list[dict[str, Any] | None]:
     """The 22 places of ``kit`` as ``{"key", "loss": [[term, loss, reason], ...]}``, ``None`` for an empty place (an item with no term to lose has an empty list).
 
     ``profile`` is what :func:`~trioforge.model.formulas.evaluate_truthful` reads (an ``EvalProfile`` or an object that has its fields), ``buffs`` the buff
-    totals of the kit's buffs as that function takes them (``None`` for the profile's own), ``setup`` the weapon setup the kit was solved for."""
+    totals of the kit's buffs as that function takes them (``None`` for the profile's own), ``setup`` the weapon setup the kit was solved for and ``procs`` the table of
+    procs of the run (None: none counts): ``DAMAGE`` then loses the proc of the hand with the swing, as a weapon with no damage swings no proc."""
     if len(kit) != len(SLOT_INSTANCES):
         raise ValueError(f"a kit has one entry for each of the {len(SLOT_INSTANCES)} places, not {len(kit)}")
     compiled = fm.compile_profile(profile)
-    base = fm.evaluate_truthful(compiled, kit, buffs, setup=setup)
+    base = fm.evaluate_truthful(compiled, kit, buffs, setup=setup, procs=procs)
     places: list[dict[str, Any] | None] = []
     for index, item in enumerate(kit):
         if item is None:
@@ -95,7 +96,7 @@ def why_places(
         for term in terms_of(item):
             trial = list(kit)
             trial[index] = without(item, term)
-            loss = base.F - fm.evaluate_truthful(compiled, trial, buffs, setup=setup).F
+            loss = base.F - fm.evaluate_truthful(compiled, trial, buffs, setup=setup, procs=procs).F
             reason = _reason(term, item, kit, index, base, compiled) if loss == 0 else None
             found.append((term, float(loss), reason, loss))
         found.sort(key=lambda entry: -entry[3])  # (stable: the model's order breaks a tie)
@@ -110,4 +111,4 @@ def default_why(ctx: Any, race: str, role: str, tier: int, setup: str, row: Mapp
     vecs = ctx.vecs(tier)
     kit = [vecs[key] if key is not None else None for key in row["kit"]]
     totals = eval_buff_totals(ctx.buffsets["own"].totals(tuple(row["buffs"])))
-    return why_places(ctx.profile(race, role, "own", evidence).eval_profile, kit, totals, setup)
+    return why_places(ctx.profile(race, role, "own", evidence).eval_profile, kit, totals, setup, ctx.options.procs)

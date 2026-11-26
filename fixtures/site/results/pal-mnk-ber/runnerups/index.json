@@ -5,13 +5,12 @@
 "level":50,
 "data_release":"data-2026-10-14",
 "game_patch":"2026-09-22",
-"rules_version":"2026-10-13",
+"rules_version":"2026-11-19",
 "evidence":"strict",
 "buffs":"own",
 "evidence_fallback":false,
 "files":[
-{"file":"balanced.json","role":"balanced","tiers":[0,4,10],"bytes":7237,"gzip":1786,"sha256":"271cd1c4dceaddc7cd6241ed993b46641c2b46f5ba50c7b0e922b2762fd732f2"},
-{"file":"tank.json","role":"tank","tiers":[0,4,10],"bytes":7187,"gzip":1751,"sha256":"85744b06f733458941abeb3d32db1ea3e68d17f53e89a13cf56b745f9d547756"},
-{"file":"melee.json","role":"melee","tiers":[0,4,10],"bytes":7137,"gzip":1740,"sha256":"1cd94a1486a484adbe855c56aef44ac4a22b02120d215dd85fe25838af6fbb84"}
+{"file":"tank.json","role":"tank","tiers":[0,4,10],"bytes":7254,"gzip":1796,"sha256":"91e953d6100627cf2b465823ef431968777ac8005ac8fd06518775fbb4d29da0"},
+{"file":"melee.json","role":"melee","tiers":[0,4,10],"bytes":7137,"gzip":1742,"sha256":"658f61bba47faa765aba8894409dc16e4f465ca12cdafea42e3f2175347b7c80"}
 ]
 }

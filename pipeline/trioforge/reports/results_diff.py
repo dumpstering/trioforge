@@ -13,7 +13,7 @@ the inputs, no snapshot id, nothing of the maintainer's logs, and no word about 
 **What is compared.** *Every* changed
 
 * **scenario** (``kind: scenario``): a value ``F``, the ``gain`` (the value of the naked character, F less the gain, when it moved by more than the rounding
-  of the two numbers), a kit, the optional buffs, the assumed haste or the totals of one race, role, tier, weapon setup, evidence level and buff set; a scenario
+  of the two numbers), a kit, the optional buffs, the assumed haste, the totals or the weapon procs (the shard's ``procs`` table) of one race, role, tier, weapon setup, evidence level and buff set; a scenario
   that one release has and the other lacks is ``added`` or ``removed``;
 * **default pick** (``default``): the whole selection of a trio's default: its race, runner-up, setup, value, margin and kit, the view it is made at (role, tier,
   evidence level, buff set) and its flip notes; a default that one release lacks is ``added`` or ``removed``;
@@ -22,10 +22,14 @@ the inputs, no snapshot id, nothing of the maintainer's logs, and no word about 
 * **seal** (``seal``): the robustness seals (``robust.json``) of one role and tier, place by place, and the race they are for;
 * **bundle** (``bundle``): the browser bundle of a trio (``engine-l<level>.json``), named with the SHA-256 of its file in each release and never its content
   (``inputs_only`` says that the two differ in their ``inputs`` field alone);
+* **effects layer** (``exalt``, ``effects``): ``<trio>/exalt.json`` of each trio and ``effects.json`` of the release, each named with its SHA-256 in either release (``None``
+  for a release that lacks the file: ``added`` or ``removed``); for ``exalt`` the record lists the roles and lists that differ and how (``gained``, ``lost``, ``reordered``
+  or ``changed`` rows). The causes are the ones a bundle's ``inputs`` field has: any input that changed explains them;
 * **item record** (``item``): the catalog record of an item (``items.json``) and the arrival and source text of the shards' item rows (every row that any
   shard of any trio shows for it; a release holds one, which :func:`trioforge.precompute.release.check_item_rows` makes sure of).
 
-A trio or a tier that only one release has is **one** record (``trio``, ``tier``) with the number of scenarios it brings: its rows are counted, not listed.
+A trio or a tier that only one release has is **one** record (``trio``, ``tier``) with the number of scenarios it brings: its rows are counted, not listed. (The counts by
+first cause have a row ``new`` for the ones that are new and ``removed`` for the ones that are gone, so that the rows add up to the number of changes.)
 
 **Causes.** Each change lists every cause that applies, in the order of precedence ``code``, ``rule``, ``data``, ``community``:
 
@@ -62,7 +66,8 @@ separate list: the items that are strict now because of a report (``strict_gaine
 stands in the file). Both lists are read from the reason codes of the public catalog and not from the levels of the item table, which have the maintainer's private flags merged.
 
 **A change nothing explains is a solver diff**: the same inputs gave another answer. It is a bug unless the value ties (the same ``F``, or the same swaps
-in another order): ``flag`` is ``tie`` for that, and ``solver-diff`` for the bug. The Markdown puts the solver diffs before everything else.
+in another order): ``flag`` is ``tie`` for that, and ``solver-diff`` for the bug. A tie needs another kit or other optional buffs of the same value; a change of the totals, the
+haste, the weapon procs or the flip notes alone, with the same value, is another answer to the same question, so a solver diff. The Markdown puts the solver diffs before everything else.
 
 The Markdown shows the counts and the 20 largest changes of ``F``. The JSON lists every change; nothing is cut, and what the Markdown leaves out it says.
 
@@ -98,7 +103,7 @@ FORMAT = 1
 CAUSES = ("code", "rule", "data", "community")
 TOP = 20  # the changes of F the Markdown shows
 SHARD_NAMES = ("strict-own", "strict-group", "wiki-own", "wiki-group")
-KIND_ORDER = {"trio": 0, "tier": 1, "scenario": 2, "default": 3, "runner-up": 4, "seal": 5, "bundle": 6, "item": 7}
+KIND_ORDER = {"trio": 0, "tier": 1, "scenario": 2, "default": 3, "runner-up": 4, "seal": 5, "bundle": 6, "exalt": 7, "effects": 8, "item": 9}
 LIST_LIMIT = 20  # the keys and the solver diffs the Markdown lists before it says how many more there are
 GAIN_SLACK = 0.0201  # F and the gain are kept to two decimals, each rounded on its own: the value of the naked character, F less the gain, is good to two units of that
 #: the fields of an item record that the solver reads (its pool and its stats), and the ones that are only shown
@@ -109,6 +114,7 @@ OUTWEIGHED = "community-report-outweighed"  # ... and of an item that players re
 COMMUNITY_CODES = (COMMUNITY, OUTWEIGHED)  # a community entry is in the record of an item by either
 OUTWEIGHING = WIKI_MARK_CODES | ZONE_CLOSED_CODES  # what the ladder records beside the report it outweighed (a removal by a patch or research records no report: REMOVAL_CODES)
 NOT_FOR_BIS = "not-for-bis"
+LEFT_THE_TABLE = "removed-from-the-item-table"  # what outweighs a report when the new item table has no record of the item at all (not a code of the ladder: the record is gone)
 #: the rules that decide the arrival tier of an item (shards.arrival_tier)
 ARRIVAL_RULES = frozenset({"tier.max_fresh_drop", "tier.arrival"})
 
@@ -126,10 +132,16 @@ class Scope:
     tier: int | None = None
     setup: str | None = None
     evidence: str | None = None
+    default: bool = False  # the pick is the default pick of a trio (``defaults.json``), which the rules of the defaults are in and no solve is
 
 
 def _tiered(scope: Scope) -> bool:
     return scope.tier is None or scope.tier > 0
+
+
+def _procs(scope: Scope) -> bool:
+    """The setups whose hands swing and so count a weapon proc (the stick and the bow setup count none)."""
+    return scope.setup in (None, "1h-shield", "2h", "dw")
 
 
 #: where a rule is used, by rule id; a rule listed neither here nor in :data:`UNREAD` is in every pick. (The model reads these rules for the profile of a race and
@@ -137,17 +149,34 @@ def _tiered(scope: Scope) -> bool:
 RULE_SCOPES: dict[str, Callable[[Scope], bool]] = {
     "race.iksar_ac_bonus": lambda s: s.race in (None, "IKS"),
     "race.iksar_ac_placement": lambda s: s.race in (None, "IKS"),
+    "stance.berserker": lambda s: "BER" in s.classes,  # (only a trio with a Berserker has the stance: of its Melee build)
     "monk.weight_curve": lambda s: "MNK" in s.classes,
     "monk.bonus_placement": lambda s: "MNK" in s.classes,
     "haste.cap_pct_with_monk": lambda s: "MNK" in s.classes,
     "haste.cap_pct": lambda s: "MNK" not in s.classes,
     "haste.unbound_alacrity": lambda s: "MNK" in s.classes,
     "weapons.dual_wield_factor": lambda s: s.setup in (None, "dw"),
+    "weapons.ranged_factor": lambda s: s.setup in (None, "ranged"),
+    "roles.ranged_template": lambda s: "RNG" in s.classes,  # (only a trio with a Ranger has the Archer build)
+    "defaults.race_close_pct": lambda s: s.default,  # (the close races of the default pick: read after the solves, by no solve)
     "tier.weapon_damage_pct": _tiered,
     "tier.stat_rule": _tiered,
     "tier.weight_floor": _tiered,
     "tier.weight_pct": _tiered,
     "tier.negatives_scale": _tiered,
+    "tier.unscaled_stats": _tiered,
+    # the weapon procs of the score (trioforge.effects.score reads these when the inputs of a run are read, and the weapon term counts what they make)
+    "tier.socket_open": _procs,
+    "effects.proc_per_minute": _procs,
+    "effects.proc_reference_dex": _procs,
+    "effects.proc_landing": _procs,
+    "effects.proc_own_cut": _procs,
+    "effects.proc_score_kinds": _procs,
+    "effects.proc_value": _procs,
+    "effects.score_shape": _procs,
+    "effects.haste_buff": _procs,
+    "effects.restricted_targets": _procs,
+    "effects.unverified_names": _procs,
 }
 
 #: the rules the solver never reads: it uses a constant that mirrors the rule (``model/formulas.py``, ``model/tiers.py``; the tests compare the two), or only the
@@ -158,14 +187,12 @@ UNREAD = frozenset(
         "naked.cap", "naked.rule", "hp.pools_counted", "hp.sta_curve", "mana.pools_counted", "mana.base_l50", "mana.per_stat_l50", "end.formula",
         "ac.sheet.item_mult", "ac.sheet.defense_div", "ac.sheet.spell_ac_div", "ac.sheet.agi_div", "ac.softcap.past_cap_rate", "stats.knee", "stats.hard_cap",
         "stats.str_to_atk", "stats.agi_to_ac", "stats.dex_post255_slope", "packrat.pct_per_rank", "tier.accuracy_pct",
-        "tier.socket_open", "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "tier.void_mote", "roles.balanced",
-        # the effects layer reads these after the solve (the exalt plan and its lists); the solver never does
-        "effects.focus_value", "effects.spell_weight", "effects.cast_categories", "effects.cast_mass_full", "effects.late_level", "effects.click_relevance",
-        "effects.dispel_relevance", "effects.gap_categories", "effects.own_compare", "effects.instant_categories", "effects.instant_bonus", "effects.proc_value",
-        "effects.score_shape", "effects.haste_buff", "effects.near_best", "effects.access_cost", "effects.raid_zones", "effects.one_off_spas",
-        "effects.restricted_targets", "effects.unverified_names", "effects.rows_kept",
+        "tier.arrival", "tier.max_fresh_drop", "tier.exp_needed", "tier.void_mote", "weapons.fallback_bonus",
     }
 )  # fmt: skip
+# (The rules of the effects layer are no longer here: the code of the layer is hashed into the fingerprint of the chunks, because the weapon procs of the score are made from it, and
+# the test that follows the string constants of those files finds every ``effects`` rule named in it. The ones the procs use are scoped above; the others (the foci, the clicks, the rows
+# of the lists) change no pick, but are in every pick as far as this report can tell: a change to one of them can be given as a cause of a pick that changed.)
 
 
 def rule_in_pick(rule: str, scope: Scope) -> bool:
@@ -181,7 +208,8 @@ def rule_in_pick(rule: str, scope: Scope) -> bool:
 
 @dataclass(frozen=True)
 class Row:
-    """A scenario of a shard: the value, its gain over the naked character, the 22 places of the kit as item keys, the optional buffs, the assumed haste and the totals."""
+    """A scenario of a shard: the value, its gain over the naked character, the 22 places of the kit as item keys, the optional buffs, the assumed haste, the totals and the weapon
+    procs the score counts (``procs``: the row of the shard's procs table that the scenario points at, each proc ``(hand, effect name, donor item key, mode, value)``; ``None`` when none counts)."""
 
     F: float
     gain: float
@@ -189,6 +217,7 @@ class Row:
     buffs: tuple[int, ...]
     haste: int
     totals: tuple[int, ...]
+    procs: tuple[tuple[Any, ...], ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -213,6 +242,8 @@ class TrioData:
     seals: dict[str, Any]  # robust.json: the race and, for each role and tier (as text), the label of each place
     bundles: dict[str, str]  # file name -> SHA-256, for each engine-l<level>.json
     bundle_paths: dict[str, Path]  # file name -> where the bundle is, to read the two that differ and see where
+    exalt: str | None = None  # SHA-256 of exalt.json, the effects layer's file of the trio (None: the release has none for it)
+    exalt_path: Path | None = None
 
 
 def _plain(path: Path) -> Any:
@@ -292,8 +323,13 @@ class Release:
             places = tuple(doc["places"])
             items, totals, buff_sets = doc["items"], doc["totals"], doc["buff_sets"]
             kits = [tuple(None if index < 0 else items[index][0] for index in kit) for kit in doc["kits"]]
-            for race, role, tier, setup, kit, value, gain, total, buff, haste in doc["scenarios"]:
-                rows[(evidence, buffs, race, role, tier, setup)] = Row(value, gain, kits[kit], tuple(buff_sets[buff]), haste, tuple(totals[total]))
+            proc_table = doc.get("procs") or {"rows": [], "at": []}  # (written only when some scenario scores a weapon proc)
+            proc_rows = [tuple(tuple(proc) for proc in record) for record in proc_table["rows"]]
+            for at, (race, role, tier, setup, kit, value, gain, total, buff, haste) in enumerate(doc["scenarios"]):
+                proc_at = proc_table["at"][at] if at < len(proc_table["at"]) else -1
+                rows[(evidence, buffs, race, role, tier, setup)] = Row(
+                    value, gain, kits[kit], tuple(buff_sets[buff]), haste, tuple(totals[total]), proc_rows[proc_at] if proc_at >= 0 else None
+                )
             for item in items:
                 item_rows.setdefault(item[0], set()).add((item[4], item[5]))  # (every shard's row: a row that differs in a later shard is not lost to the first)
         runnerups: dict[tuple[str, int, str], RunnerUp] = {}
@@ -311,9 +347,11 @@ class Release:
         seals_path = folder / "robust.json"
         bundle_paths = {path.name: path for path in sorted(folder.glob(f"{shards.ENGINE_PREFIX}*.json"))}
         bundles = {name: _sha256(path) for name, path in bundle_paths.items()}
+        exalt_path = folder / assemble.EXALT_FILE
         return TrioData(
             slug, places, rows, _plain(defaults_path) if defaults_path.is_file() else {}, runnerups, item_rows,
             _plain(seals_path) if seals_path.is_file() else {}, bundles, bundle_paths,
+            _sha256(exalt_path) if exalt_path.is_file() else None, exalt_path if exalt_path.is_file() else None,
         )
 
     def scenario_count(self, slug: str, tier: int | None = None) -> int:
@@ -463,9 +501,13 @@ def _item_changes(
             community = "added" if a is None and any(code in COMMUNITY_CODES for code in _codes(b)) else None
             gained = a is None and COMMUNITY in _codes(b)
             moves = gained and levels[1] == "strict"
+            # an item that a report made strict and that the new item table has no record of is no longer strict: the report stands in the file (outweighed by the removal of
+            # the record) or is gone from it (retracted), as for an item the ladder hides
+            lost = b is None and a is not None and COMMUNITY in _codes(a)
+            lost_why, lost_by = (("retracted", ()) if reported is not None and key not in reported else ("outweighed", (LEFT_THE_TABLE,))) if lost else (None, ())
             found[key] = ItemChange(
                 key, "added" if a is None else "removed", ["record"], levels, community, False, moves, ["data", "community"] if community else ["data"],
-                data_moves_level=moves, gained=gained,
+                data_moves_level=moves, gained=gained, lost=lost, lost_why=lost_why, lost_by=lost_by,
             )  # fmt: skip
             continue
         fields = [name for name in (*SOLVER_FIELDS, *SHOWN_FIELDS) if a.get(name) != b.get(name)]
@@ -608,6 +650,12 @@ class Context:
             found.append("community")
         return found
 
+    def effects_causes(self) -> list[str]:
+        """Every cause of a change in a file of the effects layer (``effects.json``, ``<trio>/exalt.json``), in the order of precedence. The layer is made from the code
+        of the layer (it is in the code hash), the rules, the client's spell data (the patch) and the pool: the records of the items (the donors of an effect are items, with
+        their classes and slots) and the evidence levels. Any of those explains a change, as it explains the ``inputs`` field of a bundle."""
+        return self.bundle_causes(True)
+
 
 def _finish(change: dict[str, Any], causes: list[str], *, tie: bool) -> dict[str, Any]:
     change["causes"] = causes
@@ -622,6 +670,15 @@ def _kit_diff(places: Sequence[str], old: Sequence[str | None], new: Sequence[st
 
 def _keys(*kits: Iterable[str | None]) -> list[str]:
     return sorted({key for kit in kits for key in kit if key})
+
+
+def _donors(row: Row) -> tuple[str, ...]:
+    """The items the weapon procs of a scenario come from: a record that changes in one of them changes the value."""
+    return tuple(proc[2] for proc in row.procs or ())
+
+
+def _proc_lists(row: Row) -> list[list[Any]] | None:
+    return [list(proc) for proc in row.procs] if row.procs is not None else None
 
 
 # ---- the scenarios of a trio ---------------------------------------------------------------------------------------------------------------------
@@ -642,18 +699,18 @@ def _scenario_changes(slug: str, old: TrioData, new: TrioData, tiers: set[int], 
             assert row is not None
             change = {
                 "kind": "scenario", "trio": slug, "view": view, "change": "added" if a is None else "removed", "fields": ["row"],
-                "F": [a.F if a else None, b.F if b else None], "delta": None, "items": _keys(row.kit),
+                "F": [a.F if a else None, b.F if b else None], "delta": None, "items": _keys(row.kit, _donors(row)),
             }  # fmt: skip
-            yield _finish(change, context.causes(_keys(row.kit), scope), tie=False)
+            yield _finish(change, context.causes(change["items"], scope), tie=False)
             continue
-        fields = [name for name in ("F", "kit", "buffs", "haste", "totals") if getattr(a, name) != getattr(b, name)]
+        fields = [name for name in ("F", "kit", "buffs", "haste", "totals", "procs") if getattr(a, name) != getattr(b, name)]
         if abs((b.F - b.gain) - (a.F - a.gain)) > GAIN_SLACK:  # the gain moved otherwise than with F: the value of the naked character is another one
             fields.append("gain")
         if not fields:
             continue
         change = {
             "kind": "scenario", "trio": slug, "view": view, "change": "changed", "fields": sorted(fields), "F": [a.F, b.F],
-            "delta": round(b.F - a.F, 2), "items": _keys(a.kit, b.kit),
+            "delta": round(b.F - a.F, 2), "items": _keys(a.kit, b.kit, _donors(a), _donors(b)),
         }  # fmt: skip
         if "gain" in fields:
             change["gain"] = [a.gain, b.gain]
@@ -662,7 +719,10 @@ def _scenario_changes(slug: str, old: TrioData, new: TrioData, tiers: set[int], 
         for name in ("buffs", "haste", "totals"):
             if name in fields:
                 change[name] = [list(getattr(a, name)) if name != "haste" else a.haste, list(getattr(b, name)) if name != "haste" else b.haste]
-        yield _finish(change, context.causes(change["items"], scope), tie=(a.F, a.gain) == (b.F, b.gain))  # (another kit of the same value and the same gain)
+        if "procs" in fields:
+            change["procs"] = [_proc_lists(a), _proc_lists(b)]
+        # a tie is another kit (or other optional buffs) of the same value and the same gain; a change of the totals, the haste or the procs alone is another answer to the same question
+        yield _finish(change, context.causes(change["items"], scope), tie=(a.F, a.gain) == (b.F, b.gain) and bool({"kit", "buffs"} & set(fields)))
 
 
 # ---- the default pick and the runner-ups -------------------------------------------------------------------------------------------------------------
@@ -673,7 +733,9 @@ def _default_kit(data: TrioData) -> tuple[tuple[str | None, ...] | None, dict[st
     view = doc.get("view") or {}
     key = (view.get("evidence"), view.get("buffs"), doc.get("race"), view.get("role"), view.get("tier"), doc.get("setup"))
     row = data.rows.get(key)  # type: ignore[arg-type]
-    return (row.kit if row else None), {name: doc.get(name) for name in ("race", "runner_up_race", "setup", "F", "margin")}
+    shown = {name: doc.get(name) for name in ("race", "runner_up_race", "setup", "F", "margin")}
+    shown["close_races"] = doc.get("close_races") or []  # (a default of a release before the field has none: the same as an empty list)
+    return (row.kit if row else None), shown
 
 
 def _default_view(data: TrioData) -> dict[str, Any]:
@@ -683,7 +745,7 @@ def _default_view(data: TrioData) -> dict[str, Any]:
 
 
 def _default_changes(slug: str, old: TrioData, new: TrioData, context: Context) -> Iterable[dict[str, Any]]:
-    """The default pick of a trio, whole: its race, runner-up, setup, value, margin, kit, the view it is made at and its flip notes; a default that one release lacks
+    """The default pick of a trio, whole: its race, runner-up, setup, value, margin, close races, kit, the view it is made at and its flip notes; a default that one release lacks
     is added or removed."""
     if not old.defaults and not new.defaults:
         return
@@ -696,7 +758,7 @@ def _default_changes(slug: str, old: TrioData, new: TrioData, context: Context) 
             "kind": "default", "trio": slug, "view": data.defaults.get("view"), "change": "added" if not old.defaults else "removed", "fields": ["default"],
             "items": _keys(kit or ()),
         }  # fmt: skip
-        scopes = [Scope(classes, now["race"], view["tier"], now["setup"], view["evidence"])]
+        scopes = [Scope(classes, now["race"], view["tier"], now["setup"], view["evidence"], default=True)]
         yield _finish(change, context.causes(change["items"], scopes), tie=False)
         return
     a_kit, a = _default_kit(old)
@@ -711,7 +773,10 @@ def _default_changes(slug: str, old: TrioData, new: TrioData, context: Context) 
         fields.append("flip_notes")
     if not fields:
         return
-    scopes = [Scope(classes, a["race"], a_view["tier"], a["setup"], a_view["evidence"]), Scope(classes, b["race"], b_view["tier"], b["setup"], b_view["evidence"])]
+    scopes = [
+        Scope(classes, a["race"], a_view["tier"], a["setup"], a_view["evidence"], default=True),
+        Scope(classes, b["race"], b_view["tier"], b["setup"], b_view["evidence"], default=True),
+    ]
     change = {
         "kind": "default", "trio": slug, "view": new.defaults.get("view"), "change": "changed", "fields": sorted(fields), "old": a, "new": b,
         "items": _keys(a_kit or (), b_kit or ()),
@@ -720,7 +785,8 @@ def _default_changes(slug: str, old: TrioData, new: TrioData, context: Context) 
         change["old_view"] = a_view
     if "kit" in fields and a_kit is not None and b_kit is not None:
         change["kit"] = _kit_diff(new.place_names or old.place_names, a_kit, b_kit)
-    yield _finish(change, context.causes(change["items"], scopes), tie=a["F"] == b["F"] and a["margin"] == b["margin"] and a_view == b_view)
+    same_value = a["F"] == b["F"] and a["margin"] == b["margin"] and a["close_races"] == b["close_races"] and a_view == b_view
+    yield _finish(change, context.causes(change["items"], scopes), tie=same_value and "flip_notes" not in fields)  # (the notes say what would flip the pick: a change of them alone is another answer)
 
 
 def _runnerup_changes(slug: str, old: TrioData, new: TrioData, tiers: set[int], context: Context) -> Iterable[dict[str, Any]]:
@@ -845,6 +911,75 @@ def _bundle_changes(slug: str, old: TrioData, new: TrioData, context: Context) -
         yield _finish(change, ["new"] if kind == "added" else context.bundle_causes(change.get("inputs_only", False)), tie=False)
 
 
+# ---- the effects layer: ``exalt.json`` of a trio and ``effects.json`` of the release ---------------------------------------------------------------------
+
+
+def _effect_rows(rows: Any) -> list[str]:
+    """The rows of a list of an ``exalt.json`` role, each as its text (a row is a mapping of short keys: compared whole)."""
+    if not isinstance(rows, list):
+        rows = [rows]
+    return [json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows]
+
+
+def _exalt_lists(old: Path, new: Path) -> list[dict[str, str]]:
+    """Which lists of ``exalt.json`` differ, and how: for each role and list (``focus``, ``click``, ``carry``, ``worn``, ``proc``, ``plan``, ``noroom``) that differs,
+    ``gained`` (the new list holds every row of the old one and more), ``lost`` (the reverse), ``reordered`` (the same rows in another order) or ``changed``; ``added`` or
+    ``removed`` for a role that only one file has, and ``header`` for the fields outside the roles. Empty when a file cannot be read: the record says ``changed`` all the same."""
+    try:
+        first, second = _plain(old), _plain(new)
+        found: list[dict[str, str]] = []
+        if {k: v for k, v in first.items() if k != "roles"} != {k: v for k, v in second.items() if k != "roles"}:
+            found.append({"role": "*", "list": "header", "how": "changed"})
+        roles_a, roles_b = first.get("roles", {}), second.get("roles", {})
+        for role in sorted(set(roles_a) | set(roles_b)):
+            if role not in roles_a or role not in roles_b:
+                found.append({"role": role, "list": "*", "how": "added" if role not in roles_a else "removed"})
+                continue
+            for name in sorted(set(roles_a[role]) | set(roles_b[role])):
+                a, b = roles_a[role].get(name), roles_b[role].get(name)
+                if a == b:
+                    continue
+                one, other = _effect_rows(a), _effect_rows(b)
+                if sorted(one) == sorted(other):
+                    how = "reordered"
+                elif set(one) < set(other):
+                    how = "gained"
+                elif set(other) < set(one):
+                    how = "lost"
+                else:
+                    how = "changed"
+                found.append({"role": role, "list": name, "how": how})
+        return found
+    except (OSError, ValueError, AttributeError, TypeError):
+        return []
+
+
+def _effects_record(kind: str, slug: str | None, a: str | None, b: str | None, causes: Callable[[], list[str]]) -> dict[str, Any]:
+    """The record of a file of the effects layer that differs: ``sha256`` before and after (``None`` for a release that has no such file), as for a bundle."""
+    which = "added" if a is None else "removed" if b is None else "changed"
+    change: dict[str, Any] = {
+        "kind": kind, "trio": slug, "file": "exalt.json" if kind == "exalt" else "effects.json", "change": which, "fields": ["sha256"], "sha256": [a, b],
+    }  # fmt: skip
+    return _finish(change, ["new"] if which == "added" else causes(), tie=False)
+
+
+def _exalt_changes(slug: str, old: TrioData, new: TrioData, context: Context) -> Iterable[dict[str, Any]]:
+    if old.exalt == new.exalt:
+        return
+    change = _effects_record("exalt", slug, old.exalt, new.exalt, context.effects_causes)
+    if old.exalt_path is not None and new.exalt_path is not None:
+        change["lists"] = _exalt_lists(old.exalt_path, new.exalt_path)
+    yield change
+
+
+def _effects_changes(old: Release, new: Release, context: Context) -> Iterable[dict[str, Any]]:
+    """``effects.json``, the one file of the effects layer that the release shares between its trios."""
+    path_a, path_b = old.folder / assemble.EFFECTS_FILE, new.folder / assemble.EFFECTS_FILE
+    a, b = (_sha256(path_a) if path_a.is_file() else None), (_sha256(path_b) if path_b.is_file() else None)
+    if a != b:
+        yield _effects_record("effects", None, a, b, context.effects_causes)
+
+
 # ---- trios and tiers ----------------------------------------------------------------------------------------------------------------------------
 
 
@@ -947,12 +1082,16 @@ class Report:
 
 def _count(changes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     by_kind = Counter(c["kind"] for c in changes)
-    by_cause = {name: 0 for name in (*CAUSES, "new", "unexplained")}
+    by_cause = {name: 0 for name in (*CAUSES, "new", "removed", "unexplained")}
     for change in changes:
         if change["primary"] is not None:
             by_cause[change["primary"]] += 1
         elif change["flag"] is not None:
             by_cause["unexplained"] += 1
+        elif change["kind"] in ("trio", "tier") and change["change"] == "removed":
+            by_cause["removed"] += 1  # (a trio or a tier that is gone has no cause to name; it is counted, so that the table adds up to the changes)
+        else:
+            by_cause["unexplained"] += 1  # (nothing is left out of the table: a change with no cause and no flag is one nothing explains)
     picks = [c for c in changes if c["kind"] in ("scenario", "default", "runner-up")]
     return {
         "changes": len(changes),
@@ -997,6 +1136,8 @@ def diff(old: str | os.PathLike[str] | Release | None, new: str | os.PathLike[st
             changes.extend(_runnerup_changes(slug, a, b, common[slug], context))
             changes.extend(_seal_changes(slug, a, b, common[slug], context))
             changes.extend(_bundle_changes(slug, a, b, context))
+            changes.extend(_exalt_changes(slug, a, b, context))
+        changes.extend(_effects_changes(before, after, context))
         for change in items.values():
             record = {
                 "kind": "item", "trio": None, "key": change.key, "change": change.change, "fields": change.fields,
@@ -1036,6 +1177,8 @@ def _where(change: Mapping[str, Any]) -> str:
         return _view(change)
     if change["kind"] == "bundle":
         return f"bundle {change['file']}"
+    if change["kind"] in ("exalt", "effects"):
+        return change["file"]
     race = change.get("race")
     race = "->".join(map(str, race)) if isinstance(race, list) else race
     return " ".join(str(part) for part in (change["kind"], change.get("role"), change.get("tier"), race) if part is not None)
@@ -1080,7 +1223,10 @@ def _markdown(report: Report) -> str:
             "",
         ]
     elif s["changes"] == 0:
-        lines += [f"No change: every trio, scenario, default pick, runner-up and item record is the same as in {report.previous}.", ""]
+        lines += [
+            f"No change: every trio, scenario (with its weapon procs), default pick, runner-up, seal, bundle, effects file (`effects.json`, `exalt.json`) and item record is the same as in {report.previous}.",
+            "",
+        ]
     else:
         lines += [f"{s['changes']} changes in all; the JSON file kept in the build folder (it is not published) lists every one of them, and none is left out.", ""]
     solver = [c for c in report.changes if c["flag"] == "solver-diff"]
@@ -1093,7 +1239,7 @@ def _markdown(report: Report) -> str:
             "",
         ]
         for change in solver[:LIST_LIMIT]:
-            lines.append(f"- {change['trio']}: {_where(change)}")
+            lines.append(f"- {change['trio'] or 'the release'}: {_where(change)}")
         if len(solver) > LIST_LIMIT:
             lines.append(f"- and {len(solver) - LIST_LIMIT} more (the JSON lists them all)")
         lines.append("")

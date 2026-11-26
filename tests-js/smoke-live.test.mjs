@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, parse, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { JSDOM } from "jsdom";
@@ -20,11 +20,15 @@ import {
   USAGE,
   UsageError,
   appendLog,
+  COUNTER_MARKERS,
+  KIT_PROBE_FRAGMENT,
   checkHeaders,
   checksDir,
+  countingTagIn,
   expectedHeaders,
   ignoredConsoleMessage,
   isAbsolutePath,
+  isCounterRequest,
   itemPageKeys,
   logLine,
   main,
@@ -33,6 +37,7 @@ import {
   newestRelease,
   parseArgs,
   parseHeaderBlock,
+  readCounterTraces,
   readPageKind,
   readPagePolicies,
   readRelease,
@@ -189,15 +194,71 @@ describe("checksDir", () => {
   const folder = join(tmpdir(), "a-folder-of-the-checks"); // (outside every work tree: a folder in one is refused)
   const standard = join(home, ".local", "state", "trioforge", "checks");
 
+  // (a path is resolved by the rules of ITS platform: a Windows path asked on a Linux runner is not a relative name, and a Linux one asked on Windows is not on the current drive)
+  const resolved = (platform, value) => (platform === "win32" ? win32 : posix).resolve(value);
+
   it("is named by TRIOFORGE_CHECKS_DIR, on any platform", () => {
     expect(CHECKS_ENV).toBe("TRIOFORGE_CHECKS_DIR");
     for (const platform of ["win32", "linux", "darwin"]) {
-      expect(checksDir({ TRIOFORGE_CHECKS_DIR: absolute[platform], LOCALAPPDATA: "x" }, platform, home)).toBe(resolve(absolute[platform]));
+      expect(checksDir({ TRIOFORGE_CHECKS_DIR: absolute[platform], LOCALAPPDATA: "x" }, platform, home)).toBe(resolved(platform, absolute[platform]));
     }
   });
 
   it("takes no account of white space round the name", () => {
-    for (const platform of ["win32", "linux"]) expect(checksDir({ TRIOFORGE_CHECKS_DIR: `  ${absolute[platform]}\n` }, platform, home)).toBe(resolve(absolute[platform]));
+    for (const platform of ["win32", "linux"]) expect(checksDir({ TRIOFORGE_CHECKS_DIR: `  ${absolute[platform]}\n` }, platform, home)).toBe(resolved(platform, absolute[platform]));
+  });
+
+  it("asks the work-tree guard about a path that is a path of this computer, and not about one that is not (a Windows path on a Linux runner is a relative name; /x on Windows is on the current drive: R5)", () => {
+    const foreign = process.platform === "win32" ? "linux" : "win32";
+    const asked = [];
+    const exists = (candidate) => {
+      asked.push(candidate);
+      return true; // (every .git is there: any folder that is asked about is in a work tree)
+    };
+    const rootedHere = parse(absolute[foreign]).root !== ""; // (the root of the computer's own kind of path: "/" on Windows, none for C:\stamps on Linux)
+    if (rootedHere) {
+      expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: absolute[foreign] }, foreign, home, { exists })).toThrow(/git work tree/);
+      expect(asked.length).toBeGreaterThan(0);
+    } else {
+      expect(checksDir({ TRIOFORGE_CHECKS_DIR: absolute[foreign] }, foreign, home, { exists })).toBe(resolved(foreign, absolute[foreign]));
+      expect(asked).toEqual([]);
+    }
+    asked.length = 0;
+    expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: folder }, process.platform, home, { exists })).toThrow(/git work tree/);
+    expect(asked.length).toBeGreaterThan(0);
+  });
+
+  describe("a part that ends in a dot or a space (S2): Windows reads the name without it, and Python and Node read the real path of such a name differently", () => {
+    const dotted = ["C:\\stamps\\j.\\x", "C:\\stamps\\j \\x", "C:\\stamps\\j.", "C:/stamps/j./x", "C:\\stamps\\...\\x", "C:\\stamps\\a \\"]; // (Windows paths that have such a part)
+    const plainWindows = ["C:\\stamps\\a.b\\c", "C:\\stamps\\.\\x", "C:\\stamps\\..\\x", "C:\\stamps\\.hidden", "C:\\stamps\\x\\", "C:/stamps/a.b"]; // (a dot inside a name, and the parts "." and "..")
+
+    it.each(dotted)("refuses the Windows path %j, on any computer", (value) => {
+      expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: value }, "win32", home)).toThrow(UsageError);
+      expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: value }, "win32", home)).toThrow(/TRIOFORGE_CHECKS_DIR .*ends in a dot or a space/);
+    });
+
+    it.each(plainWindows)("does not refuse the Windows path %j for its dots", (value) => {
+      expect(checksDir({ TRIOFORGE_CHECKS_DIR: value }, "win32", home)).toBe(resolved("win32", value));
+    });
+
+    it("takes a part that ends in a dot for a name like any other where the computer is not a Windows one", () => {
+      const value = "/stamps/a./b";
+      if (process.platform === "win32") expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: value }, "linux", home)).toThrow(/ends in a dot or a space/);
+      else expect(checksDir({ TRIOFORGE_CHECKS_DIR: value }, "linux", home)).toBe(resolved("linux", value));
+    });
+
+    it.skipIf(process.platform !== "win32")("refuses the review's spelling of a junction with a dot, by its name, before any real path is asked (Node cannot open j. at all, Python reads it as j)", () => {
+      const base = mkdtempSync(join(tmpdir(), "smoke-live-dot-"));
+      try {
+        mkdirSync(join(base, "plain"));
+        mkdirSync(join(base, "repo", "build"), { recursive: true });
+        mkdirSync(join(base, "repo", ".git"));
+        symlinkSync(join(base, "repo", "build"), join(base, "plain", "j"), "junction");
+        expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: `${join(base, "plain")}\\j.\\x` }, process.platform, home)).toThrow(/ends in a dot or a space/);
+      } finally {
+        rmSync(base, { recursive: true, force: true });
+      }
+    });
   });
 
   it.each(["", "  ", "\n", "\t "])("counts an empty or blank variable (%j) as unset", (value) => {
@@ -254,6 +315,27 @@ describe("checksDir", () => {
         }
       }
       expect(checksDir({ TRIOFORGE_CHECKS_DIR: join(plain, "checks") }, process.platform, home)).toBe(join(plain, "checks"));
+    });
+
+    it("refuses a junction or a link to a folder in a work tree, whatever it is called and whether or not the rest is there yet (R5), and accepts one to a place that is no work tree", () => {
+      const { repo, plain } = places();
+      mkdirSync(join(repo, "build"));
+      symlinkSync(join(repo, "build"), join(plain, "j"), "junction");
+      for (const inner of [join(plain, "j"), join(plain, "j", "x"), join(plain, "j", "not", "yet", "made")]) {
+        expect(() => checksDir({ TRIOFORGE_CHECKS_DIR: inner }, process.platform, home)).toThrow(/TRIOFORGE_CHECKS_DIR .*git work tree/);
+      }
+      const outside = mkdtempSync(join(tmpdir(), "smoke-live-outside-"));
+      made.push(outside);
+      symlinkSync(outside, join(plain, "ok"), "junction");
+      expect(checksDir({ TRIOFORGE_CHECKS_DIR: join(plain, "ok", "checks") }, process.platform, home)).toBe(join(plain, "ok", "checks"));
+    });
+
+    it.skipIf(process.platform !== "win32")("guards a path with a root and no drive on Windows (it is on the current drive), whatever the platform that is given", () => {
+      for (const given of ["/some-folder/checks"]) {
+        const asked = [];
+        checksDir({ TRIOFORGE_CHECKS_DIR: given }, "linux", home, { exists: (candidate) => (asked.push(candidate), false) });
+        expect(asked.length, given).toBeGreaterThan(0);
+      }
     });
 
     it("is not asked of the default folder, since the home of a user can be a repository itself", () => {
@@ -454,6 +536,97 @@ describe("the headers a response must carry", () => {
     ["nothing", ""],
   ])("refuses a headers file with %s", (_, text) => {
     expect(() => expectedHeaders(text)).toThrow(UsageError);
+  });
+
+  it("holds a site built with page counts to the _headers file that build wrote, which names the two hosts of the beacon, and the plain site to the committed one", () => {
+    // (the build writes the committed file with exactly the two hosts added: pipeline/tests/test_site_analytics.py holds that; here the check is shown to hold for both)
+    const committed = readFileSync(HEADERS_FILE, "utf8");
+    const policy = expectedHeaders(committed)["content-security-policy"];
+    const counting = committed.replace("script-src 'self' 'wasm-unsafe-eval'", "script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com").replace("connect-src 'self'", "connect-src 'self' https://cloudflareinsights.com");
+    const wanted = expectedHeaders(counting);
+    expect(wanted["content-security-policy"]).not.toBe(policy);
+    const live = { ...RESPONSE, "content-security-policy": wanted["content-security-policy"], "x-content-type-options": wanted["x-content-type-options"], "referrer-policy": wanted["referrer-policy"] };
+    expect(checkHeaders(live, wanted, { indexable: false })).toEqual([]);
+    expect(checkHeaders(live, expectedHeaders(committed), { indexable: false })).toEqual(["content-security-policy is not what site/_headers sets"]); // (the plain file does not hold a counting site: the file given is the one that was built to)
+    expect(checkHeaders({ ...live, "content-security-policy": policy }, wanted, { indexable: false })).toEqual(["content-security-policy is not what site/_headers sets"]);
+  });
+
+  describe("of a site built with page counts (--analytics)", () => {
+    const SCRIPT_HOST = "https://static.cloudflareinsights.com";
+    const DATA_HOST = "https://cloudflareinsights.com";
+    const committed = readFileSync(HEADERS_FILE, "utf8");
+    const plain = expectedHeaders(committed);
+    const withHosts = (policy) =>
+      policy.replace("script-src 'self' 'wasm-unsafe-eval'", `script-src 'self' 'wasm-unsafe-eval' ${SCRIPT_HOST}`).replace("connect-src 'self'", `connect-src 'self' ${DATA_HOST}`);
+    const live = (policy) => ({ ...RESPONSE, "content-security-policy": policy, "x-content-type-options": plain["x-content-type-options"], "referrer-policy": plain["referrer-policy"] });
+    const wanted = expectedHeaders(committed, { analytics: true });
+    async function runCommand(argv) {
+      const lines = { out: [], err: [] };
+      const code = await main(argv, { log: (line) => lines.out.push(line), error: (line) => lines.err.push(line), now: () => new Date("2026-10-18T10:00:03Z") });
+      return { code, ...lines };
+    }
+
+    it("is a switch of the command line, off by default", () => {
+      expect(parseArgs([]).analytics).toBe(false);
+      expect(parseArgs(["--analytics"]).analytics).toBe(true);
+      expect(() => parseArgs(["--analytics=yes"])).toThrow(UsageError);
+      expect(USAGE).toContain("--analytics");
+    });
+
+    it("expects the committed policy plus exactly the two hosts of the counter, the script host in script-src and the data host in connect-src, and no other header changes", () => {
+      expect(wanted["content-security-policy"]).toBe(withHosts(plain["content-security-policy"]));
+      expect(wanted["content-security-policy"]).not.toBe(plain["content-security-policy"]);
+      expect(wanted["x-content-type-options"]).toBe(plain["x-content-type-options"]);
+      expect(wanted["referrer-policy"]).toBe(plain["referrer-policy"]);
+      expect(expectedHeaders(committed, { analytics: false })).toEqual(plain);
+      expect(expectedHeaders(committed, {})).toEqual(plain);
+      expect([...wanted["content-security-policy"].matchAll(/https:\/\/[a-z.]+/g)].map((match) => match[0])).toEqual([SCRIPT_HOST, DATA_HOST]);
+    });
+
+    it("passes the counting site's headers in the counting mode and fails them in the plain one, and the other way round", () => {
+      const counting = live(wanted["content-security-policy"]);
+      expect(checkHeaders(counting, wanted, { indexable: false, analytics: true })).toEqual([]);
+      expect(checkHeaders(counting, plain, { indexable: false })).toEqual(["content-security-policy is not what site/_headers sets"]);
+      const plainSite = live(plain["content-security-policy"]);
+      expect(checkHeaders(plainSite, plain, { indexable: false })).toEqual([]);
+      expect(checkHeaders(plainSite, wanted, { indexable: false, analytics: true })).toEqual([
+        "content-security-policy is not what site/_headers sets with the two hosts of the counter added to script-src and connect-src",
+      ]);
+    });
+
+    it.each([
+      ["a third host", (policy) => policy.replace(DATA_HOST, `${DATA_HOST} https://example.invalid`)],
+      ["the script host only", (policy) => policy.replace(` ${DATA_HOST}`, "")],
+      ["the data host only", (policy) => policy.replace(` ${SCRIPT_HOST}`, "")],
+      ["the two hosts swapped between the directives", (policy) => policy.replace(SCRIPT_HOST, "@@").replace(DATA_HOST, SCRIPT_HOST).replace("@@", DATA_HOST)],
+      ["a wildcard host", (policy) => policy.replace(SCRIPT_HOST, "https://*.cloudflareinsights.com")],
+      ["the hosts in default-src", (policy) => policy.replace("default-src 'self'", `default-src 'self' ${SCRIPT_HOST}`)],
+      ["unsafe-inline", (policy) => policy.replace("script-src 'self'", "script-src 'unsafe-inline' 'self'")],
+      ["the other hosts in http", (policy) => policy.replace("https://static", "http://static")],
+    ])("fails a live policy with %s, in the counting mode", (_, change) => {
+      const bad = change(wanted["content-security-policy"]);
+      expect(bad).not.toBe(wanted["content-security-policy"]);
+      expect(checkHeaders(live(bad), wanted, { indexable: false, analytics: true })).toHaveLength(1);
+    });
+
+    it("refuses, as a check that cannot run, a headers file whose policy the two hosts cannot be added to, or that names a host already", () => {
+      expect(() => expectedHeaders(GOOD_HEADERS, { analytics: true })).toThrow(UsageError); // (no script-src with 'wasm-unsafe-eval', no connect-src: it is not the policy of the site)
+      expect(() => expectedHeaders(GOOD_HEADERS, { analytics: true })).toThrow(/two hosts/);
+      expect(() => expectedHeaders(committed.replace("script-src 'self' 'wasm-unsafe-eval'", `script-src 'self' 'wasm-unsafe-eval' ${SCRIPT_HOST}`), { analytics: true })).toThrow(/two hosts/);
+    });
+
+    it("needs no file but the committed one: the check applies the switch to whatever headers file it is given", async () => {
+      const folder = mkdtempSync(join(tmpdir(), "smoke-analytics-"));
+      try {
+        writeFileSync(join(folder, "plain.txt"), GOOD_HEADERS, "utf8");
+        const result = await runCommand(["--analytics", "--headers-file", join(folder, "plain.txt"), "--out", folder]);
+        expect(result.code).toBe(2);
+        expect(result.err[0]).toMatch(/^smoke-live: .*two hosts/);
+        expect(existsSync(join(folder, "smoke-live.last-run"))).toBe(false);
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+      }
+    });
   });
 
   it("reads the real site/_headers: it sets all three", () => {
@@ -855,9 +1028,13 @@ describe("main, before a browser is needed", () => {
     return `http://127.0.0.1:${server.address().port}`;
   }
 
+  // The repository has release pointers in releases/, and the default is to expect the data release of the newest: a run that does not say otherwise ends its list of problems with
+  // a line that names it (a third line, and a stamp it would not write). These tests are about the checks, not about that expectation (its own tests are above): they expect none.
+  const withoutThePointer = (argv) => (argv.some((a) => a === "--expect-data" || a.startsWith("--expect-data=") || a === "--releases-dir") ? argv : [...argv, "--expect-data", "none"]);
+
   async function run(argv) {
     const lines = { out: [], err: [] };
-    const code = await main(argv, { log: (line) => lines.out.push(line), error: (line) => lines.err.push(line), now: () => new Date("2026-10-18T10:00:03Z") });
+    const code = await main(withoutThePointer(argv),{ log: (line) => lines.out.push(line), error: (line) => lines.err.push(line), now: () => new Date("2026-10-18T10:00:03Z") });
     return { code, ...lines };
   }
 
@@ -932,6 +1109,20 @@ describe("main, before a browser is needed", () => {
     expect(existsSync(join(folder, "smoke-live.last-run"))).toBe(false);
   });
 
+  it("ends the list with the line that names the newest pointer of the releases folder when one is there, and with none when there is no pointer or --expect-data says so (R4)", async () => {
+    const base = await site({ "/engine-manifest.json": { status: 500, body: "oops", type: "text/plain" } });
+    const releases = scratch();
+    writeFileSync(join(releases, "data-2026-10-14.json"), "{}", "utf8");
+    writeFileSync(join(releases, "data-2026-10-17.json"), "{}", "utf8");
+    const named = await run(["--base", base, "--out", scratch(), "--releases-dir", releases]);
+    expect(named.code).toBe(1);
+    expect(named.err.at(-1)).toBe("  (data-2026-10-17 is expected because it is the newest pointer in releases/; --expect-data none turns that off)");
+    const empty = await run(["--base", base, "--out", scratch(), "--releases-dir", scratch()]);
+    expect(empty.err.some((line) => line.includes("is expected because it is the newest pointer"))).toBe(false);
+    const none = await run(["--base", base, "--out", scratch(), "--releases-dir", releases, "--expect-data", "none"]);
+    expect(none.err.some((line) => line.includes("is expected because it is the newest pointer"))).toBe(false);
+  });
+
   it("fails, with the same short list, when nothing answers at the address", async () => {
     const closed = await site({});
     const server = servers.pop();
@@ -963,7 +1154,7 @@ describe("main, before a browser is needed", () => {
       [0, 3, "0 trio pages and 3 item pages"],
       [2, 0, "1 trio page and 0 item pages"],
     ]) {
-      const options = { ...parseArgs(["--base", base, "--out", folder], new Date("2026-10-18T10:00:03Z")), trios, items: itemCount };
+      const options = { ...parseArgs(["--base", base, "--out", folder, "--expect-data", "none"], new Date("2026-10-18T10:00:03Z")), trios, items: itemCount };
       const result = await runCheck(options, { now: () => new Date("2026-10-18T10:00:03Z") });
       expect(result.code).toBe(1);
       expect(result.lines).toEqual([
@@ -1000,6 +1191,274 @@ describe("main, before a browser is needed", () => {
     const browser = { newContext: async () => context, close: async () => {} };
     return { gotos, launch: async () => browser };
   }
+
+  describe("a counting tag in a page as the server sent it, and the kit link of a counting site (P1)", () => {
+    /** A page's HTML as the server sent it (the body of the response to the navigation, which is all that is read of it), with a marker in it when given. */
+    const html = (marker = "") => `<!doctype html><html><head><title>x</title></head><body><main data-page="trio">${marker}</main><script type="module" src="/assets/app-AAAAAAAA.js"></script></body></html>`;
+    const TAGS = {
+      "the host": '<script defer src="https://static.cloudflareinsights.com/beacon.min.js"></script>',
+      "the attribute": "<script data-cf-beacon='{}'></script>",
+      "the script's name": '<script src="/x/beacon.min.js"></script>',
+    };
+
+    /**
+     * A browser that loads nothing: each page answers with the body that `bodyOf(url)` gives (its text(), the status and an HTML content type: `contentType` null gives none, and a `bodyOf` that returns an Error
+     * makes text() fail), `requestsOf(url)` lists the addresses that the page "asks for" when it is opened and `lateRequestsOf(url)` those that it asks for as it is closed (the browser's `request` event of
+     * the CONTEXT is called with them: the check listens there), and `tracesOf(url)` is what the page tells of a counter script element and of its resource timing. It records every address it was sent to,
+     * with the context that opened it, and how many contexts were made.
+     */
+    function browserOf({ bodyOf = () => html(), requestsOf = () => [], lateRequestsOf = () => [], tracesOf = () => ({ scripts: 0, resources: [] }), contentType = "text/html; charset=utf-8", hasText = true, awayFails = false } = {}) {
+      const gotos = [];
+      const visits = [];
+      const contexts = [];
+      const closed = [];
+      const events = []; // (in order: "goto <url>", "evaluate <function>", "close")
+      const makeContext = () => {
+        const handlers = [];
+        const context = {
+          id: contexts.length,
+          on(name, handler) {
+            if (name === "request") handlers.push(handler);
+          },
+          newPage: async () => makePage(context, handlers),
+          route: async () => {},
+          close: async () => {
+            closed.push(context.id);
+          },
+        };
+        contexts.push(context);
+        return context;
+      };
+      const makePage = (context, handlers) => {
+        let current = "";
+        const tell = (addresses) => {
+          for (const asked of addresses) for (const handler of handlers) handler({ url: () => asked });
+        };
+        return {
+          on() {},
+          async goto(url) {
+            gotos.push(url);
+            events.push(`goto ${url}`);
+            visits.push({ url, context: context.id });
+            const leaving = current;
+            current = url;
+            if (url === "about:blank") {
+              if (awayFails) throw new Error("page.goto: net::ERR_ABORTED at about:blank\nCall log:\n  - navigating to about:blank");
+              setTimeout(() => tell(lateRequestsOf(leaving)), 50); // (a report is sent as the page goes away: pagehide, a moment after the navigation starts)
+              return null;
+            }
+            tell(requestsOf(url));
+            const notFound = url.includes("no-such-page");
+            const answer = {
+              status: () => (notFound ? 404 : 200),
+              headers: () => (contentType === null ? {} : { "content-type": contentType }),
+              request: () => ({ redirectedFrom: () => null }),
+            };
+            if (hasText) {
+              answer.text = async () => {
+                const body = bodyOf(url);
+                if (body instanceof Error) throw body;
+                return body;
+              };
+            }
+            return answer;
+          },
+          locator: () => ({ waitFor: async () => {} }),
+          waitForLoadState: async () => {},
+          waitForTimeout: async () => {},
+          evaluate: async (fn) => {
+            events.push(`evaluate ${fn.name}`);
+            if (fn.name === "readPageKind") return current.includes("/trio/") ? "trio" : current.includes("/item/") ? "item" : "notfound";
+            if (fn.name === "readPagePolicies") return { policies: [NOTFOUND_POLICY], first: true, notfound: true };
+            if (fn.name === "readCounterTraces") return tracesOf(current);
+            return null;
+          },
+          url: () => current.split("#")[0],
+          close: async () => {
+            events.push("close"); // (a page that is closed with no navigation says nothing: the requests of pagehide are not seen from here)
+          },
+        };
+      };
+      const browser = { newContext: async () => makeContext(), close: async () => {} };
+      return { gotos, visits, contexts, closed, events, launch: async () => browser };
+    }
+
+    async function checkWith(browser, extra = []) {
+      const items = { items: [{ id: 1, evidence: { level: "strict" } }] };
+      const base = await site({ "/engine-manifest.json": { body: { trios: { "pal-mnk-ber": [50] }, items: { path: "/items.json" } } }, "/items.json": { body: items } });
+      const options = parseArgs(["--base", base, "--out", scratch(), "--trios", "1", "--items", "1", "--settle", "0", "--expect-data", "none", ...extra], new Date("2026-10-18T10:00:03Z"));
+      return runCheck(options, { now: () => new Date("2026-10-18T10:00:03Z"), launch: browser.launch });
+    }
+    const lines = (result) => result.lines.filter((line) => line.startsWith("- "));
+
+    it("names the three marks of a counting tag, in lower case, and finds each in any case, and in nothing else", () => {
+      expect(COUNTER_MARKERS).toEqual(["cloudflareinsights", "data-cf-beacon", "beacon.min"]);
+      for (const [what, tag] of Object.entries(TAGS)) {
+        expect(countingTagIn(html(tag)), what).not.toBeNull();
+        expect(countingTagIn(html(tag.toUpperCase())), `${what}, in capitals`).not.toBeNull();
+      }
+      expect(countingTagIn(html())).toBeNull();
+      expect(countingTagIn("")).toBeNull();
+      expect(countingTagIn(html('<meta name="trioforge-counter" content="0123456789abcdef0123456789abcdef">'))).toBeNull(); // (the token as data is no tag: only a counting build has it, and it is not what this looks for)
+    });
+
+    it("tells a request to either host of the counter by the host, not by a word in the address", () => {
+      expect(isCounterRequest("https://static.cloudflareinsights.com/beacon.min.js")).toBe(true);
+      expect(isCounterRequest("https://cloudflareinsights.com/cdn-cgi/rum")).toBe(true);
+      expect(isCounterRequest("https://CloudflareInsights.com/x")).toBe(true);
+      for (const other of ["https://trioforge.pages.dev/assets/cloudflareinsights.js", "https://example.invalid/?u=cloudflareinsights.com", "https://evilcloudflareinsights.com/x", "not an address", ""]) {
+        expect(isCounterRequest(other), other).toBe(false);
+      }
+    });
+
+    it.each(Object.entries(TAGS))("fails any page that holds %s of a counting tag in the page as the server sent it, in both modes", async (what, tag) => {
+      for (const extra of [[], ["--analytics"]]) {
+        const browser = browserOf({ bodyOf: (url) => (url.includes("/item/") ? html(tag) : html()) });
+        const result = await checkWith(browser, extra);
+        expect(result.code, extra.join(" ")).toBe(1);
+        const found = lines(result).filter((line) => line.includes("counting tag"));
+        expect(found, `${what} ${extra.join(" ")}`).toHaveLength(1);
+        expect(found[0]).toMatch(/^- \/item\/w1\/: has a counting tag \("(cloudflareinsights|data-cf-beacon|beacon\.min)"\) in the page as the server sent it/);
+        expect(found[0]).toContain("turn the Web Analytics switch of the Cloudflare dashboard off");
+      }
+    });
+
+    it("fails the 404 page too, and a trio page, whatever the mode", async () => {
+      const browser = browserOf({ bodyOf: (url) => (url.includes("no-such-page") || url.includes("/trio/") ? html(TAGS["the host"]) : html()) });
+      const result = await checkWith(browser);
+      const found = lines(result).filter((line) => line.includes("counting tag"));
+      expect(found.map((line) => line.split(":")[0])).toEqual(["- /trio/pal-mnk-ber/", `- ${NOTFOUND_PATH}`]);
+    });
+
+    it("reads only the page itself: what a page's script holds, and a response that is no HTML, are never looked at", async () => {
+      // (the page script's own bundle names the counter's address and is not a page: only the body of the response to the navigation is read, which is the document, and only when it says it is HTML)
+      const browser = browserOf({ bodyOf: () => `const COUNTER = "https://static.cloudflareinsights.com/beacon.min.js"; data-cf-beacon`, contentType: "text/javascript" });
+      const result = await checkWith(browser);
+      expect(lines(result).filter((line) => line.includes("counting tag"))).toEqual([]);
+      const clean = browserOf();
+      expect(lines(await checkWith(clean)).filter((line) => line.includes("counting tag"))).toEqual([]);
+    });
+
+    it("in --analytics mode opens one trio page with an invented #k= fragment, and fails when it asks for either host of the counter; in the plain mode it opens none", async () => {
+      expect(KIT_PROBE_FRAGMENT).toMatch(/^#k=[A-Za-z0-9_-]{8,}$/);
+      const quiet = browserOf();
+      await checkWith(quiet, ["--analytics"]);
+      expect(quiet.gotos.filter((url) => url.includes("#k="))).toHaveLength(1);
+      expect(quiet.gotos.filter((url) => url.includes("#k="))[0]).toMatch(/\/trio\/pal-mnk-ber\/#k=/);
+      const plain = browserOf();
+      await checkWith(plain);
+      expect(plain.gotos.filter((url) => url.includes("#k="))).toEqual([]);
+      for (const asked of [["https://static.cloudflareinsights.com/beacon.min.js"], ["https://cloudflareinsights.com/cdn-cgi/rum"], ["https://static.cloudflareinsights.com/beacon.min.js", "https://cloudflareinsights.com/cdn-cgi/rum"]]) {
+        const browser = browserOf({ requestsOf: (url) => (url.includes("#k=") ? asked : []) });
+        const result = await checkWith(browser, ["--analytics"]);
+        expect(result.code).toBe(1);
+        const found = lines(result).filter((line) => line.includes("kit link"));
+        expect(found, asked.join(" ")).toHaveLength(1);
+        expect(found[0]).toMatch(new RegExp("^- /trio/pal-mnk-ber/ \\(a kit link\\): made " + asked.length + " requests? to the counter's hosts"));
+        expect(found[0]).toContain("a page opened from a kit link is never counted");
+      }
+    });
+
+    // ---- Q5: a page that cannot be read is a problem, not a pass; the kit link check is made to see what it looks for ----
+
+    it("reports, and does not pass, a page whose body could not be read, and a navigation that gave no content type", async () => {
+      for (const [what, options] of [
+        ["a body that cannot be read", { bodyOf: () => new Error("no body") }],
+        ["a response with no text()", { hasText: false }],
+        ["a navigation with no content type", { contentType: null }],
+      ]) {
+        const result = await checkWith(browserOf(options));
+        expect(result.code, what).toBe(1);
+        const found = lines(result).filter((line) => line.includes("counting tag"));
+        expect(found.length, what).toBeGreaterThan(0);
+        expect(found[0], what).toMatch(/^- \/(trio|item)\/[^:]*: (could not be read as the server sent it|answered with no content type)/);
+        expect(found[0], what).toContain("not checked for a counting tag");
+      }
+      expect(lines(await checkWith(browserOf())).filter((line) => line.includes("counting tag"))).toEqual([]); // (a page that is read and clean is still a pass)
+      const notHtml = browserOf({ bodyOf: () => "x", contentType: "text/javascript" });
+      expect(lines(await checkWith(notHtml)).filter((line) => line.includes("content type"))).toEqual([]); // (a response that says it is no HTML is not looked at, as before)
+    });
+
+    it("opens the kit link in a browser context of its own, not in the one that the pages were loaded in (a script that those pages loaded may be in the HTTP cache of it)", async () => {
+      const browser = browserOf();
+      await checkWith(browser, ["--analytics"]);
+      const kit = browser.visits.filter((visit) => visit.url.includes("#k="));
+      const others = browser.visits.filter((visit) => !visit.url.includes("#k=") && visit.url !== "about:blank");
+      expect(kit).toHaveLength(1);
+      expect(others.length).toBeGreaterThan(1);
+      expect(new Set(others.map((visit) => visit.context)).size).toBe(1);
+      expect(kit[0].context).not.toBe(others[0].context);
+      expect(browser.closed).toContain(kit[0].context); // (and its context is closed)
+      const plain = browserOf();
+      await checkWith(plain);
+      expect(plain.contexts).toHaveLength(1);
+    });
+
+    it("also fails the kit link page when the DOM has a counter script element or the resource timing lists either host, whatever the request event saw", async () => {
+      for (const [what, traces, mention] of [
+        ["a script element of the counter", { scripts: 1, resources: [] }, /has 1 counter script element/],
+        ["a resource of the counter's script host", { scripts: 0, resources: ["https://static.cloudflareinsights.com/beacon.min.js"] }, /resource timing lists 1 request to the counter's hosts/],
+        ["both", { scripts: 2, resources: ["https://cloudflareinsights.com/cdn-cgi/rum", "https://static.cloudflareinsights.com/beacon.min.js"] }, /counter script element/],
+      ]) {
+        const browser = browserOf({ tracesOf: (url) => (url.includes("#k=") ? traces : { scripts: 0, resources: [] }) });
+        const result = await checkWith(browser, ["--analytics"]);
+        expect(result.code, what).toBe(1);
+        const found = lines(result).filter((line) => line.includes("kit link"));
+        expect(found.length, what).toBeGreaterThan(0);
+        expect(found.join("\n"), what).toMatch(mention);
+      }
+      const quiet = browserOf({ tracesOf: () => ({ scripts: 0, resources: [] }) });
+      expect(lines(await checkWith(quiet, ["--analytics"])).filter((line) => line.includes("kit link"))).toEqual([]);
+    });
+
+    it("sends the kit link page away (to about:blank) before it closes it, and waits a moment, so that a report sent at pagehide is seen (R4)", async () => {
+      const browser = browserOf();
+      await checkWith(browser, ["--analytics"]);
+      const at = (text) => browser.events.lastIndexOf(text);
+      expect(browser.events.filter((event) => event === "goto about:blank")).toHaveLength(1);
+      expect(at("evaluate readCounterTraces")).toBeGreaterThan(-1);
+      expect(at("goto about:blank"), "after the page was looked into").toBeGreaterThan(at("evaluate readCounterTraces"));
+      expect(at("close"), "and before it is closed").toBeGreaterThan(at("goto about:blank"));
+      const plain = browserOf();
+      await checkWith(plain);
+      expect(plain.events.filter((event) => event === "goto about:blank")).toEqual([]);
+    });
+
+    it("says so, in one line, when the kit link page could not be sent away to about:blank, and does not pass on less than it claims (S5)", async () => {
+      const browser = browserOf({ awayFails: true });
+      const result = await checkWith(browser, ["--analytics"]);
+      const found = lines(result).filter((line) => line.includes("kit link")); // (a line of the list of problems: the check fails on it)
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/^- \/trio\/pal-mnk-ber\/ \(a kit link\): could not be sent away to about:blank \(page\.goto: net::ERR_ABORTED at about:blank\)/);
+      expect(found[0], "one line: the rest of the browser's message is not copied").not.toContain("Call log");
+      expect(found[0]).toContain("shows less than it should");
+      const fine = await checkWith(browserOf(), ["--analytics"]);
+      expect(lines(fine).filter((line) => line.includes("kit link"))).toEqual([]); // (the same check, with the navigation that works, says nothing)
+      expect(lines(await checkWith(browserOf({ awayFails: true }))).filter((line) => line.includes("kit link"))).toEqual([]); // (the plain mode opens no kit link page)
+    });
+
+    it("keeps listening until the page has gone: a request that is made as it is sent away (a report at pagehide, a moment after) fails the kit link check, with --settle 0 as well", async () => {
+      const browser = browserOf({ lateRequestsOf: (url) => (url.includes("#k=") ? ["https://cloudflareinsights.com/cdn-cgi/rum"] : []) });
+      const result = await checkWith(browser, ["--analytics"]);
+      expect(result.code).toBe(1);
+      const found = lines(result).filter((line) => line.includes("kit link"));
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/made 1 request to the counter's hosts/);
+    });
+
+    it("looks for the traces in the page with a function of its own, named readCounterTraces, that is handed the two hosts", () => {
+      expect(typeof readCounterTraces).toBe("function");
+      const found = readCounterTraces.toString();
+      expect(found).toContain("data-cf-beacon");
+      expect(found).toContain("getEntriesByType");
+    });
+
+    it("does not fail a counting site whose pages ask for the counter, when they are not the kit link page (a counted page does)", async () => {
+      const browser = browserOf({ requestsOf: (url) => (url.includes("#k=") ? [] : ["https://static.cloudflareinsights.com/beacon.min.js", "https://cloudflareinsights.com/cdn-cgi/rum"]) });
+      const result = await checkWith(browser, ["--analytics"]);
+      expect(lines(result).filter((line) => line.includes("kit link") || line.includes("counting tag"))).toEqual([]);
+    });
+  });
 
   it.each([0, 0.5, 2])("gives every page the time that navigationMs says for a pace of %s, and never the time of one request (R13)", async (pace) => {
     const items = { items: [{ id: 1, evidence: { level: "strict" } }] };
@@ -1073,7 +1532,7 @@ describe("main, before a browser is needed", () => {
   describe("run as a command", () => {
     async function command(args, env = {}) {
       try {
-        const { stdout, stderr } = await promisify(execFile)(process.execPath, [SCRIPT, ...args], { timeout: 60_000, env: { ...process.env, ...env } });
+        const { stdout, stderr } = await promisify(execFile)(process.execPath, [SCRIPT, ...withoutThePointer(args)], { timeout: 60_000, env: { ...process.env, ...env } });
         return { code: 0, stdout, stderr };
       } catch (error) {
         return { code: error.code, stdout: error.stdout, stderr: error.stderr };

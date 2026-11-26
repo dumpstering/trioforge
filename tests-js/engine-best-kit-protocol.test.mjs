@@ -24,7 +24,7 @@ const MANIFEST = parseManifest({
   trios: { "pal-mnk-ber": [50] },
 });
 
-const SCENARIO = { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" };
+const SCENARIO = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" };
 const request = (over = {}) => ({ v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, mode: "best-kit", scenario: { ...SCENARIO }, tier: 4, budgetMs: 5000, ...over });
 const weighted = (weights, over = {}) => request({ weights, ...over });
 const scenario = (over) => request({ scenario: { ...SCENARIO, ...over } });

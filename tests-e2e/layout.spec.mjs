@@ -295,12 +295,21 @@ test("the assumptions are one folded line that says the choices, opens from the 
   expect(changed).toMatch(/changed/i);
 });
 
-test("the assumptions line is the next stop after the three choices and the link that explains the roles @once", async ({ page }) => {
+test("the assumptions line is the next stop after the three choices, the link that explains the roles and the eight priorities @once", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await open(page, TRIO);
   await page.locator("#sw-tier").focus();
   await page.keyboard.press("Tab");
   await expect(page.locator(".controls .hint a")).toBeFocused();
+  // the priorities (a select for each stat, drawn after the choices they sit beside) come next, in the order of their address, then the button for the rates; Reset is switched off while every step is Normal, so it is no stop
+  for (const id of ["hp", "ac", "mana", "atk", "dex", "haste", "resists", "end"]) {
+    await page.keyboard.press("Tab");
+    await expect(page.locator(`#prio-${id}`)).toBeFocused();
+  }
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#prio-preset-resists"), "the preset of the Tank and the Shield caster builds (Resists first) comes before the button for the rates").toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#prio-rates-show")).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.locator("#assumes > summary")).toBeFocused();
   await page.keyboard.press("Tab"); // closed: its three assumptions are not stops, the next is the button that opens every row's stats

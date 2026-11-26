@@ -176,19 +176,19 @@ describe("the best kit of the page", () => {
     await opened();
     expect($("#upgrade-motes-source-page").checked).toBe(true);
     expect($("#upgrade-motes-source-gear").checked).toBe(false);
-    expect(BAKED.steps.length).toBe(126);
+    expect(BAKED.steps.length).toBe(120);
     check(BAKED);
     expect(lines()[0]).toMatch(/^[A-Za-z0-9 ]+: .+ \+4 to \+5, [+−]?[\d,<+]+$/); // "Chest: <item> +4 to +5, +142"
-    expect(text("#upgrade-motes-end")).toBe("That is every mote there is to spend: every item is then at +10.");
+    expect(text("#upgrade-motes-end")).toBe("After these, no mote adds any kit value: 6 could still be spent, and none of them gains anything.");
     expect(text("#upgrade-motes-for")).toMatch(/^For the best kit of this page \(.+\): kit value now [\d,]+\.$/);
     expect($("#upgrade-motes-state").classList.contains("quiet")).toBe(true);
   });
 
   it("says the list once through the page's live region, when it is ready: how many motes, for what, and the first one", async () => {
     await opened();
-    await waitFor(() => expect($("#announce").textContent).toContain("Spend your motes: 126 motes"));
+    await waitFor(() => expect($("#announce").textContent).toContain("Spend your motes: 120 motes"));
     const what = /^For (the best kit of this page \(.+\)): kit value now/.exec(text("#upgrade-motes-for"))[1];
-    expect($("#announce").textContent).toBe(`Spend your motes: 126 motes for ${what}. First: ${lineOf(BAKED.steps[0])}. That is every mote there is to spend: every item is then at +10.`);
+    expect($("#announce").textContent).toBe(`Spend your motes: 120 motes for ${what}. First: ${lineOf(BAKED.steps[0])}. After these, no mote adds any kit value: 6 could still be spent, and none of them gains anything.`);
   });
 
   it("shows only as many lines as the motes asked for, and the first N lines of the whole order are the order for N motes", async () => {
@@ -205,9 +205,9 @@ describe("the best kit of the page", () => {
     check(BAKED, 1);
     expect(text("#upgrade-motes-end")).toBe("These are the first 1 mote.");
     type(box, "9999"); // (more than there are to spend: an order of its own, which ends where the whole one does)
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     check(BAKED);
-    expect(text("#upgrade-motes-end")).toBe("That is every mote there is to spend: every item is then at +10.");
+    expect(text("#upgrade-motes-end")).toBe("After these, no mote adds any kit value: 6 could still be spent, and none of them gains anything.");
     type(box, ""); // (the whole order was worked out already: it is there at once)
     check(BAKED);
   });
@@ -227,10 +227,10 @@ describe("the best kit of the page", () => {
     type($("#upgrade-motes-n"), "2");
     check(BAKED, 2);
     type($("#upgrade-motes-n"), "");
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     check(BAKED);
     for (const again of ["3", "10", ""]) type($("#upgrade-motes-n"), again); // (nothing new to work out: what was worked out is kept)
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     expect(walks).toHaveBeenCalledTimes(4); // 3, 10, 2 and the whole order
   });
 
@@ -245,8 +245,8 @@ describe("the best kit of the page", () => {
     type(box, "9");
     await waitFor(() => expect(lines()).toHaveLength(9));
     type(box, "99999999999999999999");
-    await waitFor(() => expect(lines()).toHaveLength(126));
-    expect(text("#upgrade-motes-end")).toBe("That is every mote there is to spend: every item is then at +10.");
+    await waitFor(() => expect(lines()).toHaveLength(120));
+    expect(text("#upgrade-motes-end")).toBe("After these, no mote adds any kit value: 6 could still be spent, and none of them gains anything.");
   });
 
   it("refuses a number that is not a whole number of at least one: the list stays, the box says it is wrong, and nothing is worked out again", async () => {
@@ -270,7 +270,7 @@ describe("the best kit of the page", () => {
 
   it("says a number that is being typed once it settles, not at every key", async () => {
     await opened();
-    await waitFor(() => expect($("#announce").textContent).toContain("Spend your motes: 126 motes"));
+    await waitFor(() => expect($("#announce").textContent).toContain("Spend your motes: 120 motes"));
     $("#announce").textContent = "";
     type($("#upgrade-motes-n"), "1");
     type($("#upgrade-motes-n"), "12");
@@ -282,12 +282,12 @@ describe("the best kit of the page", () => {
 
   it("goes when the kit of the page changes, and is worked out again for the kit that is shown: an old list is never left under a new kit", async () => {
     await opened();
-    expect(lines()).toHaveLength(126);
+    expect(lines()).toHaveLength(120);
     drawKit({ tier: 9 }); // the visitor switches the tier: every row is drawn again at +9, one mote each
     await waitFor(() => expect(lines()).toHaveLength(0)); // at once, the old list is gone
-    await waitFor(() => expect(lines()).toHaveLength(21), 5000);
+    await waitFor(() => expect(lines()).toHaveLength(20), 5000);
     expect(lines().every((line) => / \+9 to \+10, /.test(line))).toBe(true);
-    expect(text("#upgrade-motes-end")).toBe("That is every mote there is to spend: every item is then at +10.");
+    expect(text("#upgrade-motes-end")).toBe("After these, no mote adds any kit value: 1 could still be spent, and none of them gains anything.");
     expect(text("#upgrade-motes-for")).toMatch(/^For the best kit of this page/);
     drawKit({ tier: 10 });
     await waitFor(() => expect(text("#upgrade-motes-end")).toBe("Every item is at +10, so there is nothing to spend a mote on."), 5000);
@@ -311,7 +311,7 @@ describe("the best kit of the page", () => {
     await waitFor(() => expect(lines().length).toBeGreaterThan(0), 5000);
     watcher.disconnect();
     for (const list of seen) expect(list.every((line) => / \+9 to \+10, /.test(line)), "a line of the old kit, drawn after the change").toBe(true);
-    await waitFor(() => expect(lines()).toHaveLength(21), 8000);
+    await waitFor(() => expect(lines()).toHaveLength(20), 8000);
   });
 
   it("says so when it cannot read the kit that is shown (an item with no link), and offers nothing", async () => {
@@ -332,7 +332,7 @@ describe("the best kit of the page", () => {
     expect(lines()).toEqual([]);
     tickBox();
     expect($("#upgrade-motes").hidden).toBe(false);
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     check(BAKED);
   });
 
@@ -373,7 +373,7 @@ describe("the best kit of the page", () => {
     expect(lines()).toEqual([]);
     fail = false;
     $("#upgrade-motes-state button").click();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     expect(text("#upgrade-motes-state")).toBe("");
   });
 
@@ -405,7 +405,7 @@ function mountPanel({ view = {}, evaluator = EVALUATOR } = {}) {
   made.manifestJson.kitvalue = { path: KITVALUE_PATH, bytes: KITVALUE_BYTES.length, gzip: 20, sha256: sha256(KITVALUE_BYTES) };
   made.files.set(MAIN, new TextEncoder().encode(JSON.stringify(made.manifestJson)));
   const net = siteFetch(made, { serve: (url) => (new URL(url, "https://trioforge.test").pathname === KITVALUE_PATH ? script(KITVALUE_BYTES) : undefined) });
-  let shown = { race: "OGR", role: "balanced", buffs: "own", evidence: "strict", setup: "dw", weights: null, ...view };
+  let shown = { race: "OGR", role: "tank", buffs: "own", evidence: "strict", setup: "dw", weights: null, ...view };
   const watchers = new Set();
   const spoken = [];
   const panel = createMotes(root, {
@@ -443,29 +443,29 @@ describe("a view that has no published kit", () => {
   it("is not offered for custom weights, or for buffs other than the own and the group ones, where Wear this shows the optimizer's answer", async () => {
     const { setView } = mountPanel();
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     setView({ buffs: "raid" });
     await waitFor(() => expect(text("#upgrade-motes-state")).toMatch(/^The kit shown here is the optimizer's answer for these buffs or weights, not a published one\./));
     expect(lines()).toEqual([]);
     expect($("#upgrade-motes-end").hidden).toBe(true);
     expect($("#upgrade-motes-for").hidden).toBe(true);
     setView({ buffs: "own" });
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     setView({ weights: { multipliers: { HP: 2 } } });
     await waitFor(() => expect(lines()).toEqual([]));
     await waitFor(() => expect(text("#upgrade-motes-state")).toMatch(/not a published one/));
     setView({ weights: null });
-    await waitFor(() => expect(lines()).toHaveLength(126), 8000);
+    await waitFor(() => expect(lines()).toHaveLength(120), 8000);
     check(BAKED);
   });
 
   it("drops the list at once when the view changes, and works out the kit that is shown", async () => {
     const { setView } = mountPanel();
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
-    setView({ role: "tank" });
+    await waitFor(() => expect(lines()).toHaveLength(120));
+    setView({ role: "melee" });
     expect(lines(), "at once, before the pause that lets a change settle").toEqual([]);
-    await waitFor(() => expect(lines()).toHaveLength(126), 8000);
+    await waitFor(() => expect(lines()).toHaveLength(120), 8000);
   });
 });
 
@@ -564,14 +564,14 @@ describe("the answer hands Equip now's kit over", () => {
     expect(run.engine.runs).toHaveLength(1);
     const kit = kitOf({ 0: "w80301@4" });
     run.engine.runs[0].onStep({ ...equipStep({ kit }), buffs: [11, 12] });
-    expect(onGear).toHaveBeenLastCalledWith({ request: expect.objectContaining({ scenario: expect.objectContaining({ race: "HUM", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" }) }), kit, buffs: [11, 12] }, false);
+    expect(onGear).toHaveBeenLastCalledWith({ request: expect.objectContaining({ scenario: expect.objectContaining({ race: "HUM", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" }) }), kit, buffs: [11, 12] }, false);
     onGear.mockClear();
     addByName("Quillmark Bracer", "0"); // the gear changes: the kit that was drawn is old from this moment, before the pause is over
     expect(onGear).toHaveBeenCalledWith(null, true);
     expect(onGear.mock.calls.every(([source]) => source === null)).toBe(true);
     await vi.advanceTimersByTimeAsync(700);
     onGear.mockClear();
-    run.setView({ role: "tank" }); // the view changes: the same
+    run.setView({ role: "melee" }); // the view changes: the same
     expect(onGear).toHaveBeenLastCalledWith(null, true);
     onGear.mockClear();
     run.gear.clear(); // emptied: nothing is coming
@@ -589,8 +589,8 @@ describe("the answer hands Equip now's kit over", () => {
     run.engine.runs[0].finish({ kind: "scenario", mode: "farm-path", stopped: "no-gain", steps: 0, hasteAssumed: 30, elapsedMs: 5 });
     await vi.advanceTimersByTimeAsync(10);
     onGear.mockClear();
-    run.setView({ role: "tank" });
-    run.setView({ role: "balanced" }); // (undone before the pause is over)
+    run.setView({ role: "melee" });
+    run.setView({ role: "tank" }); // (undone before the pause is over: the page opens on the Tank)
     expect(onGear).toHaveBeenLastCalledWith(null, true);
     await vi.advanceTimersByTimeAsync(700);
     expect(run.engine.runs).toHaveLength(1); // (the request is the one sent last: nothing is sent again)
@@ -668,14 +668,14 @@ describe("the buffs of the kit", () => {
     const tired = { ...EVALUATOR, bestBuffsOfKit: (view) => ({ ...bestBuffsOfKit(view), exact: false }) };
     mountPanel({ evaluator: tired });
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     expect($("#upgrade-motes-inexact").hidden).toBe(false);
     expect(text("#upgrade-motes-inexact")).toBe("The best buffs for this kit were not searched out completely, so they may not be the best ones.");
-    expect(lines(), "the list is still made, with the buffs it found").toHaveLength(126);
+    expect(lines(), "the list is still made, with the buffs it found").toHaveLength(120);
     document.body.replaceChildren();
     mountPanel();
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     expect($("#upgrade-motes-inexact").hidden).toBe(true);
   });
 
@@ -707,7 +707,7 @@ describe("what a review found in the panel", () => {
     slowClock();
     tickBox();
     await waitFor(() => expect(lines().length).toBeGreaterThan(3));
-    expect(lines().length).toBeLessThan(126);
+    expect(lines().length).toBeLessThan(120);
     const box = $("#upgrade-motes-n");
     type(box, "0");
     expect(box.getAttribute("aria-invalid")).toBe("true");
@@ -716,7 +716,7 @@ describe("what a review found in the panel", () => {
     expect(text("#upgrade-motes-bad"), "after more slices").toBe("Use a whole number of motes from 1, or leave the box empty.");
     expect($("#upgrade-motes-bad").hidden).toBe(false);
     expect(box.getAttribute("aria-invalid")).toBe("true");
-    await waitFor(() => expect(lines()).toHaveLength(126), 15000);
+    await waitFor(() => expect(lines()).toHaveLength(120), 15000);
     expect($("#upgrade-motes-bad").hidden, "and when the run is over").toBe(false);
     expect(box.getAttribute("aria-invalid")).toBe("true");
     type(box, "5");
@@ -764,17 +764,17 @@ describe("what a review found in the panel", () => {
   it("does not say a wrong number of motes for a panel that is shut, or one that has been cleared", async () => {
     const { spoken, setView } = mountPanel();
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     spoken.length = 0;
     type($("#upgrade-motes-n"), "0");
     tickBox(); // the panel is shut before the pause is over
     await new Promise((resolve) => setTimeout(resolve, 700));
     expect(spoken).toEqual([]);
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     spoken.length = 0;
     type($("#upgrade-motes-n"), "00");
-    setView({ role: "tank" }); // the list is cleared before the pause is over
+    setView({ role: "melee" }); // the list is cleared before the pause is over
     await new Promise((resolve) => setTimeout(resolve, 700));
     expect(spoken.filter((said) => /whole number/.test(said))).toEqual([]);
   });
@@ -782,21 +782,21 @@ describe("what a review found in the panel", () => {
   it("lets go of everything when it is destroyed: the box, the choices and the number do nothing, and the view and the page's kit are not watched", async () => {
     const { panel, setView } = mountPanel();
     tickBox();
-    await waitFor(() => expect(lines()).toHaveLength(126));
+    await waitFor(() => expect(lines()).toHaveLength(120));
     panel.destroy();
     $("#upgrade-motes-n").dispatchEvent(new Event("input", { bubbles: true }));
     type($("#upgrade-motes-n"), "3");
-    expect(lines(), "the number is not taken").toHaveLength(126);
+    expect(lines(), "the number is not taken").toHaveLength(120);
     tickBox();
     expect($("#upgrade-motes").hidden, "the box is not heard").toBe(false);
     choose("#upgrade-motes-source-gear");
     expect(text("#upgrade-motes-state")).toBe("");
-    setView({ role: "tank" });
+    setView({ role: "melee" });
     drawKit({ tier: 9 });
     await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(lines(), "the page's kit is not watched").toHaveLength(126);
+    expect(lines(), "the page's kit is not watched").toHaveLength(120);
     panel.setGear(gearOf(EQUIP));
-    expect(lines()).toHaveLength(126);
+    expect(lines()).toHaveLength(120);
   });
 
   it("announces only a list that the visitor asked for: not the one a change of the gear or the view starts again by itself, which would take the place of what the page and Equip now say", async () => {
@@ -814,7 +814,7 @@ describe("what a review found in the panel", () => {
     choose("#upgrade-motes-source-page"); // the visitor chooses the page's kit: said
     await waitFor(() => expect(spoken.at(-1)).toMatch(/^Spend your motes: 6 motes for the best kit of this page/));
     const again = spoken.length;
-    setView({ role: "tank" }); // the view changed: the list is made again, and not said (the page says its own)
+    setView({ role: "melee" }); // the view changed: the list is made again, and not said (the page says its own)
     await waitFor(() => expect($("#upgrade-motes-for").hidden).toBe(true));
     await waitFor(() => expect(lines()).toHaveLength(6));
     await new Promise((resolve) => setTimeout(resolve, 150));

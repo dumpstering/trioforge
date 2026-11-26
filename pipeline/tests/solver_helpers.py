@@ -145,10 +145,25 @@ def is_weapon(item):
     return item.weapon is not None and item.weapon.dmg > 0 and item.weapon.delay > 0
 
 
+def is_bow(item):
+    """A weapon of the archery skill that fits the range place."""
+    return is_weapon(item) and item.weapon.skill.casefold() == "archery" and "RANGE" in item.slots
+
+
+def is_ranged_skill(item):
+    """A weapon of the archery skill or of a throwing skill (``Throwing``, ``Throwingv1``, ``Throwingv2``), in any case: it is no melee weapon."""
+    skill = ((item.weapon.skill if item.weapon is not None else None) or "").casefold()
+    return skill == "archery" or skill.startswith("throwing")
+
+
 def hand_ok(item, group, setup):
+    if group == "RANGE":
+        return is_bow(item) if setup == "ranged" else True  # the range place takes a bow in the ranged setup, anything else in the others
+    if is_ranged_skill(item):
+        return False  # a bow or a thrown weapon is in no hand, in every setup, whatever slots the item lists: the range place is the one for it
     if group == "SECONDARY" and item.weapon is not None and item.weapon.two_handed:
         return False  # a two-hander needs both hands: never in the off hand, whatever the setup
-    if setup in (None, "stick"):
+    if setup in (None, "stick", "ranged"):
         return True
     if setup == "1h-shield":
         return item.is_shield if group == "SECONDARY" else is_weapon(item) and not item.weapon.two_handed
@@ -165,7 +180,7 @@ def fits(item, group, setup, any_rule="all"):
         return "ANY" in item.slots or (any_rule == "all" and any(s in MODEL_SLOTS for s in item.slots))
     if group not in item.slots:
         return False
-    return hand_ok(item, group, setup) if group in HANDS else True
+    return hand_ok(item, group, setup) if group in HANDS or group == "RANGE" else True
 
 
 def candidates(items, group, setup, any_rule="all"):
@@ -221,7 +236,11 @@ class Instance:
 
 
 def best_softcap(trio, level=50):
-    return max((TABLES.softcap[(c, level)] for c in trio), key=lambda t: t[0])
+    """The cap and the rate past it as the rules give them (T2): the larger of the floor and the best class cap, and the larger of the floor and the best class rate, each from the best class of the trio."""
+    return (
+        max(TABLES.rules.get("ac.softcap.base_floor", level), *(TABLES.softcap[(c, level)][0] for c in trio)),
+        max(TABLES.rules.get("ac.softcap.rate_floor", level), *(TABLES.softcap[(c, level)][1] for c in trio)),
+    )
 
 
 def make_profile(trio, race, weights, *, level=50, buff_totals=None, **changes):
@@ -229,9 +248,9 @@ def make_profile(trio, race, weights, *, level=50, buff_totals=None, **changes):
     cap, rate = best_softcap(trio, level)
     base = dict(
         level=level, naked=fm.naked(race, trio, TABLES), weights=weights, pools=fm.pools_for(trio, level, TABLES),
-        buff_totals=buff_totals or {}, haste_cap=85 if "MNK" in trio else 75, softcap=(cap, rate),
+        buff_totals=buff_totals or {}, haste_cap=fm.haste_cap_at(level) + (10 if "MNK" in trio else 0), softcap=(cap, rate),
         monk=fm.monk_curve(TABLES.rules, level) if "MNK" in trio else None,
-    )
+    )  # (T7: the cap of the level, and the flat 10 of Unbound Alacrity with a Monk, as the exporter's brute-force module has it)
     base.update(changes)
     return fm.EvalProfile(**base)
 
@@ -409,7 +428,7 @@ def random_instance(rng, *, trio_index=None, with_buffs=None, any_rule=None, mon
     if rng.random() < 0.3:
         for school in rng.sample(SCHOOLS, 2):
             weights[f"SV_{school}"] = round(rng.uniform(0.01, 3.0), 3)
-    haste_cap = 85 if monk else 75
+    haste_cap = fm.haste_cap_at(level) + (10 if monk else 0)  # (T7: the cap of the level, and the 10 of Unbound Alacrity with a Monk, as the profile has it)
     spell_const = rng.choice((0, 0, 0, 20, haste_cap - 5, haste_cap + 6, 40))
 
     want_buffs = (rng.random() < 0.6 if with_buffs is None else with_buffs) or haste_buffs
@@ -459,7 +478,11 @@ class Space:
         self.options = []
         for g, size in SLOT_GROUPS:
             cands = candidates(inst.items, g, inst.setup, inst.any_rule)
-            if cands:
+            if g == "RANGE" and inst.setup == "ranged":  # the bow setup fills the range place: every kit has a bow in it
+                assert cands, "the ranged setup needs a bow for the range place"
+                self.group_names.append(g)
+                self.options.append([option for option in group_options(cands, size) if option])
+            elif cands:
                 self.group_names.append(g)
                 self.options.append(group_options(cands, size))
         self.kits = self._enumerate()
@@ -520,9 +543,10 @@ class Space:
                             table[f"SV_{school}"][oi] += value
                     table["W10"][oi] += item.weight10
                     table["HASTE"][oi] = max(table["HASTE"][oi], item.haste)
-                    if g in HANDS and item.weapon is not None:
+                    if (g in HANDS or g == "RANGE") and item.weapon is not None:
                         table["WEAPON"][oi] += float(
-                            fm.weapon_index(item.weapon, g, inst.setup, inst.haste_assumed, p.dw_factor)
+                            fm.weapon_index(item.weapon, g, inst.setup, inst.haste_assumed, p.dw_factor, p.ranged_factor, p.level)  # (T9: the level of the profile)
+                            * (p.stance["swing_factor"] if p.stance is not None and g in HANDS else 1)  # (T8: the stance's factor on the hands, not on a bow)
                         )
             idx = self.kits[:, gi]
             for n in names:
@@ -580,17 +604,18 @@ class Space:
         iksar = float(p.iksar_ac)
         inside = (monk if p.placement["monk"] == "inside" else 0.0) + (iksar if p.placement["iksar"] == "inside" else 0.0)
         cap, rate = float(p.softcap[0]), float(p.softcap[1])
-        x = (4 / 3) * (f["ACW"] + f["ACS"]) + float(p.defense_cap) / 3 + float(b.get("AC", 0)) / 4 + np.minimum(T["AGI"], 510) / 20 + inside
+        agi_share = float(p.stance["agi_share"]) if p.stance is not None else 1.0  # (T8: the Berserker stance counts no agility in the armor class and the evasion)
+        x = (4 / 3) * (f["ACW"] + f["ACS"]) + float(p.defense_cap) / 3 + float(b.get("AC", 0)) / 4 + agi_share * np.minimum(T["AGI"], 510) / 20 + inside
         y = math.floor(cap * (100 + float(p.cs_pct) + float(p.pe_pct)) / 100) + f["ACS"]
         sheet = np.minimum(x, rate * x + (1 - rate) * y)
         per_point = W("AC") / (4 / 3)
         total += per_point * sheet
         total += per_point * (monk if p.placement["monk"] == "top" else 0.0)
         total += per_point * (iksar if p.placement["iksar"] == "top" else 0.0)
-        total += W("AC") * 0.2222 * np.clip(T["AGI"], 0, 510)
+        total += W("AC") * 0.2222 * np.clip(T["AGI"], 0, 510) * agi_share
         # ATK, DEX, CHA
         total += W("ATK") * (0.666667 * np.clip(T["STR"], 0, 510) + f["ATK"] + float(b.get("ATK", 0)))
-        total += W("DEX") * pwl(T["DEX"], (255, 510), (1, 0.1, 0))
+        total += W("DEX") * pwl(T["DEX"], (255, 510), (1, 1, 0))
         total += W("CHA") * np.clip(T["CHA"], 0, 510)
         # HASTE
         spell, hc = float(b.get("HASTE", 0)), float(p.haste_cap)

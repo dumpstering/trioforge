@@ -30,7 +30,7 @@ const waitFor = (check) => vi.waitFor(check, { timeout: 2000 });
 
 /** The donors of the lines of the contract and the texts they are given here (the files of the contract say none: the fixture is built without the catalog). */
 const HEAD_DONOR = "w90003"; // Crown of the Vanguard, a Vendor: the focus of the Head
-const BACK_DONOR = "w80236"; // Harrowgate Shawl, Quest or crafted: the click of the Back
+const BACK_DONOR = "w80974"; // Choker of Seven Pebbles, Quest or crafted: the worn effect of the Neck (the one donor of the plan that is a quest item: the old name BACK of the constant is kept)
 const CHEST_DONOR = "w90046"; // Mantle of the Faithful, Raid drop: a focus of the Chest
 const WORN_DONOR = "w90029"; // Breastplate of Warding, Drop: a worn effect of the Chest, which has no text here
 const HOSTILE = '<img src=x onerror="window.__owned = 1"> & <b>bold</b> "quoted"';
@@ -113,11 +113,11 @@ describe("the line under a place of Wear this", () => {
   it("keeps its words, and the word for how hard the donor is to get is a button, in its brackets as one piece, when the donor has texts", async () => {
     await shown(withSources(TEXTS));
     expect(lineText(lines("HEAD")[0])).toBe("Exalt: Spell Haste II (focus, +1) from Crown of the Vanguard (Vendor); level this item to +1");
-    expect(lineText(lines("BACK")[0])).toBe("Exalt: Alacrity (click, +2) from Harrowgate Shawl (Quest or crafted); level both to +2");
+    expect(lineText(lines("NECK")[0])).toBe("Exalt: Heritage of Mistmoore (worn, +3) from Choker of Seven Pebbles (Quest or crafted); level both to +3");
     const open = button("HEAD");
     expect(open).not.toBeNull();
     expect(open.textContent).toBe("Vendor");
-    expect(button("BACK").textContent).toBe("Quest or crafted");
+    expect(button("NECK").textContent).toBe("Quest or crafted");
     expect(lines("HEAD")[0].querySelectorAll("button.exalt-srcbtn")).toHaveLength(1);
     // the bracket, the word and the bracket are one piece, which the page keeps on a line (it wraps before it, or not at all)
     const unit = open.parentElement;
@@ -131,7 +131,7 @@ describe("the line under a place of Wear this", () => {
     const open = button("HEAD");
     expect(open.getAttribute("type")).toBe("button");
     expect(open.getAttribute("aria-label")).toBe("Vendor: where Crown of the Vanguard comes from");
-    expect(button("BACK").getAttribute("aria-label")).toBe("Quest or crafted: where Harrowgate Shawl comes from");
+    expect(button("NECK").getAttribute("aria-label")).toBe("Quest or crafted: where Choker of Seven Pebbles comes from");
     expect(open.getAttribute("aria-expanded")).toBe("false");
     const panel = panelOf("HEAD");
     expect(panel).not.toBeNull();
@@ -153,9 +153,9 @@ describe("the line under a place of Wear this", () => {
     expect(panel.querySelector(".exalt-src-more").textContent).toBe("and 2 more on the item page");
     expect(panel.querySelector("a.exalt-src-page").textContent).toBe("Item page");
     // a donor with one source and none left over has the one text and the link
-    button("BACK").click();
-    expect([...panelOf("BACK").children].map((node) => node.className)).toEqual(["exalt-src-label", "exalt-src-text", "exalt-src-page"]);
-    expect(panelOf("BACK").querySelector(".exalt-src-text").textContent).toBe("quest: Fixture Rite");
+    button("NECK").click();
+    expect([...panelOf("NECK").children].map((node) => node.className)).toEqual(["exalt-src-label", "exalt-src-text", "exalt-src-page"]);
+    expect(panelOf("NECK").querySelector(".exalt-src-text").textContent).toBe("quest: Fixture Rite");
   });
 
   it("closes the text with a second click", async () => {
@@ -172,11 +172,11 @@ describe("the line under a place of Wear this", () => {
   it("opens the text of each line on its own: the other lines of the place and of the other places stay as they are", async () => {
     await shown(withSources(TEXTS));
     button("HEAD").click();
-    expect(panelOf("BACK").hidden).toBe(true);
-    expect(button("BACK").getAttribute("aria-expanded")).toBe("false");
-    button("BACK").click();
+    expect(panelOf("NECK").hidden).toBe(true);
+    expect(button("NECK").getAttribute("aria-expanded")).toBe("false");
+    button("NECK").click();
     expect(panelOf("HEAD").hidden).toBe(false);
-    expect(panelOf("BACK").hidden).toBe(false);
+    expect(panelOf("NECK").hidden).toBe(false);
     expect(lines("CHEST")).toHaveLength(2);
     expect(lines("CHEST")[0].querySelector("button.exalt-srcbtn")).not.toBeNull(); // the Mantle has texts
     expect(lines("CHEST")[1].querySelector("button.exalt-srcbtn")).toBeNull(); // the Breastplate has none: its line says "(Drop)" as it always did
@@ -188,7 +188,7 @@ describe("the line under a place of Wear this", () => {
     expect(lineText(line)).toBe("Exalt: Ultravision (worn, +3) from Breastplate of Warding (Drop); level this item to +3");
     expect(line.querySelector("button.exalt-srcbtn, .exalt-src, .exalt-where")).toBeNull();
     expect(line.textContent).toContain("(Drop)");
-    expect(lines("NECK")[0].querySelector(".exalt-src, .exalt-srcbtn")).toBeNull();
+    expect(lines("SHOULDERS")[0].querySelector(".exalt-src, .exalt-srcbtn")).toBeNull();
   });
 
   it("is the line it was when the file has no table of texts at all, or one that is not a table, or entries that are not lists of texts", async () => {
@@ -209,7 +209,7 @@ describe("the line under a place of Wear this", () => {
 
   it("keeps the texts of an entry that is a list of texts, and ignores a count that is not a whole number of at least one", async () => {
     await shown(withSources({ [HEAD_DONOR]: ["Lake of Ill Omen (a fixture lurker)", 0], [BACK_DONOR]: ["quest: Fixture Rite", 1.5], [CHEST_DONOR]: ["Plane of Hate (a fixture wraith)", -3] }));
-    for (const place of ["HEAD", "BACK"]) {
+    for (const place of ["HEAD", "NECK"]) {
       button(place).click();
       expect(panelOf(place).querySelector(".exalt-src-more"), place).toBeNull();
       expect(panelOf(place).querySelectorAll(".exalt-src-text")).toHaveLength(1);
@@ -299,8 +299,8 @@ describe("the section's plan and lists", () => {
     expect(crown.getAttribute("href")).toBe("/item/w90003/");
     expect(crown.getAttribute("aria-label")).toBe("+3 more sources of Crown of the Vanguard, on its item page");
     expect(row("Mantle of the Faithful", "Improved Healing III").querySelector("a.exalt-more").textContent).toBe("+1 more");
-    expect(row("Harrowgate Shawl", "Alacrity").querySelector(".exalt-more")).toBeNull();
-    expect(row("Harrowgate Shawl", "Alacrity").querySelector(".exalt-from").textContent).toBe("quest: Fixture Rite");
+    expect(row("Choker of Seven Pebbles", "Heritage of Mistmoore").querySelector(".exalt-more")).toBeNull();
+    expect(row("Choker of Seven Pebbles", "Heritage of Mistmoore").querySelector(".exalt-from").textContent).toBe("quest: Fixture Rite");
   });
 
   it("shows the same in the list of donors to farm, and says no more of a donor that has none", async () => {

@@ -135,6 +135,15 @@ def posix_home(user: str) -> str:
     return "/" + "home" + "/" + user
 
 
+def macos_profile(user: str) -> str:
+    return "/" + "Users" + "/" + user
+
+
+def wsl_home(user: str, distro: str = "Ubuntu", host: str = "wsl$", sep: str = "\\") -> str:
+    """A home folder of a WSL distribution as Windows shows it: a network share of the host ``wsl$`` (or ``wsl.localhost``)."""
+    return sep * 2 + host + sep + distro + sep + "home" + sep + user
+
+
 # ---- scanning helpers --------------------------------------------------------------------
 
 

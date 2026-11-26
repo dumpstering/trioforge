@@ -15,7 +15,7 @@ git ignores.
 | `brute/` | 40 small invented instances (item keys start with `it`), each with the exact maximum by enumeration of every legal kit |
 | `matrix/` | 11 scenarios chosen so that every stratum is in at least two: Iksar, a deity, each weapon setup, a real shield in the off hand, each buff key, a Monk trio below +10, mixed WIS/INT mana, a trio with END only, each role, tiers 0, 4 and 10, composed weights |
 | `upgrade/` | 3 Upgrade sessions, one per tier mode, each with Equip now, three farm steps, the best 2 and 3 sets and Every slot (between them a new item, another copy of an owned one and a tier upgrade of an owned one; two own a deity-locked item), and 3 invented sessions that pin Every slot |
-| `pmb36/` | 6 of the neutral PAL/MNK/BER 36 scenarios |
+| `pmb36/` | 6 of the neutral PAL/MNK/BER 36 scenarios (two builds, three tiers, three buff sets, two pools) |
 | `evaluate/` | 150 random kits with their exact breakdowns, and the Monk bins of each level that has a Monk profile |
 | `profiles/` | the PAL/MNK/BER bundle, the profile of every race, role and buff key (with no evidence level, and at each one: the weapon setups follow the level), and 60 weight compositions |
 | `items/` | 150 item records, the item at every tier and both weapon rates, the tier modes and merge costs |

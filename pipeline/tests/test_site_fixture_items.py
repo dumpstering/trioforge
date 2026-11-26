@@ -199,7 +199,7 @@ def test_the_scan_covers_the_fixture_its_end_to_end_specs_and_the_generator_of_i
     assert {
         "fixtures/site/results/items.json",
         "fixtures/site/results/pal-mnk-ber/wiki-own.json",
-        "fixtures/site/results/pal-mnk-ber/runnerups/balanced.json",
+        "fixtures/site/results/pal-mnk-ber/runnerups/tank.json",
         "fixtures/site/contract/data/strict-own.json",
         "fixtures/site/contract/trio-main.html",
         "fixtures/site/equip-now.json",

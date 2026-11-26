@@ -20,7 +20,7 @@ const MANIFEST = parseManifest({
   trios: { "pal-mnk-ber": [50] },
 });
 
-const SCENARIO = { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" };
+const SCENARIO = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" };
 const KIT = new Array(22).fill(null);
 const FIELDS = {
   "equip-now": () => ({ owned: [["w90001@4", 1], ["w90002@0", 2]] }),

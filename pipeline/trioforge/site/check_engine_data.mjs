@@ -60,6 +60,7 @@ for (const { name, text } of input.bundles) {
     for (const role of Object.keys(bundle.roles)) {
       for (const buffs of Object.keys(bundle.buffs)) {
         for (const evidence of bundle.evidence_levels) {
+          if (bundle.roles[role].setups_by_evidence[evidence].length === 0) continue; // (a role that has no setup at a level is not offered there: there is no profile of it)
           checked.profiles += 1;
           try {
             assembleProfile(bundle, { race: race.code, role, buffs, evidence });

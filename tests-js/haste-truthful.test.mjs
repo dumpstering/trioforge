@@ -197,6 +197,37 @@ describe("the truthful solve by hand", () => {
     }
   });
 
+  it("with a floor looks only for a kit worth it: the best at the floor, no kit above it, over the levels and for one program (R14)", () => {
+    const session = make();
+    try {
+      const best = solveScenario(session, { name: "main", items: beltPool(), options: HAND, budgetMs: BUDGET_MS });
+      const value = best.F.toNumber();
+      expect(best.levels.length).toBeGreaterThan(1);
+      // a floor at the best value: the best kit, found as without a floor
+      const at = solveScenario(session, { name: "main", items: beltPool(), options: HAND, budgetMs: BUDGET_MS, floor: value });
+      expect(at.status).toBe("optimal");
+      expect(at.F.toString()).toBe(best.F.toString());
+      // a floor above it: no kit is worth it, and the answer says so (no kit, proven)
+      const above = solveScenario(session, { name: "main", items: beltPool(), options: HAND, budgetMs: BUDGET_MS, floor: value + 1 });
+      expect(above.status).toBe("infeasible");
+      expect(above.kit).toBeNull();
+      expect(above.proven).toBe(true);
+      // and for a program with a haste fixed (one program, no levels)
+      const fixed = solveScenario(session, { name: "one", items: beltPool(), options: { ...HAND, haste_assumed: 0 }, budgetMs: BUDGET_MS });
+      const same = solveScenario(session, { name: "one", items: beltPool(), options: { ...HAND, haste_assumed: 0 }, budgetMs: BUDGET_MS, floor: fixed.F.toNumber() });
+      expect(same.status).toBe("optimal");
+      expect(same.F.toString()).toBe(fixed.F.toString());
+      const none = solveScenario(session, { name: "one", items: beltPool(), options: { ...HAND, haste_assumed: 0 }, budgetMs: BUDGET_MS, floor: fixed.F.toNumber() + 1 });
+      expect(none.status).toBe("infeasible");
+      expect(none.kit).toBeNull();
+      for (const bad of ["x", null, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(() => solveScenario(session, { name: "main", items: beltPool(), options: HAND, budgetMs: 1, floor: bad }), String(bad)).toThrow(/floor/);
+      }
+    } finally {
+      closeSession(session);
+    }
+  });
+
   it("has one level when the spell haste is at the cap, and the kit is the one program's", () => {
     const profile = profileWith({ weights: { DMG: 1000, HP: 1, AC: 2 }, buff_totals: { HASTE: 80 }, haste_cap: 75 });
     const items = [gear("sash", ["WAIST"], { stats: { AC: 30 } }), gear("belt", ["WAIST"], { haste: 30, stats: { AC: 5 } }), SWORD];

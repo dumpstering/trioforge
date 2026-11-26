@@ -18,6 +18,7 @@ import pytest
 
 from trioforge.export import evaluate_terms
 from trioforge.model import formulas as fm
+from trioforge.model import roles
 from trioforge.model.items import SLOT_INSTANCES
 from trioforge.model.profile import AA_CHOICES, make_profile
 from trioforge.model.tables import load
@@ -29,7 +30,7 @@ ID = "hp.natural_durability_pct"
 
 
 def profile(aa=None, trio=TRIO, race="HUM"):
-    return make_profile(race, trio, 50, "balanced", None, aa, TABLES)
+    return make_profile(race, trio, 50, roles.roles_for(trio)[0], None, aa, TABLES)
 
 
 def kit_of(**stats):

@@ -446,10 +446,10 @@ describe("an address pasted into the box", () => {
 
   it("keeps a kit of the longest size the codec reads, and the box takes the whole link", () => {
     expect(KIT).toHaveLength(2048);
-    const address = here(`/trio/ber-mnk-pal/?race=OGR&role=balanced&tier=10#k=${KIT}`);
+    const address = here(`/trio/ber-mnk-pal/?race=OGR&role=tank&tier=10#k=${KIT}`);
     expect(address.length).toBeLessThanOrEqual(MAX_QUERY_LENGTH);
     type(address);
-    expect(link().getAttribute("href")).toBe(`/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=10#k=${KIT}`);
+    expect(link().getAttribute("href")).toBe(`/trio/pal-mnk-ber/?race=OGR&role=tank&tier=10#k=${KIT}`);
   });
 
   it("takes a path alone, a link with spaces round it, and a link written in capitals", () => {
@@ -613,7 +613,7 @@ describe("the length of what is typed", () => {
   it("is limited by the box to a number that is more than the longest link to a shared kit, and little more", () => {
     mount();
     expect(Number(search().getAttribute("maxlength"))).toBe(MAX_QUERY_LENGTH);
-    const longest = `https://trioforge.pages.dev/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=10&setup=1h-shield&ev=strict&buffs=group#k=${"A".repeat(2049)}`;
+    const longest = `https://trioforge.pages.dev/trio/pal-mnk-ber/?race=OGR&role=tank&tier=10&setup=1h-shield&ev=strict&buffs=group#k=${"A".repeat(2049)}`;
     expect(MAX_QUERY_LENGTH).toBeGreaterThanOrEqual(longest.length);
     expect(MAX_QUERY_LENGTH).toBeLessThanOrEqual(4096);
   });

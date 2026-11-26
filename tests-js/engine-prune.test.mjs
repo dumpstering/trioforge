@@ -39,7 +39,7 @@ function optimum(profile, items, setup, buffset, options) {
 
 /** The truthful optimum of a pool (the weapons are paid the haste the kit counts, the options fixing none), as the worker finds it. */
 function truthfulOptimum(profile, items, setup, buffset, options, monkBins) {
-  const session = createSession({ highs, profile, setup, buffset, monkBins });
+  const session = createSession({ highs, profile, setup, buffset, monkBins, procs: options.procs ?? null });
   try {
     const got = solveScenario(session, { name: "main", items, options: { ...options, haste_assumed: null, haste_floor: null, haste_exact: false }, budgetMs: 600_000 });
     expect(got.status).toBe("optimal");

@@ -28,7 +28,7 @@ const fakeFetch = () => async (url) => {
   return { ok: true, status: 200, json: async () => structuredClone(dataFile(name)) };
 };
 
-/** The listeners for `hashchange` that the code under test put on the window: first.js adds one each time it is evaluated, and one that is left would answer the next test's navigation. */
+/** The listeners for `hashchange` and `popstate` that the code under test put on the window: first.js adds them each time it is evaluated, and one that is left would answer the next test's navigation. */
 const hashListeners = [];
 beforeEach(() => {
   window.localStorage.clear();
@@ -36,12 +36,12 @@ beforeEach(() => {
   window.history.replaceState(null, "", PAGE);
   const add = window.addEventListener.bind(window);
   vi.spyOn(window, "addEventListener").mockImplementation((type, handler, options) => {
-    if (type === "hashchange") hashListeners.push(handler);
+    if (type === "hashchange" || type === "popstate") hashListeners.push([type, handler]);
     return add(type, handler, options);
   });
 });
 afterEach(() => {
-  for (const handler of hashListeners.splice(0)) window.removeEventListener("hashchange", handler);
+  for (const [type, handler] of hashListeners.splice(0)) window.removeEventListener(type, handler);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.resetModules();
@@ -179,17 +179,47 @@ describe("a second kit link opened in the page that is showing a kit", () => {
     const before = hashListeners.length;
     const first = await import(module("first.js"));
     const own = hashListeners.splice(before);
-    for (const handler of own) window.removeEventListener("hashchange", handler);
-    return { first, own };
+    for (const [type, handler] of own) window.removeEventListener(type, handler);
+    return { first, own: own.filter(([type]) => type === "hashchange").map(([, handler]) => handler), listening: own.map(([type]) => type) };
   }
   const open = async (hash) => {
     window.location.hash = hash;
     await new Promise((resolve) => setTimeout(resolve, 20)); // (jsdom fires hashchange after a task)
   };
 
-  it("is looked for from the first import of the page script: first.js listens for hashchange", async () => {
-    const { own } = await loaded();
+  it("is looked for from the first import of the page script: first.js listens for hashchange, and for popstate, which a browser fires before it", async () => {
+    const { own, listening } = await loaded();
     expect(own).toHaveLength(1);
+    expect(listening.sort()).toEqual(["hashchange", "popstate"]);
+  });
+
+  it("is taken at popstate already, which Chrome and Firefox fire before hashchange for a fragment: a script that listened after first.js never sees the kit in the address, and the page is loaded again once", async () => {
+    const { first } = await loaded();
+    const reload = vi.fn();
+    const stop = first.followKitLinks({ reload });
+    const seen = [];
+    const spy = () => seen.push(window.location.href);
+    window.addEventListener("popstate", spy); // (a script of the page that came after first.js, such as a counter that follows the history)
+    window.addEventListener("hashchange", spy);
+    window.history.replaceState(window.history.state, "", `${PAGE}#k=${OTHER}`); // (the address changes; jsdom's own navigation fires only hashchange, so the order of a browser is made by hand)
+    window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    expect(seen).toEqual([`https://trioforge.test${PAGE}`, `https://trioforge.test${PAGE}`]);
+    expect(window.history.state).toEqual({ k: OTHER });
+    expect(document.documentElement.dataset.kitFragment).toBe("cleared");
+    expect(reload).toHaveBeenCalledTimes(1);
+    window.removeEventListener("popstate", spy);
+    window.removeEventListener("hashchange", spy);
+    stop();
+  });
+
+  it("does nothing at popstate for a history entry that holds no kit fragment (back and forward between the page's own entries)", async () => {
+    const { first } = await loaded();
+    const reload = vi.fn();
+    first.followKitLinks({ reload });
+    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { k: KIT } }));
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it("is taken out of the address as the first one was, and the page is loaded again to show it", async () => {
@@ -278,7 +308,7 @@ describe("a second kit link opened in the page that is showing a kit", () => {
       },
     };
     first.followKitLinks({ window: { addEventListener: (type, handler) => handlers.push([type, handler]), removeEventListener() {}, location, history, document } });
-    expect(handlers.map(([type]) => type)).toEqual(["hashchange"]);
+    expect(handlers.map(([type]) => type)).toEqual(["hashchange", "popstate"]);
     handlers[0][1]();
     expect(history.state).toEqual({ k: OTHER });
     expect(reload).toHaveBeenCalledTimes(1);
@@ -408,7 +438,7 @@ describe("what the section is given for the value of a shared kit", () => {
 
   it("is the role, the buffs and the evidence level the page shows, and no more: the weapon setup is read from the kit's hands and the haste is the model's, neither the page's", async () => {
     const { env } = await started();
-    expect(env.valueView()).toEqual({ role: "balanced", buffs: "own", evidence: "strict" });
+    expect(env.valueView()).toEqual({ role: "tank", buffs: "own", evidence: "strict" });
     expect(Object.keys(env.valueView()).sort()).toEqual(["buffs", "evidence", "role"]);
   });
 
@@ -417,7 +447,7 @@ describe("what the section is given for the value of a shared kit", () => {
     expect(env.words.raceName("OGR")).toBe("Ogre");
     expect(env.words.raceName("TRL")).toBe("Troll");
     expect(env.words.raceName("XXX")).toBe("XXX"); // (a race the page has no name for is shown by its code)
-    expect(env.words.viewText()).toBe("Balanced, your own buffs");
+    expect(env.words.viewText()).toBe("Tank, your own buffs");
     expect(env.words.viewText()).not.toContain($('[data-f="assume-setup"]').textContent);
     expect([env.words.setupText("dw"), env.words.setupText("1h-shield"), env.words.setupText("2h")]).toEqual(["dual wield", "1H + shield", "two-hander"]);
     expect(env.words.setupText("stick"), "the page of this trio has no stat stick among its weapons: the section has the words").toBeUndefined();

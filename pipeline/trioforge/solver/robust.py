@@ -18,15 +18,17 @@ The variants (:func:`perturbations`)
   label                                     what changes                         rule, test
   ========================================  ===================================  ======================
   ``Monk curve full until 34``              ``Profile.monk``                     ``monk.weight_curve``, B9
-  ``Monk placement inside``                 ``Profile.placement["monk"]``        ``monk.bonus_placement``, B9
-  ``Iksar placement inside``                ``Profile.placement["iksar"]``       ``race.iksar_ac_placement``, B17
+  ``Monk placement top``                    ``Profile.placement["monk"]``        ``monk.bonus_placement``
+  ``Iksar placement top``                   ``Profile.placement["iksar"]``       ``race.iksar_ac_placement``
   ``Weapon damage +5%``                     the items (``at_tier(weapon_pct=)``) ``tier.weapon_damage_pct``, B5
   ========================================  ===================================  ======================
 
   ``mana.wis_bands`` is settled (it lists no alternative), so it adds no variant; a rules file that lists an alternative
   for it gets a ``WIS band <slope>`` variant again, naming the rule's test, if it has one.
-  The numbers in the labels are the alternative's own. The Iksar rule lists no alternative of its own; it has the same
-  two readings as the Monk bonus, so it takes the Monk rule's alternative placement unless the rules file gives it one.
+  The two placements are settled (the client puts both bonuses inside X before the cap), so the variants are the other
+  reading, ``top`` (after the cap), and no in-game test is named for them. The numbers in the labels are the alternative's own.
+  The Iksar rule lists no alternative of its own; it has the same two readings as the Monk bonus, so it takes the Monk
+  rule's alternative placement unless the rules file gives it one.
   The weapon rate changes the item views, not the profile, so its profile is the base profile and its
   :attr:`Perturbation.item_options` carry ``{"weapon_pct": 5}`` (the rule is 10 now and 5 its alternative).
 

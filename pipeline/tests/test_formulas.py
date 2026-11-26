@@ -599,11 +599,12 @@ def test_weapon_index_of_a_one_hander_without_a_listed_bonus():
     assert weapon_index(sword, "PRIMARY", "1h-shield", 0, 1) == F(7, 6)
 
 
-def test_weapon_index_of_a_two_hander_uses_67_hundredths_of_the_delay_up_to_50():
+def test_weapon_index_of_a_two_hander_uses_6875_ten_thousandths_of_the_delay_up_to_50_at_level_50():
+    """T9: the client's formula at level 50 for a weapon whose damage is at most the level (it was 0.67)."""
     axe = WeaponVec("2H Slashing", 40, 60, None, True)
-    assert weapon_index(axe, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 50) / 60  # the delay counts at most 50
+    assert weapon_index(axe, "PRIMARY", "2h", 0, 1) == (40 + F(6875, 10000) * 50) / 60  # the delay counts at most 50
     short = WeaponVec("2H Slashing", 40, 40, None, True)
-    assert weapon_index(short, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 40) / 40
+    assert weapon_index(short, "PRIMARY", "2h", 0, 1) == (40 + F(6875, 10000) * 40) / 40
 
 
 def test_a_listed_bonus_replaces_the_pattern_and_a_listed_zero_is_not_listed():
@@ -728,11 +729,13 @@ def test_str_counts_to_510_for_atk_and_item_atk_has_no_cap():
 
 @pytest.mark.parametrize(
     "dex, expected",
-    [(100, 100), (255, 255), (256, F("255.1")), (300, F("259.5")), (510, 255 + F("25.5")), (700, 255 + F("25.5"))],
+    [(100, 100), (255, 255), (256, 256), (300, 300), (510, 510), (700, 510)],
 )
-def test_dex_is_full_to_255_then_a_tenth_to_510(dex, expected):
+def test_dex_is_full_to_510_with_no_break_at_255(dex, expected):
+    """T5: the client has no break at 255 for dexterity (it counted a tenth of a point a point from 255 on before)."""
     result = value({"DEX": 1}, naked={**NAKED_100, "DEX": dex})
     assert result.parts["DEX"] == expected
+    assert F(str(TABLES.rules.get("stats.dex_post255_slope"))) == formulas.DEX_PAST_KNEE == 1
 
 
 def test_cha_is_linear_to_510():
@@ -796,9 +799,12 @@ def test_a_non_shield_in_the_off_hand_is_worn_armor_class():
     assert result.totals["sheet"]["shield_ac"] == 0 and result.totals["sheet"]["worn_ac"] == 480
 
 
+TOP = {"monk": "top", "iksar": "top"}  # (R3: the default placement is "inside" now, the client's; the tests of the "top" reading name it)
+
+
 def test_monk_bonus_sits_on_top_of_the_capped_sheet():
     curve = monk_curve(TABLES.rules, 50)
-    prof = dict(softcap=(400, F(1, 2)), monk=curve)
+    prof = dict(softcap=(400, F(1, 2)), monk=curve, placement=TOP)
     chest = vec(stats={"AC": 270}, weight10=200)  # 20 stones -> bonus 58
     result = value({"AC": 4}, kit_of(("CHEST", chest)), **prof)
     assert result.totals["sheet"]["monk_bonus"] == 58
@@ -820,7 +826,7 @@ def test_monk_bonus_placed_inside_x_is_capped_with_the_rest():
 def test_monk_weight_sums_every_worn_item_and_a_heavy_kit_is_penalized():
     curve = monk_curve(TABLES.rules, 50)
     heavy = kit_of(("CHEST", vec(weight10=250)), ("LEGS", vec(weight10=150)))  # 40 stones
-    result = value({"AC": 4}, heavy, softcap=(10 ** 6, 0.5), monk=curve)
+    result = value({"AC": 4}, heavy, softcap=(10 ** 6, 0.5), monk=curve, placement=TOP)
     assert result.totals["weight10"] == 400 and result.totals["sheet"]["monk_bonus"] == -10
     assert result.parts["MONK"] == 3 * -10
 
@@ -831,7 +837,7 @@ def test_a_trio_without_a_monk_has_no_weight_term():
 
 
 def test_iksar_armor_class_sits_on_top_or_inside():
-    top = value({"AC": 4}, kit_of(("CHEST", vec(stats={"AC": 450}))), softcap=(400, F(1, 2)), iksar_ac=35)
+    top = value({"AC": 4}, kit_of(("CHEST", vec(stats={"AC": 450}))), softcap=(400, F(1, 2)), iksar_ac=35, placement=TOP)
     assert top.parts["IKSAR"] == 3 * 35 and top.parts["AC"] == 3 * (400 + F(1, 2) * 205)
     assert top.totals["sheet"]["iksar"] == 35 and top.totals["sheet"]["total"] == F("502.5") + 35
     inside = value({"AC": 4}, kit_of(("CHEST", vec(stats={"AC": 450}))), softcap=(400, F(1, 2)), iksar_ac=35,
@@ -870,11 +876,14 @@ def test_regen_counts_gear_to_the_cap_and_buffs_outside_it():
     assert result.totals["regen"]["HPREG"] == {"gear": 35, "buff": 5, "counted": 35}
 
 
-def test_resists_count_each_school_to_200_with_buffs_inside_the_cap():
-    kit = kit_of(("HEAD", vec(sv={"FIRE": 150, "COLD": 100})), ("BACK", vec(sv={"MAGIC": -10})))
-    result = value({"SV": F(1, 2)}, kit, buffs={"SV": {"FIRE": 70}})
-    assert result.parts["RESISTS"] == F(1, 2) * (200 + 100 - 10)
-    assert result.totals["resists"]["FIRE"] == {"gear": 150, "buff": 70, "counted": 200}
+def test_resists_count_each_school_to_1000_with_buffs_inside_the_cap():
+    """T4: the game client's resist cap is 1000 a school (it was a judgment of 200): gear and buffs count together up to it."""
+    kit = kit_of(("HEAD", vec(sv={"FIRE": 900, "COLD": 100})), ("BACK", vec(sv={"MAGIC": -10})))
+    result = value({"SV": F(1, 2)}, kit, buffs={"SV": {"FIRE": 200}})
+    assert result.parts["RESISTS"] == F(1, 2) * (1000 + 100 - 10)
+    assert result.totals["resists"]["FIRE"] == {"gear": 900, "buff": 200, "counted": 1000}
+    plain = value({"SV": F(1, 2)}, kit_of(("HEAD", vec(sv={"FIRE": 150, "COLD": 100}))), buffs={"SV": {"FIRE": 70}})
+    assert plain.totals["resists"]["FIRE"] == {"gear": 150, "buff": 70, "counted": 220}  # (what the old cap of 200 cut short)
 
 
 def test_a_school_weight_replaces_the_general_resist_weight():
@@ -886,6 +895,44 @@ def test_a_school_weight_replaces_the_general_resist_weight():
 def test_corruption_is_never_scored():
     result = value({"SV": 1}, kit_of(("HEAD", vec(sv={"CORRUPTION": 80, "FIRE": 5}))))
     assert result.parts["RESISTS"] == 5
+
+
+STANCE = {"swing_factor": F("2.1"), "agi_share": 0}  # T8: the Berserker stance of the client's calculation (x2.1 on the swing timer after the haste cap, no AGI in mitigation or evasion)
+
+
+def test_the_berserker_stance_multiplies_the_swing_after_the_haste_cap_and_takes_agi_out_of_the_sheet_and_the_evasion():
+    sword = vec(weapon=WeaponVec("1H Slashing", 20, 30, None, False), slots=("PRIMARY",))
+    boots = vec("boots", haste=30, slots=("FEET",))
+    kit = kit_of(("PRIMARY", sword), ("FEET", boots))
+    weights = {"DMG": 10, "AC": 4, "HASTE": 1}
+    plain = evaluate(profile(weights=weights, naked={**NAKED_100, "AGI": 100}), kit, {"HASTE": 20}, setup="1h-shield", haste_assumed=50)
+    stanced = evaluate(profile(weights=weights, naked={**NAKED_100, "AGI": 100}, stance=STANCE), kit, {"HASTE": 20}, setup="1h-shield", haste_assumed=50)
+    assert stanced.parts["WEAPON"] == plain.parts["WEAPON"] * F("2.1")  # the factor multiplies the whole of the swing's index
+    assert stanced.totals["haste"] == plain.totals["haste"] and stanced.parts["HASTE"] == plain.parts["HASTE"]  # (the stance does not change the haste that counts: the factor comes after the cap)
+    assert plain.parts["EVASION"] > 0 and stanced.parts["EVASION"] == 0  # (no AGI in the evasion)
+    assert plain.totals["sheet"]["X"] - stanced.totals["sheet"]["X"] == F(100, formulas.SHEET_AGI_DIV)  # (and none in the armor class: AGI / 20 less)
+    assert stanced.parts["MANA"] == plain.parts["MANA"] and stanced.parts["HP"] == plain.parts["HP"]
+
+
+def test_the_stance_factor_is_for_the_hands_that_swing_and_not_for_a_bow_or_a_proc():
+    bow = vec("bow", weapon=WeaponVec("Archery", 40, 60, None, False), slots=("RANGE",))
+    kit = kit_of(("RANGE", bow))
+    weights = {"DMG": 10}
+    plain = evaluate(profile(weights=weights, ranged_factor=F(3, 4)), kit, setup="ranged", haste_assumed=0)
+    stanced = evaluate(profile(weights=weights, ranged_factor=F(3, 4), stance=STANCE), kit, setup="ranged", haste_assumed=0)
+    assert plain.parts["WEAPON"] > 0 and stanced.parts["WEAPON"] == plain.parts["WEAPON"]  # (a bow shoots as it did)
+    main = vec("main", weapon=WeaponVec("1H Slashing", 20, 30, None, False), slots=("PRIMARY",))
+    off = vec("off", weapon=WeaponVec("1H Slashing", 18, 36, None, False), slots=("SECONDARY",))
+    both = kit_of(("PRIMARY", main), ("SECONDARY", off))
+    a = evaluate(profile(weights=weights, dw_factor=F(69, 100)), both, setup="dw")
+    b = evaluate(profile(weights=weights, dw_factor=F(69, 100), stance=STANCE), both, setup="dw")
+    assert b.parts["WEAPON"] == a.parts["WEAPON"] * F("2.1")  # (both hands swing faster)
+
+
+@pytest.mark.parametrize("stance", [{"swing_factor": 0, "agi_share": 0}, {"swing_factor": -1, "agi_share": 0}, {"swing_factor": 2, "agi_share": 2}, {"swing_factor": 2}, {"agi_share": 0}, {"swing_factor": 2, "agi_share": 0, "x": 1}, 5, "berserker"])
+def test_a_stance_that_is_not_a_factor_of_the_swing_and_a_share_of_agi_is_refused(stance):
+    with pytest.raises(ValueError, match="stance"):
+        profile(stance=stance)
 
 
 def test_weapon_damage_part():
@@ -910,7 +957,7 @@ def test_evaluate_scores_a_hand_the_setup_does_not_allow_as_zero():
     prof = profile(weights={"DMG": 1})
     for setup, kit, want in (
         ("2h", kit_of(("PRIMARY", sword)), 0),  # a one-hander in the two-hander setup
-        ("2h", kit_of(("PRIMARY", axe), ("SECONDARY", sword)), (40 + F(67, 100) * 50) / 60),  # only the axe counts
+        ("2h", kit_of(("PRIMARY", axe), ("SECONDARY", sword)), (40 + F(6875, 10000) * 50) / 60),  # only the axe counts (T9: 0.6875)
         ("dw", kit_of(("PRIMARY", axe)), 0),
         ("1h-shield", kit_of(("PRIMARY", sword), ("SECONDARY", sword)), F(7, 6)),  # the second sword is no shield
     ):
@@ -942,7 +989,7 @@ def test_the_total_is_the_sum_of_the_parts_and_matches_a_worked_example():
     }
     prof = profile(
         weights=weights, level=50, softcap=(392, 0.33), cs_pct=10, pe_pct=2, defense_cap=230, haste_cap=85,
-        iksar_ac=0, monk=monk_curve(TABLES.rules, 50),
+        iksar_ac=0, monk=monk_curve(TABLES.rules, 50), placement=TOP,
     )
     kit = kit_of(
         ("HEAD", vec(stats={"AC": 30, "STA": 20, "HP": 40, "HPREG": 2}, weight10=40)),
@@ -1256,16 +1303,74 @@ def test_the_constants_in_the_evaluator_are_the_ones_in_rules_json():
     # the rules file prints 4/3 to ten digits; the evaluator keeps it exact
     assert abs(F(str(rules.get("ac.sheet.item_mult"))) - formulas.SHEET_ITEM_MULT) < F(1, 10 ** 9)
     assert formulas.SCHOOLS == tuple(SCHOOLS)
-    assert rules.get("resist.cap") == 200 and rules.get("regen.gear_caps") == {"HP": 30, "MANA": 15, "END": 15}
+    assert rules.get("resist.cap") == 1000 and rules.get("regen.gear_caps") == {"HP": 30, "MANA": 15, "END": 15}
 
 
 def test_the_default_caps_are_the_rules_caps():
     prof = profile()
-    assert prof.caps == {"regen": {"HP": 30, "MANA": 15, "END": 15}, "resist": 200}
-    assert dict(prof.placement) == {"monk": "top", "iksar": "top"}
+    assert prof.caps == {"regen": {"HP": 30, "MANA": 15, "END": 15}, "resist": 1000}
+    assert dict(prof.placement) == {"monk": "inside", "iksar": "inside"}  # (R3: the default is the rules' placement, the client's; it was "top")
 
 
 def test_rules_that_the_evaluator_leaves_to_the_profile_are_open_or_null():
-    # the weapon damage weight is a judgment the profile carries (per role, times the role's ATK weight), open until
+    # the weapon damage weight is a judgment the profile carries (per build, times the build's ATK weight and weapon factor), open until
     # test B18; the evaluator reads it only through the DMG weight of the profile it is given
-    assert TABLES.rules.get("weapons.damage_weight") == 600
+    assert TABLES.rules.get("weapons.damage_weight") == 450
+
+
+# ---- F5: a weapon of a ranged skill scores nothing in a hand, in the evaluator as in the builder ---------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("skill", ["Archery", "archery", "Throwing", "Throwingv1", "Throwingv2"])
+@pytest.mark.parametrize("setup", ["1h-shield", "2h", "dw", "stick", "ranged", None])
+@pytest.mark.parametrize("hand", ["PRIMARY", "SECONDARY"])
+def test_a_weapon_of_a_ranged_skill_scores_nothing_in_a_hand_whatever_the_setup(skill, setup, hand):
+    """The builder refuses such a weapon a hand (weapons.allowed_in_hand, E8); the evaluator, which writes the definition out again, scores 0 there too: they are one rule."""
+    weapon = WeaponVec(skill, 30, 40, None, False)
+    assert weapon_index(weapon, hand, setup, 25, F(4, 5)) == 0
+    assert weapon_index(WeaponVec(skill, 30, 40, None, True), hand, setup, 25, F(4, 5)) == 0  # (a two-hander of a ranged skill too)
+    melee = WeaponVec("1H Piercing", 30, 40, None, False)
+    assert weapon_index(melee, hand, "dw", 25, F(4, 5)) > 0  # (the same numbers of a melee skill are scored)
+
+
+def test_the_range_place_scores_a_bow_under_the_bow_setup_and_a_thrown_weapon_nowhere():
+    bow = WeaponVec("Archery", 30, 40, None, False)
+    assert weapon_index(bow, "RANGE", "ranged", 0, F(4, 5), F(1)) == F(30, 40)
+    assert weapon_index(WeaponVec("Throwing", 30, 40, None, False), "RANGE", "ranged", 0, F(4, 5), F(1)) == 0  # (a thrown weapon is no bow)
+    assert weapon_index(bow, "RANGE", "dw", 0, F(4, 5)) == 0
+
+
+@pytest.mark.parametrize("skill", ["Archery", "Throwing", "Throwingv2", "Piercing", "Hand to Hand", "1H Slashing", None])
+@pytest.mark.parametrize("setup", ["1h-shield", "2h", "dw", "stick", "ranged"])
+@pytest.mark.parametrize("hand", ["primary", "secondary", "range"])
+def test_the_evaluator_and_the_builder_agree_on_what_a_hand_scores(skill, setup, hand):
+    from trioforge.model import weapons as wp
+
+    for two_handed in (False, True):
+        vec = WeaponVec(skill, 30, 40, None, two_handed)
+        item = types.SimpleNamespace(weapon=vec, slots=frozenset({"PRIMARY", "SECONDARY", "RANGE"}), is_shield=False)
+        assert weapon_index(vec, hand.upper(), setup, 10, F(4, 5), F(1)) == wp.damage_index_exact(item, hand, setup, 10, dw_factor=F(4, 5), ranged_factor=F(1)), (skill, setup, hand, two_handed)
+
+
+def test_the_evaluator_does_not_judge_where_an_item_stands_and_only_the_weapon_term_refuses_a_hand_to_a_ranged_weapon():
+    """(G8) ``evaluate`` values the kit it is given: the stats of an item count in whatever place it stands (the callers, the builder, the pruning and the page's own reader of a shared kit, make legal
+    kits and refuse the others), and the weapon term is the one thing that looks at the place: a hand scores the weapons the setup lets stand there. So an Archery or Throwing item in a hand counts its stats
+    and no swing, as a sword in the chest counts its stats and no swing."""
+    from solver_helpers import make_item, make_profile
+
+    profile = make_profile(("PAL", "MNK", "BER"), "OGR", {"HP": 1, "DMG": 600})
+    ring = make_item("ring", {"FINGER"}, stats={"HP": 40})
+    bow = make_item("bow", {"RANGE", "PRIMARY"}, stats={"HP": 40}, weapon=WeaponVec("Archery", 30, 40, None, False))
+    sword = make_item("sword", {"PRIMARY"}, stats={"HP": 40}, weapon=WeaponVec("1H Slashing", 30, 40, None, False))
+
+    def value(**places):
+        kit = [None] * len(SLOT_INSTANCES)
+        for place, item in places.items():
+            kit[SLOT_INSTANCES.index(place)] = item
+        return evaluate(profile, kit, setup="dw", haste_assumed=0).F
+
+    empty = value()
+    assert value(HEAD=ring) == value(FINGER=ring) > empty  # a ring in the head counts as in the finger: no place is refused
+    assert value(CHEST=sword) == value(FINGER=ring)  # a sword in the chest counts its stats and no swing
+    assert value(PRIMARY=bow) == value(FINGER=ring)  # an Archery weapon in the main hand: its stats, no swing (F5)
+    assert value(PRIMARY=sword) > value(PRIMARY=bow)  # (the same numbers of a sword score the swing)

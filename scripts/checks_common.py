@@ -149,77 +149,26 @@ def decode_json(body: bytes) -> Any:
 # ---- robots.txt ------------------------------------------------------------------------------------------------------------------------------------------
 
 
-class Robots:
-    """What one robots.txt allows this program: ``allows(target)`` for a path with its query, and the ``crawl_delay`` its group asks for (or None).
-
-    The rules are those of RFC 9309. Of the rules of the group that applies, the one with the longest pattern that matches the start of the target decides, and
-    ``Allow`` wins a tie; ``*`` in a pattern stands for any text and ``$`` at its end anchors it; no rule that matches means allowed; an empty ``Disallow`` forbids
-    nothing.
-    """
-
-    def __init__(self, rules: Sequence[tuple[bool, str]] = (), crawl_delay: float | None = None, *, disallow_all: bool = False) -> None:
-        self.crawl_delay = crawl_delay
-        self._disallow_all = disallow_all
-        self._rules = [(allow, len(pattern), _pattern_regex(pattern)) for allow, pattern in rules if pattern]
-
-    def allows(self, target: str) -> bool:
-        if self._disallow_all:
-            return False
-        text = urllib.parse.unquote(target)
-        best, verdict = -1, True
-        for allow, length, regex in self._rules:
-            if regex.match(text) and (length > best or (length == best and allow)):
-                best, verdict = length, allow
-        return verdict
+def _shared(name: str) -> Any:
+    """A standard-library module of ``pipeline/trioforge/sources`` that the checks share with the fetchers of the sources, loaded by its path (as ``default_folder`` loads
+    ``checks_dir``: no installed copy of the package is needed, and none can be stale)."""
+    path = Path(__file__).resolve().parents[1] / "pipeline" / "trioforge" / "sources" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"trioforge_{name}_of_the_scripts", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot find {path.name} of the sources")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def _pattern_regex(pattern: str) -> re.Pattern[str]:
-    text = urllib.parse.unquote(pattern)
-    anchored = text.endswith("$")
-    body = text[:-1] if anchored else text
-    return re.compile(".*".join(re.escape(part) for part in body.split("*")) + ("$" if anchored else ""), re.S)
+_robots = _shared("robots")
+Robots = _robots.Robots  # (one reading of a robots.txt, by the rules of RFC 9309, for the checks and for the fetchers of the sources alike)
+_complete = _robots.check_complete
 
 
 def parse_robots(text: str, product: str = PRODUCT) -> Robots:
-    """The :class:`Robots` of a robots.txt for the program called ``product``.
-
-    A group (one or more ``User-agent`` lines, then its rules) applies when one of its names is the program's or the front of it up to a hyphen (``trioforge`` for
-    ``trioforge-checks``); the groups of that kind are the program's, and only when there are none are the groups for ``*``. Field names have no case; a byte order
-    mark, CRLF line ends and ``#`` comments are read; a rule before any ``User-agent`` line belongs to nobody.
-    """
-    token = product.lower()
-    groups: list[dict[str, Any]] = []
-    current: dict[str, Any] | None = None
-    after_agent = False
-    for raw in text.lstrip("\ufeff").splitlines():
-        line = raw.split("#", 1)[0].strip()
-        field, colon, value = line.partition(":")
-        if not colon:
-            continue
-        field, value = field.strip().lower(), value.strip()
-        if field == "user-agent":
-            if current is None or not after_agent:
-                current = {"agents": [], "rules": [], "delay": None}
-                groups.append(current)
-            current["agents"].append(value.lower())
-            after_agent = True
-        elif field in ("allow", "disallow", "crawl-delay"):
-            after_agent = False
-            if current is None:
-                continue
-            if field == "crawl-delay":
-                try:
-                    delay = float(value)
-                except ValueError:
-                    continue
-                if math.isfinite(delay) and delay >= 0:
-                    current["delay"] = delay
-            else:
-                current["rules"].append((field == "allow", value))
-    ours = [g for g in groups if any(a == token or (a and a != "*" and token.startswith(a + "-")) for a in g["agents"])]
-    chosen = ours or [g for g in groups if "*" in g["agents"]]
-    delays = [g["delay"] for g in chosen if g["delay"] is not None]
-    return Robots([rule for g in chosen for rule in g["rules"]], max(delays) if delays else None)
+    """The :class:`Robots` of a robots.txt for the program called ``product`` (see ``trioforge.sources.robots``)."""
+    return _robots.parse_robots(text, product)
 
 
 # ---- the fetcher -----------------------------------------------------------------------------------------------------------------------------------------
@@ -233,23 +182,6 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
-
-
-def _complete(status: int, headers: Mapping[str, str], body: bytes) -> None:
-    """Raise :class:`http.client.IncompleteRead` if ``body`` stops before the ``Content-Length`` that the answer promised.
-
-    ``read(n)`` of an answer with a length returns what came when the server closed the connection early and raises nothing, so a robots.txt cut before its ``Disallow``
-    lines would allow everything and a JSON cut in two would have another hash and be reported as changed. (An answer that is chunked is checked by ``http.client``
-    itself, which raises when the last chunk does not come; an answer with no length ends where the connection does, and nothing says it is short; a 204, a 304 and a 1xx
-    have no body whatever their headers say; and a body of more than ``MAX_BODY_BYTES`` was cut by us and is refused as too large.)"""
-    if status in (204, 304) or 100 <= status < 200 or len(body) > MAX_BODY_BYTES:
-        return
-    lowered = {str(name).lower(): str(value).strip() for name, value in headers.items()}
-    if "transfer-encoding" in lowered or not re.fullmatch(r"[0-9]{1,15}", lowered.get("content-length", "")):
-        return
-    promised = int(lowered["content-length"])
-    if len(body) < promised:
-        raise http.client.IncompleteRead(body, promised - len(body))
 
 
 def real_transport(timeout: float = TIMEOUT) -> Transport:

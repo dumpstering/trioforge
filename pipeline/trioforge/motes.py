@@ -111,12 +111,15 @@ def _moved(before: Mapping[str, Any], after: Mapping[str, Any], old: ItemVec, ne
 
 def mote_order(
     profile: Any, kit: Sequence[ItemVec | None], records: Mapping[str, Mapping[str, Any]], rules: Any, setup: str | None, buffset: Any = None,
-    buffs: Iterable[int] = (), motes: int | None = None, *, weapon_pct: int | None = None,
+    buffs: Iterable[int] = (), motes: int | None = None, *, weapon_pct: int | None = None, procs: Any = None,
 ) -> MoteOrder:
     """The order in which to spend ``motes`` motes (all that can be spent, when ``None``) on ``kit``, a list of 22 items or ``None`` (the places of
     :data:`trioforge.model.items.SLOT_INSTANCES`), each at its own tier. ``records`` are the catalog records by item key (an item at another tier is made from its record by
     :func:`trioforge.model.items.at_tier`, under ``rules`` and the weapon rate ``weapon_pct``). ``profile``, ``setup`` and ``buffset`` are the evaluator's, and ``buffs`` the
     ids of the optional buffs of ``buffset`` that the kit is valued with (none by default); without a ``buffset`` the kit is valued under the profile's own buffs.
+
+    ``procs`` is the :class:`~trioforge.model.procs.ProcTable` of the trio (None: no proc counts): the weapon term of every kit counts the proc each hand that swings has, with the Lore items
+    the kit wears left out of the donors, as the evaluator does.
 
     Raises ``ValueError`` for a kit that is not 22 places, an item that has no record, a ``motes`` that is not ``None`` or a whole number of at least 0, and ``buffs`` with no
     ``buffset`` to choose them from."""
@@ -135,7 +138,7 @@ def mote_order(
     p = fm.compile_profile(profile)
 
     def value(trial: list[ItemVec | None]) -> fm.Breakdown:
-        return fm.evaluate_truthful(p, trial, totals, setup=setup)
+        return fm.evaluate_truthful(p, trial, totals, setup=setup, procs=procs)
 
     current = value(slots)
     start = current.F
@@ -152,7 +155,7 @@ def mote_order(
             break
         # the run of each worn item below the top: the fewest motes that gain something, and the gain
         best: tuple[Fraction, int, int, ItemVec, fm.Breakdown] | None = None  # (gain, k, place, raised, result) of the best run that fits
-        best_any: tuple[Fraction, int] | None = None  # (gain, k) of the best run, fitting or not
+        shortest: int | None = None  # the fewest motes of any run, fitting or not
         for place, item in enumerate(slots):
             if item is None or item.tier >= MAX_TIER:
                 continue
@@ -166,16 +169,16 @@ def mote_order(
                     break
             else:
                 continue  # (no run: not at any length)
-            if best_any is None or _better(gain, k, best_any):  # (equal rates, equal runs: the earlier place stays)
-                best_any = (gain, k)
+            if shortest is None or k < shortest:
+                shortest = k
             if (motes is None or k <= motes - spent) and (best is None or _better(gain, k, best[:2])):
                 best = (gain, k, place, raised, result)
-        if best_any is None:
+        if shortest is None:
             ending = "no-gain"
             break
         if best is None:
             ending = "motes"
-            next_run = best_any[1]
+            next_run = shortest  # (the fewest motes that would let the order go on: no run fits, and the shortest is the nearest to fitting)
             break
         gain, k, place, raised, result = best
         old = slots[place]

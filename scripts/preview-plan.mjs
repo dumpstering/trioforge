@@ -17,6 +17,24 @@ export function distFolder(root, env) {
   return folder;
 }
 
+/** The two variables that give the site build its optional settings (page counts, the Search Console file): a preview never inherits them from the shell, so that the setting a release is built with cannot reach a browser test. */
+export const BUILD_SETTING_VARIABLES = ["TRIOFORGE_ANALYTICS_TOKEN", "TRIOFORGE_GOOGLE_VERIFICATION"];
+/** The variable that makes a preview a build with page counts (the third server of the browser tests), and the shape of a token. */
+export const PREVIEW_ANALYTICS_VARIABLE = "TRIOFORGE_PREVIEW_ANALYTICS_TOKEN";
+const TOKEN = /^[0-9a-f]{32}$/;
+
+/**
+ * What a preview gives the site build: the arguments to add to its command line (`--analytics-token <token>` when $TRIOFORGE_PREVIEW_ANALYTICS_TOKEN is set, and only then; a value that is not 32 lower-case hex
+ * characters is refused, without repeating it) and the environment it runs in, which is the given one without the variables of the build's own settings (BUILD_SETTING_VARIABLES).
+ */
+export function buildSettings(env) {
+  const token = env[PREVIEW_ANALYTICS_VARIABLE];
+  if (token !== undefined && token !== "" && !TOKEN.test(token)) throw new Error(`${PREVIEW_ANALYTICS_VARIABLE} must be 32 lower-case hex characters`);
+  const clean = { ...env };
+  for (const name of BUILD_SETTING_VARIABLES) delete clean[name];
+  return { args: token ? ["--analytics-token", token] : [], env: clean };
+}
+
 /**
  * Which results the second preview (the one with the section Effects to exalt, TRIOFORGE_PREVIEW_EXALT=1) is built from.
  *

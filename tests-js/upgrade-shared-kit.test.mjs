@@ -24,6 +24,19 @@ import * as sectionCode from "../pipeline/trioforge/site/static/ui/upgrade-input
 import { BUNDLE_BYTES, ITEMS_BYTES, makeSite, sha256, siteFetch } from "./engine-site-fixture.mjs";
 import { $, $$, mountPage } from "./upgrade-helpers.mjs";
 
+// A decoded kit that carries a setup the page does not know (the link reader gives none today but "ranged"): the reader below is wrapped to say one, when a test asks for it
+const forced = vi.hoisted(() => ({ setup: undefined }));
+vi.mock("../pipeline/trioforge/site/static/input/kitdecode.js", async (importOriginal) => {
+  const real = await importOriginal();
+  return {
+    ...real,
+    decodeKit: (...args) => {
+      const out = real.decodeKit(...args);
+      return forced.setup === undefined || !out.kit ? out : { ...out, kit: { ...out.kit, setup: forced.setup } };
+    },
+  };
+});
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONTRACT = resolve(HERE, "../fixtures/site/contract");
 const MAIN = "/engine-manifest.json";
@@ -56,6 +69,7 @@ const serveShards = (url) => {
 };
 
 afterEach(() => {
+  forced.setup = undefined;
   vi.restoreAllMocks();
   delete window.navigator.clipboard;
   window.localStorage.clear();
@@ -201,7 +215,7 @@ describe("the value of a shared kit", () => {
   const KITS = KIT_VALUES.kits;
   const reachable = KIT_VALUES.values.filter((row) => ["own", "group"].includes(row.buffs) && KITS[row.kit].deity === null);
   const SETUP_WORDS = { dw: "dual wield", "1h-shield": "1H + shield", "2h": "two-hander", stick: "stat stick" };
-  const ROLE_WORDS = { balanced: "Balanced", tank: "Tank", melee: "Melee" };
+  const ROLE_WORDS = { tank: "Tank", melee: "Melee damage" };
   const RACE_WORDS = { OGR: "Ogre", TRL: "Troll", IKS: "IKS", HUM: "HUM" }; // (the contract copy of the page lists three races; the page shows the code of one it does not list)
   const BUFF_WORDS = { own: "your own buffs", group: "common group buffs" };
   const sentence = (kit, row) =>
@@ -220,7 +234,7 @@ describe("the value of a shared kit", () => {
 
   it("is the kit's own whatever weapon setup the page shows and whatever tier it shows, which move the haste the page's own answer is scored at", async () => {
     const kit = KITS[0];
-    const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
+    const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "tank" && one.buffs === "own");
     const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { ev: kit.evidence });
     await settled(app);
     await showView(app, row, kit);
@@ -248,7 +262,7 @@ describe("the value of a shared kit", () => {
     const kit = KITS[0];
     const { app } = open(fromLink(link({ race: "TRL", slots: slotsOfKit(kit) })), { ev: "wiki" });
     await settled(app);
-    await vi.waitFor(() => expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Troll, Balanced, your own buffs\./), { timeout: 5000, interval: 10 });
+    await vi.waitFor(() => expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Troll, Tank, your own buffs\./), { timeout: 5000, interval: 10 });
     const asTroll = numberShown();
     document.body.replaceChildren();
     const again = open(fromLink(link({ race: "OGR", slots: slotsOfKit(kit) })), { ev: "wiki" });
@@ -263,7 +277,7 @@ describe("the value of a shared kit", () => {
     const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { ev: kit.evidence });
     await settled(app);
     const seen = [];
-    for (const [role, buffs] of [["balanced", "own"], ["melee", "own"], ["melee", "group"], ["balanced", "group"]]) {
+    for (const [role, buffs] of [["tank", "own"], ["melee", "own"], ["melee", "group"], ["tank", "group"]]) {
       await showView(app, rowOf(role, buffs), kit);
       await vi.waitFor(() => expect(text("#shared-kit-value")).toBe(sentence(kit, rowOf(role, buffs))), { timeout: 5000, interval: 10 });
       seen.push(numberShown());
@@ -273,7 +287,7 @@ describe("the value of a shared kit", () => {
 
   it("says that the value is at least what it says when the search for the best buffs ran out of its calls", async () => {
     const kit = KITS[0];
-    const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
+    const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "tank" && one.buffs === "own");
     const lowerBound = async () => ({ valueOfKit: (args) => ({ ...valueOfKit(args), exact: false }), loadKitBundle });
     const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { loadEngine: lowerBound, ev: kit.evidence });
     const aloud = [];
@@ -283,7 +297,7 @@ describe("the value of a shared kit", () => {
     await vi.waitFor(
       () =>
         expect(text("#shared-kit-value")).toBe(
-          `Kit value at least ${written(row)} for Ogre, Balanced, your own buffs. Weapons: dual wield, read from the kit's hands, at ${row.hasteAssumed}% haste. The best buffs were not searched out completely, so the kit may be worth more.`,
+          `Kit value at least ${written(row)} for Ogre, Tank, your own buffs. Weapons: dual wield, read from the kit's hands, at ${row.hasteAssumed}% haste. The best buffs were not searched out completely, so the kit may be worth more.`,
         ),
       { timeout: 5000, interval: 10 },
     );
@@ -296,7 +310,7 @@ describe("the value of a shared kit", () => {
     const stick = async () => ({ valueOfKit: (args) => ({ ...valueOfKit(args), setup: "stick", hasteAssumed: 77 }), loadKitBundle });
     const { app } = open(fromLink(link({ race: kit.race, slots: slotsOfKit(kit) })), { loadEngine: stick });
     await settled(app);
-    expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Ogre, Balanced, your own buffs\. Weapons: stat stick, read from the kit's hands\.$/);
+    expect(text("#shared-kit-value")).toMatch(/^Kit value [\d,]+ for Ogre, Tank, your own buffs\. Weapons: stat stick, read from the kit's hands\.$/);
   });
 
   it("leaves out an item that cannot be worn where the link puts it, says so in its row and in the value, and counts the others", async () => {
@@ -766,5 +780,68 @@ describe("what a shared kit is not", () => {
     expect(window.history.state).toEqual({ k: "kept" });
     expect(window.localStorage.length).toBe(0);
     expect(window.location.hash).toBe("");
+  });
+});
+
+describe("a kit made for the Bow setup", () => {
+  const BOW = [17, 90038, 4]; // (the invented bow of the fixture's catalog, in the range place)
+  const slots = [...KIT_SLOTS, BOW];
+  const places = slots.map(([slotIndex, id, tier]) => ({ slotIndex, key: `w${id}`, tier }));
+  const reference = (over = {}) => valueOfKit({ bundle: BUNDLE, records: RECORDS, race: "OGR", role: "tank", buffs: "own", evidence: "wiki", places, ...over });
+
+  it("says in its link that it was: the page values it under the Bow setup, with its bow scored, and says the setup is the link's", async () => {
+    const { app } = open(fromLink(link({ slots, setup: "ranged" })));
+    await settled(app);
+    expect(text("#shared-kit-value")).toMatch(/Weapons: bow, as the link says, at \d+% haste\.$/);
+    expect(numberShown()).toBe(written({ value: reference({ madeFor: "ranged" }).value }));
+    expect(reference({ madeFor: "ranged" }).setup).toBe("ranged");
+  });
+
+  it("is valued as it always was when its link has no marker: the setup of its hands, read from them", async () => {
+    const { app } = open(fromLink(link({ slots })));
+    await settled(app);
+    expect(text("#shared-kit-value")).toMatch(/Weapons: [a-z -]+, read from the kit's hands/);
+    expect(text("#shared-kit-value")).not.toMatch(/as the link says/);
+    expect(numberShown()).toBe(written({ value: reference().value }));
+  });
+
+  it("keeps the marker when the kit is shared again: the link it makes names the same kit with the same setup", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true });
+    const first = link({ slots, setup: "ranged" });
+    const { app } = open(fromLink(first));
+    await settled(app);
+    $("#shared-kit-share-button").click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1), { timeout: 5000, interval: 10 });
+    const again = writeText.mock.calls[0][0].slice(writeText.mock.calls[0][0].indexOf("#k=") + 3);
+    expect(again).toBe(first);
+    expect(decodeKit(again, RECORDS).kit.setup).toBe("ranged");
+  });
+});
+
+describe("a kit that carries a setup other than the Bow marker", () => {
+  const slots = KIT_SLOTS;
+
+  it("is valued as a kit with no marker is, and shared again with no marker: only the Bow marker is the link's to say", async () => {
+    for (const unknown of ["dw", "stick", "1h-shield", "2h", "bow", ""]) {
+      forced.setup = unknown === "" ? "x" : unknown;
+      const writeText = vi.fn(async () => {});
+      Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true });
+      const asks = [];
+      const loadEngine = async () => ({ valueOfKit: (args) => (asks.push(args), valueOfKit(args)), loadKitBundle });
+      const { app } = open(fromLink(link({ slots })), { loadEngine });
+      await settled(app);
+      expect(asks.length, unknown).toBeGreaterThan(0);
+      for (const args of asks) expect("madeFor" in args, `${unknown}: the evaluator is not told a setup`).toBe(false);
+      expect(text("#shared-kit-value"), unknown).toMatch(/read from the kit's hands/);
+      expect(text("#shared-kit-value"), unknown).not.toMatch(/as the link says/);
+      $("#shared-kit-share-button").click();
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1), { timeout: 5000, interval: 10 });
+      const written = writeText.mock.calls[0][0];
+      expect(written.slice(written.indexOf("#k=") + 3), `${unknown}: the link it makes has no marker`).toBe(link({ slots }));
+      document.body.replaceChildren();
+      delete window.navigator.clipboard;
+      window.history.replaceState(null, "", "/trio/pal-mnk-ber/");
+    }
   });
 });

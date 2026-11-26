@@ -4,6 +4,7 @@ import { EvaluateError, SLOT_INSTANCES, evaluate, profileOf } from "../pipeline/
 import { CLASS_CODES, atTier } from "../pipeline/trioforge/site/static/engine/items.js";
 import { LIMIT, compare } from "../pipeline/trioforge/site/static/engine/milpjson.js";
 import { ModelError, buildMilp, ident, planTopPools } from "../pipeline/trioforge/site/static/engine/model.js";
+import { readProcs } from "../pipeline/trioforge/site/static/engine/procs.js";
 import { readBundle } from "../pipeline/trioforge/site/static/engine/profile.js";
 import { PROTOCOL_VERSION, validateRequest } from "../pipeline/trioforge/site/static/engine/protocol.js";
 import { Rational } from "../pipeline/trioforge/site/static/engine/rational.js";
@@ -69,6 +70,7 @@ function caseOf(shared, doc) {
     return items.get(ident);
   };
   const bins = profile.monk === null ? undefined : deepFreeze(clone(shared.bins[String(inputs.level)]));
+  const procs = readProcs(inputs.procs ?? null, inputs.trio); // (the table of weapon procs of a case of the brute family that has one)
   return {
     doc,
     profile,
@@ -77,7 +79,8 @@ function caseOf(shared, doc) {
     bins,
     itemAt,
     poolOf: (solve) => solve.pool.map((ident) => itemAt(ident.slice(0, ident.lastIndexOf("@")), Number(ident.slice(ident.lastIndexOf("@") + 1)))),
-    optionsOf: (solve) => deepFreeze({ ...clone(solve.options), ...(bins === undefined ? {} : { monk_bins: bins }) }),
+    procs,
+    optionsOf: (solve) => Object.freeze({ ...deepFreeze({ ...clone(solve.options), ...(bins === undefined ? {} : { monk_bins: bins }) }), ...(procs === null ? {} : { procs }) }),
   };
 }
 
@@ -94,11 +97,15 @@ function shuffled(list, seed) {
 
 /** The options with the owned caps, the upgrades and the new items listed the other way round. */
 function reversedOptions(options) {
-  return deepFreeze({
-    ...clone(options),
-    owned_caps: Object.fromEntries(Object.entries(options.owned_caps ?? {}).reverse()),
-    new_keys: [...(options.new_keys ?? [])].reverse(),
-    upgrades: Object.fromEntries(Object.entries(options.upgrades ?? {}).reverse()),
+  const { procs, ...rest } = options; // (the table of procs is an object of the engine, not data: it is given as it is)
+  return Object.freeze({
+    ...deepFreeze({
+      ...clone(rest),
+      owned_caps: Object.fromEntries(Object.entries(options.owned_caps ?? {}).reverse()),
+      new_keys: [...(options.new_keys ?? [])].reverse(),
+      upgrades: Object.fromEntries(Object.entries(options.upgrades ?? {}).reverse()),
+    }),
+    ...(procs === undefined ? {} : { procs }),
   });
 }
 
@@ -438,7 +445,7 @@ function solveTests(set, families) {
             // the kit the solver found, valued exactly: the model never overstates it (the check of the Python solver, 1e-6 relative), and
             // since the model's optimum is the best value of any kit, the kit is worth that
             const { kit, buffs } = decode(model, got.x, c.itemAt);
-            const options = { setup: c.setup, hasteAssumed: model.info.haste_assumed, monkBins: c.bins, buffset: c.buffset ?? undefined };
+            const options = { setup: c.setup, hasteAssumed: model.info.haste_assumed, monkBins: c.bins, buffset: c.buffset ?? undefined, procs: c.procs ?? undefined };
             const exact = evaluate(c.profile, kit, c.buffset === null ? null : buffs, options).F.toNumber();
             expect(got.objective, `${doc.id} ${solve.label}: the model overstates its kit`).toBeLessThanOrEqual(exact + 1e-6 * Math.max(1, Math.abs(exact)));
             expect(relative(exact, want), `${doc.id} ${solve.label}: the kit is worth ${exact}`).toBeLessThanOrEqual(REL);
@@ -470,7 +477,7 @@ function bruteTests(set) {
       expect(relative(got.objective, brute.toNumber()), `${doc.id}: ${got.objective} against ${brute.toString()}`).toBeLessThanOrEqual(REL);
       // the kit is worth the brute-force value, exactly
       const { kit, buffs } = decode(model, got.x, c.itemAt);
-      const options = { setup: c.setup, hasteAssumed: model.info.haste_assumed, monkBins: c.bins, buffset: c.buffset ?? undefined };
+      const options = { setup: c.setup, hasteAssumed: model.info.haste_assumed, monkBins: c.bins, buffset: c.buffset ?? undefined, procs: c.procs ?? undefined };
       const exact = evaluate(c.profile, kit, c.buffset === null ? null : buffs, options).F;
       expect(relative(exact.toNumber(), brute.toNumber()), `${doc.id}: the kit is worth ${exact.toString()}`).toBeLessThanOrEqual(REL);
     }, 60_000);
@@ -785,12 +792,12 @@ describe("hand-made models", () => {
     expect(index(dw, "SECONDARY", "sword")).toBe(q(2).mul(q(20, 30)).mul(q(3, 2)).mul(q(1, 2)).toNumber());
     expect(index(dw, "PRIMARY", "dagger")).toBe(q(2).mul(q(12, 20)).mul(q(3, 2)).toNumber());
     expect(index(dw, "SECONDARY", "dagger")).toBe(q(2).mul(q(8, 20)).mul(q(3, 2)).mul(q(1, 2)).toNumber());
-    // the shield setup scores the main hand only, the stick scores nothing, a two-hander has a bonus of its own (67 hundredths of the delay, at most 50)
+    // the shield setup scores the main hand only, the stick scores nothing, a two-hander has a bonus of its own (the client's formula of the level: 0.6875 of the delay at level 50, at most 50, T9)
     const shielded = modelOf(profile, [SWORD, SHIELD], { setup: "1h-shield", haste_assumed: 50 });
     expect(index(shielded, "PRIMARY", "sword")).toBe(q(2).mul(q(35, 30)).mul(q(3, 2)).toNumber());
     expect(index(shielded, "SECONDARY", "shield")).toBe(0);
     const two = modelOf(profile, HANDS, { setup: "2h", haste_assumed: 0 });
-    expect(index(two, "PRIMARY", "axe")).toBe(q(2).mul(q(40).add(q(67, 100).mul(q(50)))).div(q(60)).toNumber()); // (the delay counts at most 50)
+    expect(index(two, "PRIMARY", "axe")).toBe(q(2).mul(q(40).add(q(6875, 10000).mul(q(50)))).div(q(60)).toNumber()); // (the delay counts at most 50)
     const stick = modelOf(profile, HANDS, { setup: "stick", haste_assumed: 50 });
     expect(stick.item_cols.filter(([, group]) => group === "PRIMARY" || group === "SECONDARY").every(([column]) => stick.c[column] === 0)).toBe(true);
     // a weapon in an Any place scores its stats and no damage

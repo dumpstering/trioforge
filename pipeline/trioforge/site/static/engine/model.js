@@ -15,7 +15,7 @@
 //   items     a list of the pool: each item as `atTier` gives it (`key`, `tier`, `slots`, `classes`, `deity`, `races`, `lore`, `stats`, `sv`,
 //             `haste`, `weight10`, `weapon`, `is_shield`). An item for another class than the trio's, locked to a deity the profile does not
 //             have, or for another race than the profile's gets no column.
-//   setup     null, "1h-shield", "2h", "dw" or "stick" (see weapons.py: which items stand in the hands, and which hand scores damage).
+//   setup     null, "1h-shield", "2h", "dw", "stick" or "ranged" (see weapons.py: which items stand in the hands and the range place, and which of them scores damage).
 //   buffset   null (no buffs), or `{set, table}` as the bundle writes them: `bundle.buffs[key].set` and `bundle.buff_table`. A buff is named once in
 //             its list and in one list only (a repeat would be two columns of one name), a conflict is `[a, b]` or `[a, b, reasons]` (the bundle
 //             writes the reasons, a list of texts, which are not read), and a conflict or a clique names optional buffs only (as Python's builder).
@@ -36,9 +36,10 @@
 // tier limit is MAX_TIER of tiers.js, and the source of this file holds no number but 0 and 1 (tests-js/engine-literals.test.mjs scans it).
 // Lookups of a name from the data go through a Map or a Set. A list that is given is read whole: a hole in one is a ModelError.
 
-import { CONSTANTS, UNITS, fallbackBonus, monkTable, profileOf } from "./evaluate.js";
+import { BOW_SKILL, CONSTANTS, DEFAULT_LEVEL, RANGE_GROUP, RANGED_SKILL, UNITS, fallbackBonus, monkTable, profileOf } from "./evaluate.js";
 import { CLASS_CODES } from "./items.js";
-import { LIMITS } from "./protocol.js";
+import { PER_MINUTE_TO_INDEX, ProcTable } from "./procs.js";
+import { LIMITS, isPlainObject as isPlain } from "./protocol.js";
 import { ONE, Rational, ZERO } from "./rational.js";
 import { MAX_TIER } from "./tiers.js";
 
@@ -47,6 +48,20 @@ export class ModelError extends Error {
   constructor(message) {
     super(message);
     this.name = "ModelError";
+  }
+}
+
+/** What is said to a visitor whose items have no bow that the bow setup can use. */
+export const NO_BOW = "Add a bow to your list, or switch build";
+
+/**
+ * The bow setup puts a bow in the range place whatever it is worth (the row `range.bow`), so a pool with no bow that fits the range place (and that the profile can use: its class, race and
+ * deity) has no model. It is a refusal of the request's items, typed so that the worker says bad-request and goes on, where a bare error is an internal fault that replaces the worker.
+ */
+export class NoBowError extends ModelError {
+  constructor(message = NO_BOW) {
+    super(message);
+    this.name = "NoBowError";
   }
 }
 
@@ -67,7 +82,9 @@ const GROUP_SIZE = new Map(SLOT_GROUPS);
 const ANY = "ANY";
 const MODEL_SLOTS = new Set(SLOT_GROUPS.map(([name]) => name).filter((name) => name !== ANY));
 const [PRIMARY, SECONDARY] = CONSTANTS.handPlaces;
-const HANDS = new Set([PRIMARY, SECONDARY]);
+/** The groups the weapons rules are asked about: the two hands, and the range place (a bow stands there in the bow setup). */
+const WEAPON_GROUPS = new Set([PRIMARY, SECONDARY, RANGE_GROUP]);
+const HAND_NAMES = [PRIMARY, SECONDARY];
 /** What the gear can give by name (the attributes, the flat points and the regens), and the quantities that have a name of their own. */
 const FLATS = ["HP", "MANA", "END", "ATK", "HPREG", "MANAREG", "ENDREG"];
 const GEAR_KEYS = new Set([...ATTRIBUTES, ...FLATS]);
@@ -78,7 +95,7 @@ const CLASS_SET = new Set(CLASS_CODES);
 export const ANY_RULES = ["all", "explicit"];
 const RULE_ALL = ANY_RULES[0];
 const TIER_TEXT = new Map(Array.from({ length: MAX_TIER + 1 }, (_, tier) => [String(tier), tier]));
-const OPTION_KEYS = ["any_rule", "haste_assumed", "haste_floor", "haste_exact", "owned_caps", "new_keys", "max_new", "upgrades", "monk_bins"];
+const OPTION_KEYS = ["any_rule", "haste_assumed", "haste_floor", "haste_exact", "owned_caps", "new_keys", "max_new", "upgrades", "monk_bins", "procs"];
 const BINARY_KINDS = ["ordering", "deficit", "selection", "monk", "haste", "buff", "made"];
 const SAFE_CHARS = new Set([..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.@|+ "]);
 const LABEL_SIGNS = new Set([..."[],#"]);
@@ -92,12 +109,6 @@ const larger = (a, b) => (a.compare(b) >= 0 ? a : b);
 /** A whole number (a safe integer) as a Rational. */
 const whole = (count) => new Rational(BigInt(count));
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-
-function isPlain(value) {
-  if (!isRecord(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
 
 /** A field of an object that the caller gave, if it is its own (never one that the prototype has). */
 function own(object, key) {
@@ -268,7 +279,9 @@ export function readOptions(raw) {
     }
   }
   const upgrades = new Map([...ups].sort((a, b) => compareText(a[0], b[0])));
-  return { anyRule, hasteAssumed, hasteFloor, hasteExact, ownedCaps, newKeys, maxNew, upgrades, monkBins: given.get("monk_bins") };
+  const procs = given.get("procs") ?? null;
+  if (procs !== null && !(procs instanceof ProcTable)) throw fail("procs is the table of procs of the trio (readProcs of engine/procs.js), or null");
+  return { anyRule, hasteAssumed, hasteFloor, hasteExact, ownedCaps, newKeys, maxNew, upgrades, monkBins: given.get("monk_bins"), procs };
 }
 
 // ---- the items ---------------------------------------------------------------------------------------------------------------------------
@@ -323,7 +336,8 @@ export function readItem(raw, at) {
     if (!Number.isSafeInteger(dmg) || !Number.isSafeInteger(delay)) throw fail(`${label}: the weapon's dmg and delay must be whole numbers`);
     if (bonus !== null && !Number.isSafeInteger(bonus)) throw fail(`${label}: the weapon's bonus must be null or a whole number`);
     if (typeof own(weaponGiven, "two_handed") !== "boolean") throw fail(`${label}: the weapon's two_handed must be true or false`);
-    weapon = { dmg, delay, bonus, twoHanded: own(weaponGiven, "two_handed") };
+    const skill = own(weaponGiven, "skill");
+    weapon = { dmg, delay, bonus, twoHanded: own(weaponGiven, "two_handed"), skill: typeof skill === "string" ? skill : null };
   }
   return {
     key,
@@ -346,30 +360,51 @@ export function readItem(raw, at) {
 /** Whether the item is a weapon (a damage and a delay above 0). */
 const isWeapon = (item) => item.weapon !== null && item.weapon.dmg > 0 && item.weapon.delay > 0;
 
+/** Whether the item is a bow (`is_bow` in weapons.py): a weapon of the archery skill, in any case, that fits the range place. */
+export const isBow = (item) => isWeapon(item) && item.weapon.skill !== null && item.weapon.skill.toLowerCase() === BOW_SKILL && item.slots.has(RANGE_GROUP);
+
 /**
  * Whether the setup lets the item stand in the hand (`allowed_in_hand` in weapons.py; whether the item fits the slot is for the caller): a
- * two-hander is never in the off hand, `stick` takes anything, the shield setup takes a shield in the off hand and a one-hander in the main hand,
- * `2h` a two-hander in the main hand, `dw` a one-hander in either.
+ * two-hander is never in the off hand, a weapon of a ranged skill never in a hand, `stick` and `ranged` take anything else, the shield setup takes a shield in the off hand and a one-hander in the main hand,
+ * `2h` a two-hander in the main hand, `dw` a one-hander in either. The range place takes a bow in the `ranged` setup and anything that fits it in the others.
  */
 export function allowedInHand(item, hand, setup) {
+  if (hand === RANGE_GROUP) return setup === "ranged" ? isBow(item) : true;
+  if (RANGED_SKILL.test(item.weapon?.skill ?? "")) return false; // (`_ranged_skill` in weapons.py: archery, or a skill that begins with "throwing", in any case)
   if (hand === SECONDARY && item.weapon !== null && item.weapon.twoHanded) return false;
-  if (setup === "stick") return true;
+  if (setup === "stick" || setup === "ranged") return true;
   if (setup === "1h-shield" && hand === SECONDARY) return item.isShield;
   if (!isWeapon(item)) return false;
   if (setup === "2h") return hand === PRIMARY && item.weapon.twoHanded;
   return !item.weapon.twoHanded;
 }
 
+/** The procs of `hand` that the best pair can need, best first (`candidates` of procs.py): every proc up to and including the first one that nothing can block, since a proc that a worn Lore copy blocks leaves the next one in its place. */
+export function procCandidates(table, item, hand) {
+  const cell = table.cell(item, hand);
+  if (cell.candidates === undefined) {
+    const chosen = [];
+    for (const entry of table.every(item, hand)) {
+      chosen.push(entry);
+      if (table.natives(item).has(entry.effect) || !table.sources(item, hand, entry.effect).every((key) => table.loreKeys.has(key))) break;
+    }
+    cell.candidates = chosen;
+  }
+  return cell.candidates;
+}
+
 /** What the item adds in the hand under the setup at the percent haste, exactly (`damage_index_exact` in weapons.py). */
-export function damageIndex(item, hand, setup, hastePercent, dwFactor) {
+export function damageIndex(item, hand, setup, hastePercent, dwFactor, rangedFactor = ONE, swingFactor = ONE, level = DEFAULT_LEVEL) {
   if (setup === "stick" || !allowedInHand(item, hand, setup) || !isWeapon(item)) return ZERO;
+  if ((setup === "ranged") !== (hand === RANGE_GROUP)) return ZERO; // the hands of the bow setup are stat sticks, and the range place scores in no other setup
   const { weapon } = item;
   const haste = ONE.add(whole(hastePercent).div(UNITS.percent));
   const damage = whole(weapon.dmg);
   const delay = whole(weapon.delay);
-  if (hand === SECONDARY) return damage.div(delay).mul(haste).mul(dwFactor);
-  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : fallbackBonus(weapon.twoHanded, delay);
-  return damage.add(bonus).div(delay).mul(haste);
+  if (hand === SECONDARY) return damage.div(delay).mul(haste).mul(dwFactor).mul(swingFactor);
+  if (hand === RANGE_GROUP) return damage.div(delay).mul(haste).mul(rangedFactor); // a bow's own damage per delay: no bonus, which is a main hand's; and no stance's factor
+  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : fallbackBonus(weapon.twoHanded, delay, damage, level);
+  return damage.add(bonus).div(delay).mul(haste).mul(swingFactor);
 }
 
 // ---- the buff set ------------------------------------------------------------------------------------------------------------------------
@@ -684,7 +719,7 @@ class Builder {
   fits(item, group) {
     if (group === ANY) return item.slots.has(ANY) || (this.opts.anyRule === RULE_ALL && [...item.slots].some((slot) => MODEL_SLOTS.has(slot)));
     if (!item.slots.has(group)) return false;
-    if (HANDS.has(group)) return allowedInHand(item, group, this.setup ?? "stick");
+    if (WEAPON_GROUPS.has(group)) return allowedInHand(item, group, this.setup ?? "stick");
     return true;
   }
 
@@ -700,7 +735,7 @@ class Builder {
     this.hasteAssumed = this.assumedHaste();
     for (const term of [
       this.termHp, this.termMana, this.termEnd, this.termAc, this.termAtk, this.termDex, this.termCha, this.termHaste, this.termRegen, this.termResists,
-      this.termWeapons,
+      this.termWeapons, this.termProcs,
     ]) {
       term.call(this);
     }
@@ -733,6 +768,12 @@ class Builder {
     for (const [group, columns] of byGroup) {
       const reach = columns.reduce((sum, column) => sum.add(this.ub[column]), ZERO);
       if (reach.compare(whole(GROUP_SIZE.get(group))) > 0) this.row(`group.${group}`, new Map(columns.map((column) => [column, ONE])), null, whole(GROUP_SIZE.get(group)));
+    }
+    if (this.setup === "ranged") {
+      // the bow setup is the one in which the range place holds a bow: it is filled even when the damage is worth nothing (the row range.bow of the Python builder)
+      const bows = byGroup.get(RANGE_GROUP) ?? [];
+      if (bows.length === 0) throw new NoBowError();
+      this.row("range.bow", new Map(bows.map((column) => [column, ONE])), ONE, null);
     }
     for (const [key, columns] of loreCols) {
       if (columns.length > 1) this.row(`lore.${key}`, new Map(columns.map((column) => [column, ONE])), null, ONE);
@@ -1186,13 +1227,17 @@ class Builder {
       .plus(shield)
       .scaled(sheet.itemMult)
       .plus(new Lin(p.defenseTerm))
-      .plus(this.buffpart("AC"), ONE.div(sheet.spellAcDiv))
-      .plus(this.capped("AGI"), ONE.div(sheet.agiDiv))
-      .plus(inside);
+      .plus(this.buffpart("AC"), ONE.div(sheet.spellAcDiv));
+    // (the Berserker stance: agility counts for nothing in the armor class and the evasion, and then neither term is made)
+    const agiShare = p.agiShare;
+    const withAgi = agiShare.sign() === 0 ? x : x.plus(this.capped("AGI"), ONE.div(sheet.agiDiv).mul(agiShare));
+    const xAll = withAgi.plus(inside);
     const y = new Lin(p.softcapFloor).plus(shield);
-    this.cappedSheet(x, y, p.rate, perPoint);
-    const evasion = this.curve(this.total("AGI"), [STAT_CAP], [ONE, ZERO], "curve.AC.agi");
-    this.addLin(evasion.lin, w.mul(CONSTANTS.agiToAc));
+    this.cappedSheet(xAll, y, p.rate, perPoint);
+    if (agiShare.sign() !== 0) {
+      const evasion = this.curve(this.total("AGI"), [STAT_CAP], [ONE, ZERO], "curve.AC.agi");
+      this.addLin(evasion.lin, w.mul(CONSTANTS.agiToAc).mul(agiShare));
+    }
   }
 
   termAtk() {
@@ -1435,14 +1480,90 @@ class Builder {
     const setup = this.setup ?? "stick";
     if (this.capture) {
       // (the coefficients are those of a level: LevelPrograms.programFor adds them)
-      this.weaponCols = this.itemCols.filter(({ group }) => HANDS.has(group));
+      this.weaponCols = this.itemCols.filter(({ group }) => WEAPON_GROUPS.has(group));
       return;
     }
     for (const { col, group, item } of this.itemCols) {
-      if (!HANDS.has(group)) continue;
-      const index = damageIndex(item, group, setup, this.hasteAssumed, this.p.dwFactor);
+      if (!WEAPON_GROUPS.has(group)) continue;
+      const index = damageIndex(item, group, setup, this.hasteAssumed, this.p.dwFactor, this.p.rangedFactor, this.p.swing, this.p.level);
       if (index.sign() !== 0) this.addObj(col, w.mul(index));
     }
+  }
+
+  /**
+   * The procs of the hands that swing (`_term_procs` of solver/model.py, whose docstring has the rows in words): `DMG x value / 600` for the proc a hand counts, with no haste factor, the off hand's by
+   * the dual-wield factor. While no proc a hosted column can count has a Lore item among its sources the hands do not meet, and the proc is a constant on the column; else each way a proc can be counted
+   * in a hand has a binary (`proc.n[e,hand]` its own, `proc.f[e,hand]` from a donor with a second copy, `proc.l[e,hand,k]` from the Lore item `k`) with the rows `proc.host.<kind>`, `proc.one`,
+   * `proc.worn` (a Lore donor the kit wears is no donor) and `proc.copies` (the one copy of a Lore item supplies one hand).
+   */
+  termProcs() {
+    const table = this.opts.procs;
+    const w = this.p.weights.DMG;
+    if (table === null || w.sign() === 0 || !["1h-shield", "2h", "dw"].includes(this.setup)) return;
+    const hands = this.setup === "dw" ? HAND_NAMES : HAND_NAMES.slice(0, 1);
+    const factor = { PRIMARY: ONE, SECONDARY: this.p.dwFactor };
+    const counts = new Map(hands.map((hand) => [hand, []]));
+    for (const { col, group, item } of this.itemCols) {
+      if (counts.has(group) && damageIndex(item, group, this.setup, 0, this.p.dwFactor, this.p.rangedFactor, ONE, this.p.level).sign() !== 0) counts.get(group).push({ col, item, entries: procCandidates(table, item, group) });
+    }
+    const lored = hands.some((hand) =>
+      counts.get(hand).some(({ item, entries }) => entries.some((entry) => !table.natives(item).has(entry.effect) && table.sources(item, hand, entry.effect).some((key) => table.loreKeys.has(key)))),
+    );
+    const value = (hand, effect) => w.mul(factor[hand]).mul(effect).div(PER_MINUTE_TO_INDEX);
+    if (!lored) {
+      for (const hand of hands) for (const { col, entries } of counts.get(hand)) if (entries.length > 0) this.addObj(col, value(hand, entries[0].value));
+      return;
+    }
+    const byKey = new Map();
+    for (const { col, item } of this.itemCols) {
+      if (!byKey.has(item.key)) byKey.set(item.key, []);
+      byKey.get(item.key).push(col);
+    }
+    let flags = 0;
+    const lone = new Map(); // the flags that take a proc from the one copy of a Lore item, by item (both hands)
+    for (const hand of hands) {
+      const native = new Map();
+      const plain = new Map();
+      const lore = new Map();
+      const push = (map, key, col) => map.set(key, [...(map.get(key) ?? []), col]);
+      for (const { col, item, entries } of counts.get(hand)) {
+        const own = table.natives(item);
+        for (const entry of entries) {
+          if (own.has(entry.effect)) {
+            push(native, entry.effect, col);
+            continue;
+          }
+          const found = table.sources(item, hand, entry.effect);
+          if (found.some((key) => !table.loreKeys.has(key))) push(plain, entry.effect, col);
+          else for (const key of found) push(lore, `${entry.effect}\u0000${key}`, col);
+        }
+      }
+      const kinds = [
+        ...[...native].map(([effect, cols]) => ({ kind: "n", effect, key: "", cols })),
+        ...[...plain].map(([effect, cols]) => ({ kind: "f", effect, key: "", cols })),
+        ...[...lore].map(([pair, cols]) => ({ kind: "l", effect: pair.split("\u0000")[0], key: pair.split("\u0000")[1], cols })),
+      ].sort((a, b) => compareText(a.effect, b.effect) || compareText(a.kind, b.kind) || compareText(a.key, b.key));
+      const mine = [];
+      for (const { kind, effect, key, cols } of kinds) {
+        const label = `${effect},${hand}${key === "" ? "" : `,${key}`}`;
+        const y = this.newColumn(`proc.${kind}[${label}]`, ZERO, ONE, true);
+        flags += 1;
+        mine.push(y);
+        this.addObj(y, value(hand, table.effects.find((one) => one.id === effect).value));
+        this.row(`proc.host.${kind}[${label}]`, new Map([[y, ONE], ...cols.map((col) => [col, ONE.neg()])]), null, ZERO);
+        if (kind === "l") {
+          lone.set(key, [...(lone.get(key) ?? []), y]);
+          if (byKey.has(key)) this.row(`proc.worn[${label}]`, new Map([[y, ONE], ...byKey.get(key).map((col) => [col, ONE])]), null, ONE);
+        }
+      }
+      if (mine.length > 1) this.row(`proc.one[${hand}]`, new Map(mine.map((y) => [y, ONE])), null, ONE);
+    }
+    if (this.setup === "dw") {
+      for (const key of [...lone.keys()].sort(compareText)) {
+        if (lone.get(key).length > 1) this.row(`proc.copies[${key}]`, new Map(lone.get(key).map((y) => [y, ONE])), null, ONE);
+      }
+    }
+    if (flags > 0) this.info.binaries.proc = flags;
   }
 
   // -- the document -------------------------------------------------------------------------------------------------------------------------
@@ -1530,7 +1651,7 @@ export class LevelPrograms {
     if (w.sign() !== 0) {
       const setup = builder.setup ?? "stick";
       for (const { col, group, item } of builder.weaponCols) {
-        const weapon = damageIndex(item, group, setup, level, builder.p.dwFactor);
+        const weapon = damageIndex(item, group, setup, level, builder.p.dwFactor, builder.p.rangedFactor, builder.p.swing, builder.p.level);
         if (weapon.sign() !== 0) c[col] = real((builder.obj.get(col) ?? ZERO).add(w.mul(weapon)));
       }
     }

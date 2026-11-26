@@ -1,6 +1,6 @@
 """What each race gets you: the section of "How the best race was judged" (race-explain).
 
-For the races the page names (the best race and the ones tied with it, or the best race and the runner-up) the section says, from the results and the rules and never from
+For the races the page names (the best race and the ones close to it, from the data's list, or the best race and the runner-up) the section says, from the results and the rules and never from
 hand-typed numbers: the race's value and its gap to the best, what its best kit's totals change against the best race's, its starting stats against the best race's, and its racial
 abilities as the wiki words them, each said to be scored or not. Only the Iksar's natural AC is scored.
 """
@@ -14,7 +14,7 @@ import pytest
 from site_helpers import parse
 from test_site_build import need_node, read, run_build
 from test_site_content import render_trio
-from test_site_race_tie import UNTIED_LINE, results_with_tie
+from test_site_race_tie import ALONE_LINE, results_with_close
 
 from trioforge import rules as rules_module
 from trioforge.site import build, content, data, view
@@ -211,7 +211,7 @@ def with_setup_value(results, race, setup, value):
 
 
 def test_the_totals_term_says_each_race_is_judged_on_its_own_best_kit_with_the_real_best_races_name(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997), ("HUM", 0.998)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997), ("HUM", 0.998)), book, racials)
     for card in card_nodes(doc)[1:]:
         assert list(facts(card))[2] == KIT
         assert "Kit totals" not in card.text()
@@ -233,13 +233,13 @@ def test_a_race_on_the_same_setup_as_the_best_race_has_no_weapons_row(book, raci
     assert "Weapons" not in facts(card_nodes(doc)[0])  # (the best race is the one the others are named against)
 
 
-# ---- a page with tied races --------------------------------------------------------------------------------------------------------
+# ---- a page with close races --------------------------------------------------------------------------------------------------------
 
 
-def test_a_tied_page_has_the_best_race_and_every_tied_race_in_order_of_value(book, racials):
-    page, _, doc = render(results_with_tie(("TRL", 0.997), ("HUM", 0.998)), book, racials)
-    assert [(c.code, c.tag) for c in page.race_cards] == [("OGR", "best race"), ("HUM", "tied with Ogre"), ("TRL", "tied with Ogre")]
-    assert [n.find("p").text() for n in card_nodes(doc)] == ["Ogre best race", "Human tied with Ogre", "Troll tied with Ogre"]
+def test_a_page_with_close_races_has_the_best_race_and_every_close_race_in_order_of_value(book, racials):
+    page, _, doc = render(results_with_close(("TRL", 0.997), ("HUM", 0.998)), book, racials)
+    assert [(c.code, c.tag) for c in page.race_cards] == [("OGR", "best race"), ("HUM", "close to Ogre"), ("TRL", "close to Ogre")]
+    assert [n.find("p").text() for n in card_nodes(doc)] == ["Ogre best race", "Human close to Ogre", "Troll close to Ogre"]
     human = card_nodes(doc)[1]
     assert facts(human)["Value"].text() == "10,699"
     assert facts(human)["Against Ogre"].text() == f"{MINUS}21 ({MINUS}0.20%)"
@@ -247,20 +247,20 @@ def test_a_tied_page_has_the_best_race_and_every_tied_race_in_order_of_value(boo
 
 
 def test_a_race_that_cannot_start_the_trio_is_not_named_even_when_it_is_the_closest(book, racials):
-    page, _, _ = render(results_with_tie(("ELF", 1.0), ("TRL", 0.999)), book, racials)
+    page, _, _ = render(results_with_close(("ELF", 1.0), ("TRL", 0.999)), book, racials)
     assert [c.code for c in page.race_cards] == ["OGR", "TRL"]
 
 
-VIEW = "Balanced view at +4 with your own buffs"  # the words of #best-race-view on the fixture page
+VIEW = "Tank view at +4 with your own buffs"  # the words of #best-race-view on the fixture page
 KIT = "Its best kit against Ogre's best kit"  # the term of the totals: each race is judged on its own best kit, so the totals compare kits and not only races
 OWN_KITS = "Each race is judged with its own best kit, so the differences include item choices as well as the race."
 
 
-def test_the_intro_of_a_tied_page_names_the_view_it_describes_in_the_words_of_the_best_race_line(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997)), book, racials)
+def test_the_intro_of_a_page_with_close_races_names_the_view_it_describes_in_the_words_of_the_best_race_line(book, racials):
+    _, _, doc = render(results_with_close(("TRL", 0.997)), book, racials)
     assert doc.by_id("best-race-view").text() == VIEW
     assert doc.by_id("race-gets-intro").text() == (
-        f"In the {VIEW}, these races are within 0.5% of the best, so the page calls them tied. This section describes that view; the switches do not change it. "
+        f"In the {VIEW}, these races are within 1% of the best, so the page calls them close. This section describes that view; the switches do not change it. "
         f"Each is compared with Ogre. {OWN_KITS} Values are in hit-point equivalents."
     )
 
@@ -282,9 +282,9 @@ def test_the_view_of_the_section_follows_the_view_the_page_was_built_for(book, r
 
 
 def test_no_card_says_it_is_best_in_this_view_since_a_change_of_the_switches_makes_that_false(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997)), book, racials)
     assert "in this view" not in doc.by_id("race-gets").text()
-    assert [n.find("p").text() for n in card_nodes(doc)] == ["Ogre best race", "Troll tied with Ogre"]
+    assert [n.find("p").text() for n in card_nodes(doc)] == ["Ogre best race", "Troll close to Ogre"]
 
 
 # ---- the racial abilities, said as scored or not -----------------------------------------------------------------------------------
@@ -301,7 +301,7 @@ def test_every_ogre_racial_says_it_is_not_scored_with_the_wikis_words(book, raci
 
 
 def test_the_iksar_armour_class_is_the_one_racial_that_says_it_is_scored_and_with_the_rules_number(book, racials):
-    _, _, doc = render(results_with_tie(("IKS", 0.999)), book, racials)
+    _, _, doc = render(results_with_close(("IKS", 0.999)), book, racials)
     iksar = next(n for n in card_nodes(doc) if n.find("p").text().startswith("Iksar"))
     items = racial_items(iksar)
     scored = [li for li in items if "(not scored)" not in li.text()]
@@ -315,7 +315,7 @@ def test_the_iksar_armour_class_is_the_one_racial_that_says_it_is_scored_and_wit
 
 
 def test_the_number_of_the_scored_racial_is_the_rules_and_not_the_pages(book, racials):
-    page = make_page(results_with_tie(("IKS", 0.999)), book, racials)
+    page = make_page(results_with_close(("IKS", 0.999)), book, racials)
     rule = book.get("race.iksar_ac_bonus")
     scored = [r for c in page.race_cards for r in c.racials if r.scored]
     assert [(r.name, r.scored_text) for r in scored] == [("Increased Armor Class", f"+{rule.value} {rule.unit}")]
@@ -325,12 +325,12 @@ def test_the_number_of_the_scored_racial_is_the_rules_and_not_the_pages(book, ra
 def test_the_page_refuses_to_call_a_racial_scored_that_the_racials_file_does_not_have(book, racials):
     stripped = dataclasses.replace(racials, rows=tuple(r for r in racials.rows if not (r.race == "IKS" and r.name == "Increased Armor Class")))
     with pytest.raises(ValueError, match="Increased Armor Class"):
-        make_page(results_with_tie(("IKS", 0.999)), book, stripped)
+        make_page(results_with_close(("IKS", 0.999)), book, stripped)
     make_page(data.load_trio(FIXTURE), book, stripped)  # (a page that does not name the Iksar does not need it)
 
 
 def test_nothing_in_the_section_says_a_racial_changes_the_ranking(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997), ("IKS", 0.998)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997), ("IKS", 0.998)), book, racials)
     text = doc.by_id("race-gets").text().casefold()
     for phrase in ("changes the ranking", "moves the ranking", "ranks higher", "counts toward", "adds to the value", "is worth more"):
         assert phrase not in text
@@ -340,7 +340,7 @@ def test_nothing_in_the_section_says_a_racial_changes_the_ranking(book, racials)
 
 
 def test_the_section_is_in_the_expander_after_the_scoring_notes_and_before_what_could_change_it(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997)), book, racials)
     details = doc.by_id("race-why")
     assert [n.get("id") for n in details.children if not isinstance(n, str) and n.get("id")] == ["best-race-unscored", "best-race-rules", "race-gets", "best-race-note"]
     first = [n for n in details.children if not isinstance(n, str) and n.tag == "p"][0]
@@ -349,12 +349,12 @@ def test_the_section_is_in_the_expander_after_the_scoring_notes_and_before_what_
 
 def test_the_best_race_line_of_an_untied_page_is_byte_for_byte_what_it_was(book, racials):
     _, html, _ = render(data.load_trio(FIXTURE), book, racials)
-    assert UNTIED_LINE in html
+    assert ALONE_LINE in html
 
 
-def test_the_best_race_line_of_a_tied_page_is_what_it_was_too(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997), ("HUM", 0.998)), book, racials)
-    assert doc.by_id("best-race").text() == "Best race for this trio: Ogre, tied with Human and Troll (within 0.5%), judged in the Balanced view at +4 with your own buffs."
+def test_the_best_race_line_of_a_page_with_close_races_names_them_after_close(book, racials):
+    _, _, doc = render(results_with_close(("TRL", 0.997), ("HUM", 0.998)), book, racials)
+    assert doc.by_id("best-race").text() == "Races for this trio, close: Ogre, Human, Troll (within 1%), judged in the Tank view at +4 with your own buffs."
 
 
 def test_a_page_given_no_racials_has_no_section_and_is_the_page_it_was(book):
@@ -375,8 +375,8 @@ def test_the_section_names_the_rules_its_figures_follow_and_links_the_rule_of_th
     page, _, doc = render(data.load_trio(FIXTURE), book, racials)
     section = doc.by_id("race-gets")
     named = section.get("data-rules").split()
-    assert named[:2] == ["roles.balanced", "roles.templates"] and named[-1] == "naked.rule"  # the margin's rules, the totals' rules and the rule of the starting stats
-    assert set(named[2:-1]) == {row.rule.id for row in page.totals} and len(named) == len(set(named))
+    assert named[:1] == ["roles.templates"] and named[-1] == "naked.rule"  # the margin's rules, the totals' rules and the rule of the starting stats
+    assert set(named[1:-1]) == {row.rule.id for row in page.totals} and len(named) == len(set(named))
     assert [r.id for r in page.race_rules] == named
     link = section.find("a", href="/rules/#naked.rule")
     assert link.text() == "Naked stat formula" and link.parent.find(cls="seal").text() == "Player reports"
@@ -393,7 +393,7 @@ def test_the_licence_link_is_the_one_the_build_uses():
 
 
 def test_the_section_is_a_description_list_with_real_terms_and_no_table_to_scroll(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997)), book, racials)
     assert not doc.by_id("race-gets").find_all("table")
     for card in card_nodes(doc):
         assert all(n.tag in ("dt", "dd") for n in card.find("dl").children if not isinstance(n, str))
@@ -412,41 +412,41 @@ def test_the_built_fixture_page_has_the_section_and_stays_inside_its_size(tmp_pa
 
 
 def test_the_scored_racial_shows_no_sentence_of_the_wiki_but_the_file_keeps_it(book, racials):
-    page = make_page(results_with_tie(("IKS", 0.999)), book, racials)
+    page = make_page(results_with_close(("IKS", 0.999)), book, racials)
     scored = next(r for c in page.race_cards for r in c.racials if r.scored)
     assert scored.text == ""
     assert next(r for r in racials.of("IKS") if r.name == "Increased Armor Class").description.startswith("Iksar start with a +15 AC bonus")  # derived/racials.json is as it was
-    _, html, _ = render(results_with_tie(("IKS", 0.999)), book, racials)
+    _, html, _ = render(results_with_close(("IKS", 0.999)), book, racials)
     assert "+15 AC" not in html
 
 
 # ---- a long list of ties is capped, and a sentence the section has said is not said again ------------------------------------------
 
-#: eight races tied with the best one (all within 0.5% of it, all able to start the trio), the closest first: Human, High Elf, Barbarian, Erudite, Dwarf, Halfling, Half Elf, Iksar
+#: eight races close to the best one (all within 1% of it, all able to start the trio), the closest first: Human, High Elf, Barbarian, Erudite, Dwarf, Halfling, Half Elf, Iksar
 EIGHT = (("HUM", 0.999), ("HIE", 0.9985), ("BAR", 0.998), ("ERU", 0.9975), ("DWF", 0.9965), ("HFL", 0.996), ("HEF", 0.9955), ("IKS", 0.9952))
 
 
-def test_a_page_with_eight_tied_races_shows_the_best_race_and_the_five_closest_and_says_how_many_are_not_shown(book, racials):
-    page, _, doc = render(results_with_tie(*EIGHT), book, racials)
+def test_a_page_with_eight_close_races_shows_the_best_race_and_the_five_closest_and_says_how_many_are_not_shown(book, racials):
+    page, _, doc = render(results_with_close(*EIGHT), book, racials)
     assert [c.name for c in page.race_cards] == ["Ogre", "Human", "High Elf", "Barbarian", "Erudite", "Dwarf"]
     assert len(card_nodes(doc)) == view.MAX_RACE_CARDS == 6
     more = doc.by_id("race-more")
-    assert more.text() == "3 more tied races are not shown; the Race control picks them."
+    assert more.text() == "3 more close races are not shown; the Race control picks them."
     assert more.parent is doc.by_id("race-gets")
 
 
-def test_the_best_race_line_still_names_all_eight_tied_races(book, racials):
-    page, _, doc = render(results_with_tie(*EIGHT), book, racials)
-    assert page.tied_names == ("Human", "High Elf", "Barbarian", "Erudite", "Dwarf", "Halfling", "Half Elf", "Iksar")
+def test_the_best_race_line_still_names_all_eight_close_races(book, racials):
+    page, _, doc = render(results_with_close(*EIGHT), book, racials)
+    assert page.close_names == ("Ogre", "Human", "High Elf", "Barbarian", "Erudite", "Dwarf", "Halfling", "Half Elf", "Iksar")
     assert doc.by_id("best-race").text() == (
-        "Best race for this trio: Ogre, tied with Human, High Elf, Barbarian, Erudite, Dwarf, Halfling, Half Elf and Iksar (within 0.5%), "
-        "judged in the Balanced view at +4 with your own buffs."
+        "Races for this trio, close: Ogre, Human, High Elf, Barbarian, Erudite, Dwarf, Halfling, Half Elf, Iksar (within 1%), "
+        "judged in the Tank view at +4 with your own buffs."
     )
 
 
-@pytest.mark.parametrize(("shown", "line"), [(5, None), (6, "1 more tied race is not shown; the Race control picks it."), (7, "2 more tied races are not shown; the Race control picks them.")])
+@pytest.mark.parametrize(("shown", "line"), [(5, None), (6, "1 more close race is not shown; the Race control picks it."), (7, "2 more close races are not shown; the Race control picks them.")])
 def test_the_line_about_races_not_shown_is_there_only_when_some_are_left_out_and_counts_them(book, racials, shown, line):
-    page, _, doc = render(results_with_tie(*EIGHT[:shown]), book, racials)
+    page, _, doc = render(results_with_close(*EIGHT[:shown]), book, racials)
     if line is None:
         assert page.race_more == "" and "race-more" not in render_trio(page, book)
     else:
@@ -465,7 +465,7 @@ def sentences(doc):
 
 
 def test_a_racial_sentence_is_printed_only_on_its_first_appearance_in_the_section(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997), ("HUM", 0.998)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997), ("HUM", 0.998)), book, racials)
     found = sentences(doc)
     printed = [(name, text) for _, name, text in found if text]
     assert len(printed) == len(set(printed))  # no sentence twice
@@ -478,7 +478,7 @@ def test_a_racial_sentence_is_printed_only_on_its_first_appearance_in_the_sectio
 
 
 def test_every_racial_of_every_card_still_says_whether_it_is_scored(book, racials):
-    _, _, doc = render(results_with_tie(("TRL", 0.997), ("HUM", 0.998), ("IKS", 0.9975)), book, racials)
+    _, _, doc = render(results_with_close(("TRL", 0.997), ("HUM", 0.998), ("IKS", 0.9975)), book, racials)
     for card in card_nodes(doc):
         for li in racial_items(card):
             assert "(not scored)" in li.text() or "(scored," in li.text(), li.text()
@@ -488,7 +488,7 @@ def test_the_same_name_with_another_sentence_is_printed_again(book, racials):
     other = dataclasses.replace(
         racials, rows=tuple(dataclasses.replace(r, description="Troll night vision, a little different.") if (r.race, r.name) == ("TRL", "Infravision") else r for r in racials.rows)
     )
-    _, _, doc = render(results_with_tie(("TRL", 0.997)), book, other)
+    _, _, doc = render(results_with_close(("TRL", 0.997)), book, other)
     found = [(index, text) for index, name, text in sentences(doc) if name == "Infravision"]
     assert found == [(0, "Slightly improved night vision, not as good as the Dark Elf's Ultravision."), (1, "Troll night vision, a little different.")]
 
@@ -504,7 +504,7 @@ def race_profiles():
     from trioforge.model.profile import make_profile
 
     tables = view._tables()
-    profiles = {code: make_profile(code, ("PAL", "MNK", "BER"), 50, "balanced", None, None, tables, tables.rules) for code in races_module.RACE_NAMES}
+    profiles = {code: make_profile(code, ("PAL", "MNK", "BER"), 50, "tank", None, None, tables, tables.rules) for code in races_module.RACE_NAMES}
     return profiles, [f.name for f in fields(profiles["HUM"])]
 
 

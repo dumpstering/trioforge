@@ -9,13 +9,14 @@
  *
  * Every kit has exactly one spelling, and the decoder accepts nothing else: the alphabet is exact, the unused
  * bits of the last character are zero, a varint is the shortest one for its value (and at most 5 bytes), the
- * slots ascend, and every byte must be consumed. So decoding then encoding gives back the same link.
+ * slots ascend, and every byte must be consumed. So decoding then encoding gives back the same link (but for a
+ * version-2 link whose setup code this reader does not know, which is read as a kit with no marker and so written again as version 1).
  *
  * The module imports kitcode.js and nothing else, has no regular expressions, never decodes percent-escapes
  * and never throws: a link it cannot read is a list of errors (the messages of KIT_ERRORS) and no kit.
  */
 
-import { ALPHABET, DEFAULT_TABLES, KIT_ERRORS, KIT_VERSION, KitError, MAX_FRAGMENT_LENGTH, MAX_LEVEL, MAX_PAGE_ID, MAX_SLOTS, MAX_TIER, MIN_LEVEL, tablesOf } from "./kitcode.js";
+import { ALPHABET, DEFAULT_TABLES, KIT_ERRORS, KIT_VERSION, KIT_VERSION_SETUP, KitError, MAX_FRAGMENT_LENGTH, MAX_LEVEL, MAX_PAGE_ID, MAX_SLOTS, MAX_TIER, MIN_LEVEL, SETUP_CODES, tablesOf } from "./kitcode.js";
 
 const MAX_VARINT_BYTES = 5;
 
@@ -73,14 +74,16 @@ function readVarint(cursor) {
 
 // ---- decoding ----
 
-// The structure of a link: {trio, race, level, slots: [[slotIndex, pageId, tier]]}, or a KitError.
+// The structure of a link: {trio, race, level, slots: [[slotIndex, pageId, tier]], setup}, or a KitError. `setup` is the name of the marker of a version-2 link, or null (a version-1
+// link, or a marker this reader does not know, which is read as none: see the header of kitcode.js).
 function parseLink(fragment, tables) {
   if (typeof fragment !== "string") throw new KitError(KIT_ERRORS.notText);
   if (fragment.length === 0) throw new KitError(KIT_ERRORS.empty);
   if (fragment.length > MAX_FRAGMENT_LENGTH) throw new KitError(KIT_ERRORS.tooLong);
   const { trios, races } = tablesOf(tables);
   const bytes = fromBase64Url(fragment);
-  if (bytes[0] !== KIT_VERSION) throw new KitError(KIT_ERRORS.version);
+  const version = bytes[0];
+  if (version !== KIT_VERSION && version !== KIT_VERSION_SETUP) throw new KitError(KIT_ERRORS.version);
   const cursor = { bytes, position: 1 };
   const trioIndex = readVarint(cursor);
   if (trioIndex >= trios.length) throw new KitError(KIT_ERRORS.trio);
@@ -104,8 +107,10 @@ function parseLink(fragment, tables) {
     if (tier > MAX_TIER) throw new KitError(KIT_ERRORS.tier);
     slots.push([slotIndex, pageId, tier]);
   }
+  let setup = null;
+  if (version === KIT_VERSION_SETUP) setup = SETUP_CODES[readVarint(cursor) - 1] ?? null; // (code 0 and a code past the table are no marker)
   if (cursor.position !== bytes.length) throw new KitError(KIT_ERRORS.trailing);
-  return { trio: trios[trioIndex], race: races[raceIndex], level, slots };
+  return { trio: trios[trioIndex], race: races[raceIndex], level, slots, setup };
 }
 
 /**
@@ -139,7 +144,9 @@ export function decodeKit(fragment, items, tables = DEFAULT_TABLES) {
         slots.push({ slotIndex, pageId, tier, key, item });
       }
     }
-    return { kit: { v: KIT_VERSION, trio: parsed.trio, race: parsed.race, level: parsed.level, slots }, unknown, errors: [] };
+    const kit = { v: KIT_VERSION, trio: parsed.trio, race: parsed.race, level: parsed.level, slots };
+    if (parsed.setup !== null) kit.setup = parsed.setup; // (a kit of a version-1 link has no setup, not even a key)
+    return { kit, unknown, errors: [] };
   } catch (error) {
     return { kit: null, unknown: [], errors: [error instanceof KitError ? error.message : KIT_ERRORS.internal] };
   }

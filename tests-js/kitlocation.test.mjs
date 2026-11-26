@@ -201,7 +201,7 @@ describe("takeKitFromLocation", () => {
       "https://example.test/trio/pal-mnk-ber/",
       "https://example.test//other.example/x?y=1",
       "https://example.test/a%20b/?q=%23",
-      "https://example.test:8788/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=4",
+      "https://example.test:8788/trio/pal-mnk-ber/?race=OGR&role=tank&tier=4",
     ]) {
       const win = makeWindow(`${base}#k=${GOOD}`);
       const taken = takeKitFromLocation(win);

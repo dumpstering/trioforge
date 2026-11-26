@@ -119,7 +119,7 @@ describe("the baked page", () => {
     expect(chips()).toEqual(rows().map((row, index) => (index === HASTE_SLOT ? "Haste 19%" : "")));
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(chips().filter(Boolean)).toEqual([]); // (the balanced view at +10 has no worn haste in the fixture)
+    expect(chips().filter(Boolean)).toEqual([]); // (the tank view at +10 has no worn haste in the fixture)
     change($("#sw-tier"), "4");
     await app.whenIdle();
     expect(chips()).toEqual(rows().map((row, index) => (index === HASTE_SLOT ? "Haste 19%" : ""))); // repainted from the baked stats, which say the haste
@@ -161,7 +161,7 @@ describe("a view the code paints", () => {
     choose("#role-melee");
     await app.whenIdle();
     expect(chips().filter(Boolean)).toHaveLength(1);
-    choose("#role-balanced");
+    choose("#role-tank");
     await app.whenIdle();
     expect(chips()).toEqual(new Array(22).fill(""));
     for (const node of document.querySelectorAll(".kit-haste")) {

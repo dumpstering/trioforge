@@ -81,6 +81,7 @@ import {
   LIVENESS_TIMEOUT_MS,
   SCENARIO_MODES,
   STARTUP_COMPILE_MS,
+  STARTUP_FIRST_SIGN_MS,
   STARTUP_STALL_MS,
   WATCHDOG_GRACE_MS,
   checkAgainstManifest,
@@ -450,11 +451,26 @@ export function createEngineClient(options = {}) {
 
   /**
    * Whether the site has been released again since the manifest in hand was read: the main manifest is read once more (the browser is asked whether its
-   * copy is current), and it is another release if it is another text. A manifest that cannot be read again says nothing (false).
+   * copy is current), and it is another release if it is another text that is a manifest of the site, or any JSON object that names another release (a text
+   * `data_release` that is not ours: a newer format of the manifest, which this strict reader refuses, still says which release it is of). A manifest that cannot be
+   * read again says nothing (false), and neither does text that is not JSON.
    */
   async function newerRelease() {
     const answer = await fetchTextWithin(fetchFn, MANIFEST_PATH, { credentials: "same-origin", cache: "no-cache" }, STARTUP_STALL_MS, LIMITS.maxManifestBytes);
-    return answer.state === "ok" && typeof answer.text === "string" && manifestText !== null && answer.text !== manifestText;
+    if (!(answer.state === "ok" && typeof answer.text === "string" && manifestText !== null && answer.text !== manifestText)) return false;
+    let found;
+    try {
+      found = JSON.parse(answer.text);
+    } catch {
+      return false; // (the page of an error of the host, or half a file, is no release)
+    }
+    if (found !== null && typeof found === "object" && !Array.isArray(found) && typeof found.data_release === "string" && found.data_release !== manifest?.dataRelease) return true;
+    try {
+      parseManifest(found); // (another text of the same release is one only when it is a list of files)
+    } catch {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -613,6 +629,12 @@ export function createEngineClient(options = {}) {
       drop(record, toEngineError(error));
       return;
     }
+    if (record.awaitingSign) {
+      // the first thing the worker says is its sign of life: the limit for one is over, and the ones that follow (armStartLimit) take its place
+      record.awaitingSign = false;
+      clearTimer(record.startupTimer);
+      record.startupTimer = null;
+    }
     if (message.type === "ready") {
       if (record.state !== "starting") return drop(record, new EngineError("protocol", "The optimizer said it was ready twice."));
       // The worker read the manifest for itself, and says which WebAssembly that manifest lists (the file it checked and loaded, or the file the module it
@@ -630,7 +652,7 @@ export function createEngineClient(options = {}) {
     } else if (message.type === "progress") {
       if (record.state === "starting" && downloadIsOver(message)) armStartLimit(record);
       if (job !== null) job.watch(); // a sign of life of the request: the watchdog's window starts again
-      const target = job ?? (record.state === "starting" ? record.startedFor : null);
+      const target = job ?? (record.state === "starting" ? startingJob(record) : null);
       if (target !== null) report(target, withoutEnvelope(message));
     } else if (message.type === "step") {
       // a step of a farm path is a sign of life of the request, as a report of progress is, and goes to the caller of runScenario
@@ -662,6 +684,16 @@ export function createEngineClient(options = {}) {
       // WebAssembly itself (an abort when the memory ran out, say), and an instance that aborted is not used again
       if (message.code === "internal") drop(record, failure);
     }
+  }
+
+  /**
+   * The request the report of a worker that is still starting is for: the one the worker was started for, or, when that one was given up (replaced by a newer request, say, which
+   * waits for the same worker), the one now in front of the queue.
+   */
+  function startingJob(record) {
+    const started = record.startedFor;
+    if (started !== null && started !== undefined && !started.settled) return started;
+    return queue.find((job) => !job.settled) ?? null;
   }
 
   /** End a request whose data failed to load: with the notice that the page has to be reloaded if the site was released again, else with the worker's error. */
@@ -714,6 +746,7 @@ export function createEngineClient(options = {}) {
       expectedWasm: forManifest.wasm.sha256,
       fromKept: false,
       startupTimer: null,
+      awaitingSign: false, // a worker that downloads has said nothing yet: the limit for its first sign is running
       used: false, // has it been given a request? (a worker that has just said it is ready is not asked whether it is there)
       pingWaiter: null, // (alive) => void, while the page waits for the answer to a ping
       ready: null,
@@ -755,7 +788,12 @@ export function createEngineClient(options = {}) {
     // A worker that is given a compiled module has no download to do: its start has the limit for the rest of a start from the beginning. One that
     // downloads has none of the page's until the last byte is in (see armStartLimit): a stalled download is given up earlier, by the worker itself.
     if (record.fromKept) armStartLimit(record);
-    else if (!record.dead) showUi("loading"); // a download is always under the loading panel, whether a question came before it or not
+    else if (!record.dead) {
+      showUi("loading"); // a download is always under the loading panel, whether a question came before it or not
+      // and a worker that never says anything (its script did not run, and it raised no error) is given up too, after the time its own limits could take
+      record.awaitingSign = true;
+      record.startupTimer = setTimer(() => drop(record, new EngineError("engine-load", "The optimizer took too long to start. Try again, or keep the precomputed answers.")), STARTUP_FIRST_SIGN_MS);
+    }
     return record.ready;
   }
 

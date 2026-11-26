@@ -10,11 +10,14 @@ them in a fixed order: evidence (``strict``, ``wiki``), buffs (``own``, ``group`
 (Melee with a shield, say) is never in the list, so it can never be offered.
 
 The weapon setups follow the solve pool of each evidence level: the shield setup is in the grid of a level only when the
-pool of that level has a shield that a class of the trio can wear (:func:`shield_pool`). The strict pool is a part of the
+pool of that level has a shield that a class of the trio can wear (:func:`shield_pool`), and the bow setup (``ranged``) only when
+it has a bow that a class of the trio may equip (:func:`bow_pool`; both are in :func:`setup_pool`), and so the Ranged role, which is nothing
+but the bow setup, is in the grid of a level where the pool has a bow and has no scenario where it has none (it is a role of the trio when the wiki pool has
+a bow: the roles are the same at every level, and a level with no bow has no rows of it); with no pool to read a shield is assumed and a bow is not. The strict pool is a part of the
 wiki pool, so the wiki level can have the setup where the strict level has not (a strict pool that is empty, or holds no
 shield, as it does until such a shield has been seen in game), and a strict view is never solved with an empty off hand.
-For PAL/MNK/BER with a shield in both pools that is 15 races x 8 role-setup pairs x 11 tiers x 2 evidence x 2 buffs = 5,280
-scenarios; with no shield in the strict pool the strict level has 6 pairs, not 8, and the grid 4,620.
+For PAL/MNK/BER with a shield in both pools that is 16 races x 5 build-setup pairs (Tank 1h-shield, 2h and dw; Melee damage 2h and dw) x 11 tiers x 2 evidence x 2 buffs = 3,520
+scenarios; with no shield in the strict pool the strict level has 4 pairs, not 5, and the grid 3,168.
 
 A **chunk** is the work of one view: all the races of one ``(evidence, buffs, role, setup, tier)``. The pool and the weapon
 setup are the same for every race of a view, but the pruning is not quite: it leaves out an item that the race of the profile
@@ -43,8 +46,16 @@ in both directions** within the solver's exactness tolerance (the solver itself 
 so a model that understated its optimum would pass without this). A failure is an
 :class:`~trioforge.solver.solve.ExactnessError` or a :class:`ScenarioError`, and the run stops. Time limits are never used:
 every solve is called with the model alone. The builder options of every model and of the pruning are one object
-(:data:`BUILD_OPTIONS`); it and the solver settings are recorded in the shards (:func:`build_info`, :func:`solver_info`) and
-in the fingerprint of the chunk files, so a change of either redoes the chunks.
+(:data:`BUILD_OPTIONS`, with the table of procs of the trio added: :attr:`Context.options`). The shards record the solver settings (:func:`solver_info`) and the builder options that
+:func:`build_info` gives, which are ``any_rule`` and ``haste_assumed`` only: the table of procs is **not** in ``build_info``. Its effect is recorded per scenario, under ``procs`` (below). The
+fingerprint of the chunk files holds the builder options and the solver settings, and what the table is made from (the catalog, the rules file, the spell file and the code of the chunks, the
+effects code among it), so a change of any of them redoes the chunks.
+
+**Procs.** The weapon term counts the proc of each hand that swings (:mod:`trioforge.model.procs`). The table of a trio (:func:`proc_table`) is made when the inputs are read, from the
+effects of the wiki-level items of the public catalog (never from the seen flags) and the client's spell text, by the rules ``effects.proc_*``
+(:mod:`trioforge.effects.score`); the effects code is hashed into the fingerprint of the chunks with the model and the solver, and so is the spell file. A row of a chunk
+lists the procs its kit counts under ``procs`` (``[hand, effect name, donor key, "n" or "h", value]``) when any does, from the evaluator's own valuation of the kit, the one the value
+check of the row uses.
 
 Pruning is trusted only as far as it is checked, and two checks look for a loss of value. Each chunk **audits one race**,
 chosen by a rotation that visits every race over the chunks of a run (:func:`audit_race`): the race is solved again with the
@@ -91,9 +102,10 @@ from trioforge.classes import CLASS_CODES
 from trioforge.data import races as races_module
 from trioforge.data.jsonio import load_strict
 from trioforge.model import formulas as fm
+from trioforge.model import procs as procs_module
 from trioforge.model import tables as tables_module
 from trioforge.model import weapons as wp
-from trioforge.model.buffs import group_preset, own_buffs, resolve
+from trioforge.model.buffs import buffsets
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, ItemVec, at_tier
 from trioforge.model.profile import make_profile
 from trioforge.model.roles import roles_for
@@ -137,7 +149,9 @@ __all__ = [
     "run_task",
     "runnerup_chunk",
     "scenarios",
+    "bow_pool",
     "select_items",
+    "setup_pool",
     "shield_pool",
     "solve_chunk",
     "solver_info",
@@ -153,7 +167,7 @@ CODE_VERSION = 1  # bump when the format of a chunk changes: every finished chun
 #: reads ``LIMIT_SPA`` from the client spells, the tables the race table): a change in any of it redoes the chunks, so a fixed
 #: solver never serves answers of the old one. Line endings do not count. A test follows the imports of these files and fails
 #: for a module that is neither here nor explained there.
-CODE_DIRS = ("model", "solver")
+CODE_DIRS = ("model", "solver", "effects")
 CODE_FILES = ("rules.py", "classes.py", "precompute/grid.py", "sources/client_spells.py", "data/races.py")
 #: the builder options of every model of a run (and of its pruning); the shards record them
 BUILD_OPTIONS = BuildOptions()
@@ -161,6 +175,7 @@ BUILD_OPTIONS = BuildOptions()
 #: the slots of an item that the model has a place for (``ANY`` is a place, never a slot of an item)
 WEARABLE_SLOTS = frozenset(name for name, _ in SLOT_GROUPS)
 HANDS = ("PRIMARY", "SECONDARY")
+WEAPON_PLACES = (*HANDS, "RANGE")  # the places the weapon rules of a setup are asked about: the hands, and the range place for the bow setup
 SECONDARY_INDEX = SLOT_INSTANCES.index("SECONDARY")
 REMOVAL_CODES = frozenset({"removed-by-patch", "removed-by-research"})
 RUNNER_UPS = 3  # swaps kept for each place among the items that anyone can wear
@@ -250,20 +265,25 @@ def scenarios(
 
     The keyword arguments narrow the grid (a test or a quick look); a value that does not exist, or a role the trio is
     not offered, is a ``ValueError``. The order does not depend on the order of the arguments. ``items`` are the solve
-    pools, as item vectors, that decide whether the shield setup is in the grid: it is there only if the pool has a shield
-    that a class of the trio can wear (:func:`trioforge.model.weapons.shield_available`). A mapping gives the pool of
+    pools, as item vectors, that decide whether the shield setup and the bow setup are in the grid: the first is there only if the pool has a shield
+    that a class of the trio can wear (:func:`trioforge.model.weapons.shield_available`), the second only if it has a bow that a class of the trio may equip
+    (:func:`trioforge.model.weapons.bow_available`; the pool the precompute gives is :func:`setup_pool`). A mapping gives the pool of
     each evidence level (``{"strict": [...], "wiki": [...]}``; a level that is asked for and has no entry is a
     ``ValueError``), a list gives one pool to every level, and None assumes a shield, which is the grid of the design
-    (5,280 scenarios for PAL/MNK/BER)."""
+    (3,300 scenarios for PAL/MNK/BER)."""
     codes = parse_trio(trio)
     level = rules.get("level.current")
     all_races = [entry["code"] for entry in tables.races["races"] if entry["active"]]
     chosen_races = _pick("race", races, all_races)
-    chosen_roles = _pick("role", roles, roles_for(codes))
     chosen_tiers = _pick("tier", tiers, TIERS)
     chosen_evidence = _pick("evidence level", evidence, EVIDENCE)
     chosen_buffs = _pick("buff set", buffs, BUFFS)
     given = items if items is None or isinstance(items, Mapping) else list(items)  # a list is made once: items may be a generator
+    # the Ranged role plays the bow and nothing else, so it is offered when the widest pool (the wiki one) has a bow that a class of the trio can shoot: the roles of a trio
+    # are the same at every evidence level (a level whose own pool has no bow has no setup for the role and so no rows of it)
+    widest = None if given is None else list(given.get("wiki", given.get("strict", ())) if isinstance(given, Mapping) else given)
+    bow = widest is not None and wp.bow_available(codes, widest, tables=tables, level=level)  # (with no pool there is no bow: it is never assumed, as a shield is)
+    chosen_roles = _pick("role", roles, roles_for(codes, bow=bow))
 
     def pool_of(kind: str) -> list[ItemVec] | None:
         if given is None:
@@ -370,16 +390,39 @@ def shield_pool(config: Config, rules: Any, evidence: str = "wiki") -> list[Item
     ]
 
 
-def find_catalog() -> Path | None:
-    """The catalog file: ``$TRIOFORGE_CATALOG``, else ``derived/catalog.json`` of this checkout, else the one of the main
-    checkout (a worktree keeps the built data there); None when none exists."""
+def bow_pool(config: Config, rules: Any, evidence: str = "wiki") -> list[ItemVec]:
+    """The bows of the solve pool of an evidence level as item vectors at +0, as :func:`shield_pool` reads the shields: what :func:`scenarios` needs to know to decide
+    whether the level has the bow setup. A bow is a weapon of the archery skill that fits the range place (:func:`trioforge.model.weapons.is_bow`). No deity-locked item is in
+    a solve pool."""
+    if evidence not in EVIDENCE:
+        raise ValueError(f"unknown evidence level {evidence!r}; use one of {', '.join(EVIDENCE)}")
+    wanted = ("strict",) if evidence == "strict" else ("strict", "wiki")
+    return [
+        at_tier(item, 0, rules)
+        for item in config.items
+        if item["deity"] is None and config.levels[item["key"]] in wanted and "RANGE" in item["slots"]
+        and str((item.get("weapon") or {}).get("skill") or "").casefold() == wp.BOW_SKILL.casefold()
+        and wp.is_bow(at_tier(item, 0, rules))
+    ]  # (only an item of the archery skill that fits the range place is read, so an item that is no bow, whatever else is wrong with it, is left for the workers to report)
+
+
+def setup_pool(config: Config, rules: Any, evidence: str = "wiki") -> list[ItemVec]:
+    """What :func:`scenarios` reads to decide which weapon setups a level has: the shields (:func:`shield_pool`) and the bows (:func:`bow_pool`) of its solve pool."""
+    return [*shield_pool(config, rules, evidence), *bow_pool(config, rules, evidence)]
+
+
+def find_catalog(root: str | os.PathLike[str] | None = None) -> Path | None:
+    """The catalog file: ``$TRIOFORGE_CATALOG``, else ``derived/catalog.json`` of ``root`` (this checkout when none is given), else the one of the
+    main checkout of ``root``'s git (a worktree keeps the built data there); None when none exists. A ``root`` that is another tree is never given this
+    checkout's catalog: the tables, rules and spells that go with it are that tree's."""
+    base = tables_module.REPO if root is None else Path(root)
     candidates = []
     if os.environ.get("TRIOFORGE_CATALOG"):
         candidates.append(Path(os.environ["TRIOFORGE_CATALOG"]))
-    candidates.append(tables_module.REPO / "derived" / "catalog.json")
+    candidates.append(base / "derived" / "catalog.json")
     try:
         common = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=tables_module.REPO, capture_output=True,
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=base, capture_output=True,
             text=True, timeout=30, check=True,
         ).stdout.strip()
         candidates.append(Path(common).parent / "derived" / "catalog.json")
@@ -419,8 +462,9 @@ class Config:
 
     ``items`` are the catalog dicts of the trio's :class:`Selection`, ``levels`` their effective evidence levels,
     ``spells`` the beneficial-spell file of the level, ``canonical`` whether ties are resolved by the second stage,
-    ``fingerprint`` the hash of everything a result depends on, and ``default_evidence`` the evidence level of the default
-    view: ``strict``, or ``wiki`` while the strict pool is empty."""
+    ``fingerprint`` the hash of everything a result depends on, ``default_evidence`` the evidence level of the default
+    view: ``strict``, or ``wiki`` while the strict pool is empty, and ``procs`` the :class:`~trioforge.model.procs.ProcTable` of the trio
+    (:func:`proc_table`), or None when no proc is worth anything to it."""
 
     trio: tuple[str, ...]
     level: int
@@ -431,6 +475,7 @@ class Config:
     canonical: bool
     fingerprint: str
     default_evidence: str
+    procs: Any = None
 
 
 @dataclass(frozen=True)
@@ -471,15 +516,19 @@ def _file_sha256(path: Path) -> str:
 
 def load_inputs(
     trio: Sequence[str], *, catalog_path: str | os.PathLike[str], seen_path: str | os.PathLike[str] | None = None,
-    tables_root: str | os.PathLike[str] | None = None, canonical: bool = True, code_hash: str | None = None,
+    tables_root: str | os.PathLike[str] | None = None, canonical: bool = True, code_hash: str | None = None, procs: bool = True,
 ) -> tuple[Config, Meta]:
     """Read the catalog, the tables' hashes and the spell file; return the :class:`Config` and :class:`Meta` of a run.
+
+    ``procs`` (default True) makes the table of weapon procs of the trio (:func:`proc_table`) from the client's spell text of the effects layer
+    (``derived/client/effect-spells.json``): a run whose file is not there stops with a ``FileNotFoundError`` that names it, and never runs without procs by itself. A caller that
+    wants a run with no procs (a test of something else) says so with ``procs=False``, which is in the fingerprint.
 
     ``code_hash`` is the hash of the code the chunks are made under (:func:`_code_hash`), for a caller that has hashed the source files already: the release build
     hashes them once, at its start, and every worker takes that value, so that a chunk is never stamped with a hash of files that were changed after the code that
     made it was loaded. None hashes the files now.
 
-    Raises ``ValueError`` for a catalog that is not in the builder's form or a ``code_hash`` that is not a SHA-256, ``OSError`` for a file that cannot be read and
+    Raises ``ValueError`` for a catalog that is not in the builder's form or a ``code_hash`` that is not a SHA-256, ``OSError`` for a file that cannot be read (or is not there) and
     :class:`trioforge.data.catalog.BuildError` for a bad seen-flags file."""
     from trioforge.data import catalog as catalog_module  # imported here: the module is heavy and only the parent needs it
 
@@ -504,6 +553,12 @@ def load_inputs(
     strict_empty = not pool_dicts(selection, "strict")
     manifest = load_strict(root / "derived" / "client" / "manifest.json")
     dates = [entry["date"] for entry in manifest.get("inputs", []) if isinstance(entry.get("date"), str)]
+    effect_spells = root / "derived" / "client" / "effect-spells.json"
+    if procs and not effect_spells.is_file():
+        raise FileNotFoundError(
+            "derived/client/effect-spells.json is not there: the weapon procs of the score are made from it (derive it with trioforge.effects.derive, or ask for a run with no procs)"
+        )
+    table = proc_table(document["items"], codes, rules, effect_spells) if procs else None
     inputs = {
         "format": CODE_VERSION, "code": _code_hash() if code_hash is None else code_hash, "totals": list(shards.TOTALS_KEYS), "trio": codes, "level": level,
         "canonical": canonical,
@@ -514,13 +569,13 @@ def load_inputs(
             for name in ("rules/rules.json", "rules/races.json", "derived/client/basedata.json",
                          "derived/client/acmitigation.json", "derived/client/skillcaps.json",
                          f"derived/client/spells-l{level}.json")
-        },  # fmt: skip
-        "solver": solver_info(canonical), "build": build_info(),
+        } | ({"derived/client/effect-spells.json": _file_sha256(effect_spells)} if procs else {}),  # fmt: skip
+        "solver": solver_info(canonical), "build": build_info(), "procs": procs,
     }
     fingerprint = hashlib.sha256(json.dumps(inputs, sort_keys=True, default=str).encode()).hexdigest()
     config = Config(
         trio=codes, level=level, tables_root=str(root), items=tuple(selection.items), levels=dict(selection.levels),
-        spells=spells, canonical=canonical, fingerprint=fingerprint, default_evidence="wiki" if strict_empty else "strict",
+        spells=spells, canonical=canonical, fingerprint=fingerprint, default_evidence="wiki" if strict_empty else "strict", procs=table,
     )
     meta = Meta(
         data_release=f"data-{document['version']}", game_patch=max(dates, default=""), rules_version=rules.version,
@@ -528,6 +583,27 @@ def load_inputs(
         seen_count=len(seen),
     )
     return config, meta
+
+
+def proc_table(items: Sequence[Mapping[str, Any]], trio: Sequence[str], rules: Any, effect_spells: Path) -> Any:
+    """The :class:`~trioforge.model.procs.ProcTable` of ``trio``: the weapon procs that its weapons count in the score (:mod:`trioforge.effects.score`), from the effects of the
+    wiki-level items of the **public catalog** (``items``: every item of the catalog, not the trio's selection, so that no count depends on the seen flags) and the client's
+    spell text (``effect_spells``). None when no proc is worth anything to the trio; the spell file must be there (:func:`load_inputs` stops a run that lacks it)."""
+    from trioforge.effects import donors as effect_donors  # (imported here: the layer is heavy and only the parent needs it)
+    from trioforge.effects import derive, judgment, layer, score
+    from trioforge.effects import spells as effect_spell_book
+
+    carriers = [item for item in items if item["evidence"]["level"] == "wiki" and item.get("effects")]
+    if not carriers:
+        return None
+    j = judgment.Judgment.from_rules(rules)
+    book = effect_spell_book.SpellBook.load(effect_spells)
+    # (an effect the catalog has and the file was not derived for would count 0 as a proc, in silence: the run stops and says which)
+    book.check_names({derive.ALIASES.get(effect["name"], effect["name"]) for item in carriers for effect in item["effects"]})
+    effects, _ = effect_donors.build_effects(carriers, book, j)
+    ctx = layer.build_context(effects, book, j)
+    lore = {item["key"] for item in carriers if "lore" in item["flags"]}
+    return score.proc_table(effects, ctx, book, j, trio, lore)
 
 
 # ---- checking an answer --------------------------------------------------------------------------------------------
@@ -562,7 +638,7 @@ def check_kit(
             fits = place in item.slots
         if not fits:
             problems.append(f"{item.key}: does not fit {place}")
-        elif place in HANDS and setup is not None and not wp.allowed_in_hand(item, place.lower(), setup):
+        elif place in WEAPON_PLACES and setup is not None and not wp.allowed_in_hand(item, place.lower(), setup):
             problems.append(f"{item.key}: the {setup} setup does not allow it in {place}")
         if item.lore:
             if item.key in lore:
@@ -615,11 +691,9 @@ class Context:
         self.trio = config.trio
         self.tables = tables_module.load(config.tables_root)
         self.rules = self.tables.rules
-        own = own_buffs(self.trio, config.level, config.spells, self.rules)
-        self.buffsets = {
-            "own": resolve(own, self.rules),
-            "group": resolve([*own, *group_preset(config.spells)], self.rules),
-        }
+        # the buff sets a kit is chosen with: no spell haste in them while the rule haste.assume_spell is false (trioforge.model.buffs.buffsets)
+        self.buffsets = buffsets(self.trio, config.level, config.spells, self.rules, BUFFS)
+        self.options = dataclasses.replace(BUILD_OPTIONS, procs=config.procs)  # the options of every model of the run: the builder's, and the table of procs
         self._vecs: dict[int, dict[str, ItemVec]] = {}
         self._profiles: dict[tuple[str, str, str, str], Any] = {}
 
@@ -662,7 +736,7 @@ class Context:
     def empty_value(self, race: str, role: str, buffs: str) -> float:
         """The value of the naked character with its best buffs: the solve of an empty pool (the base of a gain)."""
         profile = self.profile(race, role, buffs, "wiki")
-        solution = solve_scenario(profile, [], None, self.buffsets[buffs], BUILD_OPTIONS, solver=solver_solve.solve).solution
+        solution = solve_scenario(profile, [], None, self.buffsets[buffs], self.options, solver=solver_solve.solve).solution
         if solution.status != "optimal" or solution.F is None:
             raise ScenarioError(f"the empty kit of {race} {role} {buffs} did not solve to optimality")
         return solution.F
@@ -681,7 +755,7 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
     profile = ctx.profile(race, key.role, key.buffs, key.evidence)
     started = time.perf_counter()
     solved_one = solve_scenario(
-        profile, pruned, key.setup, buffset, BUILD_OPTIONS,
+        profile, pruned, key.setup, buffset, ctx.options,
         solver=solver_solve.solve_canonical if ctx.config.canonical else solver_solve.solve,
     )
     solution, milp = solved_one.solution, solved_one.milp
@@ -690,6 +764,11 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
         raise ScenarioError(f"the solver ended with status {solution.status!r}, not optimal (no time limit is set)")
     if ctx.config.canonical and solution.tie_stage not in ("applied", "kept-first"):
         raise ScenarioError(f"the solver did not run the tie stage (tie_stage is {solution.tie_stage!r}), so the kit is not canonical")
+    if ctx.config.canonical and solution.tie_stage == "applied" and not solution.canonical:
+        raise ScenarioError(
+            "the last stage of the tie stage did not settle the kits of the same value and the same total rank "
+            f"(a tie of more than {solver_solve.MAX_TIED_KITS} kits, or a solve of it that did not finish), so the kit is not canonical"
+        )
     # "kept-first" is no error: the tie stage's kit was worth less than the first stage's by the exact evaluator, so the
     # first stage's kit stands. It is the optimum; which of several equal kits it is was left to the solver (and is counted)
     kit = list(solution.kit)
@@ -700,7 +779,7 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
     rebuilt = [vecs[item.key] if item is not None else None for item in kit]  # again, by key and tier
     totals = eval_buff_totals(buffset.totals(solution.buffs))
     # the kit is valued at the haste it counts (milp.haste_assumed is that haste: the weapon term is paid what the kit has)
-    exact = fm.evaluate(profile.eval_profile, rebuilt, totals, setup=key.setup, haste_assumed=milp.haste_assumed)
+    exact = fm.evaluate(profile.eval_profile, rebuilt, totals, setup=key.setup, haste_assumed=milp.haste_assumed, procs=ctx.options.procs)
     value = float(exact.F)
     if abs(value - solution.F) > EXACT_TOLERANCE * max(1.0, abs(value)):
         raise ExactnessError(f"the solver's value {solution.F!r} and the evaluator's value {value!r} of the kit differ")
@@ -714,7 +793,7 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
     # and the tie stage's band is 1e-7 relative, so an objective that falls short by more than the tolerance means that
     # the model is not exact, and the kit may not be the best there is. (The model's value is the kit's at the haste of the
     # program it came from, ``level``; it is the haste the kit counts unless the kit counts more than that program assumed.)
-    at_level = fm.evaluate(profile.eval_profile, rebuilt, totals, setup=key.setup, haste_assumed=solved_one.level)
+    at_level = fm.evaluate(profile.eval_profile, rebuilt, totals, setup=key.setup, haste_assumed=solved_one.level, procs=ctx.options.procs)
     limit = solver_solve.EXACTNESS_TOLERANCE * max(1.0, abs(value))
     if solution.model_F is None or abs(solution.model_F - float(at_level.F)) > limit:
         raise ExactnessError(
@@ -727,6 +806,11 @@ def _solve_one(ctx: Context, key: ChunkKey, race: str, pruned: list[ItemVec]) ->
         "totals": totals_vector(ctx.trio, ctx.config.level, ctx.tables, profile.bands, kit, totals, exact, profile.nd_pct),
         "nodes": solution.nodes, "tie": solution.tie_stage,
     }  # fmt: skip
+    counted = exact.totals.get("procs")
+    if counted is not None:  # which proc each hand that swings counts, and where it comes from: the key is there only when one counts, so a run with no proc is as it was
+        records = [procs_module.record(counted[hand], hand) for hand in ("PRIMARY", "SECONDARY") if counted[hand] is not None]
+        if records:
+            row["procs"] = records
     return row, built - started, solved - built
 
 
@@ -745,7 +829,7 @@ def audit_race(ctx: Context, key: ChunkKey, race: str, pool: Sequence[ItemVec], 
     the two models disagree: either way it is a :class:`ScenarioError` and the run stops. Returns ``{"race", "F"}``, which
     the chunk keeps."""
     profile = ctx.profile(race, key.role, key.buffs, key.evidence)
-    solution = solve_scenario(profile, pool, key.setup, ctx.buffsets[key.buffs], BUILD_OPTIONS, solver=solver_solve.solve).solution
+    solution = solve_scenario(profile, pool, key.setup, ctx.buffsets[key.buffs], ctx.options, solver=solver_solve.solve).solution
     if solution.status != "optimal" or solution.F is None:
         raise ScenarioError(f"the unpruned solve of {race} ended with status {solution.status!r}, not optimal (no time limit is set)")
     if abs(solution.F - expected) > EXACT_TOLERANCE * max(1.0, abs(expected)):
@@ -778,7 +862,7 @@ def solve_chunk(ctx: Context, key: ChunkKey, races: Sequence[str], audit: int | 
         wearable = frozenset(item.key for item in race_only if race in item.races)
         if wearable not in pruned_pools:
             profile = ctx.profile(race, key.role, key.buffs, key.evidence)
-            pruned_pools[wearable] = prune(pool, profile, key.tier, key.setup, ctx.buffsets[key.buffs], BUILD_OPTIONS)
+            pruned_pools[wearable] = prune(pool, profile, key.tier, key.setup, ctx.buffsets[key.buffs], ctx.options)
         return pruned_pools[wearable]
 
     rows, build_time, solve_time = [], 0.0, 0.0
@@ -817,7 +901,7 @@ def _fits(item: ItemVec, place: str, setup: str) -> bool:
         return "ANY" in item.slots or bool(WEARABLE_SLOTS & item.slots)
     if place not in item.slots:
         return False
-    return wp.allowed_in_hand(item, place.lower(), setup) if place in HANDS else True
+    return wp.allowed_in_hand(item, place.lower(), setup) if place in WEAPON_PLACES else True
 
 
 def runnerup_chunk(ctx: Context, role: str, tier: int, entries: Sequence[RunnerupInput]) -> dict[str, Any]:
@@ -851,7 +935,7 @@ def runnerup_chunk(ctx: Context, role: str, tier: int, entries: Sequence[Runneru
         kit = [vecs[k] if k is not None else None for k in entry.kit]
 
         def value(trial: list[ItemVec | None]) -> Any:
-            return fm.evaluate_truthful(ep, trial, totals, setup=entry.setup).F
+            return fm.evaluate_truthful(ep, trial, totals, setup=entry.setup, procs=ctx.options.procs).F
 
         base = value(kit)
         beaten = EXACT_TOLERANCE * max(1.0, abs(float(base)))  # the most a swap of an item anyone can wear may be worth
@@ -967,6 +1051,7 @@ class RobustScenario(NamedTuple):
     kit: tuple[ItemVec | None, ...]
     tables: Any
     rules: Any
+    options: Any = None
 
 
 def robust_scenario(ctx: Context, race: str, role: str, tier: int, setup: str, row: Mapping[str, Any]) -> RobustScenario:
@@ -977,5 +1062,5 @@ def robust_scenario(ctx: Context, race: str, role: str, tier: int, setup: str, r
         race=race, role=role, tier=tier, setup=setup, trio=ctx.trio, level=ctx.config.level, evidence=evidence, buffs="own",
         profile=ctx.profile(race, role, "own", evidence), buffset=ctx.buffsets["own"], items=ctx.pool(evidence, tier),
         pool_items=tuple(ctx.pool_items(evidence)), chosen_buffs=tuple(row["buffs"]), kit=tuple(vecs[k] if k is not None else None for k in row["kit"]),
-        tables=ctx.tables, rules=ctx.rules,
+        tables=ctx.tables, rules=ctx.rules, options=ctx.options,
     )  # fmt: skip

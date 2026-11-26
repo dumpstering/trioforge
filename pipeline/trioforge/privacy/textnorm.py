@@ -485,10 +485,39 @@ def base64_segments(text: str) -> list[tuple[int, str]]:
 # 16 or more hex digits that are all in one case (digests, commit ids) and package-lock style
 # integrity values ("sha512-" followed by base64). A run that mixes cases is not a digest: it is
 # letters that may well be a name.
-_HASH_RUN = re.compile(
-    r"(?P<hex>[0-9A-Fa-f]{16,})"
-    r"|(?P<integrity>(?i:sha(?:1|224|256|384|512))-[A-Za-z0-9+/]{16,}={0,2})"
+#
+# An integrity value is "sha<N>-" and the base64 of a digest of that algorithm. What the rule asks of the text, and no more: its body has the one length of that algorithm (sha1 27 characters,
+# sha224 38, sha256 43, sha384 64, sha512 86), with the padding that goes with it (one sign, two, one, none, two) optional, as some tools leave it out; the body ends in a character that the base64
+# of a digest can end in (the last character of 27, 38, 43 and 86 carries bits that are always zero: two for sha1 and sha256, so one of AEIMQUYcgkosw048; four for sha224 and sha512, so one of
+# AQgw; sha384 has none, so any); it stands alone, not after a letter or a digit (a word that ends in "sha1") and not followed by another base64 character or a sign of padding too many; and a value
+# that comes directly after a "/" has no "/" in its body (a real value is no path segment, and a folder and a name after "docs/sha256-" are a path). The base64url alphabet is not accepted (the old
+# pattern did not accept it either). Where the end of a value is, the text next to it is anything else: a quote, a brace, a comma, a bracket, an entity ("&quot;"), white space.
+#
+# THE RESIDUAL, said plainly: this is a test of shape, not of content, so a run of exactly that length that ends in such a character, not directly after a "/", and ends at a character outside
+# the alphabet, is blanked, and a name in it is not seen. By chance that is one run in 4 of the right length for sha1 and sha256, one in 16 for sha224 and sha512, and every one for sha384, which has no
+# spare bits: "x sha256-" and 43 characters of a path, a "/" among them, with a last one of the 16 (and "x" is not one of them), then a character that is no base64, is blanked. Without the exact
+# length, the last character and the "/" rule a folder in a path or a web address, such as "docs/sha256-reference/Name/LICENSE", was read as a value, the name in it blanked and left unmasked
+# when the path is printed.
+_INTEGRITY_ALPHABET = "A-Za-z0-9+/"
+#: for each algorithm: the length of its body, the characters its last one can be (None: any), and the padding that may follow
+_INTEGRITY_SHAPES = (
+    ("sha1", 27, "AEIMQUYcgkosw048", 1),
+    ("sha224", 38, "AQgw", 2),
+    ("sha256", 43, "AEIMQUYcgkosw048", 1),
+    ("sha384", 64, None, 0),
+    ("sha512", 86, "AQgw", 2),
 )
+
+
+def _integrity_alternatives(alphabet: str) -> str:
+    """The patterns of the five algorithms over ``alphabet`` (the characters of a body: with the slash, or without it)."""
+    return "|".join(
+        f"(?i:{name})-[{alphabet}]{{{length - 1}}}[{last if last is not None else alphabet}]={{0,{padding}}}" for name, length, last, padding in _INTEGRITY_SHAPES
+    )
+
+
+_INTEGRITY = f"(?:(?<!/)(?P<integrity>{_integrity_alternatives(_INTEGRITY_ALPHABET)})|(?<=/)(?P<integrity_after_slash>{_integrity_alternatives('A-Za-z0-9+')}))"
+_HASH_RUN = re.compile(r"(?P<hex>[0-9A-Fa-f]{16,})" r"|(?<![A-Za-z0-9])" + _INTEGRITY + r"(?![A-Za-z0-9+/=])")
 
 
 def _blank_hash(match: re.Match[str]) -> str:

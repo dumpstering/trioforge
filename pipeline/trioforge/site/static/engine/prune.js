@@ -10,7 +10,7 @@
 //
 // The arguments are those of Python's, in its order, and the builder's own: `items` and `profile` as `buildMilp` takes them (a list of items as
 // `atTier` gives them; a profile as `assembleProfile` gives it, read with the evaluator's reader), `tier` a whole number (every item is at it) or null
-// for a pool of many tiers (the pool of an Upgrade session), `setup` null, "1h-shield", "2h", "dw" or "stick", `buffset` null or `{set, table}`,
+// for a pool of many tiers (the pool of an Upgrade session), `setup` null, "1h-shield", "2h", "dw", "stick" or "ranged", `buffset` null or `{set, table}`,
 // `options` the builder's options (`any_rule`, `haste_assumed`, `owned_caps`, `new_keys`, `max_new`, `upgrades`, and `monk_bins` for a Monk whose
 // weight is scored; the same checks as `buildMilp` makes), and `owned` the idents (`key@tier`) of owned items besides the keys of `owned_caps`. Pass
 // it the same setup, buffset and options as the builder: the groups an item fits depend on the setup and on the Any rule, and the weapon index on the
@@ -26,7 +26,7 @@
 // The Monk bonus is read from the bins of the bundle (`options.monk_bins`, through the evaluator's `monkTable`), where Python computes it; the bins hold
 // the same numbers. Lookups of a name from the data go through a Map or a Set.
 
-import { CONSTANTS, UNITS, monkTable, profileOf } from "./evaluate.js";
+import { CONSTANTS, RANGE_GROUP, UNITS, monkTable, profileOf } from "./evaluate.js";
 import { CLASS_CODES } from "./items.js";
 import { ANY_RULES, allowedInHand, compareText, damageIndex, exact, readBuffset, readItem, readOptions } from "./model.js";
 import { Rational, ZERO } from "./rational.js";
@@ -50,7 +50,7 @@ const ANY = "ANY";
 const MODEL_SLOTS = new Set(GROUPS.filter((name) => name !== ANY));
 const [PRIMARY, SECONDARY] = CONSTANTS.handPlaces;
 const HANDS = [PRIMARY, SECONDARY];
-const HAND_SET = new Set(HANDS);
+const HAND_SET = new Set([...HANDS, RANGE_GROUP]); // the groups whose items the weapons rules decide, for every setup as WEAPON_GROUPS of solver/model.py has them: the range place takes any item in the four old setups (allowedInHand), a bow alone in the bow one
 const SETUP_SET = new Set(CONSTANTS.setups);
 const SCHOOLS = CONSTANTS.schools;
 const CLASS_SET = new Set(CLASS_CODES);
@@ -243,8 +243,37 @@ function ranksOf(values) {
   return values.map((value) => (value === null ? -1 : rank.get(value.toString())));
 }
 
+/**
+ * The columns of the procs (`_proc_columns` in prune.py, whose module docstring has the reasons): for each hand that swings, the rank of the best proc the item counts there (the constant of its
+ * column), the mode of the item (below or at the socket tier) and one 0/1 column for each source that can supply each proc to an item of the pool in that hand (in the dual-wield setup, and in the
+ * others when the table has a Lore donor); and, with a Lore donor, `PROC:lore` (0 for a donor, 1 for any other item) and one column for each donor of the pool, so that a Lore donor is never dropped for
+ * another item and drops none.
+ */
+function procColumns(column, placed, setup, procs) {
+  const hands = setup === "dw" ? HANDS : HANDS.slice(0, 1);
+  const lore = procs.loreKeys;
+  for (const hand of hands) {
+    const entries = placed.map(({ item, fits }) => (fits.has(hand) ? procs.every(item, hand) : null)); // (the rank of the best proc the item counts there: the first of the list)
+    column(ranksOf(entries.map((found) => (found === null ? null : found.length > 0 ? found[0].value : ZERO))));
+    if (setup !== "dw" && lore.size === 0) continue;
+    const hosted = placed.map(({ item }) => item.tier >= procs.socketTier);
+    column(hosted.map((one) => (one ? 1 : 0)));
+    column(hosted.map((one) => (one ? 0 : 1)));
+    const sets = placed.map(({ item, fits }) => new Map(fits.has(hand) ? procs.every(item, hand).map((entry) => [entry.effect, procs.sources(item, hand, entry.effect)]) : []));
+    const every = new Map();
+    for (const found of sets) for (const [effect, keys] of found) for (const key of keys) every.set(`${effect}\u0000${key}`, [effect, key]);
+    for (const [effect, key] of [...every.values()].sort((a, b) => compareText(a[0], b[0]) || compareText(a[1], b[1]))) {
+      column(sets.map((found) => ((found.get(effect) ?? []).includes(key) ? 1 : 0)));
+    }
+  }
+  if (lore.size > 0) {
+    column(placed.map(({ item }) => (lore.has(item.key) ? 0 : 1)));
+    for (const key of [...new Set(placed.map(({ item }) => item.key).filter((one) => lore.has(one)))].sort(compareText)) column(placed.map(({ item }) => (item.key === key ? 1 : 0)));
+  }
+}
+
 /** One row per item: a vector in which "A can replace B" is "every entry of A is at least that of B" (`_matrix` in prune.py). */
-function matrixOf(placed, p, setup, scored, weightRule, hasteAssumed) {
+function matrixOf(placed, p, setup, scored, weightRule, hasteAssumed, procs) {
   const columns = [];
   const column = (values) => columns.push(values);
   for (const group of GROUPS) column(placed.map(({ fits }) => (fits.has(group) ? 1 : 0)));
@@ -263,10 +292,11 @@ function matrixOf(placed, p, setup, scored, weightRule, hasteAssumed) {
     column(armor.map((value, at) => (second[at] ? (shield[at] ? value : 0) : NO_PLACE)));
   }
   if (scoredSet.has("DMG")) {
-    for (const hand of HANDS) {
-      const index = placed.map(({ item, fits }) => (fits.has(hand) ? damageIndex(item, hand, setup ?? "stick", hasteAssumed, p.dwFactor) : null));
+    for (const hand of setup === "ranged" ? [...HANDS, RANGE_GROUP] : HANDS) {
+      const index = placed.map(({ item, fits }) => (fits.has(hand) ? damageIndex(item, hand, setup ?? "stick", hasteAssumed, p.dwFactor, p.rangedFactor, p.swing, p.level) : null));
       column(ranksOf(index));
     }
+    if (procs !== null && ["1h-shield", "2h", "dw"].includes(setup)) procColumns(column, placed, setup, procs);
   }
   if (weightRule !== null) {
     column(placed.map(({ item }) => -item.weight10));
@@ -435,7 +465,7 @@ export function pruneReport(items, profile, tier, setup, buffset = null, options
   const hasteAssumed = assumedHaste(profile, placed, buffs, opts);
   const scored = scoredOf(p, hands);
   const weightRule = weightRuleOf(p, scored, placed, opts.monkBins);
-  const rows = matrixOf(placed, p, hands, scored, weightRule, hasteAssumed);
+  const rows = matrixOf(placed, p, hands, scored, weightRule, hasteAssumed, opts.procs);
   const roles = rolesOf(placed, opts, protectedIdents);
   const { kept, replacedBy } = sweep(placed, rows, roles);
   for (const [at, by] of replacedBy) dropped.set(placed[at].item.ident, ["dominated", placed[by].item.ident]);

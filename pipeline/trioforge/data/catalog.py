@@ -44,7 +44,7 @@ Everything else keeps ``item_type`` ``null`` and the source ``null``. See :func:
 
 **Class and race lists.** A page that says ``Race: NONE`` (or ``Class: NONE``) states an empty list: nobody may wear
 (or use) the item. The list stays empty and the evidence ladder marks the item ``not-for-bis`` with the note
-``race NONE`` (``class NONE``). A page with no ``Race:`` line is read as all races, as ever, and says nothing.
+``race NONE`` (``class NONE``). A page with no ``Race:`` line is read as all races, as ever, and says nothing. A ``Class:`` or ``Race:`` line with nothing after it also gives an empty list, and the note says ``class left blank`` (``race left blank``), not NONE.
 
 **Every page is parsed under a time limit.** A worker process parses and normalizes one page at a time;
 a page that takes more than ``--timeout`` seconds (default 10) is skipped as ``timeout``, its worker

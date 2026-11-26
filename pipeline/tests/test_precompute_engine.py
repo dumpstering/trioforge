@@ -26,7 +26,7 @@ from trioforge.export import browser
 from trioforge.precompute import engine as engine_module
 from trioforge.precompute import grid, shards
 
-NARROW = dict(races=("OGR",), roles=("balanced",), tiers=(4,), robustness=False)  # one race, one role, one tier: a few seconds
+NARROW = dict(races=("OGR",), roles=("tank",), tiers=(4,), robustness=False)  # one race, one role, one tier: a few seconds
 # the same keys as test_site_integration: a strict level that wears things, with a shield in it (w9014)
 SEEN = {"w9001", "w9002", "w9003", "w9006", "w9007", "w9009", "w9011", "w9012", "w9014", "w9015", "w9021"}
 WITH_SHIELD, WITHOUT_SHIELD = ["1h-shield", "2h", "dw"], ["2h", "dw"]
@@ -134,15 +134,15 @@ def test_the_item_table_carries_the_levels_the_shards_were_made_with(run):
     for name in shards.SHARD_NAMES:
         for row in read(run.dir / name)["items"]:
             assert levels[row[0]] == row[6], (name, row[0])  # every item a shard shows has the level the table gives it
-        for row in read(run.dir / "runnerups" / "balanced.json")["items"]:
+        for row in read(run.dir / "runnerups" / "tank.json")["items"]:
             assert levels[row[0]] == row[6], ("runner-ups", row[0])
 
 
 def test_without_seen_flags_the_levels_are_the_catalogs_and_the_files_differ(run, plain):
     assert set(levels_of(read(plain.out / "items.json")).values()) == {"wiki", "disputed", "hidden"}  # the invented catalog has no strict item
     assert (plain.out / "items.json").read_bytes() != (run.out / "items.json").read_bytes()
-    strict = read(run.dir / "engine-l50.json")["roles"]["balanced"]["setups_by_evidence"]
-    bare = read(plain.dir / "engine-l50.json")["roles"]["balanced"]["setups_by_evidence"]
+    strict = read(run.dir / "engine-l50.json")["roles"]["tank"]["setups_by_evidence"]
+    bare = read(plain.dir / "engine-l50.json")["roles"]["tank"]["setups_by_evidence"]
     assert strict == {"strict": WITH_SHIELD, "wiki": WITH_SHIELD}  # the seen shield is in the strict pool
     assert bare == {"strict": WITHOUT_SHIELD, "wiki": WITH_SHIELD}  # no strict item: no strict shield
 
@@ -283,7 +283,7 @@ def test_a_table_that_cannot_be_made_takes_the_old_table_away_as_a_bundle_that_c
 
 def test_a_bundle_of_another_level_in_the_trio_folder_is_removed_with_the_other_stale_result_files(again):
     stale = again.dir / "engine-l55.json"
-    stale.write_text("{}", encoding="utf-8")
+    stale.write_text(json.dumps({"rules_version": RULES.version}), encoding="utf-8")  # (a bundle of an earlier run of these rules: one with no rules version is old, and the run refuses it)
     rerun(again)
     assert not stale.exists() and (again.dir / "engine-l50.json").is_file()
 
@@ -303,7 +303,7 @@ def test_a_pool_whose_weapon_setups_depend_on_the_race_is_a_violation_and_writes
     out = tmp_path / "out"
     stale = out / SLUG / "engine-l50.json"
     stale.parent.mkdir(parents=True)
-    stale.write_text("{}", encoding="utf-8")  # an earlier run's bundle must not be left standing beside new shards
+    stale.write_text(json.dumps({"rules_version": RULES.version}), encoding="utf-8")  # an earlier run's bundle must not be left standing beside new shards (one that records these rules: with none the run refuses it)
     summary = pc.run(SLUG, out, catalog=catalog, processes=1, **NARROW)
     assert (out / SLUG / "wiki-own.json").is_file() and (out / "items.json").is_file()  # the shards and the table are written
     assert not stale.exists()
@@ -327,12 +327,12 @@ def test_a_bundle_whose_weapon_setups_differ_from_the_grid_of_the_run_stops_it_b
 
     def lying(*args, **kwargs):
         made = real(*args, **kwargs)
-        made["roles"]["balanced"]["setups_by_evidence"]["wiki"] = ["dw"]
+        made["roles"]["tank"]["setups_by_evidence"]["wiki"] = ["dw"]
         return made
 
     monkeypatch.setattr(browser, "bundle", lying)
     out = tmp_path / "out"
-    with pytest.raises(pc.PrecomputeError, match=r"weapon setups.*balanced.*wiki"):
+    with pytest.raises(pc.PrecomputeError, match=r"weapon setups.*tank.*wiki"):
         pc.run(SLUG, out, catalog=write_catalog(tmp_path / "catalog.json"), processes=1, **NARROW)
     assert not list(out.rglob("*.json"))  # nothing at all: not a chunk, not a result file
 

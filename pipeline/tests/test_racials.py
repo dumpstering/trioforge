@@ -99,19 +99,19 @@ def test_a_resist_racial_and_a_linked_skill_with_no_section_are_described_by_the
 
 @pytest.mark.parametrize(
     ("title", "code"),
-    [("Ogre", "OGR"), ("High Elf", "HIE"), ("Wood Elf", "ELF"), ("Half-Elf", "HEF"), ("Kerra", "KER"), ("Froglok", "FRG"), ("Dark Elf", "DEF")],
+    [("Ogre", "OGR"), ("High Elf", "HIE"), ("Wood Elf", "ELF"), ("Half-Elf", "HEF"), ("Kerra", "KER"), ("Froglok", "FRG"), ("Dark Elf", "DEF"), ("Half Dark Elf", "HDE")],
 )
 def test_a_page_title_is_matched_to_its_race_code_by_the_name_the_rules_use(title, code):
     assert parsed(invented(title, racial_page("Infravision"))).code == code
 
 
 def test_a_race_the_rules_have_no_code_for_is_skipped_and_says_why():
-    skipped = racials.parse_page(invented("Half Dark Elf", racial_page("Infravision")))
-    assert isinstance(skipped, racials.Skip) and skipped.reason == "no-race-code" and skipped.title == "Half Dark Elf"
+    skipped = racials.parse_page(invented("Marsh Goblin", racial_page("Infravision")))  # (an invented race: the page that used to be the example, Half Dark Elf, is a race of the rules now)
+    assert isinstance(skipped, racials.Skip) and skipped.reason == "no-race-code" and skipped.title == "Marsh Goblin"
 
 
 def test_every_race_of_the_rules_has_a_title_that_matches_it():
-    titles = {racials.race_code(name) for name in ("Human", "Barbarian", "Erudite", "Wood Elf", "High Elf", "Dark Elf", "Half-Elf", "Dwarf", "Troll", "Ogre", "Halfling", "Gnome", "Iksar", "Kerra", "Froglok")}
+    titles = {racials.race_code(name) for name in ("Human", "Barbarian", "Erudite", "Wood Elf", "High Elf", "Dark Elf", "Half-Elf", "Dwarf", "Troll", "Ogre", "Halfling", "Gnome", "Iksar", "Kerra", "Froglok", "Half Dark Elf")}
     assert titles == set(races_module.RACE_NAMES)
 
 
@@ -228,7 +228,7 @@ def make_snapshot(root: Path, records: list[dict], *, category: str = racials.CA
 def snapshot(tmp_path):
     ogre, iksar = page("ogre"), page("iksar")
     human = invented("Human", racial_page("None"), revid=77, pageid=3)
-    odd = invented("Half Dark Elf", racial_page("Infravision"), revid=88, pageid=4)
+    odd = invented("Marsh Goblin", racial_page("Infravision"), revid=88, pageid=4)
     return make_snapshot(tmp_path / "snap", [ogre, iksar, human, odd])
 
 
@@ -239,7 +239,7 @@ def test_the_file_has_the_pages_the_racials_and_what_was_skipped(snapshot):
     assert ogre == {"race": "OGR", "title": "Ogre", "revid": 153426, "url": "https://eqlwiki.com/index.php?title=Ogre&oldid=153426"}
     assert [r["name"] for r in document["racials"] if r["race"] == "OGR"] == ["Increased Consumption Rate", "Infravision", "Frontal Stun Immunity", "Slam"]
     assert [r for r in document["racials"] if r["race"] == "HUM"] == []
-    assert document["skipped"] == [{"title": "Half Dark Elf", "reason": "no-race-code"}]
+    assert document["skipped"] == [{"title": "Marsh Goblin", "reason": "no-race-code"}]
 
 
 def test_the_written_file_carries_the_licence_the_attribution_and_where_it_came_from(snapshot, tmp_path):
@@ -271,7 +271,7 @@ def test_a_snapshot_of_another_category_is_refused(tmp_path):
 
 
 def test_a_snapshot_with_no_race_page_at_all_is_refused(tmp_path):
-    empty = make_snapshot(tmp_path / "none", [invented("Half Dark Elf", racial_page("Infravision"))])
+    empty = make_snapshot(tmp_path / "none", [invented("Marsh Goblin", racial_page("Infravision"))])
     with pytest.raises(ValueError, match="no race page"):
         racials.read_racials(empty)
 

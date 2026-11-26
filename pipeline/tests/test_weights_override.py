@@ -8,8 +8,8 @@ weights and the regen window compose:
 * a **slider** (x0.5, x1 or x2 on a group of ``WEIGHT_GROUPS``) multiplies the weights of its group *after* that, so a
   custom weight of 3 under ATK+HASTE x2 is worth 6;
 * the weapon damage weight DMG follows the ATK weight in effect: it is the role's own DMG times (ATK in effect / own
-  ATK), which is the rule value (600) times the ATK weight for Tank and Melee, 0 for Caster and the mean of the
-  templates for Balanced; the ATK+HASTE slider scales it too;
+  ATK), which is the rule value (450) times the ATK weight and the weapon factor of the build (the Tank 0.5, Melee damage 1, the
+  casting builds 0); the ATK+HASTE slider scales it too;
 * the three regen weights are ``10 ticks a minute x T x`` the weight in effect of what they return; ``regen_T`` None (or
   a T equal to the role's own) keeps the role's own derivation, so nothing moves; the regen slider scales them last;
 * a weight on a currency the trio cannot reach (MANA without a mana pool) stays 0, together with MANAREG.
@@ -51,8 +51,9 @@ GROUP_OF = {key: group for group, keys in WEIGHT_GROUPS.items() for key in keys}
 REGEN = (("HPREG", "HP"), ("MANAREG", "MANA"), ("ENDREG", "END"))
 
 
-def base_of(trio, role="balanced", rules=RULES):
-    return weights_for(trio, role, rules)
+def base_of(trio, role=None, rules=RULES):
+    """The weights of a build of the trio (the first it is offered, unless one is named)."""
+    return weights_for(trio, role or roles.roles_for(trio)[0], rules)
 
 
 def every_role():
@@ -218,7 +219,7 @@ def test_the_derived_weights_and_what_they_follow_are_named_for_the_browser():
     assert set(roles.DERIVED_KEYS) <= set(BASE) and not set(roles.DERIVED_KEYS) & set(roles.CUSTOM_KEYS)
     for regen, resource in roles.REGEN_SOURCES.items():  # what weights_for derives, as the override derives it
         assert BASE[regen] == roles.TICKS_PER_MINUTE * MINUTES * BASE[resource]
-    assert BASE["DMG"] == RULES.get("weapons.damage_weight") * BASE[roles.DAMAGE_FOLLOWS]
+    assert BASE["DMG"] == RULES.get("weapons.damage_weight") * BASE[roles.DAMAGE_FOLLOWS] * RULES.get("roles.weapon_factor")["tank"] == 600.75  # (the Tank's weapon factor is a half)
 
 
 def test_the_bounds_are_the_ones_the_bundle_hands_to_the_browser():
@@ -237,7 +238,7 @@ def test_with_nothing_asked_the_result_is_the_role_weights_to_the_last_digit_for
         assert weights_override(base, {}, {}, None) == base, (trio, role)
         assert weights_override(base) == base, (trio, role)
         count += 1
-    assert count > 1500
+    assert count == 1394  # the builds of the 560 trios, the Archer left out (no pool): 274 + 210 + 525 + 161 + 224
 
 
 def test_every_slider_at_1_no_custom_weights_and_the_default_window_change_nothing_exactly():
@@ -250,8 +251,8 @@ def test_every_slider_at_1_no_custom_weights_and_the_default_window_change_nothi
 
 
 def test_the_default_window_is_the_role_s_own_even_when_the_stored_weights_are_rounded_fractions():
-    # Balanced of SHD/CLR/SHM has END = 17/60, which a float cannot hold: 10 x 3 x its float is 8.499999999999998
-    base = base_of(("SHD", "CLR", "SHM"))
+    # a weight that a float cannot hold (a bundle of an earlier release stored the mean of templates, END = 17/60): 10 x 3 x its float is 8.499999999999998
+    base = {**base_of(("SHD", "CLR", "SHM")), "END": 17 / 60, "ENDREG": 8.5}
     assert base["ENDREG"] == 8.5 and q(base["END"]) * 30 != q(base["ENDREG"])  # derived again from the float: 8.499...
     assert weights_override(base, {}, {}, MINUTES)["ENDREG"] == base["ENDREG"]
 
@@ -279,24 +280,24 @@ def test_the_result_is_a_new_dict_of_floats_and_the_inputs_are_left_alone():
 
 
 def test_a_custom_weight_is_scaled_by_its_slider_and_the_damage_weight_follows_the_attack_weight():
-    # Tank: ATK 2 and DMG 600 x 2 = 1200. Custom ATK 3 under ATK+HASTE x2 is an ATK of 6, and 600 x 6 = 3600 of DMG.
+    # Tank: ATK 2.67 and DMG 450 x 2.67 x 0.5 = 600.75 (the Tank's weapon factor is a half). Custom ATK 3 under ATK+HASTE x2 is an ATK of 6, and 225 x 6 = 1350 of DMG.
     result = weights_override(BASE, {"ATK+HASTE": 2}, {"ATK": 3}, None)
-    assert result["ATK"] == 6 and result["DMG"] == 3600 == 600 * result["ATK"]
+    assert result["ATK"] == 6 and result["DMG"] == 1350 == 450 * 0.5 * result["ATK"]
     assert result["HASTE"] == 3  # the role's own 1.5, doubled
-    assert result["DMG"] == RULES.get("weapons.damage_weight") * result["ATK"]
+    assert result["DMG"] == RULES.get("weapons.damage_weight") * RULES.get("roles.weapon_factor")["tank"] * result["ATK"]
 
 
 def test_the_example_with_every_part_at_once():
     result = weights_override(
         BASE, {"ATK+HASTE": 2, "AC": 0.5, "regen": 2, "SV": 0.5, "MANA": 2}, {"ATK": 3, "HP": 2}, 60
     )
-    assert result["ATK"] == 6 and result["HASTE"] == 3 and result["DMG"] == 3600
-    assert result["AC"] == 3 and result["MANA"] == 1
+    assert result["ATK"] == 6 and result["HASTE"] == 3 and result["DMG"] == 1350
+    assert result["AC"] == 6 and result["MANA"] == pytest.approx(0.3)
     assert all(result[f"SV_{school}"] == 0.2 for school in SCHOOLS)
     assert result["HP"] == 2 and result["DEX"] == BASE["DEX"] and result["END"] == BASE["END"]
     # regen: 10 x 60 x the weight in effect (the slider on MANA does not feed MANAREG), then the regen slider x2
     assert result["HPREG"] == 10 * 60 * 2 * 2 == 2400
-    assert result["MANAREG"] == 10 * 60 * 0.5 * 2 == 600
+    assert result["MANAREG"] == 10 * 60 * 0.15 * 2 == 180
     assert result["ENDREG"] == 10 * 60 * 0.5 * 2 == 600
 
 
@@ -321,13 +322,15 @@ def test_the_caster_stick_scores_no_damage_whatever_the_attack_weight():
     assert weights_override(caster, {"ATK+HASTE": 2}, {"ATK": 50}, None)["DMG"] == 0
 
 
-def test_balanced_with_a_caster_in_it_keeps_the_ratio_of_its_own_damage_to_its_attack_weight():
-    balanced = base_of(("SHD", "CLR", "SHM"))
-    assert balanced["DMG"] == pytest.approx(1000) and balanced["ATK"] == pytest.approx(53 / 30)
-    result = weights_override(balanced, {}, {"ATK": 2}, None)
-    assert result["DMG"] == pytest.approx(1000 * 2 / (53 / 30)) and result["DMG"] < 600 * 2
-    two_templates = base_of(("PAL", "MNK", "BER"))
-    assert weights_override(two_templates, {}, {"ATK": 4}, None)["DMG"] == pytest.approx(600 * 4)
+def test_a_build_with_a_weapon_factor_keeps_the_ratio_of_its_own_damage_to_its_attack_weight():
+    tank = base_of(("SHD", "CLR", "SHM"), "tank")
+    assert tank["DMG"] == pytest.approx(450 * 2.67 * 0.5) and tank["ATK"] == pytest.approx(2.67)
+    result = weights_override(tank, {}, {"ATK": 2}, None)
+    assert result["DMG"] == pytest.approx(450 * 0.5 * 2) and result["DMG"] < 450 * 2  # the factor of a half stays: a custom attack weight of 2 is 225 a point
+    melee = base_of(("PAL", "MNK", "BER"), "melee")
+    assert weights_override(melee, {}, {"ATK": 5}, None)["DMG"] == pytest.approx(450 * 5)
+    shield = base_of(("SHD", "CLR", "SHM"), "shield")
+    assert shield["DMG"] == 0 and weights_override(shield, {"ATK+HASTE": 2}, {"ATK": 50}, None)["DMG"] == 0
 
 
 def test_a_trio_with_no_mana_class_keeps_mana_and_mana_regen_at_zero():

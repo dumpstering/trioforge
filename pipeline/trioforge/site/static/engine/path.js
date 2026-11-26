@@ -25,6 +25,13 @@
 // step to step. Every solve is the truthful one of solve.js (`solveScenario`): the weapons are paid the haste the kit counts, so the value of a kit is the
 // same wherever it stands and a step's gain is never a revaluation of the kit it started from; the options of the session may fix one haste for every kit instead.
 //
+// Of additions of exactly the same value. The solve of a step gives one of them, and which one is the solver's path (the canonical solve of Python takes the one of the kit that comes
+// first in the order of kits, a visitor's solve, which runs no tie stage, whatever HiGHS reached first): so after it the step looks for a smaller one, the same program with only the
+// candidates before the one found on offer (the others held at none in `owned_caps`, on the same pool, in a scenario of its own so that the model of the step stays for the next step), and if its best value is exactly
+// the step's the addition it found is the next to look before, until none ties. The step is the first by `(key, tier)` of the additions worth exactly the best value, in the canonical
+// path and in the visitor's alike (`_earlier_equal` in upgrade.py), and its kit is the solve of that addition alone (canonical when the path is; the kit of the look when it is not).
+// The look is a solve of the same kind as the step's, so a step costs one more; a path with no step that has a smaller candidate costs no more.
+//
 // The stepper. `createFarmPath` makes the path and does nothing else (the deadline is fixed there: the time between the calls that follow counts against the
 // budget); `start()` solves Equip now and gives its answer (`baseline` of farmPath), once, first; `next()` makes the next step and gives exactly the object that
 // farmPath's `onStep` is called with, or null once the path has ended; `stop()` ends the path before its next step (the next call of `next()` gives null and
@@ -62,10 +69,10 @@
 
 import { SLOT_INSTANCES, CONSTANTS, evaluate, evaluateTruthful, profileOf } from "./evaluate.js";
 import { CLASS_CODES } from "./items.js";
-import { ModelError, compareText, ident, readItem, readOptions } from "./model.js";
+import { ModelError, NO_BOW, compareText, ident, isBow, readItem, readOptions } from "./model.js";
 import { fitGroups, prune } from "./prune.js";
 import { LABEL_NO_INCUMBENT } from "./protocol.js";
-import { solveScenario } from "./solve.js";
+import { builderOptions, solveScenario } from "./solve.js";
 
 /** An input that is not what the Upgrade functions read: the message says which. */
 export class PathError extends Error {
@@ -80,6 +87,8 @@ const fail = (message) => new PathError(message);
 /** The scenarios the functions keep in the session: Equip now, and the persistent Best-1 model of the farm path. */
 const EQUIP_NOW = "equip-now";
 const BEST_1 = "best-1";
+/** The scenario of the look for an earlier equal addition of a step: a model of its own, so that the model of the step stays as it is for the next step. */
+const BEST_1_LOOK = "best-1-look";
 /** The most additions the path makes at once (the Best-1 model), and the steps it makes unless asked for fewer (`farm_path` in upgrade.py). */
 const MAX_NEW = 1;
 const DEFAULT_STEPS = 8;
@@ -301,8 +310,23 @@ export function sessionHaste(profile, owned, candidates, setup, buffset = null, 
  * models included. Returns the answer of `solveScenario` (solve.js), with `build` (what `setScenario` said about the models).
  */
 function solveEquipNow(session, ledger, { deadline, canonical }) {
+  requireBow(session, [...ledger.items.values()]);
   const options = { ...sessionBuilderOptions(session), owned_caps: Object.fromEntries(ledger.counts) };
   return solveScenario(session, { name: EQUIP_NOW, items: [...ledger.items.values()], options, budgetMs: Math.max(0, deadline - session.now()), deadline, canonical });
+}
+
+export { NO_BOW };
+
+/**
+ * The bow setup puts a bow in the range place whatever it is worth (the row `range.bow` of the model, in Python and here, and in every fixture): Equip now, which has the owned items alone, has no
+ * kit in that setup when the list has no bow that the profile can wear. The bow counts only if it passes the builder's own filter (`usableBy`: a class of the trio, the deity, the race), as the model
+ * filters its items before it looks for a bow; the model would otherwise refuse the list with an error of its own (typed now, `NoBowError`, and a bad request too). The refusal here is a bad request of
+ * the list with a sentence that says what to do, and the worker goes on. (A normal answer with an empty range place would be another model than the one Python holds this to.)
+ */
+function requireBow(session, items) {
+  if (session.setup !== "ranged") return;
+  const usable = usableBy(session.profile);
+  if (!items.some((item, at) => isBow(readItem(item, at)) && usable(item))) throw fail(NO_BOW);
 }
 
 /** The builder's options of a session: its Any rule, and the one haste it fixes if it does. */
@@ -334,8 +358,10 @@ class Plan {
     this.news = new Set();
     this.ups = new Map(); // target ident -> source ident
     this.kinds = new Map(); // ident -> [kind, source tier]
+    this.cands = new Map(); // every candidate by ident (a copy or a Lore copy too), for the order of the equal additions
     for (const candidate of [...candidates].sort(byKeyThenTier)) {
       const name = ident(candidate.key, candidate.tier);
+      this.cands.set(name, candidate);
       const [kind, source] = ledger.classify(candidate);
       if (kind === KIND_COPY) {
         if (!candidate.lore) {
@@ -352,16 +378,27 @@ class Plan {
     }
   }
 
-  /** The builder's options for `pool` (the whole pool of this solve, or a pruned one): the idents that are no longer in it are left out. */
-  options(base, pool, maxNew) {
+  /**
+   * The builder's options for `pool` (the whole pool of this solve, or a pruned one): the idents that are no longer in it are left out. With `only` (a Set of idents) only those candidates are on
+   * offer: the others are not new items or upgrade targets any more, a candidate that is not owned is held at none (a count of 0 in `owned_caps`) and one that is owned has no copy beyond its
+   * count (`_Plan.options` in upgrade.py).
+   */
+  options(base, pool, maxNew, only = null) {
     const present = new Set(pool.map((item) => ident(item.key, item.tier)));
-    return {
-      ...base,
-      owned_caps: Object.fromEntries(this.caps),
-      new_keys: [...this.news].filter((name) => present.has(name)),
-      max_new: maxNew,
-      upgrades: Object.fromEntries([...this.ups].filter(([target]) => present.has(target))),
-    };
+    const caps = new Map(this.caps);
+    let news = [...this.news].filter((name) => present.has(name));
+    let ups = [...this.ups].filter(([target]) => present.has(target));
+    if (only !== null) {
+      for (const name of [...news, ...ups.map(([target]) => target)].sort(compareText)) if (!only.has(name) && !caps.has(name)) caps.set(name, 0);
+      news = news.filter((name) => only.has(name));
+      ups = ups.filter(([target]) => only.has(target));
+    }
+    return { ...base, owned_caps: Object.fromEntries(caps), new_keys: news, max_new: maxNew, upgrades: Object.fromEntries(ups) };
+  }
+
+  /** The idents of the candidates that come before `limit` (an item: `(key, tier)`): the ones the look for an earlier equal addition puts on offer. */
+  before(limit) {
+    return new Set([...this.cands].filter(([, candidate]) => byKeyThenTier(candidate, limit) < 0).map(([name]) => name));
   }
 }
 
@@ -399,6 +436,37 @@ function acquiredBy(kit, plan, ledger) {
     add(name, Math.max(0, shared - ledger.counts.get(name)), ...plan.kinds.get(name));
   }
   return found;
+}
+
+/**
+ * The first by `(key, tier)` of the additions worth exactly `best` (the value of the step) when one comes before `chosen`, else null (`_earlier_equal` in upgrade.py): the step's program is
+ * solved again with only the candidates before the addition found on offer, on the same pool and the same model of the session (the others held at none), and if its best value is
+ * `best` its addition is the next to look before, until the best value is less (it is never more). The solves are plain ones (no tie stage): which of the equal additions such a solve
+ * gives does not matter. Returns `{found, answer, ranOut}`: `found` the addition (`{item, kind, sourceTier}`) and `answer` the solve that found it; `ranOut` is true when a solve of the look
+ * had no time or did not end proven, and the look stopped (what it had found stands).
+ */
+function earlierEqual(session, ledger, plan, kept, sessionOptions, chosen, best, { deadline, left }) {
+  const present = new Set(kept.map((item) => ident(item.key, item.tier)));
+  let found = null;
+  let answer = null;
+  let limit = chosen.item;
+  for (;;) {
+    const offered = new Set([...plan.before(limit)].filter((name) => present.has(name)));
+    if (offered.size === 0) return { found, answer, ranOut: false };
+    const remaining = left();
+    if (remaining <= 0) return { found, answer, ranOut: true };
+    // only a kit worth the step's value is looked for (`floor`): a look that finds none ends at once, which is nearly always what it finds
+    const solved = solveScenario(session, { name: BEST_1_LOOK, items: kept, options: plan.options(sessionOptions, kept, MAX_NEW, offered), budgetMs: remaining, deadline, canonical: false, needTime: true, floor: best.toNumber() });
+    if (solved === null) return { found, answer, ranOut: true };
+    if (solved.status === "infeasible") return { found, answer, ranOut: false }; // (no kit of those candidates is worth the step's value: no earlier addition ties)
+    if (solved.status !== STATUS_OPTIMAL || solved.kit === null) return { found, answer, ranOut: true };
+    if (!solved.F.equals(best)) return { found, answer, ranOut: false };
+    const acquired = acquiredBy(solved.kit, plan, ledger);
+    if (acquired.length !== 1) throw fail(`the look for an earlier equal addition acquires ${acquired.length} items, not one`);
+    found = acquired[0];
+    answer = solved;
+    limit = found.item;
+  }
 }
 
 /** The owned set after an acquisition: an upgrade takes a copy from its source and adds one of the target, anything else adds a copy. */
@@ -489,7 +557,7 @@ function makePath(session, owned, candidates, { budgetMs, canonical, wanted, onB
   const left = () => deadline - session.now();
   const result = { steps: [], stopped: STOP_LIMIT, hasteAssumed: null, baseline: null, elapsedMs: 0 };
   const sessionOptions = sessionBuilderOptions(session);
-  const withBins = (options) => (session.monkBins === undefined ? options : { ...options, monk_bins: session.monkBins });
+  const withBins = (options) => builderOptions(session, options);
   let phase = "new"; // new -> started (by start()) -> ended
   let ending = null; // why the path ends at the next call, when the step just made was the last (it was not found, or not proven the best)
   let stopping = false;
@@ -557,7 +625,7 @@ function makePath(session, owned, candidates, { budgetMs, canonical, wanted, onB
     };
 
     if (answer.kit === null) return notFound();
-    const acquired = acquiredBy(answer.kit, plan, ledger);
+    let acquired = acquiredBy(answer.kit, plan, ledger);
     const gain = answer.F.sub(before);
     if (acquired.length === 0 || gain.sign() <= 0) {
       // nothing improves the value: proven if the solve is
@@ -565,12 +633,40 @@ function makePath(session, owned, candidates, { budgetMs, canonical, wanted, onB
       return end(STOP_NO_GAIN);
     }
     if (acquired.length !== 1) throw fail(`step ${number} acquires ${acquired.length} items, not one: the model admitted too much`);
+    // of additions worth exactly the same the first by (key, tier) is the step's: the look for an earlier one, on the model of the step (see the head of this file)
+    let stepAnswer = answer;
+    let lookRanOut = false;
+    if (answer.status === STATUS_OPTIMAL) {
+      const looking = session.now();
+      const look = earlierEqual(session, ledger, plan, kept, sessionOptions, acquired[0], answer.F, { deadline, left });
+      lookRanOut = look.ranOut;
+      if (look.found !== null) {
+        let alone = look.answer; // (the look's own answer: its kit is a kit of that addition, and not canonical)
+        if (canonical) {
+          const remainingNow = left();
+          alone = solveScenario(session, { name: BEST_1, items: kept, options: plan.options(sessionOptions, kept, MAX_NEW, new Set([ident(look.found.item.key, look.found.item.tier)])), budgetMs: remainingNow, deadline, canonical, needTime: true });
+          if (alone === null || alone.status !== STATUS_OPTIMAL || alone.kit === null) {
+            step.timings.solveMs += session.now() - looking;
+            return notFound();
+          }
+          step.timings.tieMs += alone.timings.tieMs;
+        }
+        if (!alone.F.equals(answer.F)) throw fail(`step ${number}: the addition that comes first among the equal ones is not worth what the best is`);
+        acquired = acquiredBy(alone.kit, plan, ledger);
+        if (acquired.length !== 1) throw fail(`step ${number} acquires ${acquired.length} items, not one: the model admitted too much`);
+        stepAnswer = alone;
+        step.solution = alone;
+        step.hasteAssumed = alone.hasteAssumed;
+      }
+      step.timings.solveMs += session.now() - looking; // (the time of the step's solves: the look and the solve of the addition that came first are among them)
+      step.timings.totalMs = session.now() - began;
+    }
     join(ledger, acquired[0]);
-    before = answer.F;
+    before = stepAnswer.F;
     Object.assign(step, { found: true, item: acquired[0].item, kind: acquired[0].kind, sourceTier: acquired[0].sourceTier, F: before, gain, owned: ledger.snapshot() });
     result.steps.push(step);
-    // an addition that is not proven the best: it is a step, and the time is gone
-    if (answer.status !== STATUS_OPTIMAL) ending = STOP_TIME;
+    // an addition that is not proven the best: it is a step, and the time is gone (so is it when the look for an earlier equal one ran out of time)
+    if (answer.status !== STATUS_OPTIMAL || lookRanOut) ending = STOP_TIME;
     return step;
   }
 
@@ -633,7 +729,7 @@ export function bestSets(session, owned, candidates, k, request) {
   const left = () => deadline - session.now();
 
   const sessionOptions = sessionBuilderOptions(session);
-  const withBins = (options) => (session.monkBins === undefined ? options : { ...options, monk_bins: session.monkBins });
+  const withBins = (options) => builderOptions(session, options);
   const baseline = solveEquipNow(session, ledger, { deadline, canonical });
   const result = (more) => ({
     k,
@@ -714,11 +810,11 @@ export function everySlot(session, kit, candidates, request = {}) {
   const offered = checkedCandidates(candidates);
   const ledger = new Owned(owned === undefined ? [] : ownedEntries(owned));
 
-  const { profile, setup, buffset, monkBins } = session;
+  const { profile, setup, buffset, monkBins, procs } = session;
   const base = session.options;
   // a swap is valued at the haste the swapped kit counts (the one haste of the session's options when they fix one)
   const usable = usableBy(profile);
-  const evaluated = { setup, monkBins, buffset: buffset ?? undefined };
+  const evaluated = { setup, monkBins, buffset: buffset ?? undefined, procs: procs ?? undefined };
   const value = (trial) =>
     base.haste_assumed === null
       ? evaluateTruthful(profile, trial, buffset === null ? null : chosen, evaluated).F

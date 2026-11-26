@@ -10,15 +10,21 @@
  *
  *   byte 0     version, always 1
  *   varint     trio index    the position in TRIO_CODES, 0..559
- *   varint     race index    the position in RACE_CODES, 0..14
+ *   varint     race index    the position in RACE_CODES, 0..15
  *   varint     level         1..65
  *   varint     slot count n  0..22
  *   n times    varint slotIndex  0..21, strictly ascending
  *              varint pageId     1..2^31-1, the number in a catalog key "w<pageId>"
  *              varint tier       0..10
  *
- * The bytes travel as base64url (RFC 4648 section 5) with no padding. A kit is at most 160 bytes, so
- * at most 214 characters; a link may be up to 2,048. There is no compression: nothing here inflates.
+ * The bytes travel as base64url (RFC 4648 section 5) with no padding. A kit is at most 160 bytes (161 with
+ * the setup marker below), so at most 216 characters; a link may be up to 2,048. There is no compression: nothing here inflates.
+ *
+ * Version 2, the optional setup marker. A kit that was made for a weapon setup that its hands do not tell (the Bow setup: its bow stands in the range place, which a kit's hands do not
+ * show) can say so: version 2 is the fields of version 1 and then one more varint, the code of the setup, the position in SETUP_CODES plus one (1 is "ranged"). It is written
+ * only for such a kit; a kit with no marker is written as version 1, the same text as ever, and a version-1 link is read as it always was (the kit has no `setup`). A reader that
+ * gets a code it does not know (0, or beyond the table) reads the kit with no marker, so that a link of a later version still opens; and the page accepts a marker only for a setup that
+ * the trio offers and a kit that has a bow in its range place (engine/kitvalue.js), so a marker is a claim that cannot change a kit's items, only the setup its value is worked out under.
  *
  * Every kit has exactly one spelling, and the decoder accepts nothing else: the alphabet is exact,
  * the unused bits of the last character are zero, a varint is the shortest one for its value (and
@@ -35,9 +41,10 @@
  *   1. Run `takeKitFromLocation()` first in the page module, before any other script can read the
  *      URL. It lives in input/kitlocation.js, the one file of the kit link that the page script
  *      carries (this file is code of the Upgrade section, loaded with it). It moves a `#k=` payload
- *      into `history.state` (which survives a reload) and removes the fragment. If `source` is
- *      "fragment" and `cleared` is false, the fragment is still in the URL: turn analytics off for
- *      this page.
+ *      into `history.state` (which survives a reload) and removes the fragment. A page that was
+ *      opened from a kit link (`source` is "fragment", or "state" on a reload) is never counted by
+ *      the page counter: counter.js adds the counter's script to a page with no kit link and to no
+ *      other.
  *   2. When `payload` is not null, fetch the item table, then call `decodeKit(payload, items)`
  *      (input/kitdecode.js: the reading half of the codec, which only the panel of a shared kit
  *      imports, and so a chunk of its own in the build).
@@ -48,9 +55,9 @@
  * Two limits that the page has to respect, because no code in this module can:
  *   - Clearing the fragment does not hide it everywhere. The navigation timing entry
  *     `performance.getEntriesByType("navigation")[0].name` keeps the address the page was loaded
- *     with, `#k=` payload included, and anything that reports that name would send the kit. The
- *     Phase 5 preview test asserts that the analytics beacon never sends "#k=". If it ever does,
- *     analytics must stay off for a page opened from a kit link.
+ *     with, `#k=` payload included, and anything that reports that name would send the kit. That
+ *     is why the analytics stay off for a page opened from a kit link: counter.js does not load the
+ *     counter's script there, and tests-e2e/analytics.spec.mjs holds it.
  *   - `history.state` belongs to one history entry. Following a link to an in-page anchor
  *     (`<a href="#main">`) makes a new history entry with no state, so a reload would lose the
  *     kit. In-page anchors must not create history entries: the page moves with
@@ -73,6 +80,10 @@ export const SLOT_ORDER = Object.freeze(
 );
 
 export const KIT_VERSION = 1;
+/** The version of a link that carries the setup marker (see the header). The `v` of a kit stays 1: the version of the link is not the version of the kit. */
+export const KIT_VERSION_SETUP = 2;
+/** The setups a link can name, in the order of their codes (the code is the position plus one). Part of the format: never reorder it, only add at the end. */
+export const SETUP_CODES = Object.freeze(["ranged"]);
 export const MAX_FRAGMENT_LENGTH = 2048;
 export const MAX_SLOTS = SLOT_ORDER.length;
 export const MAX_TIER = 10;
@@ -85,8 +96,8 @@ export const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 /** The 16 class codes in class-id order: the list in `pipeline/trioforge/classes.py`. */
 export const CLASS_CODES = Object.freeze("WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER".split(" "));
 
-/** The 15 race codes in the order of `rules/races.json`. A kit spells a race as written there ("OGR"). */
-export const RACE_CODES = Object.freeze("HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG".split(" "));
+/** The 16 race codes in the order of `rules/races.json` (a race is only ever added at the end, so that no kit link made before it changes). A kit spells a race as written there ("OGR"). */
+export const RACE_CODES = Object.freeze("HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG HDE".split(" "));
 
 /**
  * All 560 class triples. A trio is spelled as the page address spells it: its class codes in
@@ -123,6 +134,7 @@ export const KIT_ERRORS = Object.freeze({
   truncated: "kit link ends too early",
   overlong: "a number in the kit link is not in canonical form",
   varintTooLong: "a number in the kit link is too long",
+  setup: "unknown setup",
   trio: "unknown trio code",
   race: "unknown race code",
   level: `level out of range (${MIN_LEVEL}..${MAX_LEVEL})`,
@@ -241,10 +253,11 @@ function canonicalSlots(slots) {
 
 /**
  * Writes a kit as a link payload (the text after `#k=`).
- * @param {{v: 1, trio: string, race: string, level: number, slots: Array<[number, number, number]
+ * @param {{v: 1, trio: string, race: string, level: number, setup?: string | null, slots: Array<[number, number, number]
  *   | {slotIndex: number, pageId: number, tier: number}>}} kit
  *   `trio` and `race` are spelled as in the tables; slots may come in any order and are written
- *   in ascending slot order; properties other than these are ignored (and never written).
+ *   in ascending slot order; `setup` is the optional marker (a name in SETUP_CODES, else KitError;
+ *   none or null: a version-1 link); properties other than these are ignored (and never written).
  * @param {{trios: string[], races: string[]}} [tables]
  * @returns {string} base64url without padding, at most 214 characters
  * @throws {KitError} for any kit that is not exactly writable; nothing is returned then
@@ -259,7 +272,10 @@ export function encodeKit(kit, tables = DEFAULT_TABLES) {
   if (race < 0) throw new KitError(KIT_ERRORS.race);
   if (!isWhole(kit.level, MIN_LEVEL, MAX_LEVEL)) throw new KitError(KIT_ERRORS.level);
   const slots = canonicalSlots(kit.slots);
-  const bytes = [KIT_VERSION];
+  const marked = kit.setup !== undefined && kit.setup !== null;
+  const code = marked && typeof kit.setup === "string" ? SETUP_CODES.indexOf(kit.setup) + 1 : 0;
+  if (marked && code === 0) throw new KitError(KIT_ERRORS.setup);
+  const bytes = [marked ? KIT_VERSION_SETUP : KIT_VERSION];
   pushVarint(bytes, trio);
   pushVarint(bytes, race);
   pushVarint(bytes, kit.level);
@@ -269,6 +285,7 @@ export function encodeKit(kit, tables = DEFAULT_TABLES) {
     pushVarint(bytes, pageId);
     pushVarint(bytes, tier);
   }
+  if (marked) pushVarint(bytes, code);
   const text = toBase64Url(bytes);
   if (text.length > MAX_FRAGMENT_LENGTH) throw new KitError(KIT_ERRORS.tooLong); // cannot happen: 214 is the most
   return text;

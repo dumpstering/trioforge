@@ -24,6 +24,7 @@ from test_site_items import expected_rows, number
 from trioforge import rules as rules_module
 from trioforge.classes import CLASS_CODES
 from trioforge.export import browser
+from trioforge.model.roles import opening_role
 from trioforge.site import build, content, data, view
 
 REPO = Path(__file__).resolve().parents[2]
@@ -495,7 +496,7 @@ def test_a_name_is_plain_text_where_the_item_has_no_page_a_disputed_one_and_a_hi
     by_key["w90003"]["owned_only"] = True
     pages = frozenset(build.item_page_keys(changed))
     assert "w90001" not in pages and "w90003" not in pages and "w90002" in pages
-    strict = results.shards[("strict", "own")].scenario("OGR", "balanced", 4, "dw")
+    strict = results.shards[("strict", "own")].scenario("OGR", "tank", 4, "dw")
     rows = view.kit_rows(strict, pages)
     assert rows[0].name == "Helm of the Stoneward" and rows[0].href is None  # disputed: plain text
     assert all(row.href is None for row in rows if row.empty) and sum(1 for row in rows if row.href) == 20
@@ -611,7 +612,7 @@ def test_every_link_of_every_page_of_the_site_that_goes_to_an_item_goes_to_a_pag
 
 def valid_trios(count: int) -> list[str]:
     """The fixture's own slug and ``count - 1`` other trios whose default answer (the fixture's: an Ogre, a Troll behind it) the build accepts: the race must be the creation-legal one with the
-    highest value, and which races a trio can start depends on its classes."""
+    highest value, which races a trio can start depends on its classes, and the build it opens on (the fixture's: the Tank) must be the one its classes open on."""
     results = data.load_trio(RESULTS / "pal-mnk-ber")
     found = []
     for trio in combinations(CLASS_CODES, 3):
@@ -620,9 +621,11 @@ def valid_trios(count: int) -> list[str]:
             continue
         try:
             build.check_defaults(dataclasses.replace(results, meta=dataclasses.replace(results.meta, slug=slug, trio=trio)))
-        except build.BuildError:
+            opens_on_the_tank = opening_role(trio, ("tank", "melee")) == "tank"  # (the reader refuses a defaults.json that opens on another build than the classes open on)
+        except (build.BuildError, ValueError):
             continue
-        found.append(slug)
+        if opens_on_the_tank:
+            found.append(slug)
     return ["pal-mnk-ber", *found[: count - 1]]
 
 

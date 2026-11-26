@@ -1,5 +1,5 @@
 {
- "provenance": {"inputs":[{"file":"Resources/skillcaps.txt","sha256":"f92c3364719db1f9824101c9d7eecb67bb23a1c5c6fd03aba42c46775be1f8f1","date":"2026-06-19"}],"generator":"trioforge.sources.client_tables 0.0.1","generated":"2026-10-13"},
+ "provenance": {"inputs":[{"file":"Resources/skillcaps.txt","sha256":"f92c3364719db1f9824101c9d7eecb67bb23a1c5c6fd03aba42c46775be1f8f1","date":"2026-06-19"}],"generator":"trioforge.sources.client_tables 0.0.1","generated":"2026-11-24"},
  "skill_names": {"0":"1H Blunt","1":"1H Slashing","2":"2H Blunt","3":"2H Slashing","4":"Abjuration","5":"Alteration","7":"Archery","8":"Backstab","10":"Bash","11":"Block","13":"Channeling","14":"Conjuration","15":"Defense","18":"Divination","19":"Dodge","20":"Double Attack","22":"Dual Wield","24":"Evocation","28":"Hand to Hand","30":"Kick","31":"Meditate","33":"Offense","34":"Parry","36":"1H Piercing","37":"Riposte","51":"Throwing","71":"Intimidation","73":"Taunt","76":"Triple Attack","77":"2H Piercing"},
  "rows": [
   {"class":1,"skill":0,"level":1,"cap":10},

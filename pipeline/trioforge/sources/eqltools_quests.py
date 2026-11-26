@@ -27,6 +27,7 @@ import datetime
 import hashlib
 import re
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -105,7 +106,7 @@ def read_quests(path: str | Path, *, minimum: int = MINIMUM_QUESTS) -> dict[str,
         if title is None:
             skipped += 1
             continue
-        page = _clean(entry["t"].replace("_", " ")) if isinstance(entry.get("t"), str) else None
+        page = _clean(urllib.parse.unquote(entry["t"]).replace("_", " ")) if isinstance(entry.get("t"), str) else None  # (the source writes the page title as a web address does)
         quests.append(
             {
                 "title": title,

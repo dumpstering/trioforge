@@ -61,17 +61,30 @@ weight             dimensions it scores
 ``SV``/``SV_x``    each school's resist, with the school's weight, else ``SV``
 ``DMG``            the weapon index of a hand, for the setup (at the assumed haste of the options, else the
                    best the scenario offers: the order of the weapons of a hand does not depend on it); not in the
-                   stick
+                   stick. In the ``ranged`` setup the hands score nothing and the range place scores its bow
 =================  =========================================================================================
 
 * **Armor class** counts one way in the primary hand, the Any group and every armor place (worn) and another way for a
   shield in the secondary hand (it also raises the softcap). They are compared apart, group by group, so a shield and a
   held item with more armor class do not replace each other.
+* **Range place.** Under ``ranged`` the range place takes a bow and no other item (:func:`fit_groups`), and its index (the
+  bow's own damage per delay at the haste, with no damage bonus, which is a main hand's, times the profile's ``ranged_factor``) is a dimension of its own; under every other setup it takes what it always did
+  and scores nothing, so the pool that comes out is the same as before.
 * **Weapon index.** The primary hand's index has the damage bonus, the secondary's has the dual-wield factor instead and
   none of the bonus, so two weapons can swap order between the hands; both are compared. The index is exact (a fraction),
   ranked to integers for the comparison. The haste is one factor for every weapon of a hand, so two weapons in one hand
   keep their order at any haste: the ranks, and so the pruned pool, are the same for every haste the truthful solve
   assumes (one program for each haste a kit can count).
+* **Procs** (``options.procs``, :mod:`trioforge.model.procs`; the weapon setups with a swinging hand). A proc has no haste factor, so it is compared apart from the swing: for each
+  hand that swings, the rank of the best proc the item counts there (its own below the socket tier, the best it can host from it: the constant of its column) is a dimension
+  of its own (``PROC:<hand>``), so an item that hosts a better proc is never dropped by one that only swings better. In the dual-wield setup the hands couple through the
+  copies that supply a proc (one copy supplies one hand), and an item can stand in for another only if every proc the other can count it can count from every source the other
+  has, whatever the other hand takes (its candidates are not enough: if the other hand takes the best of the replacement, the replacement's second must be as good as what the dropped
+  item would have counted; and with fewer sources the replacement could be refused a pair that the dropped item was allowed), so every (proc, source) of an item in a hand is a 0/1
+  dimension of its own (``PROC:<hand>:<effect>:<source key>``), and the mode of the item (below or at the socket tier) is one, so that the two never replace each other. The Lore rule (a worn
+  copy is no donor) makes the worth of a kit depend on which Lore donors it wears, so a Lore donor is never dropped for another item and drops none: ``PROC:lore`` is 0 for a Lore donor and
+  1 for any other item (a donor is never at least as good as an item that is not one), and ``PROC:lore:<key>`` is 1 for that one donor and 0 for the rest (nothing is at least as good as a donor).
+  A table with a Lore donor gets the (proc, source) dimensions in the one-hand setups too, since the sources a proc can be taken from decide whether a worn Lore copy blocks it.
 * **Weight.** The worn weight only moves the Monk bonus. It is compared (lighter or equal) when the bonus differs within
   the weights the pool can reach (the builder's own range), and then only if the bonus never rises with weight; a curve
   that does rise makes the weight an equality. Otherwise (no Monk, no armor class weight, or every reachable weight gets
@@ -131,7 +144,8 @@ from trioforge.model import formulas as fm
 from trioforge.model import weapons as wp
 from trioforge.model.buffs import BuffSet
 from trioforge.model.items import SLOT_GROUPS, ItemVec
-from trioforge.solver.model import ANY_RULES, BuildOptions, ident
+from trioforge.model.procs import ProcTable
+from trioforge.solver.model import ANY_RULES, WEAPON_GROUPS, BuildOptions, ident
 
 __all__ = ["MUTATIONS", "OWNED_MUTATIONS", "PruneReport", "fit_groups", "prune", "prune_report", "scored_dimensions"]
 
@@ -201,7 +215,7 @@ def fit_groups(item: ItemVec, setup: str | None, any_rule: str = "all") -> froze
         if group == "ANY":
             if "ANY" in item.slots or (any_rule == "all" and any(slot in MODEL_SLOTS for slot in item.slots)):
                 fits.add(group)
-        elif group in item.slots and (group not in HANDS or wp.allowed_in_hand(item, group.lower(), setup)):
+        elif group in item.slots and (group not in WEAPON_GROUPS or wp.allowed_in_hand(item, group.lower(), setup)):
             fits.add(group)
     return frozenset(fits)
 
@@ -292,9 +306,35 @@ def _ranks(values: Sequence[Fraction | None]) -> list[int]:
     return [-1 if value is None else rank[value] for value in values]
 
 
+def _proc_columns(
+    columns: dict[str, list[int]], placed: Sequence[tuple[ItemVec, frozenset[str]]], setup: str | None, procs: ProcTable
+) -> None:
+    """The columns of the procs (see the module docstring): for each hand that swings, the rank of the best proc the item counts there (the constant of its column), the
+    mode of the item (below or at the socket tier), and, in the dual-wield setup, one 0/1 column for each source (item key) that can supply each proc to an item of the pool in that hand
+    (:meth:`~trioforge.model.procs.ProcTable.source_sets`)."""
+    hands = HANDS if setup == "dw" else HANDS[:1]
+    lore = procs.lore_keys
+    for hand in hands:
+        entries = [procs.entries(item, hand) if hand in fits else None for item, fits in placed]
+        columns[f"PROC:{hand}"] = _ranks([None if e is None else (e[0].value if e else Fraction(0)) for e in entries])
+        if setup != "dw" and not lore:
+            continue
+        hosted = [procs.hosted(item) for item, _ in placed]
+        columns[f"PROC:{hand}:hosted"] = [int(h) for h in hosted]
+        columns[f"PROC:{hand}:native"] = [int(not h) for h in hosted]
+        sets = [procs.source_sets(item, hand) if hand in fits else {} for item, fits in placed]
+        every = sorted({(effect, key) for found in sets for effect, keys in found.items() for key in keys})
+        for effect, key in every:
+            columns[f"PROC:{hand}:{effect}:{key}"] = [int(key in found.get(effect, ())) for found in sets]
+    if lore:  # (a Lore donor is never dropped for another item and drops none: see the module docstring)
+        columns["PROC:lore"] = [0 if item.key in lore else 1 for item, _ in placed]
+        for key in sorted({item.key for item, _ in placed if item.key in lore}):
+            columns[f"PROC:lore:{key}"] = [int(item.key == key) for item, _ in placed]
+
+
 def _matrix(
     placed: Sequence[tuple[ItemVec, frozenset[str]]], p: fm.EvalProfile, setup: str | None, scored: Sequence[str],
-    weight_rule: str | None, haste_assumed: int,
+    weight_rule: str | None, haste_assumed: int, procs: ProcTable | None = None,
 ) -> np.ndarray:
     """One row per item: a vector in which "A can replace B" is "every entry of A is at least that of B"."""
     columns: dict[str, list[int]] = {}
@@ -320,13 +360,18 @@ def _matrix(
             columns["AC:off-worn"] = [(0 if s else a) if o else NO_PLACE for a, o, s in zip(ac, second, shield)]
             columns["AC:off-shield"] = [(a if s else 0) if o else NO_PLACE for a, o, s in zip(ac, second, shield)]
     if "DMG" in scored:
-        for hand in HANDS:
+        for hand in (*HANDS, "RANGE") if setup == "ranged" else HANDS:
             index = [
-                wp.damage_index_exact(item, hand.lower(), setup or "stick", haste_assumed, dw_factor=p.dw_factor)
+                wp.damage_index_exact(
+                    item, hand.lower(), setup or "stick", haste_assumed, dw_factor=p.dw_factor, ranged_factor=p.ranged_factor,
+                    swing_factor=wp.swing_factor_of(p), level=p.level,  # (a factor that every hand shares moves no rank: it is passed so that the column is the index the model scores)
+                )
                 if hand in fits else None
                 for item, fits in placed
             ]
             columns[f"DMG:{hand}"] = _ranks(index)
+        if procs is not None and setup in ("1h-shield", "2h", "dw"):
+            _proc_columns(columns, placed, setup, procs)
     if weight_rule is not None:
         columns["WEIGHT:light"] = [-item.weight10 for item, _ in placed]
         if weight_rule == "eq":
@@ -513,7 +558,8 @@ def prune_report(
     pool = list(placed)
     if _MUTATION == "ineligible_dominates":
         pool += [(item, fits) for item in outsiders if (fits := fit_groups(item, setup, options.any_rule))]
-    matrix = _matrix(pool, p, setup, scored, weight_rule, haste_assumed)
+    procs = options.procs if "DMG" in scored and setup in ("1h-shield", "2h", "dw") else None
+    matrix = _matrix(pool, p, setup, scored, weight_rule, haste_assumed, procs)
     roles = _roles(pool, options, protected_idents)
     kept_at, replaced_by = _sweep([item for item, _ in pool], [fits for _, fits in pool], matrix, roles)
     outsider_idents = {(item.key, item.tier) for item in outsiders}
@@ -525,7 +571,7 @@ def prune_report(
         [pool[i][0] for i in kept_at if (pool[i][0].key, pool[i][0].tier) not in outsider_idents] + strangers,
         key=lambda item: (item.key, item.tier),
     )
-    compared = (*scored, "WEIGHT") if weight_rule is not None else scored
+    compared = (*scored, *(("PROC",) if procs is not None else ()), *(("WEIGHT",) if weight_rule is not None else ()))
     return PruneReport(tuple(kept), dropped, haste_assumed, compared, weight_rule)
 
 

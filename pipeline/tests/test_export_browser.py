@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 from after_an_add import AfterAnAdd, strict_without_a_report
+from unpaged_case import with_an_unpaged_wearable
 
 from trioforge.classes import CLASS_CODES
 from trioforge.data.jsonio import loads_strict
@@ -38,11 +39,13 @@ from trioforge.model import items as items_module
 from trioforge.model import roles, weapons
 from trioforge.model.buffs import (
     COMPONENTS,
+    buffsets,
     enchanter_preset,
     group_preset,
     own_buffs,
     raid_preset,
     resolve,
+    without_spell_haste,
 )
 from trioforge.model.items import SLOT_GROUPS, at_tier
 from trioforge.model.profile import Profile, eval_buffs, make_profile
@@ -126,12 +129,15 @@ def buffsets_for(codes, level, spells, rules=RULES):
     """The four resolved buff sets of a trio, written again from the public buff functions."""
     own = own_buffs(codes, level, spells, rules)
     group = group_preset(spells, level=level)
-    return {
-        "own": resolve(own, rules),
-        "group": resolve([*own, *group], rules),
-        "group+enchanter": resolve([*own, *group, *enchanter_preset(spells, level, rules=rules)], rules),
-        "raid": resolve([*own, *raid_preset(spells, level, rules=rules)], rules),
+    sets = {
+        "own": own,
+        "group": [*own, *group],
+        "group+enchanter": [*own, *group, *enchanter_preset(spells, level, rules=rules)],
+        "raid": [*own, *raid_preset(spells, level, rules=rules)],
     }
+    if not rules.get("haste.assume_spell"):  # the rule: a kit is chosen on gear haste alone
+        sets = {key: without_spell_haste(buffs) for key, buffs in sets.items()}
+    return {key: resolve(buffs, rules) for key, buffs in sets.items()}
 
 
 def reference_dict(codes, level, race, role, buffset, tables=TABLES, **options):
@@ -149,19 +155,86 @@ def path_get(root, dotted):
 
 REQUIRED = (
     "version", "data_release", "rules_version", "trio", "level", "profile_common", "evidence_levels", "races", "roles",
-    "buffs", "buff_table", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios",
+    "buffs", "buff_table", "buff_table_haste", "procs", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios",
 )  # fmt: skip
+HASTE_SETS = tuple(f"{key}+haste" for key in BUFF_SETS)
 
 
 def test_the_bundle_has_every_top_level_field_and_none_is_empty(pmb):
     assert list(pmb) == list(REQUIRED)
     for name in REQUIRED:
+        if name == "procs":
+            assert pmb[name] is None  # (a bundle made with no table of procs has none: null; the table is in the tests of test_procs_bundle)
+            continue
         assert pmb[name] not in (None, "", [], {}), name  # a Monk trio has monk_bins too
     assert pmb["version"] == browser.FORMAT == 1
     assert pmb["rules_version"] == RULES.version
     assert pmb["data_release"] == "data-2030-01-02"
     assert pmb["trio"] == ["PAL", "MNK", "BER"] and pmb["level"] == 50
-    assert list(pmb["buffs"]) == list(BUFF_SETS) == ["own", "group", "group+enchanter", "raid"]
+    assert list(BUFF_SETS) == ["own", "group", "group+enchanter", "raid"]
+    assert browser.HASTE_BUFF_SETS == HASTE_SETS == ("own+haste", "group+haste", "group+enchanter+haste", "raid+haste")
+    assert list(pmb["buffs"]) == [*BUFF_SETS, *HASTE_SETS]  # (each buff set has a twin that keeps the haste of the spells: what "I have a haste spell" solves with)
+
+
+# ---- the haste-carrying twins of the buff sets ---------------------------------------------------------------------------
+
+
+def with_haste_sets(codes, level, spells):
+    """The four buff sets as a kit is chosen with the haste of the spells in them: written from the public buff functions, whatever the rule says."""
+    return buffsets(codes, level, spells, RULES, BUFF_SETS, spell_haste=True)
+
+
+@pytest.mark.parametrize("trio", [FIVE_TRIOS[0], FIVE_TRIOS[1], FIVE_TRIOS[4]])
+def test_a_twin_of_a_buff_set_is_the_set_the_rule_with_spell_haste_makes(trio, l50):
+    """The parity of the toggle: the sets the bundle keeps under ``key+haste`` are, row for row and buff for buff, the sets of the bundle of the rule ``haste.assume_spell`` true."""
+    made = bundle(trio, 50, TABLES, RULES, l50)
+    kept = bundle(trio, 50, TABLES, rules_with_haste(), l50)
+    for key in BUFF_SETS:
+        assert made["buffs"][key + "+haste"] == kept["buffs"][key], key
+        assert made["buffs"][key] != kept["buffs"][key] or made["buffs"][key]["spell_haste"] == kept["buffs"][key]["spell_haste"]
+    assert made["buff_table_haste"] == kept["buff_table"]
+    assert made["buff_table"] != made["buff_table_haste"]  # (the haste spells are in the second table only, and Augmentation has its haste in it)
+    # the rule true: both are the one set, and so are the tables
+    for key in BUFF_SETS:
+        assert kept["buffs"][key + "+haste"] == kept["buffs"][key], key
+    assert kept["buff_table_haste"] == kept["buff_table"]
+
+
+@pytest.mark.parametrize("trio", [FIVE_TRIOS[0], FIVE_TRIOS[1], FIVE_TRIOS[4]])
+def test_assemble_gives_the_profile_of_the_solve_with_spell_haste_for_a_twin(trio, l50):
+    made = bundle(trio, 50, TABLES, RULES, l50)
+    sets = with_haste_sets(trio, 50, l50)
+    races = [entry["code"] for entry in made["races"]]
+    checked = 0
+    for race in (races[0], races[len(races) // 2], races[-1]):
+        for role in roles.roles_for(trio):
+            for key in BUFF_SETS:
+                expected = reference_dict(trio, 50, race, role, sets[key])
+                assert assemble(made, race, role, key + "+haste") == expected, (race, role, key)
+                assert expected["spell_haste"] >= assemble(made, race, role, key)["spell_haste"]
+                checked += 1
+    assert checked >= 3 * 4
+
+
+def test_the_twins_say_more_haste_than_the_sets_they_are_twins_of(pmb):
+    base = [pmb["buffs"][key]["spell_haste"] for key in BUFF_SETS]
+    twin = [pmb["buffs"][key]["spell_haste"] for key in HASTE_SETS]
+    assert base == [10, 10, 10, 10]  # (the 10 of Unbound Alacrity of the Monk alone: no spell haste in a set of the rule)
+    assert twin == [35, 50, 70, 70]  # (25, 40, 60 and 60 of the spells, and the 10 of the Monk)
+    table = pmb["buff_table_haste"]
+    for key in HASTE_SETS:
+        ids = [*pmb["buffs"][key]["set"]["always_on"], *pmb["buffs"][key]["set"]["optional"]]
+        assert all(str(buff) in table for buff in ids), key
+    for key in BUFF_SETS:
+        ids = [*pmb["buffs"][key]["set"]["always_on"], *pmb["buffs"][key]["set"]["optional"]]
+        assert all(str(buff) in pmb["buff_table"] for buff in ids), key
+    assert not any("HASTE" in entry["vec"] for entry in pmb["buff_table"].values())  # (no spell haste in the table of the sets of the rule)
+    assert any("HASTE" in entry["vec"] for entry in table.values())
+
+
+def test_a_bundle_reassembles_the_twins_too_and_the_corners_check_them(pmb):
+    with pytest.raises(ValueError, match="buff set"):
+        assemble(pmb, "HUM", "tank", "own+haste+haste")
 
 
 def test_the_data_release_defaults_to_the_date_of_the_client_data(l50):
@@ -212,15 +285,15 @@ def test_assemble_gives_the_profile_dict_for_every_race_role_and_buff_key(trio, 
                 got = assemble(made, race, role, key)
                 assert got == expected, (trio, race, role, key)
                 checked += 1
-    assert checked == 15 * len(roles.roles_for(trio)) * 4
+    assert checked == 16 * len(roles.roles_for(trio)) * 4
 
 
 @pytest.mark.parametrize("trio", FIVE_TRIOS[:2])
 def test_the_assembled_profile_has_the_same_json_text_and_loads_as_the_same_profile(trio, l50):
     made = bundle(trio, 50, TABLES, RULES, l50)
     buffsets = buffsets_for(trio, 50, l50)
-    last = roles.roles_for(trio)[-1]
-    for race, role, key in [("HUM", "balanced", "own"), ("IKS", "balanced", "raid"), ("OGR", last, "group")]:
+    first, last = roles.roles_for(trio)[0], roles.roles_for(trio)[-1]
+    for race, role, key in [("HUM", first, "own"), ("IKS", first, "raid"), ("OGR", last, "group")]:
         profile = make_profile(race, trio, 50, role, buffsets[key], None, TABLES)
         got = assemble(made, race, role, key)
         assert json.dumps(got, separators=(",", ":")) == profile.to_json()
@@ -263,6 +336,8 @@ def test_the_assembled_profiles_of_the_other_trio_types_are_the_ones_the_precomp
     for race, _ in grid.race_order(trio, TABLES):
         for role in roles.roles_for(trio):
             for label in ("strict", "wiki"):
+                if not made["roles"][role]["setups_by_evidence"][label]:
+                    continue  # (the Ranged role plays the bow and nothing else: a level whose pool has no bow does not offer it, and has no profile of it)
                 got = assemble(made, race, role, "own", evidence=label)
                 assert got == ctx.profile(race, role, "own", label).to_dict(), (trio, race, role, label)
 
@@ -281,7 +356,9 @@ def test_a_level_55_bundle_reassembles_too(l55):
 def test_the_evidence_label_and_the_deity_are_the_two_choices_assemble_takes_on_top(pmb, l50):
     trio, buffsets = ("PAL", "MNK", "BER"), buffsets_for(("PAL", "MNK", "BER"), 50, l50)
     wiki = assemble(pmb, "OGR", "tank", "group", evidence="wiki")
-    assert wiki == reference_dict(trio, 50, "OGR", "tank", buffsets["group"], evidence="wiki")
+    # the setups of a level follow its solve pool (a shield makes the shield setup, a bow the bow setup), so the reference is given the wiki pool the bundle was made from
+    pool = grid.Context(grid.load_inputs(trio, catalog_path=REPO / "derived" / "catalog.json")[0]).pool("wiki", 0)
+    assert wiki == reference_dict(trio, 50, "OGR", "tank", buffsets["group"], evidence="wiki", items=pool)
     assert pmb["evidence_levels"] == ["strict", "wiki"] and pmb["profile_common"]["evidence"] == "strict"
     locked = assemble(pmb, "OGR", "tank", "group", deity="Tunare")
     assert locked == reference_dict(trio, 50, "OGR", "tank", buffsets["group"], deity="Tunare")
@@ -316,7 +393,7 @@ def test_the_profile_parts_are_split_by_what_varies_and_nothing_is_in_two_places
     common, race_part, role_part, buff_part = (
         set(pmb["profile_common"]),
         {"race", "naked", "iksar_ac"},
-        {"role", "weights", "setups"},
+        {"role", "weights", "setups", "stance"},  # (T8: the stance is the build's)
         {"buff_totals", "spell_haste"},
     )
     assert common | race_part | role_part | buff_part == {"format", *fields}
@@ -342,23 +419,27 @@ def test_the_races_come_in_the_order_of_the_pages_with_legality_and_the_racial_v
 
 def test_the_roles_are_the_offered_ones_with_their_weights_and_setups(pmb):
     codes = ("PAL", "MNK", "BER")
-    assert list(pmb["roles"]) == roles.roles_for(codes) == ["balanced", "tank", "melee"]
+    assert list(pmb["roles"]) == roles.roles_for(codes) == ["tank", "melee"]
     for role, row in pmb["roles"].items():
-        assert set(row) == {"weights", "setups", "setups_by_evidence"}
+        assert set(row) == {"weights", "setups", "stance", "setups_by_evidence"}
+        assert row["stance"] == ({"swing_factor": 2.1, "agi_share": 0} if role == "melee" else None)  # (T8: the Melee build of a trio with a Berserker plays the stance)
         assert row["weights"] == roles.weights_for(codes, role, RULES, mana_reachable=True)
         assert row["setups"] == weapons.setups_for(codes, role, TABLES, level=50)  # no pool to read: a shield assumed
         assert list(row["setups_by_evidence"]) == pmb["evidence_levels"] == ["strict", "wiki"]
         for setups in row["setups_by_evidence"].values():
-            assert [setup for setup in row["setups"] if setup in setups] == setups  # a pool can only take a setup away
+            assert [setup for setup in row["setups"] if setup in setups] == [s for s in setups if s != "ranged"]  # a pool can only take a setup away, but for the bow setup, which only a pool with a bow brings
 
 
-def test_a_trio_with_one_role_has_balanced_only(l50):
-    codes = ("WIZ", "MAG", "ENC")
+def test_a_trio_with_one_build_has_that_build_only(l50):
+    codes = ("MNK", "ROG", "BER")
     made = bundle(codes, 50, TABLES, RULES, l50)
-    assert list(made["roles"]) == ["balanced"]
-    assert made["roles"]["balanced"]["setups"] == weapons.setups_for(codes, "balanced", TABLES, level=50)
-    assert "stick" in made["roles"]["balanced"]["setups"]
-    assert made["monk_bins"] is None
+    assert list(made["roles"]) == ["melee"]
+    assert made["roles"]["melee"]["setups"] == weapons.setups_for(codes, "melee", TABLES, level=50)
+    assert "2h" in made["roles"]["melee"]["setups"]
+    assert made["monk_bins"] is not None  # (a Monk trio)
+    casters = bundle(("WIZ", "MAG", "ENC"), 50, TABLES, RULES, l50)
+    assert list(casters["roles"]) == ["castertank", "caster"] and "stick" in casters["roles"]["caster"]["setups"]
+    assert casters["monk_bins"] is None
 
 
 @pytest.mark.parametrize("trio", FIVE_TRIOS)
@@ -387,21 +468,42 @@ def test_each_buff_key_holds_the_totals_the_spell_haste_and_the_resolved_set(tri
             assert entry.get("illusion", False) == buff.illusion
     ids = [int(i) for i in table]
     assert ids == sorted(ids) and len(ids) == len(set(ids))
-    used = {i for row in made["buffs"].values() for part in ("always_on", "optional") for i in row["set"][part]}
+    used = {i for key in BUFF_SETS for part in ("always_on", "optional") for i in made["buffs"][key]["set"][part]}  # (the twins read the table of their own: buff_table_haste)
     assert used == set(ids)
 
 
-def test_the_enchanter_line_is_in_the_third_set_and_the_raid_holds_more_still(pmb):
-    group, enchanted, raid = (pmb["buffs"][key] for key in ("group", "group+enchanter", "raid"))
+def rules_with_haste():
+    """The real rules with ``haste.assume_spell`` true: the buff sets keep the haste the spells give (the Enchanter's line is a haste and nothing else)."""
+    data = copy.deepcopy(RAW_RULES)
+    for rule in data["rules"]:
+        if rule["id"] == "haste.assume_spell":
+            rule["value"] = True
+    return Rules(data)
+
+
+def test_the_enchanter_line_is_in_the_third_set_and_the_raid_holds_more_still(l50):
+    made = bundle(("PAL", "MNK", "BER"), 50, TABLES, rules_with_haste(), l50)
+    group, enchanted, raid = (made["buffs"][key] for key in ("group", "group+enchanter", "raid"))
     assert (group["spell_haste"], enchanted["spell_haste"], raid["spell_haste"]) == (50, 70, 70)  # 40, 60, 60 and the 10 of Unbound Alacrity of the Monk
     assert enchanted != group
     assert raid["set"]["cardinality"] == 15 and len(raid["set"]["optional"]) > len(group["set"]["optional"])
-    assert pmb["buffs"]["own"]["spell_haste"] <= group["spell_haste"]
+    assert made["buffs"]["own"]["spell_haste"] <= group["spell_haste"]
+
+
+def test_with_no_spell_haste_assumed_the_enchanter_line_is_inert_and_the_third_set_is_the_group_set(pmb):
+    group, enchanted, raid = (pmb["buffs"][key] for key in ("group", "group+enchanter", "raid"))
+    assert (group["spell_haste"], enchanted["spell_haste"], raid["spell_haste"]) == (10, 10, 10)  # the 10 of Unbound Alacrity of the Monk alone
+    # the line that makes the third set another is a haste and nothing else: it is in the set's list of dropped buffs as inert, and the set is the group's but for that
+    assert {key: value for key, value in enchanted["set"].items() if key != "dropped"} == {key: value for key, value in group["set"].items() if key != "dropped"}
+    assert [row[1:3] for row in enchanted["set"]["dropped"] if row not in group["set"]["dropped"]] == [["Swift Like the Wind", "inert"]]  # (the Enchanter's line, dropped as inert)
+    assert raid["set"]["cardinality"] == 15 and len(raid["set"]["optional"]) > len(group["set"]["optional"])
 
 
 def test_an_enchanter_trio_already_has_the_line_as_its_own(l50):
-    made = bundle(("WIZ", "MAG", "ENC"), 50, TABLES, RULES, l50)
+    made = bundle(("WIZ", "MAG", "ENC"), 50, TABLES, rules_with_haste(), l50)
     assert made["buffs"]["own"]["spell_haste"] == made["buffs"]["group+enchanter"]["spell_haste"] == 60
+    left_out = bundle(("WIZ", "MAG", "ENC"), 50, TABLES, RULES, l50)
+    assert left_out["buffs"]["own"]["spell_haste"] == left_out["buffs"]["group+enchanter"]["spell_haste"] == 0
 
 
 # ---- the buff table holds whole numbers ------------------------------------------------------------------------------
@@ -531,14 +633,32 @@ def test_the_item_and_weapon_constants_are_exported_too(pmb):
     assert constants["buff_components"] == list(COMPONENTS)
     assert constants["weapon_setups"] == list(weapons.SETUPS)
     exported = {
+        "BONUS_FROM_LEVEL": "weapon_index.bonus_from_level",
         "BONUS_ONE_HANDED": "weapon_index.bonus_one_handed",
         "BONUS_TWO_HANDED": "weapon_index.bonus_two_handed",
-        "BONUS_TWO_HANDED_DELAY_CAP": "weapon_index.bonus_two_handed_delay_cap",
-    }
+        "BONUS_DELAY_CAP": "weapon_index.bonus_delay_cap",
+        "BONUS_DELAY_DIV": "weapon_index.bonus_delay_div",
+        "BONUS_LEVEL_DIV": "weapon_index.bonus_level_div",
+    }  # (T9: the fallback bonus of the client's formula, with the level in it)
     for name, dotted in exported.items():
         assert decode(path_get(constants, dotted)) == exact(getattr(weapons, name)), name
     # the dual-wield factor is the trio's own (profile.dw_factor); no stale default of the module (0.8) is exported
-    assert sorted(constants["weapon_index"]) == ["bonus_one_handed", "bonus_two_handed", "bonus_two_handed_delay_cap"]
+    assert sorted(constants["weapon_index"]) == sorted(path.split(".")[1] for path in exported.values())
+
+
+def test_the_haste_caps_of_the_bundle_are_made_by_the_function_a_profile_is_made_with(pmb, monkeypatch):
+    """R4: the exporter wrote ``cap + 10`` with a literal; the 10 is what Unbound Alacrity adds, which ``make_profile`` reads from one constant, and the bundle reads it from the same."""
+    from trioforge.model import profile as profile_module
+
+    pmb_codes, plain_codes = ("PAL", "MNK", "BER"), ("WAR", "CLR", "ENC")
+    monk = make_profile("OGR", pmb_codes, 50, "melee", None, None, TABLES)
+    plain = make_profile("OGR", plain_codes, 50, "tank", None, None, TABLES)
+    haste = decode(pmb["constants"]["haste"])
+    assert (haste["cap"], haste["cap_with_monk"]) == (plain.haste_cap, monk.haste_cap) == (75, 85)
+    monkeypatch.setattr(profile_module, "UNBOUND_ALACRITY_HASTE", 7)  # (what Unbound Alacrity adds, as the rule says it: the profile and the bundle move together)
+    moved = decode(browser._constants(pmb_codes, 50, TABLES, RULES)["haste"])
+    assert moved["cap_with_monk"] == make_profile("OGR", pmb_codes, 50, "melee", None, None, TABLES).haste_cap == fm.haste_cap_at(50) + 7
+    assert moved["cap"] == make_profile("OGR", plain_codes, 50, "tank", None, None, TABLES).haste_cap == fm.haste_cap_at(50)
 
 
 def test_the_rule_driven_constants_come_from_the_rules_for_the_level(pmb):
@@ -546,7 +666,7 @@ def test_the_rule_driven_constants_come_from_the_rules_for_the_level(pmb):
     assert decode(constants["regen_caps"]) == exact(RULES.get("regen.gear_caps"))
     assert decode(constants["resist_cap"]) == RULES.get("resist.cap")
     assert decode(constants["haste"]) == {
-        "cap": RULES.get("haste.cap_pct"), "cap_with_monk": RULES.get("haste.cap_pct_with_monk"),
+        "cap": fm.haste_cap_at(50), "cap_with_monk": fm.haste_cap_at(50) + 10,  # (T7: the cap has a level dimension: 75, and 85 with a Monk, at level 50)
         "worn_per_tier": RULES.get("haste.worn_per_tier"),
     }  # fmt: skip
     assert decode(constants["iksar_ac_bonus"]) == RULES.get("race.iksar_ac_bonus")
@@ -653,7 +773,7 @@ def test_the_tier_rules_are_what_at_tier_reads(pmb):
     tier = decode(pmb["tier_rules"])
     assert tier["max_tier"] == items_module.MAX_TIER == 10
     assert tier["stat_rule"] == RULES.get("tier.stat_rule") == items_module.STAT_RULE_TEXT
-    assert tier["negatives_scale"] is False
+    assert tier["negatives_scale"] == RULES.get("tier.negatives_scale") == items_module.NEGATIVES_RULE_TEXT
     assert tier["weight_floor10"] == 1 and tier["unknown_weight10"] == items_module.UNKNOWN_WEIGHT10
     assert tier["weight_pct"] == RULES.get("tier.weight_pct") == 9 and tier["weight_rule"] == items_module.WEIGHT_RULE_TEXT
     assert tier["haste_per_tier"] == RULES.get("haste.worn_per_tier")
@@ -684,7 +804,8 @@ def test_the_exported_tier_numbers_are_the_ones_at_tier_applies(pmb):
         got = at_tier(probe({"HASTE": 10, "HPREG": 3, "STR": -5}), n, RULES)
         assert got.haste == 10 + n * int(tier["haste_per_tier"])
         assert got.stats["HPREG"] == 3 + n * int(tier["regen_per_tier"])
-        assert got.stats["STR"] == -5  # a negative stat does not scale
+        shrunk = -5 + min(5, max(n, 5 * n // divisor))  # T6: a negative stat moves toward zero by the amount a positive one would grow, and never passes zero
+        assert got.stats.get("STR", 0) == shrunk and ("STR" in got.stats) == (shrunk != 0)
     assert at_tier(probe({}, 0.3), top, RULES).weight10 == floor10
     weight_pct = int(tier["weight_pct"])
     for tenths in range(1, 200):
@@ -701,10 +822,10 @@ def test_the_weapon_rules_label_the_switch_and_name_both_rates(pmb):
     assert weapon["test"] == RULES.settled_by("tier.weapon_damage_pct") == "B5"
     assert weapon["seal"] == RULES.seal("tier.weapon_damage_pct")
     assert weapon["delay_changes"] is False and "dmg" in weapon["damage_rule"]
-    assert weapon["damage_weight"] == RULES.get("weapons.damage_weight") == 600
+    assert weapon["damage_weight"] == RULES.get("weapons.damage_weight") == 450
     assert weapon["dual_wield_factor"] == {"with_monk": Fraction(83, 100), "without_monk": Fraction(69, 100)}
-    assert weapon["bonus_one_handed"] == Fraction(1, 2) == fm.fr(weapons.BONUS_ONE_HANDED)
-    assert weapon["bonus_two_handed"] == Fraction(67, 100) == fm.fr(weapons.BONUS_TWO_HANDED)
+    assert weapon["bonus_one_handed"] == Fraction(4, 5) == fm.fr(weapons.BONUS_ONE_HANDED)  # (T9: the factors of the client's fallback bonus)
+    assert weapon["bonus_two_handed"] == Fraction(11, 10) == fm.fr(weapons.BONUS_TWO_HANDED)
     assert weapon["label"] == "Weapon damage per tier"
     assert weapon["setups"] == list(weapons.SETUPS)
 
@@ -756,8 +877,15 @@ def test_a_regen_window_that_is_not_whole_is_a_reduced_ratio_of_integers(l50):
 
 
 @pytest.fixture(scope="module")
-def catalog_doc():
+def committed_doc():
     return loads_strict((REPO / "derived" / "catalog.json").read_text(encoding="utf-8"), "catalog.json")
+
+
+@pytest.fixture(scope="module")
+def catalog_doc(committed_doc):
+    """The committed catalog and one invented wearable that has no wiki page: the real catalog has none since the wiki made a page for the last one, and the tests of this module hold
+    the code path of such an item (no page id, after every page, its match name made of its name), so one is added in memory (unpaged_case.py)."""
+    return with_an_unpaged_wearable(committed_doc)
 
 
 @pytest.fixture(scope="module")
@@ -791,9 +919,9 @@ def test_the_table_has_a_header_and_one_record_for_every_wearable_of_the_catalog
 
 
 @pytest.fixture(scope="module")
-def after_an_add(tmp_path_factory, catalog_doc):
-    """The catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh."""
-    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), catalog_doc)
+def after_an_add(tmp_path_factory, committed_doc):
+    """The catalog once reports have been accepted for a live wearable (strict now) and for two that the wiki or the zones outweigh (the committed catalog: a report names a page of the wiki)."""
+    return AfterAnAdd(tmp_path_factory.mktemp("after-an-add"), committed_doc)
 
 
 @pytest.mark.parametrize("after", [False, True], ids=["the committed catalog", "the catalog after an accepted report"])
@@ -1184,7 +1312,7 @@ def test_each_evidence_level_lists_the_setups_its_own_pool_allows(case, tmp_path
 
 def test_assemble_picks_the_setups_of_the_evidence_level_and_assumes_a_shield_without_one(l50):
     made = bundle(PBM, 50, TABLES, RULES, l50, catalog=[levelled(1, "strict"), shield(2, "wiki")])
-    for role in ("balanced", "tank"):
+    for role in ("tank",):
         assert assemble(made, "HUM", role, "own", evidence="strict")["setups"] == WITHOUT_SHIELD
         assert assemble(made, "HUM", role, "own", evidence="wiki")["setups"] == WITH_SHIELD
         assert assemble(made, "HUM", role, "own")["setups"] == WITH_SHIELD  # no pool to read: as with no items

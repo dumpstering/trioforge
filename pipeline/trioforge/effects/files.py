@@ -146,7 +146,8 @@ def default_kits(trio_dir: str | os.PathLike[str]) -> tuple[str, int, dict[str, 
     """The default kit of each role of a trio's results: ``(race, tier, {role: [(place, item key), ...]})``, or ``None`` when the results have no default race.
 
     The kit is the solved one of the default view (the evidence level and buffs of ``defaults.json``, its tier) for the default race, in the best setup (the greatest value)
-    of each role the shard holds. Empty places are left out."""
+    of each role the shard holds, but for the opening build, whose setup is the one ``defaults.json`` names (the file's value is the exact one; the rows keep two decimals, and two
+    setups that tie to the cent may be told apart by the exact values). Empty places are left out."""
     folder = Path(trio_dir)
     defaults = load_strict(folder / "defaults.json")
     race, view = defaults.get("race"), defaults["view"]
@@ -154,10 +155,14 @@ def default_kits(trio_dir: str | os.PathLike[str]) -> tuple[str, int, dict[str, 
         return None
     shard = load_strict(folder / f"{view['evidence']}-{view['buffs']}.json")
     keys = [row[shard["items_keys"].index("key")] for row in shard["items"]]
-    best: dict[str, list[Any]] = {}
+    found: dict[str, list[list[Any]]] = {}
     for row in shard["scenarios"]:
-        if row[0] == race and row[2] == view["tier"] and (row[1] not in best or row[5] > best[row[1]][5]):
-            best[row[1]] = row
+        if row[0] == race and row[2] == view["tier"]:
+            found.setdefault(row[1], []).append(row)
+    best: dict[str, list[Any]] = {}
+    for role, rows in found.items():
+        named = [row for row in rows if row[3] == defaults.get("setup")] if role == view["role"] else []  # (a setup the shard has no row for: the best row stands)
+        best[role] = max(named or rows, key=lambda row: row[5])  # (the first of equal rows)
     kits: dict[str, list[tuple[str, str]]] = {}
     for role, row in best.items():
         kits[role] = [(place, keys[index]) for place, index in zip(shard["places"], shard["kits"][row[4]], strict=True) if index >= 0]
@@ -180,7 +185,7 @@ def trio_document(built: Built, slug: str, race: str, tier: int, kits: dict[str,
     """The ``exalt.json`` document of a trio from its default kits (``kits``: role to ``(place, item key)``)."""
     classes = [part.upper() for part in slug.split("-")]
     roles: dict[str, Any] = {}
-    for role in roles_for(classes):
+    for role in roles_for(classes, bow=None):  # (the lists of every role the trio can have: the pool of the results decides which of them the page offers)
         if role not in kits:
             continue
         options = layer.layer(classes, role, built.ctx)
@@ -317,7 +322,7 @@ def _check_trio(doc: Any, slug: str, name: str, shared: dict[str, Any], ids: set
     _need(doc.get("version") == VERSION and doc.get("trio") == slug, name, "wrong version or trio")
     _need(doc.get("data_release") == shared.get("data_release"), name, f"made for another data release than {EFFECTS_FILE}")
     _need(_is_list_of(doc.get("classes"), str) and isinstance(doc.get("roles"), dict), name, "classes must be a list of codes and roles an object")
-    offered = roles_for(doc["classes"])
+    offered = roles_for(doc["classes"], bow=None)
     for role, entry in doc["roles"].items():
         _need(role in offered, name, f"role {role} is not offered to the trio")
         _need(isinstance(entry, dict) and all(isinstance(entry.get(part), list) for part in (*LISTS, "plan", "noroom")), name, f"role {role} lacks a list")

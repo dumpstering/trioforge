@@ -72,7 +72,7 @@ def test_nothing_else_is_allowed(url):
 
 def test_the_client_refuses_an_address_the_caller_does_not_allow_and_sends_nothing():
     sent = []
-    client = PoliteClient("ua", transport=lambda url, headers: sent.append(url) or (200, {}, b"x"))
+    client = PoliteClient("ua", transport=lambda url, headers: sent.append(url) or (200, {}, b"x"), honour_robots=False)
     with pytest.raises(FetchError, match="address not allowed"):
         eqlt._get(client, "https://eqlegendstools.com/api/items/")
     assert sent == []
@@ -85,7 +85,7 @@ def test_a_redirect_is_refused_and_not_retried():
         sent.append(url)
         return 302, {"Location": "https://eqlegendstools.com/api/"}, b""
 
-    client = PoliteClient("ua", transport=transport, sleep=lambda s: None)
+    client = PoliteClient("ua", transport=transport, sleep=lambda s: None, honour_robots=False)
     with pytest.raises(FetchError, match="redirect refused"):
         eqlt._get(client, "https://eqlegendstools.com/items/checkmate/")
     assert sent == ["https://eqlegendstools.com/items/checkmate/"]
@@ -284,7 +284,7 @@ class Site:
 
 def fetch(tmp_path, site=None, **kwargs):
     site = site or Site()
-    client = PoliteClient(eqlt.USER_AGENT, transport=site, clock=site.clock, sleep=site.sleep)
+    client = PoliteClient(eqlt.USER_AGENT, transport=site, clock=site.clock, sleep=site.sleep, honour_robots=False)
     manifest = eqlt.run_fetch(client, tmp_path / "2026-10-25", date(2026, 10, 25), say=lambda text: None, **kwargs)
     return site, manifest
 
@@ -372,14 +372,14 @@ def test_an_unfinished_fetch_is_refused(tmp_path):
 
 def test_the_command_fetches_into_the_folder_and_says_done(tmp_path, capsys, monkeypatch):
     site = Site()
-    client = PoliteClient(eqlt.USER_AGENT, transport=site, clock=site.clock, sleep=site.sleep)
+    client = PoliteClient(eqlt.USER_AGENT, transport=site, clock=site.clock, sleep=site.sleep, honour_robots=False)
     monkeypatch.setattr(eqlt, "LOCK_PATH", tmp_path / "lock")
     assert eqlt.main(["fetch", "--out", str(tmp_path / "2026-10-25")], client=client, today=date(2026, 10, 25)) == 0
     assert "done: 46 items" in capsys.readouterr().out and len(site.calls) == 47
 
 
 def test_the_command_exits_2_when_the_site_stops_answering(tmp_path, capsys, monkeypatch):
-    client = PoliteClient(eqlt.USER_AGENT, transport=lambda url, headers: (404, {}, b""), sleep=lambda s: None)
+    client = PoliteClient(eqlt.USER_AGENT, transport=lambda url, headers: (404, {}, b""), sleep=lambda s: None, honour_robots=False)
     monkeypatch.setattr(eqlt, "LOCK_PATH", tmp_path / "lock")
     assert eqlt.main(["fetch", "--out", str(tmp_path / "x")], client=client) == 2
     assert "error:" in capsys.readouterr().err
@@ -450,7 +450,7 @@ def test_an_item_page_that_cannot_be_read_stops_the_fetch_before_it_is_cached_an
 def test_the_command_exits_2_for_a_page_that_cannot_be_read(tmp_path, capsys, monkeypatch):
     site = Site()
     site.pages[eqlt.item_url("checkmate")] = "<html></html>"
-    client = PoliteClient(eqlt.USER_AGENT, transport=site, clock=site.clock, sleep=site.sleep)
+    client = PoliteClient(eqlt.USER_AGENT, transport=site, clock=site.clock, sleep=site.sleep, honour_robots=False)
     monkeypatch.setattr(eqlt, "LOCK_PATH", tmp_path / "lock")
     assert eqlt.main(["fetch", "--out", str(tmp_path / "2026-10-25")], client=client) == 2
     assert "checkmate" in capsys.readouterr().err and not (tmp_path / "2026-10-25" / "manifest.json").exists()

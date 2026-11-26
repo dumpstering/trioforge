@@ -1,1 +1,1 @@
-https://github.com/example-owner/trioforge/issues/new?template=wrong-item.yml&title=Problem+with+the+Paladin+%2F+Monk+%2F+Berserker+page&page=https%3A%2F%2Ftrioforge.pages.dev%2Ftrio%2Fpal-mnk-ber%2F%3Frace%3DOGR%26role%3Dbalanced%26tier%3D4%26setup%3Ddw%26buffs%3Down
+https://github.com/example-owner/trioforge/issues/new?template=wrong-item.yml&title=Problem+with+the+Paladin+%2F+Monk+%2F+Berserker+page&page=https%3A%2F%2Ftrioforge.pages.dev%2Ftrio%2Fpal-mnk-ber%2F%3Frace%3DOGR%26role%3Dtank%26tier%3D4%26setup%3Ddw%26buffs%3Down

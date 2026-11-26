@@ -113,6 +113,10 @@ SEEN_FLAGS_NAME = "seen-flags.json"
 BUILD_FOLDER = "build"
 # A file with one of these endings is JSON, and may not hold a reason with the code of a seen item.
 JSON_SUFFIXES = (".json", ".jsonl", ".ndjson")
+# The content rules that a file name or a ref name is read for: the words that point at the game
+# client's own program file. The other rules describe text in a file (a chat line, a path into a
+# profile folder), which a name does not hold in any way that matters.
+NAME_RULES = frozenset({"provenance"})
 # The reason the catalog builder writes for an item seen in game: its code as the value of a "code" member.
 # The code is followed by a quote, a colon (a suffix) or a backslash (an escape); a longer word is another code.
 SEEN_REASON = re.compile(r'"code"\s*:\s*"seen-in-game(?=["\\:])', re.IGNORECASE)
@@ -505,7 +509,7 @@ class _FileScan:
         if self.path.casefold().endswith(PDF_EXTENSIONS):
             self.add(0, 0, "pdf", "-")
             proceed = False
-        self.line(0, self.path, 0, logshape_on=False, wrap=False)
+        self.line(0, self.path, 0, logshape_on=NAME_RULES, wrap=False)
         return proceed
 
     # -- lines --------------------------------------------------------------------------------
@@ -516,11 +520,13 @@ class _FileScan:
         line: str,
         offset: int = 0,
         *,
-        logshape_on: bool = True,
+        logshape_on: bool | frozenset[str] = True,
         wrap: bool = True,
     ) -> None:
         """Check one line. ``offset`` is the number of characters of this physical line that came
-        before ``line`` (when a very long line is scanned in pieces)."""
+        before ``line`` (when a very long line is scanned in pieces). ``logshape_on`` is True for
+        every content rule, False for none, or the names of the rules to run (a file name or a
+        ref name is read for ``NAME_RULES`` only)."""
         if self.full:
             return
         if line:
@@ -533,15 +539,36 @@ class _FileScan:
                 for start, decoded in base64_segments(line):
                     imap = [start] * len(decoded)  # every decoded character: the run's start
                     self._view(number, decoded, imap, offset, line, logshape_on, True)
+            if "\0" in line:
+                self._without_nuls(number, line, offset, logshape_on)
         if wrap:
             self._wrap(number, line, offset)
+
+    def _without_nuls(self, number: int, line: str, offset: int, logshape_on: bool) -> None:
+        """Check a line that holds NUL characters once more with them removed. UTF-16 or UTF-32 text that follows UTF-8 text (after
+        its first 8 KiB, which decide how a file is read, or after a UTF-8 byte order mark) is decoded as UTF-8, and its NUL bytes sit
+        between its letters. A column is the one in the line as it was."""
+        keep = [index for index, character in enumerate(line) if character != "\0"]
+        text = "".join(line[index] for index in keep)
+        if not text:
+            return
+        if text.isascii() and not _needs_variants(text):
+            views: list[tuple[str, list[int] | None]] = [(text, None)]
+        else:
+            views = _variants(text)
+        for view, imap in views:
+            self._view(number, view, keep if imap is None else [keep[at] for at in imap], offset, line, logshape_on, True)
+        if len(text) >= 8:
+            for start, decoded in base64_segments(text):
+                self._view(number, decoded, [keep[start]] * len(decoded), offset, line, logshape_on, True)
 
     def _view(self, number, text, imap, offset, raw, logshape_on, check_hex) -> None:
         ctx = self.ctx
         if logshape_on:
             for rule, start, end in logshape.find(text):
-                self._log_finding(number, text, imap, offset, raw, rule, start, end)
-            if self.json:
+                if logshape_on is True or rule in logshape_on:
+                    self._log_finding(number, text, imap, offset, raw, rule, start, end)
+            if self.json and logshape_on is True:
                 for match in SEEN_REASON.finditer(text):
                     column = (imap[match.start()] if imap is not None else match.start()) + 1 + offset
                     self.add(number, column, "seen-reason", "-", match.group())
@@ -624,10 +651,11 @@ class _FileScan:
                 feeder = _LineFeeder(self)
             if encoding != "utf-8":
                 first_line_start = 2 if encoding == "utf-16" else 0  # past the byte order mark
+                aligned = encoding is not None  # (a binary file has no alignment to keep to)
                 passes = [
                     _AsciiRuns(self),
-                    _WideRuns(self, True, first_line_start),
-                    _WideRuns(self, False, first_line_start),
+                    _WideRuns(self, True, first_line_start, aligned),
+                    _WideRuns(self, False, first_line_start, aligned),
                 ]
             whole: list[bytes] | None = [] if encoding is not None else None  # a small text, kept for its shape
             size = 0
@@ -724,15 +752,20 @@ _WIDE_KEEP = 7  # a run of three characters and half of a fourth may still becom
 
 class _WideRuns:
     """The ``strings`` pass for UTF-16: each run of four or more printable ASCII characters that
-    are each followed (little endian) or preceded (big endian) by a NUL byte. Only runs that start
-    at an even offset count: text in the other byte order, read one byte off, looks the same.
+    are each followed (little endian) or preceded (big endian) by a NUL byte. In a file that is
+    UTF-16 text (``aligned``) only runs that start at an even offset count: text in the other byte
+    order, read one byte off, looks the same. In a binary file UTF-16 text may start at any
+    offset (a tag inside an image, say), and an odd one loses its first (little endian) or last
+    (big endian) character to the other pass; so every run counts, and a finding that both find
+    is one.
 
     A position is reported like the decoded text of a UTF-16 file would report it, in characters
     from the start of the line, so the same place found by the text pass and by this one is a
     single finding. ``first_line_start`` is the size of the byte order mark."""
 
-    def __init__(self, scan: _FileScan, little: bool, first_line_start: int = 0) -> None:
+    def __init__(self, scan: _FileScan, little: bool, first_line_start: int = 0, aligned: bool = True) -> None:
         self.scan = scan
+        self.aligned = aligned
         self.pattern = _WIDE_RUN[little]
         self.first_character = 0 if little else 1  # which byte of each pair is the character
         self.carry = b""
@@ -778,11 +811,13 @@ class _WideRuns:
                     self.line_start = self.base + data.rfind(b"\n", previous, start) + 1
             end = min(run.end(), safe)
             previous = max(previous, end)
-            if (self.base + start) % 2:
+            if self.aligned and (self.base + start) % 2:
                 continue  # not on a character boundary of UTF-16 text
             piece = data[start : end - (end - start) % 2]
             if len(piece) >= 8:
-                offset = (self.base + start - self.line_start) // 2
+                # the place of the first character is the unit of its byte (the second byte of a big-endian pair), so the same text that the other
+                # pass reads one byte off is reported at the same columns, and a finding that both make is one
+                offset = (self.base + start + self.first_character - self.line_start) // 2
                 text = piece[self.first_character :: 2].decode("ascii")
                 self.scan.line(self.number, text, offset, wrap=False)
         breaks = data.count(b"\n", previous, safe)
@@ -951,6 +986,38 @@ def _scan_label(ctx: _Ctx, label: str, text: str, found: set[Finding]) -> None:
     found.update(scan.results())
 
 
+#: ``:<old mode> <new mode> <old id> <new id> <status>``: one entry of ``git log --raw -z`` (the path is the next field)
+_RAW_ENTRY = re.compile(rb":([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) [A-Z][0-9]*")
+_FILE_MODES = frozenset({"100644", "100755", "120000"})  # a file, an executable one, a link
+_GITLINK_MODE = "160000"
+
+
+def _history_entries(git: Git, selector: list[str]) -> set[tuple[str, str, str]]:
+    """``(mode, oid, path)`` for the new side of every entry of every commit's diff in ``selector``: against its parent, and
+    against each of its parents for a merge (``--diff-merges=separate``), so a path that only a merge result adds is listed, and the root commits' entries too (``--root``). One listing gives every
+    path that ever existed (a deleted one too, with mode ``000000``), every blob under each of the paths it has had, and every
+    mode, a gitlink (``160000``) included. Renames are not followed: a renamed file is its old path deleted and its new one added."""
+    # (``--root`` and ``--diff-merges=separate`` are said, not left to the user's git: ``log.showRoot=false`` prints no entry for a root commit, which let a gitlink in the first commit of a
+    # branch through, and ``log.diffMerges=combined`` prints a merge in a form that this parse does not read, which stopped every scan; ``--no-show-signature`` because ``log.showSignature=true``
+    # puts gpg's own lines ahead of the entries as soon as a commit has a signature header, and ``--encoding=UTF-8`` so that what is parsed is in the one encoding it is parsed in)
+    parts = git.run(
+        "log", *selector, "--root", "--diff-merges=separate", "--raw", "--no-abbrev", "--no-renames", "--no-ext-diff", "--ignore-submodules=none", "--no-show-signature", "--encoding=UTF-8", "-z", "--format="
+    ).split(b"\0")
+    entries: set[tuple[str, str, str]] = set()
+    index = 0
+    while index < len(parts):
+        head = parts[index]
+        index += 1
+        if not head:
+            continue
+        match = _RAW_ENTRY.fullmatch(head)
+        if match is None or index >= len(parts) or not parts[index]:
+            raise ScanError("git log output not understood")  # never let a gap in history pass as clean
+        entries.add((match.group(2).decode("ascii"), match.group(4).decode("ascii"), decode_name(parts[index])))
+        index += 1
+    return entries
+
+
 def scan_history(
     key: bytes | None,
     deny: Iterable[str],
@@ -979,11 +1046,13 @@ def scan_history(
     names = git.lines("for-each-ref", "--format=%(refname)") if refs is None else list(refs)
     for ref in names:
         scan = _FileScan(ctx, f"<ref:{ref}>")
-        scan.line(0, ref, 0, logshape_on=False, wrap=False)
+        scan.line(0, ref, 0, logshape_on=NAME_RULES, wrap=False)
         found.update(scan.results())
         count += 1
 
-    for record in git.run("log", *selector, "-z", "--format=%h%n%B").split(b"\0"):
+    # (``--encoding=UTF-8``: ``i18n.logOutputEncoding=UTF-16`` makes git print every message in UTF-16, which the split on NUL cuts into single characters, and a name in a message was then not found;
+    # ``--no-show-signature``: ``log.showSignature=true`` glues gpg's lines onto the first record)
+    for record in git.run("log", *selector, "--no-show-signature", "--encoding=UTF-8", "-z", "--format=%h%n%B").split(b"\0"):
         if not record.strip():
             continue
         head, _, body = record.partition(b"\n")
@@ -993,20 +1062,37 @@ def scan_history(
 
     objects = list(iter_pairs(git.lines("rev-list", *selector, "--objects")))
     paths = {path for _oid, path in objects if path}
-    # `rev-list --objects` names a blob once; this lists every path that ever existed.
-    paths.update(
-        git.nul_separated("log", *selector, "--no-renames", "--name-only", "-z", "--format=")
-    )
+    # `rev-list --objects` names a blob once; one listing of the diffs gives every path that ever existed (a merge's
+    # too), every path each blob has had, and every gitlink.
+    entries = _history_entries(git, selector)
+    paths.update(path for _mode, _oid, path in entries)
     for path in sorted(paths):
         scan = _FileScan(ctx, path)
         scan.path_checks()
         found.update(scan.results())
+    for path in sorted({path for mode, _oid, path in entries if mode == _GITLINK_MODE}):
+        scan = _FileScan(ctx, path)
+        scan.add(0, 0, "submodule", "-")  # as the staged scan refuses it: a pushed history must not hold one either
+        found.update(scan.results())
 
-    first_path: dict[str, str] = {}
+    names: dict[str, set[str]] = {}  # every path a blob has had
     for oid, path in objects:
-        first_path.setdefault(oid, path)
-    if first_path:
-        order = list(first_path)
+        names.setdefault(oid, set()).add(path)
+    for mode, oid, path in entries:
+        if mode in _FILE_MODES:
+            names.setdefault(oid, set()).add(path)
+    # A rule reads the path of a file in two ways (a JSON file is also checked for a seen-in-game reason, and a line may be
+    # allowed for one path and not another), so a blob is read once for each of the kinds of path it has had, under the first
+    # path of that kind.
+    allowed_paths = {entry[0] for entry in ctx.line_allow}
+    labels: dict[str, list[str]] = {}
+    for oid, owned in names.items():
+        kinds: dict[tuple[bool, str | None], str] = {}
+        for path in sorted(owned):
+            kinds.setdefault((path.casefold().endswith(JSON_SUFFIXES), path if path in allowed_paths else None), path)
+        labels[oid] = list(kinds.values())
+    if labels:
+        order = list(labels)
         listing = git.run(
             "cat-file", "--batch-check", input=("\n".join(order) + "\n").encode("ascii")
         )
@@ -1018,14 +1104,14 @@ def scan_history(
                 kind = fields[1]
                 if kind not in ("blob", "tag"):
                     continue
-                label = first_path[oid] if kind == "blob" else f"<tag:{oid[:7]}>"
-                _kind, blob = batch.get(oid)
-                scan = _FileScan(ctx, label)
-                try:
-                    scan.scan_content(blob)
-                except OSError as error:
-                    raise ScanError("cannot read git object") from error
-                found.update(scan.results())
+                for label in labels[oid] if kind == "blob" else [f"<tag:{oid[:7]}>"]:
+                    _kind, blob = batch.get(oid)
+                    scan = _FileScan(ctx, label)
+                    try:
+                        scan.scan_content(blob)
+                    except OSError as error:
+                        raise ScanError("cannot read git object") from error
+                    found.update(scan.results())
                 count += 1
 
     if stats is not None:
@@ -1091,7 +1177,9 @@ def check_identity(
         return True
 
     selector = list(revs) if revs else ["--all"]
-    listing = git.run("log", *selector, "-z", "--date=raw", "--format=" + _COMMIT_FORMAT)
+    # (``--encoding=UTF-8`` and ``--no-show-signature``, as the two listings of the history scan say: ``i18n.logOutputEncoding=UTF-16`` re-encodes the names and the split on NUL cuts them into pieces, and
+    # ``log.showSignature=true`` puts gpg's lines into the first field of a signed commit's record; either made every record "unreadable")
+    listing = git.run("log", *selector, "--no-show-signature", "--encoding=UTF-8", "-z", "--date=raw", "--format=" + _COMMIT_FORMAT)
     fields = listing.split(b"\0")
     if fields and fields[-1] == b"":
         fields.pop()  # the end of the last record

@@ -13,6 +13,15 @@ def folder_of_the_scheduled_checks_is_the_tests_own(tmp_path_factory, monkeypatc
     monkeypatch.setenv("TRIOFORGE_CHECKS_DIR", str(tmp_path_factory.mktemp("checks-folder")))
 
 
+@pytest.fixture(autouse=True)
+def the_build_settings_of_the_shell_do_not_reach_a_test(monkeypatch):
+    """The site build takes two optional settings from the environment, page counts (``$TRIOFORGE_ANALYTICS_TOKEN``) and the Search Console file (``$TRIOFORGE_GOOGLE_VERIFICATION``), which a maintainer
+    sets in the shell to build a release (CONTRIBUTING.md suggests it). A test must not build a counting site, or write the file, because of what the shell holds: both are cleared for every test (a test that
+    wants one sets it itself). ``test_site_analytics.py`` runs a probe in a process of its own with both set, to show it."""
+    monkeypatch.delenv("TRIOFORGE_ANALYTICS_TOKEN", raising=False)
+    monkeypatch.delenv("TRIOFORGE_GOOGLE_VERIFICATION", raising=False)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def the_fixture_results_are_not_made_from_the_real_catalog():
     """The site build makes the pictures of the armor from the catalog the results were made from, and stops when the catalog in ``derived/`` is not that one (it is the release's own, so a release
@@ -35,3 +44,31 @@ def the_fixture_results_are_not_made_from_the_real_catalog():
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(module, "build", built)
         yield
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="I/N",
+        help="run only the test files of shard I of N (the CI job runs the suite as a matrix of shards; see shards.py): a file is in exactly one shard",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """With ``--shard I/N`` keep the tests of the files that belong to shard I (shards.py); the rest are deselected, so a run without the option is the whole suite."""
+    text = config.getoption("--shard")
+    if text is None:
+        return
+    import shards
+
+    try:
+        index, count = shards.parse(text)
+    except ValueError as error:
+        raise pytest.UsageError(str(error)) from None
+    kept, dropped = [], []
+    for item in items:
+        (kept if shards.shard_of(item.path.name, count) == index else dropped).append(item)
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+    items[:] = kept

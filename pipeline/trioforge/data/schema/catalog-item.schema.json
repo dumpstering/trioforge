@@ -73,11 +73,11 @@
     "races": {
       "type": "array",
       "uniqueItems": true,
-      "maxItems": 15,
+      "maxItems": 16,
       "items": {
         "enum": [
           "ALL", "HUM", "BAR", "ERU", "ELF", "HIE", "DEF", "HEF", "DWF", "TRL", "OGR", "HFL", "GNM", "IKS",
-          "KER", "FRG"
+          "KER", "FRG", "HDE"
         ]
       }
     },

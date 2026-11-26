@@ -261,7 +261,7 @@ def test_the_pool_cases_have_pools_that_cross_and_tie(committed):
 
 def test_the_weapon_cases_have_every_setup_and_hand_a_listed_bonus_none_and_zero_and_a_fractional_haste(committed):
     cases = tagged(committed, "weapons")
-    assert {case["setup"] for case in cases} == {None, "1h-shield", "2h", "dw", "stick"}
+    assert {case["setup"] for case in cases} == {None, "1h-shield", "2h", "dw", "stick", "ranged"}
     assert {case["haste"] for case in cases} >= {0, 25, 12.5}
     parts = [browser.unrat(case["breakdown"]["parts"]["WEAPON"]) for case in cases]
     assert any(p == 0 for p in parts) and any(p > 0 for p in parts)

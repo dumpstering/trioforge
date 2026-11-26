@@ -876,13 +876,13 @@ describe("a change of the gear, the view or the tier mode", () => {
 
   it("does the same for a change of the view the request uses", async () => {
     const t = await computedSets();
-    t.setView({ role: "tank" });
+    t.setView({ role: "melee" });
     await given(t, 4);
     expect(setsDrawn()).toEqual([]);
     t.engine.runs[3].onStep(equipStep({ kit: kitOf({ 11: "w80301@4" }) }));
     t.engine.runs[3].finish(ended("no-gain", 0));
     await given(t, 5);
-    expect(t.engine.runs[4].request.scenario.role).toBe("tank");
+    expect(t.engine.runs[4].request.scenario.role).toBe("melee");
   });
 
   it("does not show a closed expander's old answer when it is opened after a change: it is worked out when it is next opened", async () => {

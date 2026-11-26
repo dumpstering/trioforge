@@ -19,6 +19,8 @@ import {
   placeCanonically,
   setScenario,
   solve,
+  solveScenario,
+  secondIsTaken,
   tieRanks,
 } from "../pipeline/trioforge/site/static/engine/solve.js";
 import { SOLVER_OPTIONS, solveModelWith } from "../pipeline/trioforge/site/static/engine/worker.js";
@@ -50,7 +52,7 @@ beforeAll(async () => {
   highs = await loadHighs();
 });
 
-const sessionFor = (c, extra = {}) => createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, ...extra });
+const sessionFor = (c, extra = {}) => createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, procs: c.procs, ...extra });
 
 /** A program whose proof needs a tree of more than this many nodes is one that a node limit of this many stops before the proof. */
 const NODES_TO_STOP_AT = 2;
@@ -882,6 +884,16 @@ describe("the arguments", () => {
 
 // ---- the time of a call, its stages and its start ------------------------------------------------------------------------------------------
 
+describe("the tie stage's kit (F4)", () => {
+  it("is taken unless it is worth less than the first stage's: the rule of solve.py second_is_taken, one in both languages", () => {
+    expect(secondIsTaken(q(5), q(5))).toBe(true);
+    expect(secondIsTaken(q(5), q(6))).toBe(true); // (a better kit than a first stage that stopped inside its gap is the better answer)
+    expect(secondIsTaken(q(5), q(4))).toBe(false);
+    expect(secondIsTaken(q(5, 3), q(5, 3))).toBe(true);
+    expect(secondIsTaken(q(500001, 100000), q(5))).toBe(false);
+  });
+});
+
 describe("the time of a call", () => {
   const shared = sharedOf(SAMPLE);
   const doc = SAMPLE.read(SAMPLE.paths("case", "upgrade/")[0]);
@@ -893,7 +905,7 @@ describe("the time of a call", () => {
   function ticking(more = {}, tick = TICK) {
     let clock = 0;
     const spied = spyOn(highs, { clock: () => clock, ...more.hooks?.(() => clock, (to) => (clock = to)) });
-    const session = createSession({ highs: spied.highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, now: () => (clock += tick) });
+    const session = createSession({ highs: spied.highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, procs: c.procs, now: () => (clock += tick) });
     return { session, log: spied.log, clock: () => clock, set: (to) => (clock = to) };
   }
 
@@ -914,6 +926,26 @@ describe("the time of a call", () => {
     }
   });
 
+  it("E14: looks at the time left before it builds the program of the next level: a level that is left for want of time is never built", () => {
+    const many = SAMPLE.paths("case", "upgrade/").map((path) => SAMPLE.read(path)).find((one) => one.solves.some((solved) => solved.haste.levels.length > 1));
+    expect(many, "a case of the sample whose scenario has more than one level").toBeDefined();
+    const solved = many.solves.find((one) => one.haste.levels.length > 1);
+    const here = caseOf(shared, many);
+    let clock = 0;
+    const spied = spyOn(highs, { clock: () => clock, after: () => (clock += 10_000) }); // (the first level takes ten seconds of a budget of one)
+    const session = createSession({ highs: spied.highs, profile: here.profile, setup: here.setup, buffset: here.buffset, monkBins: here.bins, procs: here.procs, now: () => clock });
+    try {
+      const answer = solveScenario(session, { name: "s", items: here.poolOf(solved), options: deepFreeze(clone({ ...solved.options, haste_assumed: null, haste_floor: null, haste_exact: false })), budgetMs: 1000, bound: false });
+      const outcomes = answer.runs.map((run) => run.outcome);
+      expect(outcomes.filter((outcome) => outcome === "solved")).toHaveLength(1);
+      expect(outcomes).toContain("time");
+      const built = [...session.scenarios.keys()];
+      expect(built, "the program of a level left for want of time was not made").toHaveLength(outcomes.filter((outcome) => outcome === "solved").length);
+    } finally {
+      closeSession(session);
+    }
+  });
+
   it("gives each stage of a canonical call its own budget, as Python gives each stage its own time limit", () => {
     // a first stage that takes 400 ms of the clock: the second stage still has the whole budget
     const { session, log, set, clock } = ticking({ hooks: (read, move) => ({ before: () => move(read() + 400) }) });
@@ -922,12 +954,14 @@ describe("the time of a call", () => {
       // (the whole tie stage, `tieShortcut: false`: the stages of the shortcut have their own test, in engine-tie-shortcut)
       const answer = solve(session, { scenario: "s", budgetMs: 1000, canonical: true, tieShortcut: false });
       expect(answer.tieStage).toBe("applied");
-      expect(log.limits).toHaveLength(2);
+      expect(log.limits).toHaveLength(3); // (R2: the first stage, the tie stage, and the solve of the last stage that finds nothing more tied)
       expect(log.limits[0].limitMs).toBeGreaterThan(1000 - 4 * TICK);
       expect(log.limits[1].limitMs, "the second stage's own budget, not what the first left of the call's").toBeGreaterThan(1000 - 4 * TICK);
       expect(log.limits[1].limitMs).toBeLessThanOrEqual(1000);
+      expect(log.limits[2].limitMs, "the last stage's own budget as well").toBeGreaterThan(1000 - 4 * TICK);
+      expect(log.limits[2].limitMs).toBeLessThanOrEqual(1000);
       expect(set).toBeTypeOf("function");
-      expect(clock()).toBeGreaterThan(800); // both stages took their 400 ms: the call took about twice its budget's worth of clock, as documented
+      expect(clock()).toBeGreaterThan(800); // the stages took their 400 ms each: the call took about as many budgets' worth of clock as it has stages, as documented
     } finally {
       closeSession(session);
     }
@@ -942,7 +976,7 @@ describe("the time of a call", () => {
       solve(session, { scenario: "s", budgetMs: 200, deadline: 1000 });
       solve(session, { scenario: "s", budgetMs: 1000, deadline: -5 });
       solve(session, { scenario: "s", budgetMs: 1000, canonical: true, deadline: 300, tieShortcut: false });
-      expect(log.limits.map((limit) => limit.limitMs)).toEqual([300, 200, 0, 300, 1000]);
+      expect(log.limits.map((limit) => limit.limitMs)).toEqual([300, 200, 0, 300, 1000, 1000]); // (the tie stage has the budget in full, and so has the last stage's solve)
       for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, "300", null, {}, [300]]) {
         expect(() => solve(session, { scenario: "s", budgetMs: 100, deadline: bad }), String(bad)).toThrow(SolveError);
       }
@@ -959,8 +993,8 @@ describe("the time of a call", () => {
       callbacks[types.mipLogging]({ data: { mip_dual_bound: 99999, mip_gap: 0.5, mip_node_count: 7 } });
     };
     const spied = spyOn(highs, { before: fired });
-    const session = createSession({ highs: spied.highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins });
-    const plain = createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins });
+    const session = createSession({ highs: spied.highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, procs: c.procs });
+    const plain = createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, procs: c.procs });
     try {
       const options = deepFreeze(clone(equip.options));
       setScenario(plain, "s", c.poolOf(equip), options);
@@ -996,7 +1030,7 @@ describe("the time of a call", () => {
 
   it("starts from the kit it is given, then from the last solution, and from the last kit when the solver's model is made anew", () => {
     const { highs: spied, log } = spyOn(highs);
-    const session = createSession({ highs: spied, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins });
+    const session = createSession({ highs: spied, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, procs: c.procs });
     try {
       setScenario(session, "s", c.poolOf(equip), deepFreeze(clone(equip.options)));
       const cold = solve(session, { scenario: "s", budgetMs: BUDGET_MS });

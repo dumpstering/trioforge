@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from unpaged_case import with_an_unpaged_wearable
 
 from trioforge.data import catalog
 from trioforge.data.catalog import (
@@ -196,7 +197,7 @@ def test_the_provenance_names_every_input_with_its_hash_and_date(tmp_path, quest
         "rules/zone-aliases.json",
     }
     assert by_file["derived/client/zones.json"]["sha256"] == hashlib.sha256((CLIENT / "zones.json").read_bytes()).hexdigest()
-    assert by_file["derived/client/zones.json"]["date"] == "2026-09-22"  # the date of ZoneNames.txt, the patch
+    assert by_file["derived/client/zones.json"]["date"] == "2026-11-09"  # the date of ZoneNames.txt, the patch
     assert by_file["rules/hand-lists.json"]["sha256"] == hashlib.sha256((RULES / "hand-lists.json").read_bytes()).hexdigest()
     assert by_file["derived/quests.json"]["date"] == "2026-10-11"
     assert by_file["https://eqlwiki.com/index.php?title=Category:Items"]["date"] == DATE
@@ -616,6 +617,24 @@ def test_race_none_and_class_none_are_empty_lists_that_are_not_for_bis_with_thei
     assert summary["warnings"]["parse_by_code"] == {"no-classes": 4}  # one per stated NONE; nothing for the missing line
 
 
+def test_a_blank_class_or_race_line_is_not_for_bis_and_its_note_says_left_blank_and_not_none(tmp_path, quests_file):
+    drops = "[[Plane of Hate]]"
+    records = [
+        synthetic_record(9851, "Blank Ring", statsblock="Slot: FINGER<br>\nClass: <br>\nRace: ", dropsfrom=drops),
+        synthetic_record(9852, "Half Ring", statsblock="Slot: FINGER<br>\nClass: NONE<br>\nRace: ", dropsfrom=drops),
+        synthetic_record(9853, "Said Ring", statsblock="Slot: FINGER<br>\nClass: NONE<br>\nRace: NONE", dropsfrom=drops),
+    ]
+    _, out = build(tmp_path, records, quests_file)
+    items = items_by_key(out)
+    assert [(items[key]["classes"], items[key]["races"]) for key in ("w9851", "w9852", "w9853")] == [([], []), ([], []), ([], [])]  # nobody, as for NONE
+    for key in ("w9851", "w9852", "w9853"):
+        assert level_and_codes(items[key]) == ("wiki", ["live-source:Plane of Hate", "not-for-bis"]), key
+    text = {key: {r["code"]: r["text"] for r in items[key]["evidence"]["reasons"]}["not-for-bis"] for key in ("w9851", "w9852", "w9853")}
+    assert "class left blank and race left blank" in text["w9851"] and "NONE" not in text["w9851"]
+    assert "class NONE and race left blank" in text["w9852"]
+    assert "class NONE and race NONE" in text["w9853"] and "blank" not in text["w9853"]
+
+
 # ---- a hand weapon that cannot be scored --------------------------------------------------------------------------
 
 
@@ -696,7 +715,8 @@ def test_no_test_that_flags_an_item_builds_a_recorded_page_of_a_real_item():
 
 @pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
 def test_the_invented_items_are_no_item_of_the_committed_catalog():
-    items = read_json(REPO / "derived" / "catalog.json")["items"]
+    # the committed catalog has no item without a wiki page since the wiki made a page for the last one: the case is an invented one added to it in memory (unpaged_case.py)
+    items = with_an_unpaged_wearable(read_json(REPO / "derived" / "catalog.json"))["items"]
     paged = [item for item in items if item["wiki"] is not None]  # an item read from EQ Legends Tools alone has no wiki page: no title, revision or page id to compare
     assert paged and len(paged) < len(items)  # the case stays covered: the catalog holds items with no wiki page
     assert all(item["key"].startswith("rlt-") for item in items if item["wiki"] is None)  # and they have a key of their own, never a w<pageid>
@@ -916,8 +936,10 @@ def test_the_committed_catalog_has_no_seen_in_game_reason_and_strict_only_from_c
     assert "seen" not in read_json(REPO / "derived" / "catalog-summary.json")
     manifest = read_json(REPO / "derived" / "sources-manifest.json")
     paged = [item["key"] for item in document["items"] if item["wiki"] is not None]  # the manifest lists the wiki pages the items were read from
-    unpaged = [item["key"] for item in document["items"] if item["wiki"] is None]
     assert list(manifest["items"]) == paged
+    # the committed catalog has no item without a wiki page any more: an invented one stands for it (unpaged_case.py), and the manifest has no entry for it; the builder's own case, with a
+    # Tools-only item made by the builder, is test_the_provenance_names_the_zone_page_and_the_manifest_lists_the_items_read_from_the_site
+    unpaged = [item["key"] for item in with_an_unpaged_wearable(document)["items"] if item["wiki"] is None]
     assert unpaged and not set(unpaged) & set(manifest["items"])  # the case stays covered: items with no wiki page exist, and the manifest has no entry for them
 
 
@@ -982,37 +1004,94 @@ def test_the_committed_catalog_has_the_hand_listed_shields_and_not_the_three_hel
     assert types("Engineer's Ring") == (None, None)
 
 
-@pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
-def test_the_committed_catalog_keeps_the_empty_lists_of_the_none_pages_and_marks_them_not_for_bis_with_the_note():
-    document = read_json(REPO / "derived" / "catalog.json")
+def check_the_empty_lists(document, summary):
+    """The gate on the empty class and race lists of a catalog document (the committed one, or one changed to show what the gate refuses)."""
     empty_races = empty_classes = 0
     for item in document["items"]:
         notes = {reason["code"]: reason["text"] for reason in item["evidence"]["reasons"]}
         for field, warned_field, label in (("races", "race", "race NONE"), ("classes", "class", "class NONE")):
-            if item[field] == []:  # only a page that says NONE: nobody may wear or use the item
-                assert {"code": "no-classes", "field": warned_field} in item["parse_warnings"], item["key"]
+            if item[field] == []:  # a page that says NONE: nobody may wear or use the item
+                if {"code": "no-classes", "field": warned_field} not in item["parse_warnings"]:
+                    # or a page that leaves the line blank (some pages of the wiki do): the same lists, but only an item that carries the not-for-bis note may have them, and its note says the line was left blank
+                    assert "not-for-bis" in notes and {"code": "bad-value", "field": warned_field} in item["parse_warnings"], item["key"]
+                    assert f"{warned_field} left blank" in notes["not-for-bis"] and label not in notes["not-for-bis"], item["key"]
+                    continue
                 assert label in notes["not-for-bis"], item["key"]
                 if field == "races":
                     empty_races += 1
                 else:
                     empty_classes += 1
     assert empty_races > 0 and empty_classes > 0
-    codes = read_json(REPO / "derived" / "catalog-summary.json")["warnings"]["parse_by_code"]
+    codes = summary["warnings"]["parse_by_code"]
     assert "no-races" not in codes and codes["no-classes"] == empty_races + empty_classes
 
 
 @pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
-def test_the_committed_catalog_has_no_hand_weapon_that_cannot_be_scored_and_keg_mallet_has_its_damage():
-    document = read_json(REPO / "derived" / "catalog.json")
+def test_the_committed_catalog_keeps_the_empty_lists_of_the_none_pages_and_marks_them_not_for_bis_with_the_note():
+    check_the_empty_lists(read_json(REPO / "derived" / "catalog.json"), read_json(REPO / "derived" / "catalog-summary.json"))
+
+
+@pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
+def test_the_gate_on_the_empty_lists_exempts_only_an_item_that_carries_the_not_for_bis_note_and_says_left_blank():
+    document, summary = read_json(REPO / "derived" / "catalog.json"), read_json(REPO / "derived" / "catalog-summary.json")
+    blank = next(item for item in document["items"] if item["key"] == "w60572")  # blank Class and Race lines
+    assert blank["classes"] == [] and blank["races"] == [] and "class left blank" in {r["code"]: r["text"] for r in blank["evidence"]["reasons"]}["not-for-bis"]
+    without_the_note = copy.deepcopy(document)
+    changed = next(item for item in without_the_note["items"] if item["key"] == "w60572")
+    changed["evidence"]["reasons"] = [r for r in changed["evidence"]["reasons"] if r["code"] != "not-for-bis"]
+    with pytest.raises(AssertionError):  # blank lists with no not-for-bis note are not exempt
+        check_the_empty_lists(without_the_note, summary)
+    says_none = copy.deepcopy(document)
+    changed = next(item for item in says_none["items"] if item["key"] == "w60572")
+    for reason in changed["evidence"]["reasons"]:
+        if reason["code"] == "not-for-bis":
+            reason["text"] = "Open to no class or race (class NONE and race NONE): kept in the catalog, not used for best-in-slot."
+    with pytest.raises(AssertionError):  # and a note that says NONE of a blank line is not the note the gate wants
+        check_the_empty_lists(says_none, summary)
+
+
+def check_the_hand_weapons(document, summary):
+    """The gate on the hand weapons of a catalog document (the committed one, or one changed to show what the gate refuses)."""
+    warned_keys = set()
     for item in document["items"]:
         weapon = item["weapon"]
+        notes = {reason["code"]: reason["text"] for reason in item["evidence"]["reasons"]}
+        # an item that carries the not-for-bis note for this very cause is exempt (a page of the wiki can lack the damage: the builder keeps the item out of best-in-slot and says so); any other item is held as ever
+        exempt = "cannot be scored" in notes.get("not-for-bis", "")
         incomplete = weapon is not None and weapon["skill"] is not None and (weapon["dmg"] is None or weapon["delay"] is None)
-        if incomplete:  # ammunition has no delay, a bow is not held in a hand
+        if incomplete and not exempt:  # ammunition has no delay, a bow is not held in a hand
             assert not set(item["slots"]) & {"PRIMARY", "SECONDARY"}, item["key"]
-        assert {"code": "weapon-incomplete", "field": "weapon"} not in item["parse_warnings"], item["key"]
+        if {"code": "weapon-incomplete", "field": "weapon"} in item["parse_warnings"]:
+            warned_keys.add(item["key"])
+            assert exempt, item["key"]
     keg = next(item for item in document["items"] if item["name"] == "Keg Mallet")
     assert keg["weapon"] == {"skill": "1H Blunt", "dmg": 9, "delay": 30, "bonus": None}  # its page says "Base Dmg: 9"
-    assert "weapon-incomplete" not in read_json(REPO / "derived" / "catalog-summary.json")["warnings"]["parse_by_code"]
+    # the summary counts the warning once for each such item, and no item is warned that the note does not name
+    assert summary["warnings"]["parse_by_code"].get("weapon-incomplete", 0) == len(warned_keys)
+
+
+@pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
+def test_the_committed_catalog_has_no_hand_weapon_that_cannot_be_scored_and_keg_mallet_has_its_damage():
+    check_the_hand_weapons(read_json(REPO / "derived" / "catalog.json"), read_json(REPO / "derived" / "catalog-summary.json"))
+
+
+@pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
+def test_the_gate_on_the_hand_weapons_exempts_only_an_item_that_carries_the_not_for_bis_note_for_that_cause():
+    document, summary = read_json(REPO / "derived" / "catalog.json"), read_json(REPO / "derived" / "catalog-summary.json")
+    stiletto = next(item for item in document["items"] if item["key"] == "w73494")  # a hand weapon with no damage on its page
+    assert stiletto["weapon"]["dmg"] is None and set(stiletto["slots"]) & {"PRIMARY", "SECONDARY"}
+    assert "cannot be scored" in {r["code"]: r["text"] for r in stiletto["evidence"]["reasons"]}["not-for-bis"]
+    without_the_note = copy.deepcopy(document)
+    changed = next(item for item in without_the_note["items"] if item["key"] == "w73494")
+    changed["evidence"]["reasons"] = [r for r in changed["evidence"]["reasons"] if r["code"] != "not-for-bis"]
+    with pytest.raises(AssertionError):  # the same weapon with no note is refused
+        check_the_hand_weapons(without_the_note, summary)
+    another = copy.deepcopy(document)
+    # an item with no weapon and no note, given a hand weapon with no delay
+    changed = next(item for item in another["items"] if item["weapon"] is None and not any(r["code"] == "not-for-bis" for r in item["evidence"]["reasons"]))
+    changed["slots"], changed["weapon"] = ["PRIMARY"], {"skill": "1H Blunt", "dmg": 9, "delay": None, "bonus": None}
+    with pytest.raises(AssertionError):
+        check_the_hand_weapons(another, summary)
 
 
 # ---- refusing what cannot be trusted --------------------------------------------------------------------
@@ -1387,9 +1466,13 @@ def test_an_empty_race_list_comes_only_from_a_race_none_line_and_it_is_not_for_b
             assert item["races"] == ["ALL"] and "race NONE" not in json.dumps(item["evidence"]), item["key"]
             continue
         says_none = stated[0].strip().casefold() == "none"
+        reasons = {reason["code"]: reason["text"] for reason in item["evidence"]["reasons"]}
+        if item["races"] == [] and stated[0].strip() == "":
+            # a Race line with nothing after it (some pages of the wiki): the list is empty as for NONE, but only an item that carries the not-for-bis note may have it, and its note says the line was left blank
+            assert "race left blank" in reasons.get("not-for-bis", ""), item["key"]
+            continue
         assert (item["races"] == []) == says_none, item["key"]  # [] is a stated NONE, and a stated NONE is []
         if says_none:
             stated_none += 1
-            reasons = {reason["code"]: reason["text"] for reason in item["evidence"]["reasons"]}
             assert "race NONE" in reasons["not-for-bis"], item["key"]
     assert stated_none > 0 and no_line > 0

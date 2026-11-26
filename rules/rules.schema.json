@@ -35,24 +35,24 @@
       "pattern": "\\S"
     },
     "seal": {
-      "description": "How far a rule can be trusted. client: read from a game client file. developer: a developer statement or patch note. measured: our own in-game test or a reproduced stat window. player: several independent player reports. model: our or EQEmu's formula, or a judgment constant.",
+      "description": "How far a rule can be trusted. client: read from a game client file. developer: a developer statement or patch note. measured: our own in-game test, a reproduced stat window or the game client's own calculation. player: several independent player reports. model: our or EQEmu's formula, or a judgment constant.",
       "enum": ["client", "developer", "measured", "player", "model"]
     },
     "source_entry": {
-      "description": "One place a value comes from. url: a public https address. client-file: a text resource that ships with the game client, read as text. public-text: a public statement without a stable address, such as a patch note or a developer stream. private-measured and private-player: the maintainer's own measurement, or player reports the maintainer saw privately; the ref is then one fixed label and never a count, value or date.",
+      "description": "One place a value comes from. url: a public https address. client-file: a text resource that ships with the game client, read as text. game-client: a rule taken from the game client's own calculation, cited by one fixed label. public-text: a public statement without a stable address, such as a patch note or a developer stream. private-measured and private-player: the maintainer's own measurement, or player reports the maintainer saw privately; the ref is then one fixed label and never a count, value or date.",
       "type": "object",
       "required": ["kind", "ref"],
       "additionalProperties": false,
       "properties": {
         "kind": {
           "description": "What sort of place the ref names.",
-          "enum": ["url", "client-file", "public-text", "private-measured", "private-player"]
+          "enum": ["url", "client-file", "game-client", "public-text", "private-measured", "private-player"]
         },
         "ref": {
-          "description": "What the kind points at. url: an https:// address (a host, then an optional path; no spaces, user name or port). client-file: one of the shipped text files listed below. public-text: a short description. private-measured and private-player: exactly \"maintainer's private observation\".",
+          "description": "What the kind points at. url: an https:// address (a host, then an optional path; no spaces, user name or port). client-file: one of the shipped text files listed below. game-client: the one fixed label of the rules that come from the game client's own calculation. public-text: a short description. private-measured and private-player: exactly \"maintainer's private observation\".",
           "type": "string",
           "not": {
-            "$comment": "Nothing public may cite a client binary, an address or offset inside it, or a disassembly (the game's terms rule out reverse engineering the client): no eqgame, .exe, RVA, offset or 0x. Written with character classes because JSON Schema patterns have no case-insensitive flag. RVA stays case-sensitive on purpose: its lowercase form sits inside ordinary words, such as 'observation' in the fixed private label.",
+            "$comment": "Nothing public may carry a function address, an offset inside the client program or a listing of its code: the pattern below refuses a program-file name, an executable suffix, a relative-address label, an offset and a hexadecimal prefix (the formulas themselves may be used: the game-client kind below says so in one fixed label). It is written with character classes because JSON Schema patterns have no case-insensitive flag. The relative-address label stays case-sensitive on purpose: its lowercase form sits inside ordinary words, such as 'observation' in the fixed private label.",
             "type": "string",
             "pattern": "[Ee][Qq][Gg][Aa][Mm][Ee]|\\.[Ee][Xx][Ee]|RVA|[Oo][Ff][Ff][Ss][Ee][Tt]|0[Xx]"
           }
@@ -91,6 +91,16 @@
                 ]
               }
             }
+          }
+        },
+        {
+          "$comment": "A rule taken from the game client's own calculation cites one fixed label (the owner lifted the rule that kept client-code formulas out of the repository on 2026-11-22; the pattern on ref above still refuses an address, an offset or a program-file name, so no function address or listing reaches the public file).",
+          "if": {
+            "required": ["kind"],
+            "properties": { "kind": { "const": "game-client" } }
+          },
+          "then": {
+            "properties": { "ref": { "const": "EverQuest Legends client, build of 2026-11-17: the client's own calculation" } }
           }
         },
         {

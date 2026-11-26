@@ -2,7 +2,7 @@
 checks, the fingerprint of the chunks, one run for every result file and the loose ends.
 
 Every name, item and number here is invented. The helpers (the invented catalog, ``independent``, ``expand`` ...) are those of
-``test_precompute.py``; the tiny run (two races, Balanced, +0 and +4) is its ``tiny`` fixture.
+``test_precompute.py``; the tiny run (two races, the Tank build, +0 and +4) is its ``tiny`` fixture.
 """
 
 import ast
@@ -51,8 +51,8 @@ def test_each_race_is_pruned_for_itself_so_greaves_only_a_troll_wears_cannot_emp
     out = tmp_path / "out"
     pc.run(SLUG, out, catalog=write_catalog(tmp_path / "catalog.json", items), processes=1, **TINY)
     rows = expand(read(out / SLUG / "wiki-own.json"))
-    assert rows[("TRL", "balanced", 4, "dw")]["kit"][LEGS] == "w9027"
-    assert rows[("OGR", "balanced", 4, "dw")]["kit"][LEGS] == "w9028"  # not an empty place
+    assert rows[("TRL", "tank", 4, "dw")]["kit"][LEGS] == "w9027"
+    assert rows[("OGR", "tank", 4, "dw")]["kit"][LEGS] == "w9028"  # not an empty place
     for (race, role, tier, setup), row in rows.items():
         full, *_ = independent(items, tier, race, role, setup, "own", "wiki", pruned=False)
         assert row["F"] == pytest.approx(full.F, rel=1e-9, abs=0.006), (race, tier, setup)
@@ -70,7 +70,7 @@ def test_races_that_wear_the_same_race_only_items_share_one_pruned_pool(tmp_path
         return real(pool, profile, *args, **kwargs)
 
     monkeypatch.setattr(grid, "prune", spy)
-    doc = grid.solve_chunk(ctx, grid.ChunkKey("wiki", "own", "balanced", "dw", 4), ["HUM", "TRL", "OGR", "IKS", "BAR"])
+    doc = grid.solve_chunk(ctx, grid.ChunkKey("wiki", "own", "tank", "dw", 4), ["HUM", "TRL", "OGR", "IKS", "BAR"])
     # Human and Barbarian wear neither item, Ogre and Iksar the same one: three pools, made with the first race of each set
     assert pruned_for == ["HUM", "TRL", "OGR"]
     assert [row["race"] for row in doc["rows"]] == ["HUM", "TRL", "OGR", "IKS", "BAR"]
@@ -80,7 +80,7 @@ def test_races_that_wear_the_same_race_only_items_share_one_pruned_pool(tmp_path
 # ---- runner-ups that are legal kits (item 2) ----------------------------------------------------------------------------
 
 
-CASTER_TRIO = ("PAL", "MNK", "CLR")  # a caster in the trio: Balanced is offered the stick setup, in which any item stands in any hand
+CASTER_TRIO = ("PAL", "MNK", "CLR")  # a caster in the trio: the Shield caster build is offered the stick setup, in which any item stands in any hand
 
 
 def test_runner_ups_under_the_stick_setup_never_offer_an_off_hand_item_beside_a_two_hander(tmp_path):
@@ -90,11 +90,11 @@ def test_runner_ups_under_the_stick_setup_never_offer_an_off_hand_item_beside_a_
     orb = make_item("w9031", "Test Off Orb", ["SECONDARY"], stats={"STA": 5, "WIS": 5})
     config, _ = grid.load_inputs(CASTER_TRIO, catalog_path=write_catalog(tmp_path / "catalog.json", [*CATALOG, staff, orb]))
     ctx = grid.Context(config)
-    assert "stick" in wp.setups_for(CASTER_TRIO, "balanced", ctx.tables, level=50)
-    row = grid.solve_chunk(ctx, grid.ChunkKey("wiki", "own", "balanced", "stick", 4), ["OGR"])["rows"][0]
+    assert "stick" in wp.setups_for(CASTER_TRIO, "shield", ctx.tables, level=50)
+    row = grid.solve_chunk(ctx, grid.ChunkKey("wiki", "own", "shield", "stick", 4), ["OGR"])["rows"][0]
     assert row["kit"][PRIMARY] == "w9030" and row["kit"][SECONDARY] is None  # the staff takes both hands
     entry = grid.RunnerupInput("OGR", "stick", tuple(row["kit"]), tuple(row["buffs"]), row["haste"])
-    places = grid.runnerup_chunk(ctx, "balanced", 4, [entry])["views"][0]["places"]
+    places = grid.runnerup_chunk(ctx, "shield", 4, [entry])["views"][0]["places"]
     assert places[SECONDARY] == []  # nothing can stand beside the two-hander
     vecs = ctx.vecs(4)
     kit = [vecs[key] if key else None for key in row["kit"]]
@@ -139,7 +139,7 @@ def test_a_model_objective_that_differs_from_the_evaluators_value_in_either_dire
     monkeypatch.setattr(solve_module, "solve_canonical", skewed)
     with pytest.raises(pc.PrecomputeError, match="objective re-check") as caught:
         pc.run(SLUG, tmp_path / "out", catalog=write_catalog(tmp_path / "catalog.json"), processes=1, **TINY)
-    assert "model" in str(caught.value) and "balanced role" in str(caught.value)
+    assert "model" in str(caught.value) and "tank role" in str(caught.value)
 
 
 def test_a_model_objective_within_the_exactness_tolerance_is_no_error(tmp_path, monkeypatch):
@@ -157,24 +157,24 @@ def test_a_model_objective_within_the_exactness_tolerance_is_no_error(tmp_path, 
 def test_a_plain_swap_that_beats_the_kit_is_a_violation_that_stops_the_run(tiny, tmp_path):
     config, _ = grid.load_inputs(TRIO, catalog_path=tiny.catalog)
     ctx = grid.Context(config)
-    row = expand(read(tiny.dir / "wiki-own.json"))[("OGR", "balanced", 4, "dw")]
+    row = expand(read(tiny.dir / "wiki-own.json"))[("OGR", "tank", 4, "dw")]
     head = SLOT_INSTANCES.index("HEAD")
     assert row["kit"][head] is not None
     kit = list(row["kit"])
     kit[head] = None  # a kit that is not the best there is: the helm it lacks is a swap of an item anyone can wear that beats it
     entry = grid.RunnerupInput("OGR", "dw", tuple(kit), tuple(row["buffs"]), row["haste"])
-    doc = grid.runnerup_chunk(ctx, "balanced", 4, [entry])
+    doc = grid.runnerup_chunk(ctx, "tank", 4, [entry])
     named = [text for text in doc["violations"] if "HEAD" in text]
     assert len(named) == 1 and "beats the kit" in named[0] and row["kit"][head] in named[0] and "OGR" in named[0]
     # the run stops on it, and writes nothing for the runner-ups of that role and tier
     grid.init_worker(config)
     path = tmp_path / "r.json"
-    result = grid.run_task({"kind": "runnerups", "role": "balanced", "tier": 4, "entries": [entry], "basis": "x", "path": str(path)})
+    result = grid.run_task({"kind": "runnerups", "role": "tank", "tier": 4, "entries": [entry], "basis": "x", "path": str(path)})
     assert result["ok"] is False and result["error"] == "ScenarioError" and "beats the kit" in result["message"]
     assert not path.exists()
     # the kit the solver found has none, though a swap of an item that needs a deity may beat it
     honest = grid.RunnerupInput("OGR", "dw", tuple(row["kit"]), tuple(row["buffs"]), row["haste"])
-    doc = grid.runnerup_chunk(ctx, "balanced", 4, [honest])
+    doc = grid.runnerup_chunk(ctx, "tank", 4, [honest])
     assert doc["violations"] == []
     assert any(delta > 0 for swaps in doc["views"][0]["places"] for _, delta in swaps)  # a locked item that beats the pick
 
@@ -204,7 +204,7 @@ def lossy_prune(monkeypatch):
 
 
 def test_a_deliberately_broken_prune_is_caught_by_the_run(tmp_path, monkeypatch, tiny):
-    assert "w9006" in expand(read(tiny.dir / "wiki-own.json"))[("OGR", "balanced", 4, "dw")]["kit"]  # the piece the break loses
+    assert "w9006" in expand(read(tiny.dir / "wiki-own.json"))[("OGR", "tank", 4, "dw")]["kit"]  # the piece the break loses
     lossy_prune(monkeypatch)
     with pytest.raises(pc.PrecomputeError) as caught:
         pc.run(SLUG, tmp_path / "out", catalog=tiny.catalog, processes=1, **TINY)

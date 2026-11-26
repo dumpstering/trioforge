@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-13",
+  "version": "2026-11-19",
   "rules": [
     {
       "id": "level.current",
@@ -209,15 +209,42 @@
     {
       "id": "ac.softcap.past_cap_rate",
       "title": "AC rate past the softcap",
-      "value": "per class from Resources/ACMitigation.txt: the rate of the class with the best softcap",
+      "value": "per class from Resources/ACMitigation.txt: the best rate of the trio's classes, and at least ac.softcap.rate_floor",
       "unit": "text",
       "seal": "client",
       "source": [
-        {"kind": "client-file", "ref": "Resources/ACMitigation.txt"}
+        {"kind": "client-file", "ref": "Resources/ACMitigation.txt"},
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
       ],
-      "date": "2026-10-13",
+      "date": "2026-11-22",
       "status": "active",
-      "notes": "For example 0.33 for the Paladin at level 50."
+      "notes": "For example 0.33 for the Paladin at level 50. The client takes the best rate of the three classes, which can be another class than the one with the best cap, and never a rate below the floor (0.25 for a caster and 0.28 for a Shaman, Rogue, Beastlord or Berserker are read as 0.3)."
+    },
+    {
+      "id": "ac.softcap.base_floor",
+      "title": "Armor class softcap: the least a trio's cap can be",
+      "value": 350,
+      "unit": "AC",
+      "seal": "measured",
+      "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
+      ],
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The softcap before Combat Stability and Physical Enhancement is the larger of this and the best softcap of the trio's classes at the level (Resources/ACMitigation.txt): a trio of casters, whose best class cap is 328 at level 50, has 350, so with Combat Stability 3 its softcap is 385 and not 360 (392 and not 367 with Physical Enhancement as well, which a trio of casters is not given unless the planner is told so)."
+    },
+    {
+      "id": "ac.softcap.rate_floor",
+      "title": "Armor class past the softcap: the least rate",
+      "value": 0.3,
+      "unit": "fraction",
+      "seal": "measured",
+      "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
+      ],
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "What counts of the armor class past the softcap is the larger of this and the best rate of the trio's classes: a caster's 0.25 is read as 0.3."
     },
     {
       "id": "ac.softcap.combat_stability_pct",
@@ -276,16 +303,17 @@
     },
     {
       "id": "stats.knee",
-      "title": "Stat knee",
+      "title": "Stamina knee (into hit points)",
       "value": 255,
       "unit": "stat",
-      "seal": "player",
+      "seal": "measured",
       "source": [
         {"kind": "url", "ref": "https://eqltools.com/attributes"},
-        {"kind": "private-player", "ref": "maintainer's private observation"}
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The only break at 255 in the client is the one of stamina into hit points: above it a point of stamina counts half (hp.sta_curve). Strength, agility, wisdom, intelligence, charisma and dexterity have no break at 255: each counts in full up to the cap of 510 (wisdom and intelligence reach mana through the bands of mana.wis_bands, and the endurance average through its own breaks at 100 and 200)."
     },
     {
       "id": "stats.hard_cap",
@@ -327,38 +355,42 @@
     {
       "id": "stats.dex_post255_slope",
       "title": "DEX benefit slope past 255",
-      "value": 0.1,
+      "value": 1,
       "unit": "fraction",
-      "seal": "player",
+      "seal": "measured",
       "source": [
-        {"kind": "private-player", "ref": "maintainer's private observation"}
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "Dexterity has no break at 255 in the client: it counts in full up to the cap of 510, in the endurance average and, for a bow or a thrown weapon, in the attack. What the game server does with it (weapon procs) is not known."
     },
     {
       "id": "haste.cap_pct",
       "title": "Haste cap",
-      "value": 75,
+      "value": "max(level, 30) + 25 up to level 50 (75 at level 50), 85 for levels 51 to 59, 100 from level 60",
       "unit": "percent",
-      "seal": "player",
+      "seal": "measured",
       "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"},
         {"kind": "private-player", "ref": "maintainer's private observation"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The cap of the total haste (a haste spell, the best worn haste item and the other sources together) grows with the level to the value the game shows at the level cap of today, and rises in steps after it. Overhaste, which Unbound Alacrity is taken to be, lifts the cap by its own amount."
     },
     {
       "id": "haste.cap_pct_with_monk",
       "title": "Haste cap with a Monk in the trio",
-      "value": 85,
+      "value": "the cap of the level plus the 10 that Unbound Alacrity adds (85 at level 50)",
       "unit": "percent",
-      "seal": "player",
+      "seal": "measured",
       "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"},
         {"kind": "public-text", "ref": "patch notes, Unbound Alacrity"},
         {"kind": "private-player", "ref": "maintainer's private observation"}
       ],
-      "date": "2026-10-13",
+      "date": "2026-11-22",
       "status": "active"
     },
     {
@@ -386,6 +418,19 @@
       "date": "2026-10-22",
       "status": "active",
       "notes": "A trio with a Monk gets 10 haste that stacks with the best spell haste and the best worn haste, up to haste.cap_pct_with_monk (the cap already includes its 10). The wiki's Haste Guide says it grants up to 10% haste and raises the cap by 10%; the patch notes say it raises both the current and the maximum haste value. 2026-10-22: the weapon index is paid the haste the kit counts (the spell haste of the buffs it takes, this 10 included, plus the best worn haste it wears, up to the cap), not a haste the scenario could reach; the solver chooses the buffs and the haste item together with the weapons."
+    },
+    {
+      "id": "haste.assume_spell",
+      "title": "A haste spell is assumed when a kit is chosen",
+      "value": false,
+      "unit": "bool",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment, not a measurement. A trio may or may not have a hasting class awake, so with false a kit is chosen on gear haste alone: the haste of a spell is left out of the profile (the spell haste of the profile is the Monk's flat haste alone) and a worn haste item is then worth its full value, up to the cap. With true the haste of the buffs enters the profile as it did before, and the kit is chosen as if the best haste spell were always on. A reader who does have a haste spell ticks the box \"I have a haste spell\" under Buffs on a trio page: the kit is then worked out in the browser with the buff set that keeps the haste of the spells (a twin of each buff set in the bundle), which is what the rule true gives."
     },
     {
       "id": "regen.gear_caps",
@@ -429,26 +474,42 @@
     {
       "id": "resist.cap",
       "title": "Resist cap",
-      "value": 200,
+      "value": 1000,
       "unit": "per school",
-      "seal": "model",
+      "seal": "measured",
       "source": [
-        {"kind": "public-text", "ref": "TrioForge judgment"}
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The cap of each resist in the client's stat window is 1000 up to level 65 (a level above 65 has (level + 135) x 5), and abilities of the Discordant Defiance kind raise it. The model valued the gear and buff resists of a school up to 200, a judgment, before."
     },
     {
       "id": "tier.stat_rule",
       "title": "Tier stat rule",
       "value": "base + max(n, floor(base*n/10))",
       "unit": "text",
-      "seal": "player",
+      "seal": "measured",
       "source": [
-        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"}
+        {"kind": "url", "ref": "https://eqlwiki.com/Item_Upgrade_System"},
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The client's own calculation agrees at whole tiers: a stat gains the larger of a point and a tenth of its base for each tier, truncated. The attack of an item is not one of the stats it scales (tier.unscaled_stats)."
+    },
+    {
+      "id": "tier.unscaled_stats",
+      "title": "Stats the tier rule leaves alone",
+      "value": ["ATK"],
+      "unit": "stats",
+      "seal": "measured",
+      "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
+      ],
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "Item attack never grows with the tier: a +4 or a +10 item's attack is its +0 value. The client's calculation leaves the heal amount, the spell damage, the clairvoyance and the delay alone too; the model carries attack only."
     },
     {
       "id": "tier.weight_floor",
@@ -577,17 +638,17 @@
     },
     {
       "id": "tier.negatives_scale",
-      "title": "Negative stats scale with tier",
-      "value": false,
-      "unit": "bool",
-      "seal": "model",
+      "title": "Negative stats shrink with tier",
+      "value": "toward zero by max(n, floor(|base|*n/10)), never past zero",
+      "unit": "text",
+      "seal": "measured",
       "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"},
         {"kind": "private-measured", "ref": "maintainer's private observation"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
-      "test": "B6",
-      "notes": "One observation suggests negative stats grow with tier; not settled."
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "A negative stat moves toward zero by the amount that a positive stat of the same size would grow, and never passes zero: a small negative stat is gone after a tier or two, and the resist or attribute of an item that is mostly a cost shrinks as the item is upgraded."
     },
     {
       "id": "monk.weight_curve",
@@ -616,21 +677,22 @@
     {
       "id": "monk.bonus_placement",
       "title": "Monk worn-weight bonus placement",
-      "value": "on top of the capped sheet AC (bypasses the softcap), valued per sheet point",
+      "value": "inside X before the cap",
       "unit": "text",
-      "seal": "developer",
+      "seal": "measured",
       "source": [
-        {"kind": "url", "ref": "https://eqltools.com/combat"}
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"},
+        {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
-      "test": "B9",
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The client adds the Monk's worn-weight bonus to the sheet value before the soft cap, so past the cap it counts at the rate past the cap, as the rest of the armor class does. The thresholds of the bonus itself (monk.weight_curve) are still an open reading.",
       "alternatives": [
         {
-          "value": "inside X before the cap",
-          "seal": "model",
+          "value": "on top of the capped sheet AC (bypasses the softcap), valued per sheet point",
+          "seal": "developer",
           "source": [
-            {"kind": "url", "ref": "https://github.com/EQEmu/Server"}
+            {"kind": "url", "ref": "https://eqltools.com/combat"}
           ]
         }
       ]
@@ -663,15 +725,30 @@
     {
       "id": "race.iksar_ac_placement",
       "title": "Iksar racial AC placement",
-      "value": "on top of the capped sheet AC (bypasses the softcap)",
+      "value": "inside X before the cap",
       "unit": "text",
-      "seal": "developer",
+      "seal": "measured",
       "source": [
-        {"kind": "url", "ref": "https://eqltools.com/combat"}
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"},
+        {"kind": "private-measured", "ref": "maintainer's private observation"}
       ],
-      "date": "2026-10-13",
-      "status": "open",
-      "test": "B17"
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "The client adds the Iksar racial armor class to the sheet value before the soft cap, which agrees with the maintainer's own reading of an Iksar's armor class."
+    },
+    {
+      "id": "stance.berserker",
+      "title": "Berserker stance: swing speed, and agility",
+      "value": {"swing_factor": 2.1, "agi_counts": false, "builds": ["melee"]},
+      "unit": "swing speed factor, agility in mitigation and evasion, and the builds that play the stance",
+      "seal": "measured",
+      "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"},
+        {"kind": "public-text", "ref": "patch notes 2026-10-22, Berserker stance"}
+      ],
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "While the Berserker stance is on, the swing timer is divided by the factor after the haste cap, so worn haste keeps its full value with or without a haste spell, and agility adds nothing to mitigation or to evasion. The model plays the stance for the builds listed (the Melee damage build) of a trio that has a Berserker; the other builds are taken to play another stance. The stance needs endurance above one percent, which the model takes to be kept up. The factor multiplies the swing of both hands and not a bow, and not a weapon proc (a proc is paced by the minute)."
     },
     {
       "id": "buffs.min_duration_minutes",
@@ -700,37 +777,67 @@
     },
     {
       "id": "roles.templates",
-      "title": "Role weight templates",
+      "title": "Build weight templates",
       "value": {
-        "tank": {"HP": 1, "AC": 6, "MANA": 0.5, "ATK": 2, "DEX": 0.1, "HASTE": 1.5, "END": 0.5, "SV": 0.4, "CHA": 0.05},
-        "melee": {"HP": 1.3, "AC": 1.5, "MANA": 0.5, "ATK": 3, "DEX": 0.8, "HASTE": 3, "END": 0.3, "SV": 0.2, "CHA": 0.05},
-        "caster": {"HP": 1, "AC": 1.2, "MANA": 4.0, "ATK": 0.3, "DEX": 0.1, "HASTE": 0, "END": 0.05, "SV": 0.4, "CHA": 0.05}
+        "tank": {"HP": 1, "AC": 12, "MANA": 0.15, "ATK": 2.67, "DEX": 0.1, "HASTE": 1.5, "END": 0.5, "SV": 0.4, "CHA": 0.05},
+        "shield": {"HP": 1, "AC": 12, "MANA": 0.3, "ATK": 0.3, "DEX": 0.05, "HASTE": 0, "END": 0.25, "SV": 1.5, "CHA": 0.05},
+        "melee": {"HP": 1.3, "AC": 1.5, "MANA": 0.15, "ATK": 4, "DEX": 0.8, "HASTE": 3, "END": 0.3, "SV": 0.2, "CHA": 0.05},
+        "castertank": {"HP": 1, "AC": 9, "MANA": 1, "ATK": 0.1, "DEX": 0.05, "HASTE": 0, "END": 0.3, "SV": 0.8, "CHA": 0.05},
+        "caster": {"HP": 1, "AC": 1.2, "MANA": 4, "ATK": 0.3, "DEX": 0.1, "HASTE": 0, "END": 0.05, "SV": 0.8, "CHA": 0.05}
       },
       "unit": "HP-equivalents",
       "seal": "model",
       "source": [
         {"kind": "public-text", "ref": "TrioForge judgment"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment, not a measurement: every number here is a weight TrioForge chose, in hit-point equivalents for one point of the stat, and a reader can change them with Your priorities. A build is a way a trio plays, and each has its own weights. Tank: in front, in a Defensive stance, armour class first, then hit points and endurance, attack (2.67 a point, the weight its weapon's damage is scored with), a little mana, a worn haste item and the weapon at a factor of 0.5 (450 x 2.67 x 0.5 = 600.75 for a point of weapon damage index, against 1800 for Melee damage: a third of its weight). Shield caster: a tank class that does its damage with spells, so a shield and armour class first, then resists and hit points, and mana only a little (0.3 a point: a knight with two casters beside it has mana to spare, and gears for armour and resists); the weapon is a carrier of stats and counts no damage, and haste is not scored. Melee damage: attack, strength, dexterity and haste, then hit points; armour class and mana are small. Caster tank: no tank class, so armour class (a shield where a class can hold one), mana as a second health bar, hit points and resists; the weapon counts no damage. Caster: mana first, then hit points and resists; the weapon counts no damage. The Archer build is the Melee build with the factors of the rule Ranged role weight factors. The weight of weapon damage in each build is the rule Weapon damage weight times the build's attack weight times the rule Weapon damage factor of each build."
     },
     {
-      "id": "roles.balanced",
-      "title": "Balanced role",
-      "value": "equal blend of the templates the trio can play",
-      "unit": "text",
+      "id": "roles.ranged_template",
+      "title": "Ranged role weight factors",
+      "value": {"DEX": 2, "AC": 0.5},
+      "unit": "multiplier on the Melee template's weight of that stat",
       "seal": "model",
       "source": [
         {"kind": "public-text", "ref": "TrioForge judgment"}
       ],
-      "date": "2026-10-13",
-      "status": "active"
+      "date": "2026-11-18",
+      "status": "active",
+      "notes": "A judgment, not a measurement. The Archer build is the Melee damage template (the rule Build weight templates, whatever it is now, so a change to Melee damage carries over) with the dexterity weight doubled and the armor class weight halved, for a Ranger who shoots from a distance and so is hit less: damage from a bow first (attack, dexterity and haste), then hit points. The other builds are not changed."
+    },
+    {
+      "id": "roles.weapon_factor",
+      "title": "Weapon damage factor of each build",
+      "value": {"tank": 0.5, "shield": 0, "melee": 1, "ranged": 1, "castertank": 0, "caster": 0},
+      "unit": "multiplier on the weapon damage weight of the build",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment, not a measurement. How much the damage of the weapons counts in each build, as a multiplier on the weight the rule Weapon damage weight gives (that weight, times the build's attack weight, times this factor, is what a point of weapon damage index is worth). Melee damage and the Archer count the weapon in full; the Tank counts it at a factor of 0.5 (its weight is then 450 x 2.67 x 0.5 = 600.75 a point, against 1800 for Melee damage), so that a shield can win the off hand where the armour class it gives is worth more than a second weapon; the Shield caster, the Caster tank and the Caster count no weapon damage at all, so their weapons are chosen for stats. Your priorities scale it with attack, as before. One mechanism for every build: the earlier rule that only the Tank, Melee and Ranged templates scored damage is this table with a 0 for the others."
+    },
+    {
+      "id": "weapons.fallback_bonus",
+      "title": "Main-hand damage bonus when the item lists none",
+      "value": {"from_level": 28, "one_handed": 0.8, "two_handed": 1.1, "delay_cap": 50},
+      "unit": "the level from which a main hand has the bonus, the factor of a one-hander and of a two-hander, and the most delay that counts",
+      "seal": "measured",
+      "source": [
+        {"kind": "game-client", "ref": "EverQuest Legends client, build of 2026-11-17: the client's own calculation"}
+      ],
+      "date": "2026-11-22",
+      "status": "active",
+      "notes": "bonus = (level / 100) x max(damage, level) x factor x min(delay, 50) / 40, from level 28 on, for the main hand of an item that lists no bonus (a listed bonus counts as it is, and a listed zero counts as none). At level 50, for a weapon whose damage is at most 50, this is half the delay for a one-hander and 0.6875 x min(delay, 50) for a two-hander. The client rounds the bonus down to a whole number when it shows it; the model keeps the exact value, as it always did. The off hand has no bonus."
     },
     {
       "id": "weapons.damage_weight",
       "title": "Weapon damage weight",
-      "value": 600,
-      "unit": "HP-equivalents per damage-index point per unit of the role's ATK weight",
+      "value": 450,
+      "unit": "HP-equivalents per damage-index point per unit of the build's ATK weight and of its weapon damage factor",
       "seal": "model",
       "source": [
         {"kind": "public-text", "ref": "TrioForge judgment"}
@@ -738,7 +845,7 @@
       "date": "2026-10-13",
       "status": "open",
       "test": "B18",
-      "notes": "Multiplied by each role template's ATK weight; the Caster role uses 0. One ATK point is taken as worth about a tenth of a percent of melee damage."
+      "notes": "A judgment. Multiplied by each build's attack weight and then by the rule Weapon damage factor of each build. 2026-11-19: 600 became 450 when the attack weight of Melee damage rose from 3 to 4, so that the weapon weight of Melee damage stays at 1800 (a third more attack weight, a quarter less per point). One ATK point is taken as worth about a tenth of a percent of melee damage."
     },
     {
       "id": "weapons.dual_wield_factor",
@@ -753,6 +860,32 @@
       "status": "open",
       "test": "B5",
       "notes": "The share of the off hand's damage that counts in the weapon index. Derivation: min(1, best Dual Wield skill / 400 x 1.32), with the Dual Wield skill at 252 for a Monk and 210 for the other dual wielders, and Ambidexterity as the x1.32: 0.83 with a Monk in the trio, 0.69 without. The source calls this a working model, not a measured figure, so the rule stays open."
+    },
+    {
+      "id": "weapons.ranged_factor",
+      "title": "Bow damage factor",
+      "value": 1.0,
+      "unit": "multiplier on the weapon damage index of a bow in the range place",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-18",
+      "status": "active",
+      "notes": "A judgment, not a measurement. In the Bow setup the bow in the range place is scored on its own damage per delay, at the haste the kit counts (its damage over its delay, times one plus the haste), times this number. 1 says a bow shot counts as much as the swing of a main hand with the same damage and delay, before that main hand's bonus. The damage bonus of a main hand is not counted for a bow: nothing in the game data says that archery gets it, and no bow lists one. Arrow damage is not counted, and nothing else about shooting is."
+    },
+    {
+      "id": "defaults.race_close_pct",
+      "title": "Races counted as close for the default race",
+      "value": 1,
+      "unit": "percent of the best value",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment, not a measurement. Only races that can be created at character creation take part. Races whose value in the opening view is within this percent of the best of them are close: the window is measured from the best race that can be created, not from the best race overall, so a race that cannot be created never sets it and is never named. The data lists the close races in order of value, the default race first (a tie goes in the display order of the races), and is empty when the best creatable race stands alone or its value is not above 0; the page says close instead of naming a best race. The default race is the best race that can be created."
     },
     {
       "id": "effects.focus_value",
@@ -1026,6 +1159,71 @@
       "date": "2026-10-24",
       "status": "active",
       "notes": "The best rows of each kind, which the page shows and the placement on a kit uses."
+    },
+    {
+      "id": "effects.proc_per_minute",
+      "title": "Procs a minute of a weapon",
+      "value": {"dex_divisor": 170, "base": 0.5},
+      "unit": "procs a minute = (DEX / dex_divisor + base) x (1 + rate / 100), the rate being the Rate line of the item's effect (0 when it lists none)",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment fitted to rates measured in play at a DEX of roughly 200 to 255; how the rate depends on DEX is not measured, which is why the DEX it is evaluated at is one fixed number (effects.proc_reference_dex) and not the DEX of the kit. Procs are paced by the minute and not by the swing, so the rate does not grow with haste, and the proc of a weapon has no haste factor in the weapon term. The Rate line is the modifier and is applied here, once, and nowhere else. The weapon term counts one proc for each hand that swings: the better of the item's own proc and the best proc it can host once an item is at the tier where the proc socket opens (a maximum, never a sum; whether a native proc and a socketed one both fire is not known), and the off hand counts it by the dual-wield factor (weapons.dual_wield_factor, a judgment: how the off hand paces a proc is not measured). A proc is worth the weapon weight of the build, so it counts as much as the same damage a second from a swing."
+    },
+    {
+      "id": "effects.proc_reference_dex",
+      "title": "The DEX at which the proc rate is evaluated",
+      "value": 200,
+      "unit": "DEX",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment: one fixed DEX for every scenario, so that the weapon term stays a sum of terms of the items worn and the solve stays exact. It sits inside the range the rate of procs a minute was fitted at."
+    },
+    {
+      "id": "effects.proc_landing",
+      "title": "Share of procs that land",
+      "value": 0.85,
+      "unit": "fraction of the damage-equivalent of a proc",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment: some procs are resisted. It multiplies the size of every kind of proc, a damage proc and the others alike."
+    },
+    {
+      "id": "effects.proc_own_cut",
+      "title": "A proc of a kind the trio casts itself",
+      "value": 0.15,
+      "unit": "factor on the size of a proc that is not damage",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment, the cut a utility click gets when the trio's own spell covers the gap (effects.score_shape gap_covered). A proc that is not damage (a slow, a stun, a debuff) counts this fraction of its size when a class of the trio has a spell of the same kind at least as strong. A haste proc keeps the cut of effects.haste_buff instead."
+    },
+    {
+      "id": "effects.proc_score_kinds",
+      "title": "Which unverified procs count in the weapon term",
+      "value": ["ambiguous"],
+      "unit": "marks of an effect record",
+      "seal": "model",
+      "source": [
+        {"kind": "public-text", "ref": "TrioForge judgment"}
+      ],
+      "date": "2026-11-19",
+      "status": "active",
+      "notes": "A judgment. A proc record with no mark counts in full. One marked ambiguous (its name matches several spells of the client's text) counts at the smaller of its candidate spells. A mark that is not listed counts nothing: inferred (a proc inferred from a weapon whose page has no trigger wording) and description (players describe the effect differently from the spell data). Such records stay in the lists of effects to exalt."
     }
   ]
 }

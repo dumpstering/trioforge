@@ -78,7 +78,7 @@ async function useTrio(page) {
   await pick(page, "buffs-group");
   await expect(page.locator('[data-f="assume-buffs"]')).toHaveText("common group buffs");
   await pick(page, "role-melee");
-  await expect(page.locator('[data-f="v-role"]')).toHaveText("Melee");
+  await expect(page.locator('[data-f="v-role"]')).toHaveText("Melee damage");
   await expect(page.locator("#status")).toHaveText("");
 }
 
@@ -119,11 +119,12 @@ test.describe("keyboard", () => {
     await expect(page.locator("#theme-toggle")).toBeVisible();
     await openSwitches(page, { keyboard: true, assumptions: false }); // on a phone the Change button comes first, then the switches it opens
     // the three choices, then the one folded line of the assumptions (Enter opens it), then the three assumptions it holds
-    const stops = ["#sw-race", 'input[name="role"]:checked', "#sw-tier", "#assumes > summary", "#assume-buffs > summary", "#assume-weapons > summary"];
+    // (the eight selects of the priorities, which are drawn after the choices, come between the tier and the folded line: the first is a few presses from the tier, and the folded line is the eight after it)
+    const stops = ["#sw-race", 'input[name="role"]:checked', "#sw-tier", "#prio-hp", "#assumes > summary", "#assume-buffs > summary", "#assume-weapons > summary"];
     let limit = 20; // the skip link, the logo, the five links and the theme button come first
     for (const stop of stops) {
       await tabTo(page, stop, limit);
-      limit = 6; // after that each switch is only a few presses from the one before
+      limit = stop === "#prio-hp" ? 10 : 6; // after that each switch is only a few presses from the one before (the folded line, the eight selects of the priorities)
       expect(await focusRingWidth(page), `${stop} shows a focus ring`).toBeGreaterThanOrEqual(2);
       if (stop === "#assumes > summary") await page.keyboard.press("Enter");
     }
@@ -158,7 +159,7 @@ test.describe("keyboard", () => {
     await openSwitches(page, { keyboard: true, assumptions: false });
     await tabTo(page, 'input[name="role"]:checked');
     const roles = await page.$$eval('input[name="role"]', (radios) => radios.map((r) => r.value));
-    expect(roles.length).toBeGreaterThanOrEqual(3);
+    expect(roles.length).toBeGreaterThanOrEqual(2); // (the fixture's trio offers two builds, the Tank and Melee damage)
     let current = start.controls.role;
     for (let step = 0; step < roles.length; step++) {
       const next = roles[(roles.indexOf(current) + 1) % roles.length];
@@ -244,7 +245,7 @@ test.describe("keyboard", () => {
     for (let at = roles.indexOf(start.controls.role); at !== roles.indexOf(role); at = (at + 1) % roles.length) await page.keyboard.press("ArrowRight");
     await expectView(page, shard, { ...start.controls, role, setup: null, announced: "role" });
     // then through its setups
-    await tabTo(page, "#assumes > summary", 6); // (the folded line comes first, then the assumptions it holds)
+    await tabTo(page, "#assumes > summary", 14); // (the tier, the link that explains the roles, the eight selects of the priorities and the button for their rates come first, then the folded line, then the assumptions it holds)
     await page.keyboard.press("Enter");
     await tabTo(page, "#assume-weapons > summary", 6);
     await page.keyboard.press("Enter");
@@ -361,6 +362,29 @@ for (const [name, path] of PAGE_LIST) {
     await expectNoOverflow(page);
   });
 }
+
+// T8 and T10: the stance note and the two haste notes are words in the Assumptions; they stay inside the window and pass axe, in the four views (a trio with no stance build or no haste spell skips the part it has none of)
+test("the haste notes and the stance note say their words inside the window and pass axe, with the assumptions open and the build that plays the stance chosen", async ({ page }, testInfo) => {
+  await open(page, TRIO);
+  await openSwitches(page);
+  const stance = page.locator('input[name="role"][data-stance]');
+  if ((await stance.count()) > 0) {
+    await pick(page, await stance.first().getAttribute("id"));
+    await expect(page.locator("#assume-weapons > summary")).toContainText("Berserker stance"); // (the folded Weapons line says it; the note is inside the panel)
+    await page.locator("#assume-weapons > summary").click();
+    await expect(page.locator("#stance-note")).toBeVisible();
+    await expect(page.locator("#stance-note")).toContainText("times as fast, applied after the haste cap and on top of whatever haste counts");
+  }
+  await openAssumptions(page);
+  if ((await page.locator("#haste-spell-note").count()) > 0) {
+    await page.locator("#assume-buffs > summary").click();
+    await expect(page.locator("#haste-spell-note")).toBeVisible();
+    await expect(page.locator("#haste-spell-note")).toContainText("Without a spell the best worn haste counts in full");
+    await expect(page.locator('[data-f="haste-note"]')).toContainText("With no haste spell it counts in full");
+  }
+  await expectNoOverflow(page);
+  await axe(page, testInfo);
+});
 
 /** A shard whose item names and sources are 170 characters long with no space in them, served in place of the real one. */
 async function withLongNames(page) {

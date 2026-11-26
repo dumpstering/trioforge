@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RACES_PATH = REPO_ROOT / "rules" / "races.json"
 
 # Written out here on purpose, so these tests do not trust the module they are checking.
-RACE_CODES = "HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG".split()
+RACE_CODES = "HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG HDE".split()
 CLASS_CODES = "WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER".split()
 STATS = ["STR", "STA", "AGI", "DEX", "WIS", "INT", "CHA"]
 
@@ -46,6 +46,7 @@ PRIMARY_CLASSES = {
     "IKS": "BST MNK NEC SHD SHM WAR",
     "KER": "BRD BER BST DRU ROG SHM WAR",
     "FRG": "CLR MNK NEC PAL ROG SHD SHM WAR WIZ",
+    "HDE": "BRD BER ENC NEC RNG ROG SHD",
 }
 
 
@@ -67,7 +68,7 @@ def klass(data, code):
 # ---- the real file ----------------------------------------------------------------------------
 
 
-def test_the_fifteen_races_are_present_in_code_order(data):
+def test_the_sixteen_races_are_present_in_code_order(data):
     assert [r["code"] for r in data["races"]] == RACE_CODES
     assert [c["code"] for c in data["classes"]] == CLASS_CODES
     assert [c["id"] for c in data["classes"]] == list(range(1, 17))
@@ -141,7 +142,7 @@ def test_naked_stats_refuse_what_is_not_a_trio_of_known_classes(data, race_code,
         naked_stats(race_code, classes, data)
 
 
-def test_all_fifteen_races_are_active(data):
+def test_all_sixteen_races_are_active(data):
     assert all(r["active"] is True for r in data["races"])
 
 
@@ -160,7 +161,7 @@ def test_kerran_druid_is_disputed_and_nothing_else_is(data):
 
 def test_the_primary_table_reproduces_the_designs_legal_pair_counts(data):
     trios = list(combinations(CLASS_CODES, 3))
-    assert len(trios) * len(data["races"]) == 8400
+    assert len(trios) * len(data["races"]) == 8960
 
     def legal(include_disputed):
         count = 0
@@ -169,8 +170,8 @@ def test_the_primary_table_reproduces_the_designs_legal_pair_counts(data):
             count += sum(1 for trio in trios if allowed & set(trio))
         return count
 
-    assert legal(include_disputed=True) == 6755
-    assert legal(include_disputed=False) == 6719
+    assert legal(include_disputed=True) == 7231  # (6,755 of the fifteen races before Half Dark Elf, which starts 476 of the 560 trios)
+    assert legal(include_disputed=False) == 7195
 
 
 def test_stats_are_cited_to_the_public_attributes_table(data):
@@ -230,7 +231,7 @@ def test_legal_primaries_hand_back_a_list_nobody_else_holds(data):
 
 def test_legal_primaries_agree_with_the_designs_legal_pair_counts(data):
     trios = list(combinations(CLASS_CODES, 3))
-    for include_disputed, expected in ((True, 6755), (False, 6719)):
+    for include_disputed, expected in ((True, 7231), (False, 7195)):  # (6,755 and 6,719 of the fifteen races before the Half Dark Elf, which starts 476 trios)
         count = 0
         for r in data["races"]:
             allowed = set(races.legal_primaries(r["code"], include_disputed=include_disputed))
@@ -486,3 +487,42 @@ def test_a_missing_file_is_a_file_not_found_error(tmp_path):
 def test_the_default_path_is_the_repositorys_rules_file():
     assert races.RACES_PATH == RACES_PATH
     assert load() == load(RACES_PATH) == real_file()
+
+
+# ---- the Half Dark Elf (the 16th race: an unlocked race, from the page of eqlwiki, revision of 2026-11-05) --------------------------------
+
+
+HDE_PAGE = "https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325"
+
+
+def test_the_half_dark_elf_has_the_base_stats_and_the_primary_classes_of_its_page(data):
+    hde = race(data, "HDE")
+    assert hde["name"] == "Half Dark Elf" and hde["active"] is True and hde["disputed"] == []
+    assert hde["base"] == {"STR": 75, "STA": 75, "AGI": 80, "DEX": 80, "WIS": 55, "INT": 95, "CHA": 70}
+    assert hde["primary"] == ["RNG", "SHD", "BRD", "ROG", "NEC", "ENC", "BER"]  # Ranger, Shadow Knight, Bard, Rogue, Necromancer, Enchanter, Berserker: the page's seven, in class-id order
+    assert races.legal_primaries("HDE") == hde["primary"]
+    assert races.RACE_NAMES["HDE"] == "Half Dark Elf" and races.RACE_CODES[-1] == "HDE" and len(races.RACE_CODES) == 16  # (the last of the codes: no kit link made before it changes)
+    assert naked_stats("HDE", ["ENC", "NEC", "SHD"], data) == {"STR": 85, "STA": 80, "AGI": 80, "DEX": 95, "WIS": 55, "INT": 135, "CHA": 90}
+
+
+def test_the_half_dark_elf_is_cited_to_the_revision_of_its_page_and_its_cursed_heritage_is_a_note_that_is_not_scored(data):
+    assert {"kind": "url", "ref": HDE_PAGE} in data["sources"]["stats"] and {"kind": "url", "ref": HDE_PAGE} in data["sources"]["primary_classes"]
+    note = race(data, "HDE")["note"]
+    assert "Cursed Heritage" in note and "10%" in note and "lifetaps" in note and "runes" in note and "20%" in note and "regeneration" in note and "not scored" in note
+    assert [r["code"] for r in data["races"] if "note" in r] == ["HDE"]  # (no other race has one)
+
+
+def test_a_race_note_is_optional_and_must_be_text(data):
+    broken = copy.deepcopy(data)
+    race(broken, "HDE")["note"] = 7
+    problems = races._problems(broken, json.dumps(broken))
+    assert any("note" in problem and "text" in problem for problem in problems)
+    broken = copy.deepcopy(data)
+    race(broken, "HDE")["note"] = "  "
+    assert any("note" in problem for problem in races._problems(broken, json.dumps(broken)))
+    broken = copy.deepcopy(data)
+    del race(broken, "HDE")["note"]
+    assert races._problems(broken, json.dumps(broken)) == []  # (a race with no note is a race)
+    broken = copy.deepcopy(data)
+    race(broken, "HDE")["notes"] = "x"
+    assert any("unexpected key 'notes'" in problem for problem in races._problems(broken, json.dumps(broken)))

@@ -19,13 +19,19 @@ The model
   ``ANY`` (``"explicit"``).
 * **Setups** (:mod:`trioforge.model.weapons`): ``2h`` a two-hander in PRIMARY and nothing in SECONDARY; ``dw``
   one-handed weapons in both hands; ``1h-shield`` a one-handed weapon and a shield; ``stick`` anything, with a row
-  that a two-hander in PRIMARY leaves SECONDARY empty. In every setup a two-hander has no SECONDARY column at all (it
+  that a two-hander in PRIMARY leaves SECONDARY empty; ``ranged`` the hands of the stick and a bow, and only a bow, in
+  RANGE, which is always filled (the row ``range.bow``: even when damage is worth nothing the place holds a bow, and a pool with no bow for it
+  is a ``ValueError``; in every other setup RANGE takes any item that lists it, or none). In every setup a two-hander has no SECONDARY column at all (it
   needs both hands, whatever its page lists), and the pruning agrees because it asks the same function. Whether the
   trio can dual wield is decided by
   ``weapons.setups_for``; the builder only applies the hand rules. A hand column adds ``DMG`` times the weapons
   module's damage index at the program's assumed haste (a constant, see ``BuildOptions.haste_assumed``; the truthful solve of
   :mod:`trioforge.solver.haste` builds a program for each haste a kit can count, with the row ``haste.floor``): the bonus
-  is the primary hand's, the off hand of ``dw`` takes the dual-wield factor, and the ``stick`` setup scores none.
+  is the primary hand's, the off hand of ``dw`` takes the dual-wield factor, the ``stick`` setup scores none, and the ``ranged`` setup
+  scores the bow in RANGE on its own damage per delay (no bonus: that is a main hand's) times the profile's ``ranged_factor`` and nothing else.
+  With ``BuildOptions.procs`` the hands that swing add the proc they count (``_term_procs``, :mod:`trioforge.model.procs`): ``DMG x value / 600`` with no haste factor, a constant on the
+  column of a hand item (its own proc below the tier where procs can be moved, the best proc it can host at and above it) except in ``dw`` at and above that tier, where the two hands
+  couple through the copies of a Lore proc and the program has one binary for each proc a hand can host, with the rows ``proc.one``, ``proc.host`` and ``proc.copies``.
 * **Absolute objective.** The constants hold the naked character and the always-on buffs, and every curve is laid
   out from a total of 0, over the **reachable** range of its input (multi-copy stacking included: a non-Lore ring
   wearable in four places can add four times its stat). ``F = milp.const + c . x``.
@@ -113,6 +119,7 @@ from trioforge.model import formulas as fm
 from trioforge.model import weapons as wp
 from trioforge.model.buffs import Buff, BuffSet
 from trioforge.model.items import SLOT_GROUPS, ItemVec
+from trioforge.model.procs import PER_MINUTE_TO_INDEX, ProcTable
 
 __all__ = [
     "ANY_RULES",
@@ -132,7 +139,9 @@ __all__ = [
 GROUP_SIZE = dict(SLOT_GROUPS)
 MODEL_SLOTS = tuple(name for name, _ in SLOT_GROUPS if name != "ANY")
 HANDS = ("PRIMARY", "SECONDARY")
-SETUPS = (None, "1h-shield", "2h", "dw", "stick")
+SETUPS = (None, "1h-shield", "2h", "dw", "stick", "ranged")
+#: the groups whose items the weapons module is asked about (the two hands, and the range place for the bow setup)
+WEAPON_GROUPS = ("PRIMARY", "SECONDARY", "RANGE")
 ANY_RULES = ("all", "explicit")
 MUTATIONS = (None, "end_knee_101", "drop_ordering_binary", "skip_haste_clamp")
 ATTRIBUTES = fm.ATTRIBUTES
@@ -187,6 +196,8 @@ class BuildOptions:
     haste leaves of it, no haste buff that alone counts more): the truthful solve uses it so that the model's value of the kit is the
     kit's own at every point of the search, and a level's relaxation is a bound on the kits that count that haste. ``mutation``: a test hook, see the module docstring.
     ``legacy``: the legacy objective's terms (``formulas.LegacyTerms``) or None, see the module docstring.
+    ``procs``: the :class:`~trioforge.model.procs.ProcTable` of the trio, or None (no proc counts: the program is what it was before procs). The weapon term then adds the proc each
+    swinging hand counts, a constant on a hand column but for the dual-wield setup at the tier where procs can be moved (see the module docstring).
 
     ``owned_caps``, ``new_keys``, ``max_new`` and ``upgrades`` are the owned-item options (see the module docstring);
     items are named by their idents ``key@tier``. They are checked here: an ident of the wrong form, a count or a limit
@@ -204,10 +215,13 @@ class BuildOptions:
     new_keys: frozenset[str] = frozenset()
     max_new: int | None = None
     upgrades: Mapping[str, str] | None = None
+    procs: ProcTable | None = None
 
     def __post_init__(self) -> None:
         if self.legacy is not None and not isinstance(self.legacy, fm.LegacyTerms):
             raise TypeError(f"legacy must be a LegacyTerms, not {type(self.legacy).__name__}")
+        if self.procs is not None and not isinstance(self.procs, ProcTable):
+            raise TypeError(f"procs must be a ProcTable, not {type(self.procs).__name__}")
         if self.any_rule not in ANY_RULES:
             raise ValueError(f"any_rule is one of {', '.join(ANY_RULES)}, not {self.any_rule!r}")
         if self.mutation not in MUTATIONS:
@@ -506,7 +520,10 @@ class LevelPrograms:
         w = builder._weight("DMG")
         if w != 0:
             for col, hand, item in builder._weapon_cols:
-                index_of = wp.damage_index_exact(item, hand, builder.setup or "stick", level, dw_factor=builder.p.dw_factor)
+                index_of = wp.damage_index_exact(
+                    item, hand, builder.setup or "stick", level, dw_factor=builder.p.dw_factor, ranged_factor=builder.p.ranged_factor,
+                    swing_factor=wp.swing_factor_of(builder.p), level=builder.p.level,
+                )
                 if index_of:
                     c[col] = float(builder.obj.get(col, ZERO) + w * index_of)
         info = copy.deepcopy(base.info)
@@ -633,7 +650,7 @@ class _Builder:
             return listed or (self.opts.any_rule == "all" and any(s in RANGE_SLOT_FITS for s in item.slots))
         if group not in item.slots:
             return False
-        if group in HANDS:
+        if group in WEAPON_GROUPS:
             return wp.allowed_in_hand(item, group.lower(), self.setup or "stick")
         return True
 
@@ -651,7 +668,7 @@ class _Builder:
         for term in (
             self._term_hp, self._term_mana, self._term_end, self._term_ac, self._term_atk, self._term_dex,
             self._term_cha, self._term_haste, self._term_regen, self._term_resists, self._term_weapons,
-            self._term_legacy_curves,
+            self._term_procs, self._term_legacy_curves,
         ):
             term()
         return self._finish()
@@ -675,6 +692,11 @@ class _Builder:
         for group, cols in by_group.items():
             if sum(self.ub[c] for c in cols) > GROUP_SIZE[group]:
                 self._row(f"group.{group}", {c: 1 for c in cols}, None, GROUP_SIZE[group])
+        if self.setup == "ranged":  # the bow setup is the one in which the range place holds a bow: it is filled even when the damage is worth nothing
+            bows = by_group.get("RANGE", [])
+            if not bows:
+                raise ValueError("the ranged setup needs a bow for the range place, and the items have none that fits it")
+            self._row("range.bow", {c: 1 for c in bows}, 1, None)
         for key, cols in lore_cols.items():
             if len(cols) > 1:
                 self._row(f"lore.{key}", {c: 1 for c in cols}, None, 1)
@@ -1117,19 +1139,22 @@ class _Builder:
         else:
             self.const += per_point * iksar
         gear, shield = self._gear("ACW"), self._gear("ACS")
+        agi_share = Fraction(p.stance["agi_share"]) if p.stance is not None else ONE  # (the Berserker stance: agility counts for nothing in the armor class and the evasion)
         x = (
             gear.plus(shield).scaled(fm.SHEET_ITEM_MULT)
             .plus(Lin(Fraction(p.defense_cap) / fm.SHEET_DEFENSE_DIV))
             .plus(self._buffpart("AC"), Fraction(1, fm.SHEET_SPELL_AC_DIV))
-            .plus(self._capped("AGI"), Fraction(1, fm.SHEET_AGI_DIV))
-            .plus(inside)
         )
+        if agi_share:
+            x = x.plus(self._capped("AGI"), Fraction(1, fm.SHEET_AGI_DIV) * agi_share)
+        x = x.plus(inside)
         cap, rate = Fraction(p.softcap[0]), Fraction(p.softcap[1])
         floor = math.floor(cap * (100 + Fraction(p.cs_pct) + Fraction(p.pe_pct)) / 100)
         y = Lin(floor).plus(shield)
         self._capped_sheet(x, y, rate, per_point)
-        evasion = self._curve(self._total("AGI"), (fm.STAT_CAP,), (1, 0), "curve.AC.agi")
-        self._add_lin(evasion.lin, w * fm.AGI_TO_AC)
+        if agi_share:
+            evasion = self._curve(self._total("AGI"), (fm.STAT_CAP,), (1, 0), "curve.AC.agi")
+            self._add_lin(evasion.lin, w * fm.AGI_TO_AC * agi_share)
 
     def _term_atk(self) -> None:
         w = self._weight("ATK")
@@ -1338,14 +1363,94 @@ class _Builder:
             return
         setup = self.setup or "stick"
         if self._capture:  # (the coefficients are those of a level: LevelPrograms.program_for adds them)
-            self._weapon_cols = [(col, group.lower(), item) for col, group, item in self.item_cols if group in HANDS]
+            self._weapon_cols = [(col, group.lower(), item) for col, group, item in self.item_cols if group in WEAPON_GROUPS]
             return
         for col, group, item in self.item_cols:
-            if group in HANDS:
+            if group in WEAPON_GROUPS:
                 hand = group.lower()
-                index = wp.damage_index_exact(item, hand, setup, self.haste_assumed, dw_factor=self.p.dw_factor)
+                index = wp.damage_index_exact(
+                    item, hand, setup, self.haste_assumed, dw_factor=self.p.dw_factor, ranged_factor=self.p.ranged_factor,
+                    swing_factor=wp.swing_factor_of(self.p), level=self.p.level,
+                )
                 if index:
                     self._add_obj(col, w * index)
+
+    def _term_procs(self) -> None:
+        """The procs of the hands that swing (:mod:`trioforge.model.procs`): ``DMG x value / 600`` for the proc a hand counts, with no haste factor (so it is part of the base
+        objective of every haste level), the off hand's by the dual-wield factor.
+
+        A hand counts one proc, the best its item can: its own below the socket tier, the best of its own and the ones it can host from it. While no proc a hosted column can count has a Lore
+        item among its sources the hands do not meet, and the proc is a constant on the column. A Lore item is one copy (see the module docstring of :mod:`trioforge.model.procs`): the copy a
+        kit wears is no donor, and one copy supplies one hand. When a hosted proc has Lore sources the program has, for each hand, a binary for every way a proc can be counted there: ``proc.n[e,hand]``
+        (the proc ``e`` of an item that carries it, which is the copy that is worn), ``proc.f[e,hand]`` (``e`` taken from a donor that has a second copy, which nothing blocks) and
+        ``proc.l[e,hand,k]`` (``e`` taken from the Lore item ``k``, for the columns that have no donor with a second copy), with the rows ``proc.host.<kind>[...]`` (a way counts only if a column that can
+        take ``e`` that way stands in the hand), ``proc.one[hand]`` (one proc a hand), ``proc.worn[e,hand,k]`` (``proc.l`` and the columns of ``k`` in any place at most one: a worn copy is no donor) and
+        ``proc.copies[k]`` (the dual-wield hands take at most one proc from the one copy of ``k``). The stick, the bow setup and the range place score no proc, and nothing is added for a build whose
+        damage weight is 0."""
+        table, w = self.opts.procs, self._weight("DMG")
+        if table is None or w == 0 or self.legacy is not None or self.setup not in ("1h-shield", "2h", "dw"):
+            return
+        hands = HANDS if self.setup == "dw" else HANDS[:1]
+        factor = {"PRIMARY": ONE, "SECONDARY": fm.fr(self.p.dw_factor)}
+        swinging: dict[str, list[tuple[int, ItemVec]]] = {hand: [] for hand in hands}
+        for col, group, item in self.item_cols:
+            if group in hands and wp.damage_index_exact(item, group.lower(), self.setup, 0, dw_factor=self.p.dw_factor, ranged_factor=self.p.ranged_factor, level=self.p.level):  # (the stance's factor leaves 0 at 0)
+                swinging[group].append((col, item))  # (the item swings here)
+        counts = {hand: [(col, item, table.candidates(item, hand)) for col, item in swinging[hand]] for hand in hands}  # (the procs a hand can need: after the first that nothing blocks, none is ever better)
+        # a hosted proc whose sources include a Lore item ties the program to the kit (the Lore rule: a worn copy is no donor; one copy supplies one hand): only then does it need binaries
+        lored = any(
+            table.copies(key) < 2
+            for hand in hands for _, item, entries in counts[hand] for entry in entries
+            if entry.effect not in table.natives(item) for key in table.sources(item, hand, entry.effect)
+        )  # fmt: skip
+        if not lored:
+            for hand in hands:  # (no Lore source: the hands are independent, and each column carries the best proc its item can count there)
+                for col, _, entries in counts[hand]:
+                    if entries:
+                        self._add_obj(col, w * factor[hand] * Fraction(entries[0].value) / PER_MINUTE_TO_INDEX)
+            return
+        by_key: dict[str, list[int]] = {}
+        for col, _, item in self.item_cols:
+            by_key.setdefault(item.key, []).append(col)  # (every column of an item, in any place: a Lore donor that is worn there is no donor)
+        flags: list[int] = []
+        lone: dict[str, list[int]] = {}  # the flags that take the proc from the one copy of a Lore item, by item (both hands)
+        for hand in hands:
+            native: dict[str, list[int]] = {}  # the effect: the columns of the hand whose item carries it
+            plain: dict[str, list[int]] = {}  # the effect: the columns that can host it from a donor with a second copy
+            lore: dict[tuple[str, str], list[int]] = {}  # (effect, Lore donor): the columns whose only donors of it are Lore items
+            for col, item, entries in counts[hand]:
+                own = table.natives(item)
+                for entry in entries:
+                    if entry.effect in own:
+                        native.setdefault(entry.effect, []).append(col)
+                        continue
+                    found = table.sources(item, hand, entry.effect)
+                    if any(table.copies(key) >= 2 for key in found):
+                        plain.setdefault(entry.effect, []).append(col)
+                    else:
+                        for key in found:
+                            lore.setdefault((entry.effect, key), []).append(col)
+            mine: list[int] = []
+            kinds = [("n", e, "", cols) for e, cols in native.items()] + [("f", e, "", cols) for e, cols in plain.items()] + [("l", e, key, cols) for (e, key), cols in lore.items()]
+            for kind, effect, key, cols in sorted(kinds, key=lambda found: (found[1], found[0], found[2])):
+                label = f"{effect},{hand}" + (f",{key}" if key else "")
+                y = self._new(f"proc.{kind}[{label}]", 0, 1, integer=True)
+                flags.append(y)
+                mine.append(y)
+                self._add_obj(y, w * factor[hand] * table.by_id[effect].value / PER_MINUTE_TO_INDEX)
+                self._row(f"proc.host.{kind}[{label}]", {y: ONE, **{col: -ONE for col in cols}}, None, 0)
+                if kind == "l":
+                    lone.setdefault(key, []).append(y)
+                    if key in by_key:  # a Lore donor that the kit wears is not free: the flag and the columns of the item at most one
+                        self._row(f"proc.worn[{label}]", {y: ONE, **{col: ONE for col in by_key[key]}}, None, 1)
+            if len(mine) > 1:
+                self._row(f"proc.one[{hand}]", {y: ONE for y in mine}, None, 1)
+        if self.setup == "dw":
+            for key, found in sorted(lone.items()):
+                if len(found) > 1:  # (the one copy of a Lore item supplies one hand: the flags of the two hands that take a proc from it)
+                    self._row(f"proc.copies[{key}]", {y: ONE for y in found}, None, 1)
+        if flags:
+            self.info["binaries"]["proc"] = len(flags)
 
     # -- the legacy curves ---------------------------------------------------------------------------------------
 

@@ -44,7 +44,7 @@ FILES = sorted(
     [
         "items.json",
         *(f"{SLUG}/{name}" for name in ("defaults.json", "robust.json", "engine-l50.json", "strict-own.json", "strict-group.json", "wiki-own.json", "wiki-group.json")),
-        *(f"{SLUG}/runnerups/{name}" for name in ("balanced.json", "melee.json", "tank.json", "index.json")),
+        *(f"{SLUG}/runnerups/{name}" for name in ("melee.json", "tank.json", "index.json")),
     ]
 )
 
@@ -144,7 +144,7 @@ def test_the_files_of_a_release_are_the_item_table_and_the_files_of_each_trio_an
     results = results_copy(tmp_path)
     chunks = results / SLUG / "chunks"
     chunks.mkdir()
-    (chunks / "s-wiki-own-balanced-dw-t04.json").write_text('{"fingerprint": "00", "rows": []}', encoding="utf-8")
+    (chunks / "s-wiki-own-tank-dw-t04.json").write_text('{"fingerprint": "00", "rows": []}', encoding="utf-8")
     report = assemble.stage(results, [SLUG], tmp_path / "stage")
     assert names_under(tmp_path / "stage") == FILES
     assert report.trios == (SLUG,) and report.missing == () and report.files == len(FILES) and report.bytes > 0
@@ -235,7 +235,7 @@ def test_a_copy_that_differs_from_its_source_is_refused(tmp_path, monkeypatch):
 def test_a_link_in_the_results_is_refused(tmp_path):
     results = results_copy(tmp_path)
     try:
-        os.symlink(results / SLUG / "defaults.json", results / SLUG / "runnerups" / "balanced-link.json")
+        os.symlink(results / SLUG / "defaults.json", results / SLUG / "runnerups" / "tank-link.json")
     except (OSError, NotImplementedError):
         pytest.skip("this machine cannot create symbolic links")
     with pytest.raises(ReleaseRefused, match="link"):
@@ -684,7 +684,7 @@ def test_the_asset_holds_no_chunk_no_fingerprint_and_no_seen_file(tmp_path):
     results = results_copy(tmp_path)
     chunks = results / SLUG / "chunks"
     chunks.mkdir()
-    (chunks / "s-wiki-own-balanced-dw-t04.json").write_text('{"fingerprint": "00", "rows": []}', encoding="utf-8")
+    (chunks / "s-wiki-own-tank-dw-t04.json").write_text('{"fingerprint": "00", "rows": []}', encoding="utf-8")
     (results / "seen-flags.json").write_text('{"version": 1, "license": "x", "keys": ["w1"]}', encoding="utf-8")
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "catalog.json").write_text('{"reasons": [{"code": "seen-in-game"}]}', encoding="utf-8")
@@ -783,6 +783,7 @@ def test_extracting_into_a_folder_that_has_files_is_refused(tmp_path, staged):
 WRITER_NOT_HASHED = {
     "trioforge.data.catalog": "reads the seen-flags file (the keys pass through unchanged) and refuses a folder a build may not write to; the catalog it builds is hashed as a file",
     "trioforge.sources.client_tables": "writes files whole or not at all: the bytes it is given are the bytes written",
+    "trioforge.oldresults": "only names the files of a folder made before the builds, so that a run refuses to start into it: it writes nothing, and no file of a trio holds anything it decides",
 }
 
 

@@ -36,7 +36,7 @@ const change = (element, value) => {
 /** The stats of every item of a view as the shard file says them: what the page must show. */
 function shardStats(name, race, tier, setup) {
   const doc = dataFile(name);
-  const row = doc.rows.find((r) => r[0] === race && r[1] === "balanced" && r[2] === tier && r[3] === setup);
+  const row = doc.rows.find((r) => r[0] === race && r[1] === "tank" && r[2] === tier && r[3] === setup);
   const at = doc.stat_tiers.indexOf(tier);
   return doc.kits[row[4]].map((i) => (i < 0 ? null : doc.items[i][7][at]));
 }

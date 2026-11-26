@@ -32,7 +32,8 @@ wait for it and a failure of one leaves the other's files as they are (exit stat
 ``record`` saves the raw API reply for each given title (one request each, redirects not
 followed) as ``<slug>.json``: that is how ``fixtures/wiki`` was made.
 
-Everything goes through :class:`trioforge.sources.http.PoliteClient`: one request a second.
+Everything goes through :class:`trioforge.sources.http.PoliteClient`: one request a second, and the robots.txt of the wiki read
+before the first request of a run (what it disallows for us is refused, a longer Crawl-delay is obeyed, one that cannot be read stops the run).
 
 **One run at a time.** The politeness is per process, so two runs at once would ask the wiki for two
 requests a second. A run takes an exclusive lock for the API host before its first request and holds it
@@ -131,10 +132,14 @@ def list_category(client: PoliteClient, title: str) -> list[dict]:
     members: list[dict] = []
     params: dict | None = base
     seen: set = set()
+    listed: set[int] = set()  # a page whose sort key moves across the cursor while the listing is read comes on two pages of it: the first is kept
     while params is not None:
         response = client.get_json(params)
         for entry in (response.get("query") or {}).get("categorymembers", []):
-            members.append({"pageid": int(entry["pageid"]), "title": str(entry["title"])})
+            pageid = int(entry["pageid"])
+            if pageid not in listed:
+                listed.add(pageid)
+                members.append({"pageid": pageid, "title": str(entry["title"])})
         params = _continuation(response, seen, base)
     return members
 
@@ -546,19 +551,19 @@ def run_fetch(
     """Fetch a whole category into ``out`` (see the module docstring). Returns the manifest."""
     raw = out / "raw"
     raw.mkdir(parents=True, exist_ok=True)
-    (out / "manifest.json").unlink(missing_ok=True)  # no manifest while the run is unfinished
 
     members_path = raw / "members.json"
     members = None
     if resume:
         saved = _read_json(members_path)
         if _is_member_file(saved):
-            if saved["category"] != category:
+            if saved["category"] != category:  # (refused before anything is changed: the manifest of the finished run is still there)
                 raise _Refusal(
                     f"{members_path} was fetched for {saved['category']}, not {category}; "
                     "use another --out directory"
                 )
             members = saved["members"]
+    (out / "manifest.json").unlink(missing_ok=True)  # no manifest while the run is unfinished
     if members is None:
         members = list_category(client, category)
         _atomic_write(members_path, _json_bytes({"category": category, "members": members}, indent=1))

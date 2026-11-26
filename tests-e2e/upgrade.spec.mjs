@@ -1546,7 +1546,7 @@ test("a second kit link opened in the same tab shows its kit, with the address c
 const KIT_VALUES = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/kit-values.json"), "utf8"));
 const slotsOfKit = (kit) => kit.kit.flatMap((ident, slot) => (ident === null ? [] : [[slot, Number(ident.slice(1, ident.indexOf("@"))), Number(ident.slice(ident.indexOf("@") + 1))]]));
 const SETUP_WORDS = { dw: "dual wield", "1h-shield": "1H + shield", "2h": "two-hander", stick: "stat stick" };
-const ROLE_WORDS = { balanced: "Balanced", tank: "Tank", melee: "Melee" };
+const ROLE_WORDS = { tank: "Tank", melee: "Melee damage" };
 const RACE_WORDS = { OGR: "Ogre", TRL: "Troll", IKS: "IKS", HUM: "HUM" }; // (the fixture's shards list three races; the page shows the code of one it does not list)
 const BUFF_WORDS = { own: "your own buffs", group: "common group buffs" };
 /** The assumptions of the page are one folded line that holds three disclosures: a choice in them is made once the line and the disclosure are open. */
@@ -1587,7 +1587,7 @@ test("the value of a shared kit does not follow the page's weapon switch or its 
   test.skip(!FIXTURE, "the reference's kits are made of the fixture's items");
   test.setTimeout(120_000);
   const kit = KIT_VALUES.kits[0];
-  const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
+  const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "tank" && one.buffs === "own");
   await madeFrom(page, kit.evidence);
   await open(page, `${TRIO}#k=${encodeKit({ v: 1, trio: "pal-mnk-ber", race: kit.race, level: 50, slots: slotsOfKit(kit) })}`);
   await expect(page.locator("#shared-kit-table tbody tr")).toHaveCount(22, { timeout: 30_000 });

@@ -141,7 +141,7 @@ def test_the_haste_row_of_the_totals_says_that_only_the_highest_worn_haste_count
     html = render_trio(page, world.book)
     rows = parse(html).by_id("totals-body").find_all("tr")
     haste = next(r for r in rows if r.find("th").text() == "Haste")
-    assert haste.find("span", cls="row-note").text() == "Only the highest worn haste counts."
+    assert haste.find("span", cls="row-note").text().startswith("Only the highest worn haste counts.")  # (T10: with a haste spell among the buffs the note goes on with the two answers)
     assert html.count("Only the highest worn haste counts.") == 1
     assert [r.find("th").text() for r in rows if r.find_all("span", cls="row-note")] == ["Haste"]
 

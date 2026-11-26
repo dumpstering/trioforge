@@ -91,6 +91,7 @@ const rowCells = () =>
       deity: f("deity"),
     };
   });
+const checkedRole = () => [...document.querySelectorAll('input[name="role"]')].find((r) => r.checked)?.value;
 const shownSetup = () => [...document.querySelectorAll('input[name="setup"]')].find((r) => r.checked)?.value;
 const offeredSetups = () =>
   [...document.querySelectorAll('input[name="setup"]')].filter((r) => !r.hidden && !r.disabled).map((r) => r.value);
@@ -111,7 +112,7 @@ describe("the baked page the tests start from", () => {
     // wiki is the one evidence level: no seal column in the rows, no picker or note about the evidence, and no evidence in the line of the assumptions
     expect(document.querySelector('#kit-body [data-f="seal"], #kit-body [data-f="seal-icon"]')).toBeNull();
     expect(document.querySelector('input[name="ev"], #assume-evidence, #evidence-note, [data-f="assume-ev"]')).toBeNull();
-    expect(document.querySelector("#best-race-view").textContent).toBe("Balanced view at +4 with your own buffs");
+    expect(document.querySelector("#best-race-view").textContent).toBe("Tank view at +4 with your own buffs");
   });
 });
 
@@ -123,7 +124,7 @@ describe("switching the tier", () => {
     change($("#sw-tier"), "10");
     await app.whenIdle();
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
-    const want = scenarioOf("strict-own", "OGR", "balanced", 10, "dw");
+    const want = scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield");
     const rows = rowCells();
     expect(rows.map((r) => r.name)).toEqual(want.kit.map((item) => (item ? item[1] : "Leave empty")));
     for (const [index, item] of want.kit.entries()) {
@@ -134,15 +135,15 @@ describe("switching the tier", () => {
       expect(rows[index].source).toBe(item[4]);
     }
     expect($("#kit caption").textContent).toContain("+10");
-    // dual wield is the role's best setup here and the visitor did not choose it, so the address does not pin it
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
+    // 1H + shield is the Tank's best setup at +10 and the visitor did not choose it, so the address does not pin it
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&buffs=own");
   });
 
   it("keeps the fragment of the address when a switch changes it", async () => {
     const { app } = mount("#robust");
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&buffs=own");
     expect(window.location.hash).toBe("#robust");
     change($("#sw-tier"), "0"); // and it stays through the next change
     await app.whenIdle();
@@ -152,7 +153,7 @@ describe("switching the tier", () => {
 
   it("shows no deity badge on an item that needs none, and the badge on one that does", async () => {
     const doc = JSON.parse(text("data/strict-own.json"));
-    const headKey = scenarioOf("strict-own", "OGR", "balanced", 10, "dw").kit[0][0];
+    const headKey = scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield").kit[0][0];
     doc.items.find((item) => item[0] === headKey)[6] = ["The Tribunal", "Rodcet Nife"];
     const { app } = mount("", { "strict-own": { json: doc } });
     change($("#sw-tier"), "10");
@@ -166,7 +167,7 @@ describe("switching the tier", () => {
     const { app } = mount();
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    const want = scenarioOf("strict-own", "OGR", "balanced", 10, "dw");
+    const want = scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield");
     const f = (name) => $(`[data-f="${name}"]`).textContent;
     expect(f("t-ac")).toBe(fmt(want.totals.ac));
     expect(f("t-hp")).toBe(fmt(want.totals.hp));
@@ -182,13 +183,13 @@ describe("switching the tier", () => {
   it("shows the haste the weapons are scored at in the Assumes line, and it follows the view", async () => {
     const { app } = mount();
     const haste = () => $('[data-f="assume-haste"]').textContent;
-    expect(haste()).toBe(`${scenarioOf("strict-own", "OGR", "balanced", 4, "dw").hasteAssumed}%`);
+    expect(haste()).toBe(`${scenarioOf("strict-own", "OGR", "tank", 4, "dw").hasteAssumed}%`);
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(haste()).toBe(`${scenarioOf("strict-own", "OGR", "balanced", 10, "dw").hasteAssumed}%`);
+    expect(haste()).toBe(`${scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield").hasteAssumed}%`);
     choose("#buffs-group");
     await app.whenIdle();
-    expect(haste()).toBe(`${scenarioOf("strict-group", "OGR", "balanced", 10, "dw").hasteAssumed}%`);
+    expect(haste()).toBe(`${scenarioOf("strict-group", "OGR", "tank", 10, "1h-shield").hasteAssumed}%`);
     expect($("#assume-weapons summary").textContent.replace(/\s+/g, " ").trim()).toMatch(/^Weapons: dual wield, scored at \d+% haste change$/);
   });
 
@@ -201,7 +202,7 @@ describe("switching the tier", () => {
     change($("#sw-tier"), "0");
     await app.whenIdle();
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
-    const want = scenarioOf("strict-own", "TRL", "balanced", 0, "dw");
+    const want = scenarioOf("strict-own", "TRL", "tank", 0, "dw");
     expect(rowCells().map((r) => r.name)).toEqual(want.kit.map((item) => (item ? item[1] : "Leave empty")));
     expect(window.location.search).toContain("race=TRL");
   });
@@ -236,19 +237,19 @@ describe("switching the race, the role and the buffs", () => {
     choose("#buffs-group");
     await app.whenIdle();
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-group.json"]);
-    const want = scenarioOf("strict-group", "OGR", "balanced", 4, "dw");
+    const want = scenarioOf("strict-group", "OGR", "tank", 4, "dw");
     expect($('[data-f="t-haste"]').textContent).toBe(`${want.totals.haste}%`);
     expect($('[data-f="assume-buffs"]').textContent).toBe("common group buffs");
   });
 
   it("switches the role and picks that role's best setup", async () => {
     const { app } = mount();
-    choose("#role-tank");
+    choose("#role-melee");
     await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield");
-    const want = scenarioOf("strict-own", "OGR", "tank", 4, "1h-shield");
+    expect(shownSetup()).toBe("2h");
+    const want = scenarioOf("strict-own", "OGR", "melee", 4, "2h");
     expect($('[data-f="w-main"]').textContent).toBe(want.kit[20][1]);
-    expect($('[data-f="w-setup"]').textContent).toBe("1H + shield");
+    expect($('[data-f="w-setup"]').textContent).toBe("Two-hander");
     expect($("#role-hint").textContent).not.toBe("");
   });
 
@@ -295,7 +296,7 @@ describe("a switch combination with no scenario", () => {
     expect(offeredSetups()).toEqual(["2h", "dw"]);
     expect(document.querySelector('input[name="setup"][value="1h-shield"]').checked).toBe(false);
     expect(shownSetup()).toBe("2h");
-    choose("#role-balanced");
+    choose("#role-tank");
     await app.whenIdle();
     expect(offeredSetups()).toEqual(["1h-shield", "2h", "dw"]);
   });
@@ -332,16 +333,16 @@ describe("the address and the weapon setup", () => {
 
   it("is written only for a setup the visitor chose", async () => {
     const { app } = mount();
-    choose("#role-tank");
+    choose("#role-melee");
     await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield"); // the Tank's best
+    expect(shownSetup()).toBe("2h"); // Melee damage's best
     expect(setupInAddress()).toBeNull();
-    choose("#setup-2h"); // a choice
+    choose("#setup-dw"); // a choice
     await app.whenIdle();
-    expect(setupInAddress()).toBe("2h");
+    expect(setupInAddress()).toBe("dw");
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(setupInAddress()).toBe("2h"); // kept while the visitor's choice is offered and is not the best
+    expect(setupInAddress()).toBe("dw"); // kept while the visitor's choice is offered and is not the best
   });
 
   it("is not written for the choice of the setup that is the role's best: that is following the best", async () => {
@@ -349,24 +350,24 @@ describe("the address and the weapon setup", () => {
     choose("#setup-2h");
     await app.whenIdle();
     expect(setupInAddress()).toBe("2h");
-    choose("#setup-dw"); // the Balanced role's best, chosen on purpose
+    choose("#setup-dw"); // the Tank role's best, chosen on purpose
     await app.whenIdle();
     expect(shownSetup()).toBe("dw");
     expect(setupInAddress()).toBeNull();
-    choose("#role-tank"); // and the page follows the best of the role from here on
+    choose("#role-melee"); // and the page follows the best of the role from here on
     await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield");
+    expect(shownSetup()).toBe("2h");
   });
 
   it("counts a setup in the address that is the role's best as the best, so a role change shows the new role's best", async () => {
-    const { app } = mount("?role=tank&setup=1h-shield");
+    const { app } = mount("?role=melee&setup=2h");
     await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield");
+    expect(shownSetup()).toBe("2h");
     expect(setupInAddress()).toBeNull(); // the address is brought back to what it means
-    choose("#role-balanced");
+    choose("#role-tank");
     await app.whenIdle();
-    expect(shownSetup()).toBe("dw"); // Balanced's best, not the setup the old address happened to name
-    const want = scenarioOf("strict-own", "OGR", "balanced", 4, "dw");
+    expect(shownSetup()).toBe("dw"); // Tank's best, not the setup the old address happened to name
+    const want = scenarioOf("strict-own", "OGR", "tank", 4, "dw");
     expect(rowCells()[20].name).toBe(want.kit[20][1]);
     expect($("#kit-value").textContent).toBe(fmt(Math.round(want.value)));
     expect(setupInAddress()).toBeNull();
@@ -376,32 +377,32 @@ describe("the address and the weapon setup", () => {
     const { app, calls } = mount("?setup=dw");
     await app.whenIdle();
     expect(calls).toEqual([]);
-    choose("#role-tank");
+    choose("#role-melee");
     await app.whenIdle();
-    expect(shownSetup()).toBe("1h-shield");
+    expect(shownSetup()).toBe("2h");
   });
 
   it("keeps a setup in the address that is not the role's best as the visitor's choice", async () => {
-    const { app } = mount("?role=tank&setup=2h");
+    const { app } = mount("?role=tank&tier=10&setup=dw"); // at +10 the Tank's best is 1H + shield and Melee damage's is the two-hander: dual wield is the best of neither
     await app.whenIdle();
-    expect(shownSetup()).toBe("2h");
-    expect(setupInAddress()).toBe("2h");
-    choose("#role-balanced"); // offered there too, and still the visitor's choice
+    expect(shownSetup()).toBe("dw");
+    expect(setupInAddress()).toBe("dw");
+    choose("#role-melee"); // offered there too, and still the visitor's choice
     await app.whenIdle();
-    expect(shownSetup()).toBe("2h");
-    expect(setupInAddress()).toBe("2h");
+    expect(shownSetup()).toBe("dw");
+    expect(setupInAddress()).toBe("dw");
   });
 
-  it("goes round a reload: Tank, reload, Balanced shows the Balanced role's best setup and its value", async () => {
+  it("goes round a reload: Melee damage, reload, Tank shows the Tank's best setup and its value", async () => {
     const first = mount();
-    choose("#role-tank");
+    choose("#role-melee");
     await first.app.whenIdle();
     const reloaded = mount(window.location.search); // the page opened again at the address it wrote
     await reloaded.app.whenIdle();
-    expect($("#role-tank").checked).toBe(true);
-    choose("#role-balanced");
+    expect($("#role-melee").checked).toBe(true);
+    choose("#role-tank");
     await reloaded.app.whenIdle();
-    const want = scenarioOf("strict-own", "OGR", "balanced", 4, "dw");
+    const want = scenarioOf("strict-own", "OGR", "tank", 4, "dw");
     expect(shownSetup()).toBe("dw");
     expect($("#kit-value").textContent).toBe(fmt(Math.round(want.value)));
     expect(rowCells().map((r) => r.name)).toEqual(want.kit.map((item) => (item ? item[1] : "Leave empty")));
@@ -434,14 +435,14 @@ const shieldRadio = () => document.querySelector('input[name="setup"][value="1h-
 
 describe("a data file that has no shield setup", () => {
 
-  // (the shield is a choice here only for a role whose best setup it is not: for the Balanced role the best is dual wield. For a role
+  // (the shield is a choice here only for a role whose best setup it is not: for the Tank role the best is dual wield. For a role
   // whose best it is, naming it is following the best, and a level without it simply shows that level's best: see the test after.)
 
   it("shows the file's best setup and says so when a change of buffs moves to a file that lacks the shield that was chosen", async () => {
     // each data file carries its own setups: here only the group-buff file of the strict level has no shield rows
     const doc = dataFile("strict-group");
     doc.rows = doc.rows.filter((row) => row[3] !== "1h-shield");
-    const { app } = mount("?role=balanced&setup=1h-shield", { "strict-group": { json: doc } }); // Balanced: the shield is a choice, not the best
+    const { app } = mount("?role=tank&setup=1h-shield", { "strict-group": { json: doc } }); // Tank: the shield is a choice, not the best
     await app.whenIdle();
     expect(shownSetup()).toBe("1h-shield");
     expect(offeredSetups()).toEqual(["1h-shield", "2h", "dw"]);
@@ -454,7 +455,7 @@ describe("a data file that has no shield setup", () => {
     expect(status()).toMatch(/Dual wield/);
     expect(window.location.search).toContain("buffs=group");
     expect(window.location.search).not.toContain("setup="); // the file's best is shown, and was not chosen
-    const want = scenarioOf("strict-group", "OGR", "balanced", 4, "dw");
+    const want = scenarioOf("strict-group", "OGR", "tank", 4, "dw");
     expect(rowCells()[20].name).toBe(want.kit[20][1]);
     choose("#buffs-own"); // back to the file that has it: its setups are offered again, and nothing is amiss
     await app.whenIdle();
@@ -506,6 +507,36 @@ describe("reading the link", () => {
     expect(status()).toBe("");
   });
 
+  // The links of the earlier release: Balanced is gone, and a link that names it, a build the trio is not offered or a value that is no build opens the page's own build, with no error.
+  it.each([["balanced"], ["caster"], ["castertank"], ["archer"], ["Tank"], [""], ["%00"], ["tank%20tank"]])("opens the opening build for role=%s, with no error and the baked answer", async (spelled) => {
+    const { app, calls } = mount(`?role=${spelled}`);
+    await app.whenIdle();
+    expect(checkedRole()).toBe("tank"); // (the opening build of this trio)
+    expect(status()).toBe("");
+    expect(calls).toEqual([]); // (the baked answer is the page's own: nothing to fetch)
+    expect(rowCells()[0].name).toBe("Helm of the Stoneward");
+    expect(window.location.search).not.toMatch(/balanced|caster|archer/i);
+  });
+
+  it("keeps the ids of the builds that stay: role=tank and role=melee open their builds, and melee shows its best setup", async () => {
+    for (const role of ["tank", "melee"]) {
+      const { app } = mount(`?role=${role}`);
+      await app.whenIdle();
+      expect(checkedRole(), role).toBe(role);
+      expect(status(), role).toBe("");
+    }
+  });
+
+  it("opens the build's best setup for a setup the build no longer has (melee with the shield), and keeps one it has", async () => {
+    const { app } = mount("?role=melee&setup=1h-shield");
+    await app.whenIdle();
+    expect(shownSetup()).toBe("2h");
+    expect(status()).toMatch(/not available for this role/i);
+    const kept = mount("?role=tank&setup=dw");
+    await kept.app.whenIdle();
+    expect(shownSetup()).toBe("dw");
+  });
+
   it("leaves the address alone until something changes", async () => {
     const { app } = mount();
     await app.whenIdle();
@@ -514,7 +545,7 @@ describe("reading the link", () => {
 
   // A value that means nothing is read as the default, and the address is brought back to the view that is shown, so that the link
   // a visitor copies from the address bar is a link to that view and not a malformed one that merely looks like it.
-  const DEFAULT_ADDRESS = "?race=OGR&role=balanced&tier=4&buffs=own";
+  const DEFAULT_ADDRESS = "?race=OGR&role=tank&tier=4&buffs=own";
 
   // The tier switch is the tiers the shards of the trio have (a run is of a scope: +0, +4 and +10 for most trios), and nothing else is offered. A link that names
   // a tier of the game that this page has no data for is read as a value that means nothing.
@@ -569,23 +600,23 @@ describe("reading the link", () => {
     const { app, calls } = mount("?ev=wiki&tier=10");
     await app.whenIdle();
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own"); // (the address written has none)
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&buffs=own"); // (the address written has none)
     expect(status()).toBe("");
   });
 
   it("writes the default address for one bad value among good ones, and keeps the good ones that ask for another view", async () => {
-    const quiet = mount("?race=OGR&role=balanced&tier=nope");
+    const quiet = mount("?race=OGR&role=tank&tier=nope");
     await quiet.app.whenIdle();
     expect(window.location.search).toBe(DEFAULT_ADDRESS);
     const { app, calls } = mount("?tier=10&race=ZZZ"); // a view that is not the baked one: loaded, and its address written whole
     await app.whenIdle();
     expect(calls).toEqual(["/data/pal-mnk-ber/strict-own.json"]);
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&buffs=own");
     expect($("#sw-tier").value).toBe("10");
   });
 
   it("does not touch a link whose values are all clear: not for another order, an address of the default view, or a parameter of its own", async () => {
-    for (const search of ["?utm_source=a", "?buffs=own&ev=strict", "?race=OGR&role=balanced&tier=4&ev=strict&buffs=own&setup=dw", "?setup=dw"]) {
+    for (const search of ["?utm_source=a", "?buffs=own&ev=strict", "?race=OGR&role=tank&tier=4&ev=strict&buffs=own&setup=dw", "?setup=dw"]) {
       const { app, calls } = mount(search);
       await app.whenIdle();
       expect(calls, search).toEqual([]);
@@ -754,7 +785,7 @@ describe("the script's wording is the generator's wording", () => {
         slot: tr.querySelector("th").textContent.trim(),
         swaps: [...tr.querySelectorAll("li")].map((li) => li.textContent.replace(/\s+/g, " ").trim()),
         listHidden: tr.querySelector('[data-f="swaps"]').hidden,
-        noneHidden: tr.querySelector('[data-f="r-none"]').hidden,
+        none: [...tr.querySelectorAll('[data-f="r-none"]')].map((n) => n.hidden), // (the sentence is in the rows that have no swap, shown, and in no other)
       })),
       runnerupsShown: [$("#runnerups-na").hidden, $("#runnerups-table").hidden],
       robust: [$("#robust-summary").textContent, ...[...document.querySelectorAll("#robust-list li")].map((n) => n.textContent)],
@@ -788,8 +819,8 @@ describe("runner-ups and the robust core", () => {
     expect(runnerupCalls(calls)).toEqual([]); // closed: nothing is fetched
     openDetails("#runnerups");
     await app.whenIdle();
-    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "balanced.json"]); // the file of the role, and not one for the tier
-    const doc = runnerupsOf("balanced");
+    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "tank.json"]); // the file of the role, and not one for the tier
+    const doc = runnerupsOf("tank");
     const view = viewOf(doc, 10);
     const rows = [...document.querySelectorAll("#runnerups-body tr")];
     expect(rows).toHaveLength(22);
@@ -802,14 +833,14 @@ describe("runner-ups and the robust core", () => {
     // another race, or another tier of the same role: it is read from the file the page has, and nothing more is fetched
     change($("#sw-race"), "TRL");
     await app.whenIdle();
-    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "balanced.json"]);
+    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "tank.json"]);
     const trl = viewOf(doc, 10, "TRL");
     const trlSlot = trl[3].findIndex((swaps) => swaps.length > 0);
     expect([...document.querySelectorAll("#runnerups-body tr")][trlSlot].querySelectorAll("li")).toHaveLength(trl[3][trlSlot].length);
     change($("#sw-race"), "OGR");
     change($("#sw-tier"), "0");
     await app.whenIdle();
-    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "balanced.json"]);
+    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "tank.json"]);
     expect(swapCounts()).toEqual(viewOf(doc, 0)[3].map((swaps) => swaps.length)); // the swaps of the tier that is shown, from the same file
   });
 
@@ -839,7 +870,7 @@ describe("runner-ups and the robust core", () => {
     await app.whenIdle();
     openDetails("#runnerups");
     await app.whenIdle();
-    const doc = runnerupsOf("balanced");
+    const doc = runnerupsOf("tank");
     const view = viewOf(doc, 10);
     const rows = [...document.querySelectorAll("#runnerups-body tr")];
     const head = [...rows[0].querySelectorAll("li")];
@@ -852,6 +883,33 @@ describe("runner-ups and the robust core", () => {
     expect(chest.textContent).toContain("Mantle of the Faithful");
     expect(chest.querySelector('[data-f="r-deity"]').textContent).toBe("Needs deity: The Tribunal or Rodcet Nife");
     expect(chest.querySelector('[data-f="r-delta"]').textContent).toBe(fmt(Math.round(view[3][13][0][1]))); // worse than the pick
+  });
+
+  it("say 'No close alternatives' in a slot that has no swap, and only there: the page is made with it in those rows alone, and the code makes it and takes it away as the views change", async () => {
+    const doc = runnerupsOf("tank");
+    const other = viewOf(doc, 10);
+    other[3][0] = []; // a slot that had swaps in the baked view has none at this tier ...
+    other[3][3] = [other[3][1][0]]; // ... and a slot that had none has one
+    const { app } = mount("", { "runnerups/tank": { json: doc } });
+    const said = () => [...document.querySelectorAll("#runnerups-body tr")].map((row) => [...row.querySelectorAll('[data-f="r-none"]')].map((n) => [n.textContent, n.hidden, n.className]));
+    const empty = (counts) => counts.map((n) => (n === 0 ? [["No close alternatives", false, "muted"]] : []));
+    const baked = said();
+    expect(baked).toEqual(empty(swapCounts())); // the baked page: one visible sentence in each row without a swap, none in a row with swaps
+    expect(baked.some((row) => row.length === 1) && baked.some((row) => row.length === 0)).toBe(true);
+    change($("#sw-tier"), "10");
+    await app.whenIdle();
+    openDetails("#runnerups");
+    await app.whenIdle();
+    expect(swapCounts()).toEqual(other[3].map((swaps) => swaps.length));
+    expect(said()).toEqual(empty(swapCounts())); // made where the tier has no swap for a slot, taken away where it has one now
+    expect(said()[0]).toHaveLength(1);
+    expect(baked[0]).toHaveLength(0);
+    expect(said()[3]).toHaveLength(0);
+    expect(baked[3]).toHaveLength(1);
+    expect(document.querySelectorAll("#runnerups-body .delta")).toHaveLength(0); // (the figures carry no class: their data-f says what they are, as in the baked page)
+    change($("#sw-tier"), "4");
+    await app.whenIdle();
+    expect(said()).toEqual(baked); // the view of the baked page again: the same rows say it, once each
   });
 
   it("are for the default assumptions only: another view says so instead, and fetches nothing", async () => {
@@ -868,7 +926,7 @@ describe("runner-ups and the robust core", () => {
 
   it("never ask for a role that has no file", async () => {
     document.body.innerHTML = text("trio-main.html");
-    $("#runnerups").dataset.files = "tank melee"; // as if the precompute had not made the file of the Balanced role
+    $("#runnerups").dataset.files = "melee"; // as if the precompute had not made the file of the Tank
     window.history.replaceState(null, "", "/trio/pal-mnk-ber/");
     const calls = [];
     const app = initTrio({ document, window, fetch: makeFetch(calls) });
@@ -882,27 +940,27 @@ describe("runner-ups and the robust core", () => {
   });
 
   it("say that a tier the file of the role does not have is not available, and ask for nothing more for it", async () => {
-    const doc = runnerupsOf("balanced");
+    const doc = runnerupsOf("tank");
     doc.tiers = doc.tiers.filter((tier) => tier !== 10);
     doc.views = doc.views.filter((v) => v[0] !== 10);
-    const { app, calls } = mount("", { "runnerups/balanced": { json: doc } });
+    const { app, calls } = mount("", { "runnerups/tank": { json: doc } });
     change($("#sw-tier"), "10");
     await app.whenIdle();
     openDetails("#runnerups");
     await app.whenIdle();
-    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "balanced.json"]);
+    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "tank.json"]);
     expect($("#runnerups-na").hidden).toBe(false);
     expect($("#runnerups-table").hidden).toBe(true);
     change($("#sw-tier"), "0"); // a tier it has: shown, from the file the page has
     await app.whenIdle();
-    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "balanced.json"]);
+    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "tank.json"]);
     expect($("#runnerups-table").hidden).toBe(false);
   });
 
   it("do not use a file whose view is for another setup than the role's best", async () => {
-    const doc = runnerupsOf("balanced");
+    const doc = runnerupsOf("tank");
     viewOf(doc, 10)[2] = "2h";
-    const { app } = mount("", { "runnerups/balanced": { json: doc } });
+    const { app } = mount("", { "runnerups/tank": { json: doc } });
     change($("#sw-tier"), "10");
     await app.whenIdle();
     openDetails("#runnerups");
@@ -912,7 +970,7 @@ describe("runner-ups and the robust core", () => {
   });
 
   it("say so when the file cannot be loaded, and try again when the section is opened again", async () => {
-    const { app, calls, behaviour } = mount("", { "runnerups/balanced": "offline" });
+    const { app, calls, behaviour } = mount("", { "runnerups/tank": "offline" });
     change($("#sw-tier"), "10");
     await app.whenIdle();
     openDetails("#runnerups");
@@ -920,7 +978,7 @@ describe("runner-ups and the robust core", () => {
     expect($("#runnerups-na").textContent).toMatch(/couldn't load this section/i);
     expect($("#runnerups-na").hidden).toBe(false);
     expect($("#kit-body tr [data-f=\"name\"]").textContent).not.toBe(""); // the answer itself is untouched
-    delete behaviour["runnerups/balanced"];
+    delete behaviour["runnerups/tank"];
     $("#runnerups").open = false;
     openDetails("#runnerups");
     await app.whenIdle();
@@ -959,7 +1017,7 @@ describe("runner-ups and the robust core", () => {
       await app.whenIdle();
       openDetails("#robust");
       await app.whenIdle();
-      expect(sealsShown()).toBe(true); // Ogre, Balanced, +10, dual wield, own buffs: what the seals were made for
+      expect(sealsShown()).toBe(true); // Ogre, Tank, +10, 1H + shield, own buffs: what the seals were made for
       return { app, calls };
     }
 
@@ -969,8 +1027,8 @@ describe("runner-ups and the robust core", () => {
       await app.whenIdle();
       expect(notComputed()).toBe(true);
       expect($("#robust-na").textContent).toMatch(/not computed for this view/i);
-      expect($("#robust-na").textContent).toMatch(/dual wield/i); // what it was computed for
-      choose("#setup-dw");
+      expect($("#robust-na").textContent).toMatch(/1H \+ shield/i); // what it was computed for
+      choose("#setup-1h-shield");
       await app.whenIdle();
       expect(sealsShown()).toBe(true);
     });
@@ -1029,7 +1087,7 @@ describe("runner-ups and the robust core", () => {
 describe("a summoned item", () => {
   it("arrives at its spell rank: no tier, and no count of copies", async () => {
     const doc = JSON.parse(text("data/strict-own.json"));
-    const head = scenarioOf("strict-own", "OGR", "balanced", 10, "dw").kit[0];
+    const head = scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield").kit[0];
     const row = doc.items.find((item) => item[0] === head[0]);
     row[2] = "spell";
     row[3] = null;
@@ -1072,7 +1130,7 @@ describe("a page that is made from the wiki level", () => {
     expect(calls).toEqual(["/data/pal-mnk-ber/wiki-own.json"]); // the default level: the wiki shard
     openDetails("#runnerups");
     await app.whenIdle();
-    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "balanced.json"]);
+    expect(runnerupCalls(calls)).toEqual([RUNNERUPS + "tank.json"]);
     expect($("#runnerups-na").hidden).toBe(true);
     expect($("#runnerups-table").hidden).toBe(false);
   });
@@ -1088,7 +1146,7 @@ describe("a page that is made from the wiki level", () => {
 });
 
 // ---- the line that says what is shown, and the switches behind it on a phone --------------------------------------------------------------------
-// On a narrow screen the switches fold away behind one line ("Ogre · Balanced · +4") and a Change button, so that the answer is on the first
+// On a narrow screen the switches fold away behind one line ("Ogre · Tank · +4") and a Change button, so that the answer is on the first
 // screen. The fold itself is the stylesheet's (and the e2e tests look at it); the page code keeps the line right and works the button.
 
 describe("the line that says what is shown", () => {
@@ -1127,34 +1185,34 @@ describe("the line that says what is shown", () => {
 
   it("says the race, the role and the tier, and the assumptions, as the page arrives", () => {
     mount();
-    expect(line()).toBe("Showing Ogre · Balanced · +4 dual wield, your own buffs");
+    expect(line()).toBe("Showing Ogre · Tank · +4 dual wield, your own buffs");
   });
 
   it("follows every change of the view", async () => {
     const { app } = mount();
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(line()).toBe("Showing Ogre · Balanced · +10 dual wield, your own buffs");
-    choose("#role-tank");
-    await app.whenIdle();
     expect(line()).toBe("Showing Ogre · Tank · +10 1H + shield, your own buffs");
+    choose("#role-melee");
+    await app.whenIdle();
+    expect(line()).toBe("Showing Ogre · Melee damage · +10 two-hander, Berserker stance, your own buffs"); // (T8: the Melee build of this trio plays the stance, and the line says it)
     change($("#sw-race"), "TRL");
     choose("#buffs-group");
     await app.whenIdle();
-    expect(line()).toBe("Showing Troll · Tank · +10 1H + shield, common group buffs");
+    expect(line()).toBe("Showing Troll · Melee damage · +10 two-hander, Berserker stance, common group buffs");
   });
 
   it("is untouched by a view that fails to load", async () => {
     const { app } = mount("", { "strict-own": "offline" });
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(line()).toBe("Showing Ogre · Balanced · +4 dual wield, your own buffs");
+    expect(line()).toBe("Showing Ogre · Tank · +4 dual wield, your own buffs");
   });
 });
 
 // ---- what a change announces -----------------------------------------------------------------------------------------------------------------
 // #announce is a polite live region. Its text names the switch that changed, what is shown now and what the kit is worth, so that two changes never
-// sound alike (a change of buffs and a change of evidence both say "Ogre, Balanced, +4" and may move the value by the same amount).
+// sound alike (a change of buffs and a change of evidence both say "Ogre, Tank, +4" and may move the value by the same amount).
 
 describe("what a change of a switch announces", () => {
   const said = () => $("#announce").textContent;
@@ -1164,30 +1222,30 @@ describe("what a change of a switch announces", () => {
     const { app } = mount();
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(said()).toBe(`Tier +10. Showing Ogre, Balanced, +10, Dual wield. Kit value ${value("strict-own", "OGR", "balanced", 10, "dw")}.`);
+    expect(said()).toBe(`Tier +10. Showing Ogre, Tank, +10, 1H + shield. Kit value ${value("strict-own", "OGR", "tank", 10, "1h-shield")}.`);
   });
 
   it("names the race, the role and the weapons", async () => {
     const { app } = mount();
     change($("#sw-race"), "TRL");
     await app.whenIdle();
-    expect(said()).toBe(`Race Troll. Showing Troll, Balanced, +4, Dual wield. Kit value ${value("strict-own", "TRL", "balanced", 4, "dw")}.`);
-    choose("#role-tank");
+    expect(said()).toBe(`Race Troll. Showing Troll, Tank, +4, Dual wield. Kit value ${value("strict-own", "TRL", "tank", 4, "dw")}.`);
+    choose("#role-melee");
     await app.whenIdle();
-    expect(said()).toBe(`Role Tank. Showing Troll, Tank, +4, 1H + shield. Kit value ${value("strict-own", "TRL", "tank", 4, "1h-shield")}.`);
-    choose("#setup-2h");
+    expect(said()).toBe(`Role Melee damage. Showing Troll, Melee damage, +4, Two-hander. Kit value ${value("strict-own", "TRL", "melee", 4, "2h")}.`);
+    choose("#setup-dw");
     await app.whenIdle();
-    expect(said()).toBe(`Weapons Two-hander. Showing Troll, Tank, +4, Two-hander. Kit value ${value("strict-own", "TRL", "tank", 4, "2h")}.`);
+    expect(said()).toBe(`Weapons Dual wield. Showing Troll, Melee damage, +4, Dual wield. Kit value ${value("strict-own", "TRL", "melee", 4, "dw")}.`);
   });
 
   it("names the buffs, which the line of what is shown does not repeat", async () => {
     const { app } = mount();
     choose("#buffs-group");
     await app.whenIdle();
-    expect(said()).toBe(`Buffs common group buffs. Showing Ogre, Balanced, +4, Dual wield. Kit value ${value("strict-group", "OGR", "balanced", 4, "dw")}.`);
+    expect(said()).toBe(`Buffs common group buffs. Showing Ogre, Tank, +4, Dual wield. Kit value ${value("strict-group", "OGR", "tank", 4, "dw")}.`);
     choose("#buffs-own");
     await app.whenIdle();
-    expect(said()).toBe(`Buffs your own buffs. Showing Ogre, Balanced, +4, Dual wield. Kit value ${value("strict-own", "OGR", "balanced", 4, "dw")}.`);
+    expect(said()).toBe(`Buffs your own buffs. Showing Ogre, Tank, +4, Dual wield. Kit value ${value("strict-own", "OGR", "tank", 4, "dw")}.`);
   });
 
   it("is not the same text for two changes, even where the view and its value are alike", async () => {
@@ -1239,7 +1297,7 @@ describe("the status message, its Try again button and the focus", () => {
     const cases = [
       [() => change($("#sw-tier"), "10"), "The tier is back at +4."],
       [() => change($("#sw-race"), "TRL"), "The race is back at Ogre."],
-      [() => choose("#role-tank"), "The role is back at Balanced."],
+      [() => choose("#role-melee"), "The role is back at Tank."],
       [() => choose("#setup-2h"), "The weapons are back at Dual wield."],
       [() => choose("#buffs-group"), "The buffs are back at your own buffs."],
     ];
@@ -1254,9 +1312,9 @@ describe("the status message, its Try again button and the focus", () => {
   });
 
   it("says what is still shown when the address asked for more than one thing the page could not load", async () => {
-    const { app } = mount("?tier=10&role=tank", { "strict-own": "offline" });
+    const { app } = mount("?tier=10&role=melee", { "strict-own": "offline" });
     await app.whenIdle();
-    expect($("#status .status-text").textContent).toBe("Couldn't load this view; try again. Still showing Ogre, Balanced, +4, Dual wield.");
+    expect($("#status .status-text").textContent).toBe("Couldn't load this view; try again. Still showing Ogre, Tank, +4, Dual wield.");
   });
 
   it("keeps the button, and the focus on it, when the retry fails again", async () => {
@@ -1312,12 +1370,12 @@ describe("the status message, its Try again button and the focus", () => {
 
   it("gives the focus back to the radio button that is checked again when a change of it is refused", async () => {
     const { app } = mount("", { "strict-own": "offline" });
-    $("#role-tank").focus();
-    choose("#role-tank"); // an arrow key moves the focus and checks the radio button, as this does
+    $("#role-melee").focus();
+    choose("#role-melee"); // an arrow key moves the focus and checks the radio button, as this does
     await app.whenIdle();
-    expect($("#role-balanced").checked).toBe(true);
-    expect($("#role-tank").checked).toBe(false);
-    expect(document.activeElement).toBe($("#role-balanced"));
+    expect($("#role-tank").checked).toBe(true);
+    expect($("#role-melee").checked).toBe(false);
+    expect(document.activeElement).toBe($("#role-tank"));
   });
 });
 
@@ -1331,7 +1389,7 @@ describe("the expanders while the file of a new view loads", () => {
   it("hide the runner-ups of the old view, say that the new ones are coming, and show them when they come", async () => {
     let release;
     const gate = new Promise((resolve) => (release = resolve));
-    const { app } = mount("", { "runnerups/balanced": gate });
+    const { app } = mount("", { "runnerups/tank": gate });
     openDetails("#runnerups");
     await app.whenIdle();
     expect($("#runnerups-table").hidden).toBe(false); // the baked view's own
@@ -1349,7 +1407,7 @@ describe("the expanders while the file of a new view loads", () => {
     expect($("#runnerups-table").hidden).toBe(false);
     expect($("#runnerups-loading").hidden).toBe(true);
     expect($("#runnerups").hasAttribute("aria-busy")).toBe(false);
-    const view = viewOf(runnerupsOf("balanced"), 10);
+    const view = viewOf(runnerupsOf("tank"), 10);
     expect([...document.querySelectorAll("#runnerups-body tr")][0].querySelectorAll("li")).toHaveLength(view[3][0].length);
   });
 
@@ -1375,7 +1433,7 @@ describe("the expanders while the file of a new view loads", () => {
   it("do not show the old view's content for the moment between opening a closed one and its file", async () => {
     let release;
     const gate = new Promise((resolve) => (release = resolve));
-    const { app } = mount("", { "runnerups/balanced": gate });
+    const { app } = mount("", { "runnerups/tank": gate });
     change($("#sw-tier"), "10"); // closed: nothing is fetched, and the old content waits behind the closed lid
     await app.whenIdle();
     openDetails("#runnerups");
@@ -1388,7 +1446,7 @@ describe("the expanders while the file of a new view loads", () => {
   });
 
   it("say so, and are not busy any more, when the file cannot be loaded", async () => {
-    const { app } = mount("", { "runnerups/balanced": "offline" });
+    const { app } = mount("", { "runnerups/tank": "offline" });
     openDetails("#runnerups");
     change($("#sw-tier"), "10");
     await app.whenIdle();
@@ -1404,11 +1462,11 @@ describe("the expanders while the file of a new view loads", () => {
   it("ignore the late failure of the file of a view that is no longer shown, when the shown view's section is drawn", async () => {
     let fail;
     const gate = new Promise((resolve, reject) => (fail = reject));
-    const { app } = mount("", { "runnerups/tank": gate });
+    const { app } = mount("", { "runnerups/melee": gate });
     openDetails("#runnerups");
-    choose("#role-tank"); // its file is asked for, and is slow ...
+    choose("#role-melee"); // its file is asked for, and is slow ...
     for (let n = 0; n < 5; n++) await tick();
-    choose("#role-balanced"); // ... and the visitor moves on before it comes: the file of this role comes at once
+    choose("#role-tank"); // ... and the visitor moves on before it comes: the file of this role comes at once
     for (let n = 0; n < 5; n++) await tick();
     expect($("#runnerups-table").hidden).toBe(false);
     fail(new TypeError("Failed to fetch"));
@@ -1418,7 +1476,24 @@ describe("the expanders while the file of a new view loads", () => {
     expect($("#runnerups-table").hidden).toBe(false);
     expect($("#runnerups-loading").hidden).toBe(true);
     expect($("#runnerups").hasAttribute("aria-busy")).toBe(false);
-    expect(swapCounts()).toEqual(countsOf("balanced", 4));
+    expect(swapCounts()).toEqual(countsOf("tank", 4));
+  });
+
+  it("E14: leave nothing busy when the visitor closes the section and moves on before the file of the view comes, and no fill is started for the view now shown", async () => {
+    let release;
+    const gate = new Promise((resolve) => (release = resolve));
+    const { app } = mount("", { "runnerups/melee": gate });
+    openDetails("#runnerups");
+    choose("#role-melee"); // the file of this role is asked for, and is slow ...
+    for (let n = 0; n < 5; n++) await tick();
+    expect($("#runnerups").getAttribute("aria-busy")).toBe("true");
+    $("#runnerups").open = false; // ... the visitor closes the section ...
+    choose("#role-tank"); // ... and moves on: the closed section is only marked for a fill when it is opened
+    for (let n = 0; n < 5; n++) await tick();
+    release();
+    await app.whenIdle();
+    expect($("#runnerups").hasAttribute("aria-busy")).toBe(false);
+    expect($("#runnerups-loading").hidden).toBe(true);
   });
 
   it("ignore the late failure of the file of a view that is no longer shown, while the shown view's file is still coming", async () => {
@@ -1426,11 +1501,11 @@ describe("the expanders while the file of a new view loads", () => {
     let release;
     const slow = new Promise((resolve, reject) => (fail = reject));
     const next = new Promise((resolve) => (release = resolve));
-    const { app, calls } = mount("", { "runnerups/tank": slow, "runnerups/balanced": next });
+    const { app, calls } = mount("", { "runnerups/melee": slow, "runnerups/tank": next });
     openDetails("#runnerups");
-    choose("#role-tank");
+    choose("#role-melee");
     for (let n = 0; n < 5; n++) await tick();
-    choose("#role-balanced");
+    choose("#role-tank");
     for (let n = 0; n < 5; n++) await tick();
     fail(new TypeError("Failed to fetch"));
     for (let n = 0; n < 5; n++) await tick();
@@ -1442,7 +1517,7 @@ describe("the expanders while the file of a new view loads", () => {
     await app.whenIdle();
     expect($("#runnerups-table").hidden).toBe(false);
     expect($("#runnerups-loading").hidden).toBe(true);
-    expect(swapCounts()).toEqual(countsOf("balanced", 4));
+    expect(swapCounts()).toEqual(countsOf("tank", 4));
     // and the section is not marked as one to fetch again: closing it and opening it asks for nothing more
     const asked = runnerupCalls(calls).length;
     $("#runnerups").open = false;
@@ -1452,7 +1527,7 @@ describe("the expanders while the file of a new view loads", () => {
   });
 
   it("still say so when the failing file is the shown view's own", async () => {
-    const { app } = mount("", { "runnerups/balanced": "offline" });
+    const { app } = mount("", { "runnerups/tank": "offline" });
     openDetails("#runnerups");
     change($("#sw-tier"), "10");
     await app.whenIdle();
@@ -1483,7 +1558,7 @@ describe("the switches before and after the page code", () => {
     choose("#role-melee"); // the fixture's Melee has no 1H + shield
     await app.whenIdle();
     expect(disabled()).toEqual(["setup-1h-shield"]);
-    choose("#role-balanced");
+    choose("#role-tank");
     await app.whenIdle();
     expect(disabled()).toEqual([]);
   });
@@ -1499,7 +1574,7 @@ describe("the history entry", () => {
     window.history.replaceState({ kit: "a1b2" }, "", window.location.href);
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=10&buffs=own");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=10&buffs=own");
     expect(window.history.state).toEqual({ kit: "a1b2" });
   });
 
@@ -1533,7 +1608,7 @@ describe("a data file of another release than the page", () => {
   it("names a release, and so does every file of the fixture, the same one", () => {
     mount();
     expect(release()).toMatch(/^data-\d{4}-\d{2}-\d{2}$/);
-    for (const name of ["strict-own", "strict-group", "wiki-own", "wiki-group", "robust", "runnerups/balanced"]) expect(dataFile(name).release, name).toBe(release());
+    for (const name of ["strict-own", "strict-group", "wiki-own", "wiki-group", "robust", "runnerups/tank"]) expect(dataFile(name).release, name).toBe(release());
   });
 
   it("is not used: the answer stays, the switches go back, and the status says that the data was updated and offers a reload", async () => {
@@ -1570,7 +1645,7 @@ describe("a data file of another release than the page", () => {
   });
 
   it("is looked for in every file the page asks for, the runner-ups and the robust core as well", async () => {
-    const { app } = mount("", { "runnerups/balanced": elsewhere("runnerups/balanced"), robust: elsewhere("robust") });
+    const { app } = mount("", { "runnerups/tank": elsewhere("runnerups/tank"), robust: elsewhere("robust") });
     openDetails("#runnerups");
     openDetails("#robust");
     change($("#sw-tier"), "10");
@@ -1615,7 +1690,7 @@ describe("the link that reports a problem", () => {
     const { app } = mount("", {}, { footer: footer() });
     await app.whenIdle();
     expect(link().getAttribute("href")).toBe(baked());
-    expect(parts(baked()).view).toEqual({ race: "OGR", role: "balanced", tier: "4", setup: "dw", buffs: "own" });
+    expect(parts(baked()).view).toEqual({ race: "OGR", role: "tank", tier: "4", setup: "dw", buffs: "own" });
   });
 
   it("names the view that is shown: race, role, tier, weapons and buffs, with the weapons even where they are the role's best", async () => {
@@ -1833,7 +1908,7 @@ describe("the names of the items in Wear this", () => {
 
   it("are links to the pages of the items in the baked page, and the empty place is not one", () => {
     mount();
-    const want = scenarioOf("strict-own", "OGR", "balanced", 4, "dw");
+    const want = scenarioOf("strict-own", "OGR", "tank", 4, "dw");
     expect($("#main").dataset.items).toBe("/item/");
     expect(anchors()).toEqual(linked(want.kit));
     expect(anchors()[19]).toEqual([]); // "Leave empty"
@@ -1845,7 +1920,7 @@ describe("the names of the items in Wear this", () => {
     const { app } = mount();
     change($("#sw-tier"), "10");
     await app.whenIdle();
-    const want = scenarioOf("strict-own", "OGR", "balanced", 10, "dw");
+    const want = scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield");
     expect(anchors()).toEqual(linked(want.kit));
     for (const [index, item] of want.kit.entries()) {
       if (item) expect(document.querySelectorAll('#kit-body [data-f="name"]')[index].textContent).toBe(item[1]);
@@ -1857,7 +1932,7 @@ describe("the names of the items in Wear this", () => {
 
   it("are links to the right items when a place that was empty is filled and a place that was filled is emptied", async () => {
     const doc = JSON.parse(text("data/strict-own.json"));
-    const row = doc.rows.find((r) => r[0] === "OGR" && r[1] === "balanced" && r[2] === 10 && r[3] === "dw");
+    const row = doc.rows.find((r) => r[0] === "OGR" && r[1] === "tank" && r[2] === 10 && r[3] === "1h-shield");
     const kit = doc.kits[row[4]];
     expect(kit[19]).toBe(-1); // the second Any slot is empty in the fixture's kit
     kit[19] = kit[0]; // filled with the item of the head ...
@@ -1876,7 +1951,7 @@ describe("the names of the items in Wear this", () => {
   it("are plain text, after a switch, in a page that does not say that every item it can show has a page", async () => {
     const app = await switched((html) => html.replace(' data-items="/item/"', ""));
     expect(document.querySelectorAll('#kit-body [data-f="name"] a')).toHaveLength(0);
-    const want = scenarioOf("strict-own", "OGR", "balanced", 10, "dw");
+    const want = scenarioOf("strict-own", "OGR", "tank", 10, "1h-shield");
     expect(rowCells().map((r) => r.name)).toEqual(want.kit.map((item) => (item ? item[1] : "Leave empty")));
     expect(app).not.toBeNull();
   });
@@ -1890,7 +1965,7 @@ describe("the names of the items in Wear this", () => {
 
   it("are plain text for a key that the build would never have made a page of", async () => {
     const doc = JSON.parse(text("data/strict-own.json"));
-    const row = doc.rows.find((r) => r[0] === "OGR" && r[1] === "balanced" && r[2] === 10 && r[3] === "dw");
+    const row = doc.rows.find((r) => r[0] === "OGR" && r[1] === "tank" && r[2] === 10 && r[3] === "1h-shield");
     const kit = doc.kits[row[4]];
     const odd = ["../../rules", "W90001", "w90001/../x", "javascript:alert(1)", "a b", ""];
     const places = kit.map((index, place) => [index, place]).filter(([index]) => index >= 0).slice(0, odd.length);
@@ -1943,7 +2018,9 @@ describe("the page code", () => {
   it("makes no request except to its own data folder", () => {
     for (const name of files) {
       const source = readFileSync(resolve(STATIC, name), "utf8");
-      expect(source).not.toMatch(/https?:\/\//);
+      // one file names an address outside the site: the record of the Trusted Types policy (Part M), which lets the page counter's script through for the counter's own way in and nothing else
+      const named = [...source.matchAll(/https?:\/\/[^\s"'`)]+/g)].map((match) => match[0]);
+      expect(named, name).toEqual(name === "tt-record.js" ? ["https://static.cloudflareinsights.com/beacon.min.js"] : []);
       expect(source).not.toMatch(/XMLHttpRequest|WebSocket|sendBeacon|EventSource/);
     }
   });

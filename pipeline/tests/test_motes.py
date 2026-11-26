@@ -25,6 +25,7 @@ import solver_helpers as H
 from trioforge import motes
 from trioforge.model import formulas as fm
 from trioforge.model.items import SLOT_INSTANCES, at_tier
+from trioforge.model.procs import ProcDonor, ProcEffect, ProcTable
 from trioforge.model.tables import load
 
 F = Fraction
@@ -67,16 +68,17 @@ RECORDS = {
 }
 
 
-def kit_of(placed):
+def kit_of(placed, records=RECORDS):
     """The 22-place kit of ``{place index: (key, tier)}``."""
     kit = [None] * len(SLOT_INSTANCES)
     for index, (key, tier) in placed.items():
-        kit[index] = at_tier(RECORDS[key], tier, RULES)
+        kit[index] = at_tier(records[key], tier, RULES)
     return kit
 
 
 def order(profile, placed, motes_to_spend=None, **more):
-    return motes.mote_order(profile, kit_of(placed), RECORDS, RULES, more.pop("setup", "stick"), motes=motes_to_spend, **more)
+    records = more.pop("records", RECORDS)
+    return motes.mote_order(profile, kit_of(placed, records), records, RULES, more.pop("setup", "stick"), motes=motes_to_spend, **more)
 
 
 def walk(result):
@@ -282,6 +284,18 @@ def test_a_run_longer_than_the_motes_left_is_not_taken_and_the_order_says_why_it
     assert [s.spent for s in eight.steps] == [6, 7, 8] and (eight.ending, eight.spent, eight.next_run) == ("motes", 8, None)
 
 
+def test_when_no_run_fits_the_order_says_how_many_motes_the_shortest_one_needs():
+    """E7: ``next_run`` is the fewest motes that would let the order go on, the shortest of the runs left (the run of the best rate is not it: a longer run is no help to someone who has one more mote)."""
+    profile = H.make_profile(TRIO, "OGR", {"HP": 1, "DMG": 1, "HASTE": 10})
+    placed = {PLACE["NECK"]: ("h3", 10), PLACE["EAR"]: ("e25", 0), PLACE["PRIMARY"]: ("dag", 0)}
+    # the ear's run is six motes for ten (a rate of 5/3 a mote) and the dagger's two for a twentieth (1/40 a mote): the ear is the better run, and the dagger's is the shorter
+    result = order(profile, placed, 1, setup="1h-shield")
+    assert (result.steps, result.ending, result.spent, result.left) == ((), "motes", 0, 20)
+    assert result.next_run == 2
+    assert order(profile, placed, 2, setup="1h-shield").steps[0].key == "dag"  # (with the two motes the order goes on: the shortest run was the number to say)
+    assert order(profile, {PLACE["NECK"]: ("h3", 10), PLACE["EAR"]: ("e25", 0)}, 3).next_run == 6  # (one run left: its length)
+
+
 def test_a_run_that_does_not_fit_gives_way_to_a_shorter_one_and_comes_back_when_the_motes_allow_it():
     # a point of haste is worth 100 here: the run on the ear (six motes for 100) beats the head piece (4 a mote) when it fits, and not when it does not
     heavy = H.make_profile(TRIO, "OGR", {"HP": 1, "HASTE": 100})
@@ -357,3 +371,53 @@ def test_a_one_tier_raise_never_lowers_the_value_in_this_model():
                 assert fm.evaluate_truthful(instance.profile, trial, totals, setup=instance.setup).F >= base, (seed, place, item.tier, tier)
                 checked += 1
     assert checked > 2000
+
+
+# ---- F6: the order with a table of procs (the jump at the socket tier) ----------------------------------------------------------------------------------------------
+
+
+PROC_WEIGHTS = {"HP": 1, "DMG": 600}  # a proc of value V adds V / 600 to the weapon index, so with this weight it adds exactly V to the value of the kit
+PROC_TABLE = ProcTable(
+    TRIO, 4,
+    (ProcEffect("e-frost", "Frost", F(300)), ProcEffect("e-borrowed", "Borrowed", F(900))),
+    (
+        ProcDonor("e-frost", "axe", frozenset({"PRIMARY", "SECONDARY"}), frozenset(TRIO), False, False),
+        ProcDonor("e-borrowed", "far-off", frozenset({"PRIMARY", "SECONDARY"}), frozenset(TRIO), False, False),
+    ),
+)  # fmt: skip
+PROC_RECORDS = {  # (a copy: the records of the other tests of the file are not changed by these)
+    **RECORDS,
+    "axe": record("axe", ["PRIMARY"], {}, weapon={"skill": "1H Slashing", "dmg": 20, "delay": 30, "bonus": None}),
+    "chest9": record("chest9", ["CHEST"], {"HP": 600}),
+}
+
+
+def test_a_table_of_procs_adds_the_jump_at_the_socket_tier_to_the_step_and_changes_the_order():
+    """The weapon counts its own proc (300) below +4 and the best proc it can host (900) at +4: the step from +3 to +4 gains the swing's rise and 600 more, where the steps below gain the swing only.
+    The chest's mote gains less than that jump and more than the swing's rise, so the order puts the weapon first with the table and the chest first without."""
+    profile = H.make_profile(TRIO, "OGR", PROC_WEIGHTS)
+    placed = {PLACE["PRIMARY"]: ("axe", 3), PLACE["CHEST"]: ("chest9", 3)}
+    plain = order(profile, placed, setup="1h-shield", records=PROC_RECORDS)
+    held = order(profile, placed, setup="1h-shield", procs=PROC_TABLE, records=PROC_RECORDS)
+    assert [(s.place, s.key) for s in plain.steps][:2] != [(s.place, s.key) for s in held.steps][:2]
+    chest_gain = next(s.gain for s in plain.steps if s.key == "chest9")
+    plain_axe = next(s.gain for s in plain.steps if s.key == "axe")
+    held_axe = next(s.gain for s in held.steps if s.key == "axe")
+    assert (plain.steps[0].key, held.steps[0].key) == ("chest9", "axe")  # the table moves the weapon's step to the front
+    assert plain_axe < chest_gain < held_axe
+    assert held_axe - plain_axe == PROC_WEIGHTS["DMG"] * (900 - 300) / 600  # (the jump from the own proc to the best hosted one, exactly)
+    assert held.start - plain.start == 600 * 300 / 600  # (the weapon already counts its own proc at +3)
+    # below the socket tier a step gains what it does without the table: the proc is the same before and after
+    low = order(profile, {PLACE["PRIMARY"]: ("axe", 1)}, 2, setup="1h-shield", procs=PROC_TABLE, records=PROC_RECORDS)
+    assert [(s.from_tier, s.to_tier, s.gain) for s in low.steps] == [(s.from_tier, s.to_tier, s.gain) for s in order(profile, {PLACE["PRIMARY"]: ("axe", 1)}, 2, setup="1h-shield", records=PROC_RECORDS).steps]
+
+
+def test_the_values_of_an_order_made_with_procs_are_the_evaluators_with_the_same_table():
+    profile = H.make_profile(TRIO, "OGR", PROC_WEIGHTS)
+    placed = {PLACE["PRIMARY"]: ("axe", 2), PLACE["CHEST"]: ("chest9", 0)}
+    result = order(profile, placed, setup="1h-shield", procs=PROC_TABLE, records=PROC_RECORDS)
+    kit = kit_of(placed, PROC_RECORDS)
+    assert result.start == fm.evaluate_truthful(profile, kit, None, setup="1h-shield", procs=PROC_TABLE).F
+    for step in result.steps:
+        kit[step.place] = at_tier(PROC_RECORDS[step.key], step.to_tier, RULES)
+        assert step.F == fm.evaluate_truthful(profile, kit, None, setup="1h-shield", procs=PROC_TABLE).F

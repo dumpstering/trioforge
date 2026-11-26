@@ -22,6 +22,7 @@ from trioforge.classes import CLASS_CODES
 from trioforge.export import brute, browser
 from trioforge.export.fixture_cases import (
     FORMAT,
+    FixtureError,
     Inputs,
     Scenario,
     breakdown_json,
@@ -33,6 +34,7 @@ from trioforge.export.fixture_cases import (
 from trioforge.model import formulas as fm
 from trioforge.model import items as item_model
 from trioforge.model import roles
+from trioforge.model import weapons as weapons_module
 from trioforge.model.items import SLOT_INSTANCES, MAX_TIER, at_tier
 from trioforge.model.tiers import MAX_DIFFICULTY, MODES, TIER_RULES, cost_to_reach, tier_for_mode
 from trioforge.precompute.grid import parse_trio, trio_slug
@@ -55,7 +57,7 @@ __all__ = [
 
 #: a Monk trio, a mixed WIS/INT mana trio, an all-caster trio, a trio with no mana class and a melee/caster mix
 FIVE_TRIOS = tuple(parse_trio(text) for text in ("PAL-MNK-BER", "SHD-CLR-SHM", "WIZ-MAG-ENC", "WAR-ROG-BER", "BRD-RNG-BST"))
-PROFILE_RACES = ("HUM", "IKS", "OGR", "ERU", "TRL", "DWF", "HIE", "BAR", "HFL", "GNM", "KER", "FRG", "HEF", "DEF", "ELF")
+PROFILE_RACES = ("HUM", "IKS", "OGR", "ERU", "TRL", "DWF", "HIE", "BAR", "HFL", "GNM", "KER", "FRG", "HEF", "DEF", "ELF", "HDE")
 MANA_STYLES = ("WIS", "INT", "MANA", "MANAREG")
 EVALUATE_CHUNK = 1000
 ITEM_CHUNK = 1000
@@ -67,15 +69,18 @@ STAT_STYLES = (
 #: the regimes of the evaluator that the random kits are made to reach, and that a run checks they do (see evaluate_docs)
 EVALUATE_COMMON = (
     "sta>255", "end-average>100", "end-average>201", "dex>255", "wis>100", "wis>200", "wis>255", "int>100", "int>200",
-    "int>255", "softcap-binds", "shield-worn", "monk-bonus>0", "monk-bonus=0", "monk-bonus<0", "iksar", "haste-capped",
-    "resist-capped", "two-hander", "dual-wield", "buffs-chosen", "mixed-tiers",
+    "int>255", "softcap-binds", "shield-worn", "monk-bonus>0", "monk-bonus=0", "monk-bonus<0", "iksar",
+    "two-hander", "dual-wield", "buffs-chosen", "mixed-tiers", "haste-capped",
 )  # fmt: skip
 #: the stat totals past the cap of 510, which only a kit of the best items under every buff reaches
 EVALUATE_EXTREMES = ("sta>510", "dex>510", "agi>510", "str>510", "wis>510", "int>510")
 #: counted when reached, not required: charisma past 510 is reached by one kit in 5,000, and no kit of the public catalog
 #: reaches the gear regen cap (the only regen items are two wiki pieces and two hidden ones: 28 points of HP regen at the most
-#: against a cap of 30), which the brute-force instances cover instead
-EVALUATE_RARE = ("cha>510", "regen-capped")
+#: against a cap of 30), which the brute-force instances cover instead; the same holds for the resist cap, which is 1000 a school (``resist.cap``, the client's own: no kit of the public catalog
+#: with the buffs on top comes near it, and the file of the evaluate terms and the brute-force instances put kits at the cap)
+#: ("haste-capped" is required: the profiles of the scenarios carry no spell haste while the rule ``haste.assume_spell`` is false, and no worn haste item alone reaches the cap, so
+#: the scenarios of the stratum ``spell-haste`` are made with the haste of the spells in their buff sets, and the evaluations under them reach the cap)
+EVALUATE_RARE = ("cha>510", "regen-capped", "resist-capped")
 EVALUATE_COVERAGE = (*EVALUATE_COMMON, *EVALUATE_EXTREMES)
 
 
@@ -189,13 +194,15 @@ class _Maker:
         return self._stats[tier]
 
     def potential(self, style: int) -> int:
-        """What a kit of the best item of a stat style in every place reaches in that style at +10."""
+        """What a kit of the best item of a stat style in every place reaches in that style at +10. For haste the spell haste of the profile counts too (the haste of the spells in
+        its buff sets, which only the scenarios of the stratum ``spell-haste`` have): the aimed haste kits go to the scenarios where the haste cap can be reached."""
         table = self.stats(MAX_TIER)
-        return int(sum(table[options, style].max() for options in self.places if options))
+        reached = int(sum(table[options, style].max() for options in self.places if options))
+        return reached + (self.sc.profile.spell_haste if STAT_STYLES[style] == "HASTE" else 0)
 
 
 def evaluate_docs(
-    inputs: Inputs, scenarios: Sequence[Scenario], count: int, seed: int
+    inputs: Inputs, scenarios: Sequence[Scenario], count: int, seed: int, *, bow_scenarios: Sequence[Scenario] = (), bow_count: int = 0
 ) -> tuple[list[tuple[str, dict[str, Any]]], dict[str, int]]:
     """``count`` random kits, each valued by the exact evaluator under the profile of a scenario: ``evaluate/profiles.json``
     (the profiles, their buff sets, the Monk bins of each level that has a Monk profile and the records of every item used)
@@ -204,10 +211,15 @@ def evaluate_docs(
 
     A third of the kits (up to ten for each stat style) aim at an extreme: the best item of one stat in every place, all at
     +10, under every buff that can be active together, on the scenarios where that stat can go highest. The others are random:
-    items drawn at random, or from the best few of a stat, at the tier of the scenario or at tiers drawn for each item."""
+    items drawn at random, or from the best few of a stat, at the tier of the scenario or at tiers drawn for each item.
+
+    ``bow_scenarios`` and ``bow_count`` add kits after those: ``bow_count`` more, under the profiles of the scenarios of the bow setup (which come after the profiles
+    of ``scenarios``, and are drawn from a stream of their own), most of them with a bow in the range place. The ``count`` kits are drawn as they are without them."""
     rng = random.Random(f"{seed}:evaluate")
     order = list(range(len(scenarios)))
     rng.shuffle(order)
+    old_count = len(scenarios)
+    scenarios = [*scenarios, *bow_scenarios]
     makers: dict[int, _Maker] = {}
 
     def maker(index: int) -> _Maker:
@@ -221,6 +233,7 @@ def evaluate_docs(
     evaluations: list[dict[str, Any]] = []
     coverage: dict[str, int] = {}
     ranked_by_style: dict[int, list[int]] = {}
+    jobs: list[tuple[random.Random, int | None, int, bool]] = []
     for number in range(count):
         aim = number % styles if number < aimed else None
         if aim is not None:
@@ -229,13 +242,21 @@ def evaluate_docs(
             index = ranked_by_style[aim][(number // styles) % min(10, len(order))]
         else:
             index = order[number % len(order)]
+        jobs.append((rng, aim, index, False))
+    bow_rng = random.Random(f"{seed}:evaluate-ranged")
+    jobs += [(bow_rng, None, old_count + number % len(bow_scenarios), True) for number in range(bow_count if bow_scenarios else 0)]
+    for rng, aim, index, bow_pass in jobs:
         sc = scenarios[index]
         spec, profile, buffset = sc.spec, sc.profile, sc.buffset
         style = "top" if aim is not None else rng.choice(("random", "random", "stack", "stack", "stack"))
         theme = aim if aim is not None else rng.randrange(styles)
         mixed = False if aim is not None else rng.random() < 0.3
         fill = 1.0 if aim is not None else rng.choice((0.5, 0.9, 1.0))
-        setup = rng.choice((*profile.setups, *profile.setups, "1h-shield", "2h", "dw", "stick", None))
+        if bow_pass:  # (the bow setup is the one most of these kits are for)
+            setup = rng.choice((*profile.setups, *profile.setups, "ranged", "ranged", "1h-shield", "2h", "dw", "stick", None))
+        else:  # (the setups of a profile before the bow setup existed, made with no pool to read: the draws of these kits are what they were)
+            before = weapons_module.setups_for(spec.trio, spec.role, inputs.tables, level=spec.level)
+            setup = rng.choice((*before, *before, "1h-shield", "2h", "dw", "stick", None))
         kit: list[Any] = [None] * len(SLOT_INSTANCES)
         used: set[str] = set()
         two_handed = False
@@ -244,6 +265,9 @@ def evaluate_docs(
             options = maker(index).places[slot]
             if not options or rng.random() > fill or (group == "SECONDARY" and two_handed):
                 continue
+            if bow_pass and group == "RANGE" and rng.random() < 0.85:  # a bow in the range place, for the term the bow setup scores
+                bows = [p for p in options if weapons_module.is_bow(inputs.vec(sc.pool_items[p], spec.tier))]
+                options = bows or options
             column = maker(index).stats(MAX_TIER if aim is not None else None)[options, theme]
             if style == "random":
                 position = rng.choice(options)
@@ -339,15 +363,29 @@ def profile_docs(inputs: Inputs, trios: int, races: int | None, *, level_55: boo
                 )
             entries.append({"race": race, "role": role, "buffs": key, "options": options, "profile": expected})
 
+        def ways_for(role: str) -> list[dict[str, Any]]:
+            """The ways a profile of ``role`` can be made: a role that only a pool offers has no profile with no pool, and none at a level whose pool gives it no setup
+            (the Ranged role of a trio with an Archer has none at the strict level, which has no bow): that way is left out."""
+            return [
+                way for way in ways
+                if not (role in roles.POOL_ROLES and not way)
+                and not (way and not bundle["roles"][role]["setups_by_evidence"][way["evidence"]])
+            ]  # fmt: skip
+
         for race in chosen_races:
             for role in offered:
-                for key in browser.BUFF_SETS:
-                    for way in ways:
+                for key in (*browser.BUFF_SETS, *browser.HASTE_BUFF_SETS):  # (the twins keep the haste of the spells: what "I have a haste spell" solves with)
+                    for way in ways_for(role):
                         add(race, role, key, **way)
-        add(chosen_races[-1], offered[-1], "raid", deity="Tunare")
+        # (the deity adds name a way that can be made: the first of the role's, which for a role that a pool alone offers is at a level and not with none)
+        last = ways_for(offered[-1])
+        if not last:
+            raise FixtureError(f"{slug}: no profile of the {offered[-1]} role can be made, with a level or without (no level gives it a setup), so the profile lists have none to name for it")
+        add(chosen_races[-1], offered[-1], "raid", deity="Tunare", **last[0])
         middle = chosen_races[len(chosen_races) // 2], offered[len(offered) // 2]
-        for way in ways[1:]:
-            add(*middle, "group+enchanter", deity="Brell Serilis", **way)
+        for way in ways_for(middle[1]):
+            if way:
+                add(*middle, "group+enchanter", deity="Brell Serilis", **way)
         head = {"format": FORMAT, "data_release": inputs.data_release, "rules_version": inputs.rules_version}
         docs.append((f"profiles/{slug}.bundle.json", bundle))
         listing = {
@@ -367,7 +405,7 @@ def weight_docs(inputs: Inputs, count: int, seed: int) -> list[tuple[str, dict[s
     rows = []
     for _ in range(count):
         trio = rng.choice(trios)
-        role = rng.choice(roles.roles_for(trio))
+        role = rng.choice([name for name in roles.roles_for(trio) if name != "ranged"])  # (the weights of the Ranged role are no part of these draws: they are what they were)
         reachable = bool(fm.pools_for(trio, inputs.level, inputs.tables)["MANA"])
         base = roles.weights_for(trio, role, inputs.rules, mana_reachable=reachable)
         multipliers = {group: rng.choice(roles.MULTIPLIERS) for group in roles.WEIGHT_GROUPS if rng.random() < 0.35}

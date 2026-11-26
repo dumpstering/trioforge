@@ -5,7 +5,7 @@
 "level":50,
 "data_release":"data-2026-10-14",
 "game_patch":"2026-09-22",
-"rules_version":"2026-10-13",
+"rules_version":"2026-11-19",
 "evidence":"strict",
 "buffs":"own",
 "evidence_fallback":false,

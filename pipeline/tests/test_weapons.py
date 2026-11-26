@@ -19,6 +19,7 @@ from hypothesis import strategies as st
 
 from trioforge.classes import CLASS_CODES
 from trioforge.model import weapons as wp
+from trioforge.model.roles import roles_for
 from trioforge.rules import load as load_rules
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -69,10 +70,10 @@ def item(key, *, weapon=None, is_shield=False, classes=("ALL",), haste=0, slots=
 # ---- which setups a trio has ---------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "trio", [("SHD", "CLR", "SHM"), ("WIZ", "MAG", "ENC"), ("PAL", "CLR", "DRU"), ("BER", "PAL", "SHD")]
-)
-@pytest.mark.parametrize("role", wp.ROLES)
+NO_DUAL_WIELD_TRIOS = [("SHD", "CLR", "SHM"), ("WIZ", "MAG", "ENC"), ("PAL", "CLR", "DRU"), ("BER", "PAL", "SHD")]
+
+
+@pytest.mark.parametrize(("trio", "role"), [(trio, role) for trio in NO_DUAL_WIELD_TRIOS for role in roles_for(trio, bow=None)])  # (the builds each trio is offered)
 @pytest.mark.parametrize("level", [50, 55])
 def test_a_trio_without_dual_wield_never_gets_dw(trio, role, level):
     assert "dw" not in wp.setups_for(trio, role, real_tables(), level=level)
@@ -84,13 +85,19 @@ def test_a_trio_with_a_dual_wield_class_gets_dw():
     assert "dw" in wp.setups_for(("WAR", "CLR", "SHM"), "tank", tables)  # the Warrior
 
 
-@pytest.mark.parametrize("trio", [("WIZ", "MAG", "ENC"), ("SHD", "CLR", "SHM"), ("PAL", "MNK", "BER")])
-def test_the_caster_role_gets_the_stick_alone(trio):
-    assert wp.setups_for(trio, "caster", real_tables()) == ["stick"]
+CASTING_BUILDS_OF = [
+    (trio, build) for trio in (("WIZ", "MAG", "ENC"), ("SHD", "CLR", "SHM"), ("PAL", "CLR", "DRU")) for build in ("caster", "castertank", "shield") if build in roles_for(trio, bow=None)
+]  # (the casting builds each trio is offered)
 
 
-def test_wiz_mag_enc_caster_is_the_stick_and_pal_mnk_ber_melee_is_two_hander_and_dual_wield():
-    assert wp.setups_for(("WIZ", "MAG", "ENC"), "caster", real_tables()) == ["stick"]
+@pytest.mark.parametrize(("trio", "build"), CASTING_BUILDS_OF)
+def test_the_casting_builds_get_the_shield_and_the_stick_and_nothing_with_a_second_weapon(trio, build):
+    first = ["stick", "1h-shield"] if build == "caster" else ["1h-shield", "stick"]  # (the first setup wins a tie: the Caster's is the stick, the other two builds' the shield)
+    assert wp.setups_for(trio, build, real_tables()) == first  # (with no pool a shield is assumed)
+
+
+def test_wiz_mag_enc_caster_is_the_shield_and_the_stick_and_pal_mnk_ber_melee_is_two_hander_and_dual_wield():
+    assert wp.setups_for(("WIZ", "MAG", "ENC"), "caster", real_tables()) == ["stick", "1h-shield"]
     assert wp.setups_for(("PAL", "MNK", "BER"), "melee", real_tables()) == ["2h", "dw"]
 
 
@@ -98,15 +105,16 @@ def test_wiz_mag_enc_caster_is_the_stick_and_pal_mnk_ber_melee_is_two_hander_and
     ("trio", "role", "expected"),
     [
         (("PAL", "MNK", "BER"), "tank", ["1h-shield", "2h", "dw"]),
-        (("PAL", "MNK", "BER"), "balanced", ["1h-shield", "2h", "dw"]),
+        (("PAL", "MNK", "BER"), "melee", ["2h", "dw"]),  # Melee damage never has the shield
         (("SHD", "CLR", "SHM"), "tank", ["1h-shield", "2h"]),
         (("SHD", "CLR", "SHM"), "melee", ["2h"]),
-        (("SHD", "CLR", "SHM"), "balanced", ["1h-shield", "2h", "stick"]),
-        (("WAR", "CLR", "SHM"), "balanced", ["1h-shield", "2h", "dw", "stick"]),
+        (("SHD", "CLR", "SHM"), "shield", ["1h-shield", "stick"]),
+        (("WAR", "CLR", "SHM"), "tank", ["1h-shield", "2h", "dw"]),
+        (("WAR", "CLR", "SHM"), "caster", ["stick", "1h-shield"]),
         (("BRD", "RNG", "BST"), "melee", ["2h", "dw"]),
-        (("BRD", "RNG", "BST"), "balanced", ["1h-shield", "2h", "dw"]),
+        (("WAR", "RNG", "BST"), "tank", ["1h-shield", "2h", "dw"]),
         # casters have one-handed and two-handed blunt skills; with no pool nothing says no shield exists for them
-        (("WIZ", "MAG", "ENC"), "balanced", ["1h-shield", "2h", "stick"]),
+        (("WIZ", "MAG", "ENC"), "castertank", ["1h-shield", "stick"]),
     ],
 )
 def test_each_role_gets_its_setups_in_the_fixed_order(trio, role, expected):
@@ -166,7 +174,7 @@ def test_the_pool_decides_whether_a_role_gets_one_hander_and_shield():
     assert wp.setups_for(trio, "tank", tables, items=[sword]) == ["2h", "dw"]
     casters = ("WIZ", "MAG", "ENC")
     everyone = item("shield-two", is_shield=True, classes=("ALL",), slots=("SECONDARY",))
-    assert wp.setups_for(casters, "balanced", tables, items=[everyone]) == ["1h-shield", "2h", "stick"]
+    assert wp.setups_for(casters, "castertank", tables, items=[everyone]) == ["1h-shield", "stick"]
 
 
 def test_a_shield_for_casters_gives_casters_the_shield_setup_and_a_shield_for_other_classes_does_not():
@@ -174,13 +182,18 @@ def test_a_shield_for_casters_gives_casters_the_shield_setup_and_a_shield_for_ot
     for_casters = item("shield-three", is_shield=True, classes=("CLR", "DRU", "SHM", "NEC", "WIZ", "MAG", "ENC"), slots=("SECONDARY",))
     for_fighters = item("shield-four", is_shield=True, classes=("WAR", "PAL", "SHD"), slots=("SECONDARY",))
     held = item("focus", is_shield=False, classes=("ALL",), slots=("SECONDARY",))  # a held item is no shield
-    assert wp.setups_for(casters, "balanced", tables, items=[for_casters]) == ["1h-shield", "2h", "stick"]
-    assert wp.setups_for(casters, "balanced", tables, items=[for_fighters, held]) == ["2h", "stick"]
-    assert wp.setups_for(casters, "balanced", tables, items=[]) == ["2h", "stick"]
+    assert wp.setups_for(casters, "castertank", tables, items=[for_casters]) == ["1h-shield", "stick"]
+    assert wp.setups_for(casters, "castertank", tables, items=[for_fighters, held]) == ["stick"]
+    assert wp.setups_for(casters, "castertank", tables, items=[]) == ["stick"]
     # a Monk is in the class list of one shield of the catalog: the pool says so, not a list of classes in the code
     for_monks = item("shield-five", is_shield=True, classes=("WAR", "MNK", "ROG"), slots=("SECONDARY",))
-    assert wp.setups_for(("MNK", "NEC", "WIZ"), "balanced", tables, items=[for_monks]) == ["1h-shield", "2h", "dw", "stick"]
-    assert wp.setups_for(("MNK", "NEC", "WIZ"), "balanced", tables, items=[for_fighters]) == ["2h", "dw", "stick"]
+    for_warriors = item("shield-six", is_shield=True, classes=("WAR", "PAL"), slots=("SECONDARY",))  # (none of the classes of the trio below but the Monk may wear it, in the one before)
+    trio = ("MNK", "SHD", "ENC")  # a Shadow Knight (a tank class), a Monk and a spell class: the Tank and the Shield caster are offered
+    assert [role for role in ("tank", "shield") if role in roles_for(trio, bow=None)] == ["tank", "shield"]
+    assert wp.setups_for(trio, "tank", tables, items=[for_monks]) == ["1h-shield", "2h", "dw"]
+    assert wp.setups_for(trio, "tank", tables, items=[for_warriors]) == ["2h", "dw"]
+    assert wp.setups_for(trio, "shield", tables, items=[for_monks]) == ["1h-shield", "stick"]
+    assert wp.setups_for(trio, "shield", tables, items=[for_warriors]) == ["stick"]
 
 
 # ---- which items a setup allows in a hand ------------------------------------------------------------------------
@@ -216,7 +229,24 @@ def test_a_two_hander_is_never_allowed_in_the_off_hand_whatever_the_setup(setup)
     # the same weapon as a one-hander is only limited by the setup, and the off hand of a two-hander list changes nothing
     listed = item("listed-two-hander", weapon=weapon(40, 60, skill="2H Slashing", two_handed=True), slots=("PRIMARY", "SECONDARY"))
     assert wp.allowed_in_hand(listed, "secondary", setup) is False
-    assert wp.allowed_in_hand(listed, "primary", setup) is (setup in ("2h", "stick"))
+    assert wp.allowed_in_hand(listed, "primary", setup) is (setup in ("2h", "stick", "ranged"))  # the bow setup takes anything in the main hand, as the stick does
+
+
+@pytest.mark.parametrize("skill", ["Archery", "archery", "Throwing", "Throwingv1", "Throwingv2"])
+@pytest.mark.parametrize("setup", wp.SETUPS)
+def test_a_weapon_of_a_ranged_skill_never_stands_in_a_melee_hand(skill, setup):
+    """E8: a bow or a thrown weapon that lists a hand among its slots (two hidden bows of the catalog do) would be scored as a melee weapon by the dw, 1h-shield and 2h rows, and the
+    stick would give it a hand it is not worn in. The range place is the one for it: the bow setup takes a bow there."""
+    listed = item("listed", weapon=weapon(30, 40, skill=skill), slots=("PRIMARY", "SECONDARY", "RANGE"))
+    assert wp.allowed_in_hand(listed, "primary", setup) is False and wp.allowed_in_hand(listed, "secondary", setup) is False
+    assert wp.allowed_in_hand(listed, "range", setup) is (setup != "ranged" or wp.is_bow(listed))
+    assert wp.damage_index(listed, "primary", setup, 0) == 0 and wp.damage_index(listed, "secondary", setup, 0) == 0
+
+
+@pytest.mark.parametrize("skill", ["Piercing", "Hand to Hand", "1H Slash", "1H Blunt", "2H Piercing", None])
+def test_the_skills_of_melee_weapons_the_catalog_names_are_not_refused_a_hand(skill):
+    listed = item("listed", weapon=weapon(30, 40, skill=skill), slots=("PRIMARY", "SECONDARY"))
+    assert wp.allowed_in_hand(listed, "primary", "dw") is True and wp.allowed_in_hand(listed, "primary", "stick") is True
 
 
 def test_an_unknown_setup_or_hand_is_refused():
@@ -244,9 +274,10 @@ def test_a_two_hander_uses_the_listed_bonus_when_there_is_one():
 
 
 @pytest.mark.parametrize("listed", [None, 0])
-def test_without_a_listed_bonus_a_two_hander_gets_067_delay_capped_at_50_and_a_one_hander_half_the_delay(listed):
+def test_without_a_listed_bonus_a_two_hander_gets_06875_delay_capped_at_50_and_a_one_hander_half_the_delay(listed):
+    """T9: the client's formula at level 50 for a weapon whose damage is no more than the level: 0.6875 x min(delay, 50) for a two-hander (it was 0.67), half the delay for a one-hander."""
     big = item("maul", weapon=weapon(37, 70, skill="2H Blunt", bonus=listed, two_handed=True))
-    assert wp.damage_index_exact(big, "primary", "2h", 0, RULES) == (37 + Fraction(67, 100) * 50) / 70
+    assert wp.damage_index_exact(big, "primary", "2h", 0, RULES) == (37 + Fraction(6875, 10000) * 50) / 70
     small = item("dirk", weapon=weapon(10, 24, bonus=listed))
     assert wp.damage_index_exact(small, "primary", "dw", 0, RULES) == (10 + 12) / Fraction(24)
 
@@ -328,3 +359,22 @@ def test_the_assumed_haste_never_goes_over_the_cap_and_ignores_worn_haste_below_
     assert wp.haste_assumed(SimpleNamespace(haste_cap=85, spell_haste=0), [item("a", haste=36)]) == 36
     assert wp.haste_assumed(SimpleNamespace(haste_cap=75, spell_haste=10), [item("a", haste=-5)]) == 10
     assert type(wp.haste_assumed(SimpleNamespace(haste_cap=75, spell_haste=10), [item("a", haste=7)])) is int
+
+
+def test_the_swing_factor_multiplies_a_hand_that_swings_and_not_the_range_place():
+    """T8: ``damage_index_exact(..., swing_factor=)``: the Berserker stance's x2.1 on the hands, after the haste, and nothing on a bow."""
+    main = item("main", weapon=weapon(20, 30, bonus=10))
+    off = item("off", weapon=weapon(18, 36), slots=("SECONDARY",))
+    factor = Fraction("2.1")
+    for hand, setup, thing in (("primary", "2h", main), ("primary", "1h-shield", main), ("primary", "dw", main), ("secondary", "dw", off)):
+        plain = wp.damage_index_exact(thing, hand, setup, 50, RULES, dw_factor=Fraction(69, 100))
+        if setup == "2h":
+            continue  # (a one-hander is not allowed in the two-hand setup: its index is 0, which the factor leaves at 0)
+        assert plain > 0 and wp.damage_index_exact(thing, hand, setup, 50, RULES, dw_factor=Fraction(69, 100), swing_factor=factor) == plain * factor, (hand, setup)
+    two = item("two", weapon=weapon(40, 40, skill="2H Slashing", two_handed=True))
+    plain = wp.damage_index_exact(two, "primary", "2h", 50, RULES)
+    assert plain > 0 and wp.damage_index_exact(two, "primary", "2h", 50, RULES, swing_factor=factor) == plain * factor
+    bow = item("bow", weapon=weapon(40, 60, skill="Archery"), slots=("RANGE",))
+    assert wp.damage_index_exact(bow, "range", "ranged", 50, RULES) > 0
+    assert wp.damage_index_exact(bow, "range", "ranged", 50, RULES, swing_factor=factor) == wp.damage_index_exact(bow, "range", "ranged", 50, RULES)
+    assert wp.damage_index_exact(main, "primary", "stick", 50, RULES, swing_factor=factor) == 0

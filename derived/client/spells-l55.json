@@ -1,5 +1,5 @@
 {
- "provenance": {"inputs":[{"file":"spells_us.txt","sha256":"8a502ccb6fb78e8384196d935f16695a7513878278de9088878006bd94202b21","date":"2026-10-13"}],"generator":"trioforge.sources.client_spells 0.0.1","generated":"2026-10-14"},
+ "provenance": {"inputs":[{"file":"spells_us.txt","sha256":"4441b42bbe8018da870c538e59234f8a517ff974201ec6583f2a37c17281f71b","date":"2026-11-16"}],"generator":"trioforge.sources.client_spells 0.0.1","generated":"2026-11-24"},
  "level": 55,
  "unknown_formulas": {"1001":1,"1002":1},
  "spells": [

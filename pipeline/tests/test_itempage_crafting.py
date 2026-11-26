@@ -198,6 +198,27 @@ def test_failure_and_return_lines_are_not_ingredients():
     assert parsed(playercrafted=crafted).crafted == [{"container": "Forge", "ingredients": ["Ore One"]}]
 
 
+def test_a_yield_line_with_a_linked_item_is_not_an_ingredient():
+    """``Yield: 1 x [[Name]]`` has a quantity and a link, so it read as an ingredient, and before the container line it made a recipe of the item itself with no container."""
+    crafted = "* [[Brewing]]\n** Yield: 1 x [[Zorblax Brew]]\n** In [[Brewing Barrel]]:\n:: 2 x [[Water Flask]]\n"
+    assert parsed(playercrafted=crafted).crafted == [{"container": "Brewing Barrel", "ingredients": ["Water Flask"]}]
+    bold = "'" * 3
+    for line in (f"{bold}Yield: 1 x [[Zorblax Brew]]{bold}", "''Yields 1 x [[Zorblax Brew]]''", "yield: 3 x [[Zorblax Brew]]"):
+        again = f"* [[Brewing]]\n** {line}\n** In [[Brewing Barrel]]:\n:: 2 x [[Water Flask]]\n"
+        assert parsed(playercrafted=again).crafted == [{"container": "Brewing Barrel", "ingredients": ["Water Flask"]}], line
+
+
+def test_an_on_failure_line_with_a_quantity_after_a_container_is_not_an_ingredient():
+    for line in ("On Failure Returns: 1 x [[Zorblax Hammer]]", "''On Failure: ''1 x [[Zorblax Hammer]]", "Returns 1 x [[Zorblax Hammer]] upon success"):
+        crafted = f"* [[Smithing]]\n** In [[Forge]]:\n:: 1 x [[Ore One]]\n:: {line}\n"
+        assert parsed(playercrafted=crafted).crafted == [{"container": "Forge", "ingredients": ["Ore One"]}], line
+
+
+def test_a_note_at_the_end_of_an_ingredient_line_does_not_make_it_a_return_or_a_yield():
+    crafted = "* [[Smithing]]\n** In [[Forge]]:\n:: 1 x [[Zorblax Hammer]] - Bought, Returned on Failure\n:: 2 x [[Ore One]] (yields well)\n:: 1 x [[Returns Ring]]\n"
+    assert parsed(playercrafted=crafted).crafted == [{"container": "Forge", "ingredients": ["Zorblax Hammer", "Ore One", "Returns Ring"]}]
+
+
 def test_alternative_ingredients_under_one_of_are_all_kept():
     crafted = "* [[Baking]]\n** In [[Oven]]:\n::* One of:\n::: 1 x [[Rice]]\n::: 1 x [[Wheat]]\n"
     assert parsed(playercrafted=crafted).crafted == [{"container": "Oven", "ingredients": ["Rice", "Wheat"]}]

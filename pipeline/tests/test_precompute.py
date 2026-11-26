@@ -8,7 +8,7 @@ written atomically and skipped on a rerun.
 
 The evidence comes in layers:
 
-* the grid itself, against the counts of the design (5,280 scenarios for PAL/MNK/BER) and the roles' setups;
+* the grid itself, against the counts of the design (3,520 scenarios for PAL/MNK/BER) and the roles' setups;
 * the pool selection (evidence levels, hand-in and temporary items, deity locks, classes, the private seen flags);
 * a tiny grid (two races, one role, two tiers) run through the real solver: every row of the shards is re-solved here
   with the builder and the solver directly (pruned and, for the value, unpruned), the totals are recomputed from the
@@ -42,7 +42,7 @@ from trioforge.data.jsonio import load_strict
 from trioforge.data.races import RACE_NAMES
 from trioforge.model import formulas as fm
 from trioforge.model import weapons as wp
-from trioforge.model.buffs import group_preset, own_buffs, resolve
+from trioforge.model.buffs import group_preset, own_buffs, resolve, without_spell_haste
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, at_tier
 from trioforge.model.profile import make_profile
 from trioforge.model.roles import roles_for
@@ -61,7 +61,7 @@ SLUG = "pal-mnk-ber"
 TABLES = load()
 RULES = TABLES.rules
 SPELLS = json.loads((REPO / "derived" / "client" / "spells-l50.json").read_text(encoding="utf-8"))
-TINY_GRID = {"races": ("OGR", "TRL"), "roles": ("balanced",), "tiers": (0, 4)}
+TINY_GRID = {"races": ("OGR", "TRL"), "roles": ("tank",), "tiers": (0, 4)}
 TINY = {**TINY_GRID, "robustness": False}  # the robustness module is tested on its own
 # What the tiny grid holds. Every item of the invented catalog is a wiki item, so without seen flags the strict pool is empty and
 # has no shield: the strict level plays two setups (2h, dw) and the wiki level, whose pool has the shield, three (1h-shield too).
@@ -142,9 +142,12 @@ WEARABLE = {"HEAD", "FACE", "EAR", "NECK", "SHOULDERS", "ARMS", "BACK", "WRIST",
             "FEET", "WAIST", "RANGE", "ANY", "PRIMARY", "SECONDARY"}  # fmt: skip
 
 
+TOOLS_INPUT = {"file": "https://eqlegendstools.com/zones/nektropos-castle/", "sha256": "00" * 32, "date": "2026-10-27"}  # (the zone page of EQ Legends Tools that the committed catalog was built from)
+
+
 def write_catalog(path, items=CATALOG, version="2030-01-02"):
     path.write_text(
-        json.dumps({"version": version, "license": "test", "attribution": "test", "provenance": {}, "items": items}),
+        json.dumps({"version": version, "license": "test", "attribution": "test", "provenance": {"inputs": [TOOLS_INPUT]}, "items": items}),
         encoding="utf-8",
     )
     return path
@@ -187,7 +190,8 @@ def eligible(items, evidence, seen=frozenset()):
 
 def buffset_of(kind):
     own = own_buffs(TRIO, 50, SPELLS, RULES)
-    return resolve(own if kind == "own" else [*own, *group_preset(SPELLS)], RULES)
+    buffs = own if kind == "own" else [*own, *group_preset(SPELLS)]
+    return resolve(buffs if RULES.get("haste.assume_spell") else without_spell_haste(buffs), RULES)  # (the rule: no spell haste in the buffs a kit is chosen with)
 
 
 def independent(items, tier, race, role, setup, buffs, evidence, *, pruned=True, seen=frozenset()):
@@ -269,16 +273,15 @@ def test_the_catalog_of_these_tests_is_valid_against_the_item_schema():
         validate_item(item)
 
 
-def test_the_full_grid_of_the_milestone_trio_has_the_5280_scenarios_of_the_design():
+def test_the_full_grid_of_the_milestone_trio_has_the_3520_scenarios_of_the_design():
     scenarios = grid.scenarios(TRIO, TABLES, RULES)
-    assert len(scenarios) == 5280 == len(set(scenarios))
-    assert {s.race for s in scenarios} == {"HUM", "BAR", "ERU", "ELF", "HIE", "DEF", "HEF", "DWF", "TRL", "OGR", "HFL", "GNM", "IKS", "KER", "FRG"}
-    assert {s.role for s in scenarios} == {"balanced", "tank", "melee"}
+    assert len(scenarios) == 3520 == len(set(scenarios))  # 16 races x 5 build-setup pairs x 11 tiers x 2 evidence levels x 2 buff sets
+    assert {s.race for s in scenarios} == {"HUM", "BAR", "ERU", "ELF", "HIE", "DEF", "HEF", "DWF", "TRL", "OGR", "HFL", "GNM", "IKS", "KER", "FRG", "HDE"}
+    assert {s.role for s in scenarios} == {"tank", "melee"}  # (a Paladin trio with no caster class: no Shield caster, and no Balanced build any more)
     assert {s.tier for s in scenarios} == set(range(11))
     assert {s.evidence for s in scenarios} == {"strict", "wiki"} and {s.buffs for s in scenarios} == {"own", "group"}
     pairs = {(s.role, s.setup) for s in scenarios}
-    assert pairs == {("balanced", "1h-shield"), ("balanced", "2h"), ("balanced", "dw"), ("tank", "1h-shield"), ("tank", "2h"),
-                     ("tank", "dw"), ("melee", "2h"), ("melee", "dw")}  # fmt: skip
+    assert pairs == {("tank", "1h-shield"), ("tank", "2h"), ("tank", "dw"), ("melee", "2h"), ("melee", "dw")}
 
 
 def test_a_setup_a_role_does_not_play_is_never_in_the_grid():
@@ -288,9 +291,9 @@ def test_a_setup_a_role_does_not_play_is_never_in_the_grid():
 
 
 def test_the_grid_can_be_narrowed_and_is_always_in_the_same_order():
-    narrow = grid.scenarios(TRIO, TABLES, RULES, races=("OGR", "TRL"), roles=("balanced",), tiers=(0, 4), evidence=("wiki",), buffs=("own",))
+    narrow = grid.scenarios(TRIO, TABLES, RULES, races=("OGR", "TRL"), roles=("tank",), tiers=(0, 4), evidence=("wiki",), buffs=("own",))
     assert len(narrow) == 2 * 3 * 2 and {s.race for s in narrow} == {"OGR", "TRL"}
-    assert narrow == grid.scenarios(TRIO, TABLES, RULES, races=("TRL", "OGR"), roles=("balanced",), tiers=(4, 0), evidence=("wiki",), buffs=("own",))
+    assert narrow == grid.scenarios(TRIO, TABLES, RULES, races=("TRL", "OGR"), roles=("tank",), tiers=(4, 0), evidence=("wiki",), buffs=("own",))
     keys = [grid.chunk_key(s) for s in narrow]
     assert keys == sorted(keys, key=lambda k: keys.index(k))  # the races of one view sit together
     for bad in ({"races": ("XXX",)}, {"roles": ("healer",)}, {"tiers": (11,)}, {"evidence": ("hidden",)}, {"buffs": ("raid",)}):
@@ -301,9 +304,9 @@ def test_the_grid_can_be_narrowed_and_is_always_in_the_same_order():
 def test_a_chunk_is_one_view_and_holds_every_race():
     scenarios = grid.scenarios(TRIO, TABLES, RULES)
     chunks = grid.chunks(scenarios)
-    assert len(chunks) == 2 * 2 * 8 * 11 == 352
-    assert all(len(races) == 15 for races in chunks.values())
-    key = grid.ChunkKey("wiki", "own", "balanced", "dw", 4)
+    assert len(chunks) == 2 * 2 * 5 * 11 == 220  # evidence x buff sets x (build, setup) pairs x tiers
+    assert all(len(races) == 16 for races in chunks.values())
+    key = grid.ChunkKey("wiki", "own", "tank", "dw", 4)
     assert key in chunks and chunks[key][0] == "HUM"
 
 
@@ -312,7 +315,7 @@ def test_creation_legal_races_come_first_and_disputed_legality_does_not_count():
     legal = [code for code, ok in order if ok]
     assert [code for code, ok in order][: len(legal)] == legal  # legal first, then the rest
     assert "ELF" not in legal and "DEF" not in legal and {"OGR", "TRL", "IKS", "KER"} <= set(legal)
-    assert len(order) == 15
+    assert len(order) == 16
     # a Kerran may start a Druid trio only if that is confirmed, and it is not
     assert grid.creation_legal("KER", ("DRU", "WIZ", "MAG"), TABLES) is False
     assert grid.creation_legal("HUM", ("DRU", "WIZ", "MAG"), TABLES) is True
@@ -340,6 +343,39 @@ def test_the_pool_takes_wearable_items_of_the_evidence_level_for_the_trio_withou
     assert chosen.levels["w9001"] == "wiki" and set(chosen.levels.values()) == {"wiki"}
     assert {i["key"] for i in grid.pool_dicts(chosen, "wiki")} == {i["key"] for i in eligible(CATALOG, "wiki")}
     assert grid.pool_dicts(chosen, "strict") == []
+
+
+@pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
+def test_no_item_of_the_real_catalog_that_carries_not_for_bis_is_chosen_for_any_trio_and_the_table_carries_the_mark_where_the_browser_reads_it():
+    """The export item table holds every wearable, a marked one too (the mark rides in evidence.codes); what keeps it out of every kit and every Upgrade pool is that select_items (here) and
+    candidatesFor (tests-js/engine-candidates.test.mjs, on the same catalog) leave out what carries the code. Held on the real catalog: the whole marked set, w60572 and w73494 by name."""
+    from trioforge.export import browser
+
+    document = load_strict(REPO / "derived" / "catalog.json")
+    items = document["items"]
+    marked = {item["key"] for item in items if any(reason["code"] == "not-for-bis" for reason in item["evidence"]["reasons"])}
+    by_key = {item["key"]: item for item in items}
+    assert {"w60572", "w73494"} <= marked and len(marked) > 1000  # (a blank-line page with no slot, and a hand weapon with no damage; and the many that were marked before)
+    trios = ("WAR-CLR-PAL", "RNG-SHD-DRU", "MNK-BRD-ROG", "SHM-NEC-WIZ", "MAG-ENC-BST", "BER-PAL-MNK")  # every class is in one of them
+    for trio in trios:
+        chosen = {item["key"] for item in grid.select_items(items, grid.parse_trio(trio)).items}
+        assert not chosen & marked, (trio, sorted(chosen & marked)[:5])
+        assert not chosen & {"w60572", "w73494"}, trio
+    # the same items without the mark, and open to every class, are chosen: the mark alone keeps them out (w73494 is one; w60572 has no slot to wear)
+    would_be = [
+        {**copy.deepcopy(by_key[key]), "classes": ["ALL"], "evidence": {"level": "wiki", "reasons": [r for r in by_key[key]["evidence"]["reasons"] if r["code"] != "not-for-bis"]}}
+        for key in sorted(marked)
+        if by_key[key]["evidence"]["level"] in ("strict", "wiki") and grid.WEARABLE_SLOTS & set(by_key[key]["slots"])
+    ]
+    assert "w73494" in {item["key"] for item in would_be} and "w60572" not in {item["key"] for item in would_be} and len(would_be) > 100
+    assert {item["key"] for item in grid.select_items(would_be, grid.parse_trio(trios[0])).items} == {item["key"] for item in would_be}
+    # and the table writes the mark where the browser's candidates read it, for every marked wearable
+    table = browser.items(document, RULES)
+    records = {browser.record_key(record): record for record in table["items"]}
+    wearable_marked = marked & set(records)
+    assert "w73494" in wearable_marked and "w60572" not in records and len(wearable_marked) > 500
+    assert all("not-for-bis" in records[key]["evidence"].get("codes", ()) for key in wearable_marked)
+    assert not [key for key, record in records.items() if key not in marked and "not-for-bis" in record["evidence"].get("codes", ())]
 
 
 def test_seen_flags_make_wiki_items_strict_but_never_resurrect_removed_or_hidden_ones():
@@ -503,7 +539,7 @@ def test_check_kit_accepts_a_legal_kit_and_names_every_fault_of_an_illegal_one()
 def test_a_run_writes_four_shards_the_runner_ups_the_defaults_and_chunk_files(tiny):
     names = sorted(p.name for p in tiny.dir.iterdir() if p.is_file())
     assert names == ["defaults.json", "engine-l50.json", "strict-group.json", "strict-own.json", "wiki-group.json", "wiki-own.json"]
-    assert sorted(p.name for p in (tiny.dir / "runnerups").iterdir()) == ["balanced.json", "index.json"]
+    assert sorted(p.name for p in (tiny.dir / "runnerups").iterdir()) == ["index.json", "tank.json"]
     assert not (tiny.dir / "runnerups.json").exists()  # one file for each role instead
     chunk_files = sorted((tiny.dir / "chunks").glob("*.json"))
     assert len(chunk_files) == TINY_CHUNKS + 1 * 2 == 22  # 20 solve chunks, 2 runner-up chunks (role x tier)
@@ -520,14 +556,14 @@ def test_the_shard_header_names_the_data_the_rules_and_the_solver_choice(tiny):
     assert shard["version"] == 1 and shard["trio"] == SLUG and shard["classes"] == list(TRIO)
     assert (shard["evidence"], shard["buffs"], shard["level"]) == ("wiki", "own", 50)
     assert shard["data_release"] == "data-2030-01-02" and shard["rules_version"] == RULES.version
-    assert shard["game_patch"] == "2026-10-13"
+    assert shard["game_patch"] == "2026-11-16"
     solver = shard["solver"]
     assert solver["canonical"] is True and solver["time_limit"] is None  # never a time limit
     assert {name: solver[name] for name in _highs.OPTIONS if name != "output_flag"} == {n: v for n, v in _highs.OPTIONS.items() if n != "output_flag"}
     assert (solver["presolve"], solver["mip_rel_gap"], solver["threads"], solver["random_seed"]) == ("off", 0, 1, 0)
     assert solver["highs"] == highspy.Highs().version() and solver["revision"] == highspy.Highs().githash()
     assert shard["build_options"] == {"any_rule": "all", "haste_assumed": None}
-    sample = make_profile("OGR", TRIO, 50, "balanced", buffset_of("own"), None, TABLES)
+    sample = make_profile("OGR", TRIO, 50, "tank", buffset_of("own"), None, TABLES)
     assert shard["assumptions"] == {"aa": dict(sample.aa), "deity": None} == {"aa": {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}, "deity": None}
     assert shard["partial"] is True
     assert shard["flags"] == ["strict pool empty"]
@@ -538,11 +574,11 @@ def test_the_shard_header_names_the_data_the_rules_and_the_solver_choice(tiny):
     assert shard["places"] == list(shards.PLACES) and len(shard["places"]) == 22
     assert shard["items_keys"] == ["key", "name", "slots", "tier_rule", "arrival", "source", "evidence", "deity"]
     assert shard["totals_keys"] == ["ac", "hp", "mana", "end", "haste", "atk", "fire", "cold", "magic", "poison", "disease", "hpreg", "manareg", "endreg"]
-    assert shard["roles"] == ["balanced"] and shard["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}
+    assert shard["roles"] == ["tank"] and shard["setups"] == {"tank": ["1h-shield", "2h", "dw"]}
     assert shard["tiers"] == [0, 4]
     caps = shard["caps"]
-    assert caps["haste"] == 85 and caps["resist"] == 200 and caps["regen"] == {"HP": 30, "MANA": 15, "END": 15}
-    assert caps["sheet_softcap"] == make_profile("OGR", TRIO, 50, "balanced", buffset_of("own"), None, TABLES).effective_softcap
+    assert caps["haste"] == 85 and caps["resist"] == 1000 and caps["regen"] == {"HP": 30, "MANA": 15, "END": 15}  # (T4: the resist cap is 1000)
+    assert caps["sheet_softcap"] == make_profile("OGR", TRIO, 50, "tank", buffset_of("own"), None, TABLES).effective_softcap
 
 
 def test_every_row_of_a_wiki_shard_is_the_optimum_the_solver_finds_on_its_own(tiny):
@@ -601,8 +637,8 @@ def test_the_kits_are_deduplicated_and_every_row_points_at_a_real_kit_item_and_t
 def test_the_races_of_the_milestone_trio_are_all_listed_the_creation_legal_ones_first():
     races = grid.race_order(TRIO, TABLES)
     flags = [legal for _, legal in races]
-    assert len(races) == 15 and [code for code, _ in races][:2] == ["HUM", "BAR"]
-    assert flags == sorted(flags, reverse=True) and flags.count(True) == 13  # all but the Wood Elf and Dark Elf
+    assert len(races) == 16 and [code for code, _ in races][:2] == ["HUM", "BAR"]
+    assert flags == sorted(flags, reverse=True) and flags.count(True) == 14  # all but the Wood Elf and Dark Elf (the Half Dark Elf starts a Berserker)
 
 
 def test_a_narrowed_run_lists_only_the_races_it_has_rows_for(tiny):
@@ -629,9 +665,9 @@ def test_the_caps_and_the_assumptions_are_one_set_for_every_race_and_role_of_a_t
         for role in roles_for(TRIO):
             profile = make_profile(race, TRIO, 50, role, buffset_of("own"), None, TABLES)
             facts[(race, role)] = pc.layout_facts(profile)
-    assert len(facts) == 15 * 3
-    caps, assumptions = facts[("OGR", "balanced")]
-    assert (caps["haste"], caps["resist"], caps["regen"]) == (85, 200, {"HP": 30, "MANA": 15, "END": 15})
+    assert len(facts) == 16 * 2
+    caps, assumptions = facts[("OGR", "tank")]
+    assert (caps["haste"], caps["resist"], caps["regen"]) == (85, 1000, {"HP": 30, "MANA": 15, "END": 15})  # (T4: the resist cap is 1000)
     assert assumptions == {"aa": {"combat_stability": 3, "natural_durability": 4, "physical_enhancement": True}, "deity": None}
     assert {key: value for key, value in facts.items() if value != (caps, assumptions)} == {}
 
@@ -706,23 +742,23 @@ def test_the_strict_pool_is_empty_without_seen_flags_so_the_strict_shards_hold_n
         assert shard["kits"] == [[-1] * 22] and shard["items"] == []
         assert all(row[4] == 0 and row[6] == 0 for row in shard["scenarios"])  # the one empty kit, no gain
         assert len(shard["scenarios"]) == 2 * 1 * 2 * 2  # races x roles x tiers x setups: no shield in an empty pool, so two setups
-        assert shard["setups"] == {"balanced": ["2h", "dw"]}
+        assert shard["setups"] == {"tank": ["2h", "dw"]}
     wiki = read(tiny.dir / "wiki-own.json")
     assert wiki["flags"] == ["strict pool empty"]  # the default view falls back to wiki evidence
 
 
-def test_the_defaults_are_the_best_creation_legal_race_by_total_value_in_the_balanced_plus_four_view(tiny):
+def test_the_defaults_are_the_best_creation_legal_race_by_total_value_in_the_opening_build_plus_four_view(tiny):
     defaults = read(tiny.dir / "defaults.json")
     rows = expand(read(tiny.dir / "wiki-own.json"))
-    best = {race: max(row["F"] for (r, role, tier, setup), row in rows.items() if r == race and role == "balanced" and tier == 4) for race in ("OGR", "TRL")}
+    best = {race: max(row["F"] for (r, role, tier, setup), row in rows.items() if r == race and role == "tank" and tier == 4) for race in ("OGR", "TRL")}
     winner, second = sorted(best, key=lambda race: -best[race])
     assert defaults["version"] == 1 and defaults["trio"] == SLUG
-    assert defaults["view"] == {"role": "balanced", "tier": 4, "evidence": "wiki", "buffs": "own"}
+    assert defaults["view"] == {"role": "tank", "tier": 4, "evidence": "wiki", "buffs": "own"}
     assert defaults["strict_pool_empty"] is True
     assert (defaults["race"], defaults["runner_up_race"]) == (winner, second)
     assert defaults["margin"] == pytest.approx(best[winner] - best[second], abs=0.011)
     assert defaults["setup"] in ("1h-shield", "2h", "dw")
-    by_setup = {setup: row["F"] for (r, role, tier, setup), row in rows.items() if r == winner and role == "balanced" and tier == 4}
+    by_setup = {setup: row["F"] for (r, role, tier, setup), row in rows.items() if r == winner and role == "tank" and tier == 4}
     assert by_setup[defaults["setup"]] == max(by_setup.values())
     assert {entry["race"] for entry in defaults["races"]} == {"OGR", "TRL"} and all(entry["legal"] for entry in defaults["races"])
     assert defaults["flip_notes"] == [] and defaults["robustness"] == "skipped: disabled"
@@ -731,10 +767,10 @@ def test_the_defaults_are_the_best_creation_legal_race_by_total_value_in_the_bal
 def test_the_defaults_carry_the_why_of_the_default_kit_each_stat_valued_again_without_it(tiny):
     """p7kit: ``why.places`` has the 22 places of the default race's kit; the loss of a stat is the exact value of the kit less its value without that stat (``evaluate_truthful`` both times)."""
     defaults = read(tiny.dir / "defaults.json")
-    row = expand(read(tiny.dir / "wiki-own.json"))[(defaults["race"], "balanced", 4, defaults["setup"])]
+    row = expand(read(tiny.dir / "wiki-own.json"))[(defaults["race"], "tank", 4, defaults["setup"])]
     places = defaults["why"]["places"]
     assert [place["key"] if place else None for place in places] == row["kit"]
-    _, _, profile, buffset = independent(CATALOG, 4, defaults["race"], "balanced", defaults["setup"], "own", "wiki")
+    _, _, profile, buffset = independent(CATALOG, 4, defaults["race"], "tank", defaults["setup"], "own", "wiki")
     totals = eval_buff_totals(buffset.totals(tuple(row["buffs"])))
     vecs = {item["key"]: at_tier(item, 4, RULES) for item in CATALOG}
     kit = [vecs[key] if key else None for key in row["kit"]]
@@ -764,19 +800,19 @@ def test_the_defaults_carry_the_why_of_the_default_kit_each_stat_valued_again_wi
 
 def test_the_default_race_ignores_a_better_race_that_cannot_be_created_and_breaks_ties_in_race_order():
     f = {"ELF": 120.0, "OGR": 100.0, "TRL": 90.0, "KER": 95.0}
-    choice = shards.default_race(f, {"OGR", "TRL", "KER"}, ["HUM", "ELF", "OGR", "TRL", "KER"])
+    choice = shards.default_race(f, {"OGR", "TRL", "KER"}, ["HUM", "ELF", "OGR", "TRL", "KER"], 1)
     assert (choice["race"], choice["runner_up"], choice["margin"]) == ("OGR", "KER", 5.0)
-    tie = shards.default_race({"TRL": 50.0, "OGR": 50.0}, {"OGR", "TRL"}, ["OGR", "TRL"])
+    tie = shards.default_race({"TRL": 50.0, "OGR": 50.0}, {"OGR", "TRL"}, ["OGR", "TRL"], 1)
     assert (tie["race"], tie["runner_up"], tie["margin"]) == ("OGR", "TRL", 0.0)
-    assert shards.default_race({"ELF": 1.0}, set(), ["ELF"]) is None
-    one = shards.default_race({"OGR": 1.0, "ELF": 5.0}, {"OGR"}, ["OGR", "ELF"])
+    assert shards.default_race({"ELF": 1.0}, set(), ["ELF"], 1) is None
+    one = shards.default_race({"OGR": 1.0, "ELF": 5.0}, {"OGR"}, ["OGR", "ELF"], 1)
     assert one["race"] == "OGR" and one["runner_up"] is None and one["margin"] is None
 
 
 def test_runner_ups_are_exact_swaps_three_plain_ones_and_at_most_one_deity_locked_one_that_beats_them(tiny):
     assert (grid.RUNNER_UPS, grid.DEITY_RUNNER_UPS) == (3, 1)
     docs = runnerup_docs(tiny.dir)
-    assert sorted(docs) == [("balanced", 0), ("balanced", 4)]  # one file for each role holds both tiers
+    assert sorted(docs) == [("tank", 0), ("tank", 4)]  # one file for each role holds both tiers
     wiki_own = read(tiny.dir / "wiki-own.json")
     rows = expand(wiki_own)
     situations = {"beats": 0, "too weak": 0, "tie": 0, "no plain swap": 0}
@@ -845,7 +881,7 @@ def test_runner_ups_are_exact_swaps_three_plain_ones_and_at_most_one_deity_locke
 
 
 def test_the_robust_file_is_skipped_with_a_note_when_the_module_is_missing_and_stale_copies_are_removed(fresh, monkeypatch):
-    (fresh.dir / "robust.json").write_text("{}", encoding="utf-8")
+    (fresh.dir / "robust.json").write_text(json.dumps({"rules_version": RULES.version}), encoding="utf-8")  # (a file of an earlier run of these rules: one with no rules version is old, and the run refuses it)
     monkeypatch.setitem(__import__("sys").modules, "trioforge.solver.robust", None)  # importing it fails
     summary = pc.run(SLUG, fresh.out, catalog=fresh.catalog, processes=1, **TINY_GRID)
     assert not (fresh.dir / "robust.json").exists()
@@ -857,7 +893,7 @@ def test_runner_ups_are_one_file_for_each_role_with_every_tier_of_the_scope_and_
     index = read(folder / "index.json")
     assert (index["version"], index["trio"], index["evidence"], index["buffs"]) == (1, SLUG, "wiki", "own")
     assert index["evidence_fallback"] is True and index["data_release"] == "data-2030-01-02" and index["rules_version"] == RULES.version
-    assert [(f["role"], f["tiers"], f["file"]) for f in index["files"]] == [("balanced", [0, 4], "balanced.json")]  # a role, and all the tiers of the run in it
+    assert [(f["role"], f["tiers"], f["file"]) for f in index["files"]] == [("tank", [0, 4], "tank.json")]  # a role, and all the tiers of the run in it
     assert sorted(p.name for p in folder.iterdir()) == sorted([*(f["file"] for f in index["files"]), "index.json"])
     for entry in index["files"]:
         data = (folder / entry["file"]).read_bytes()
@@ -910,16 +946,17 @@ def test_result_files_are_replaced_in_a_safe_order_the_runner_ups_before_the_res
 
 
 def test_the_old_single_runner_up_file_and_files_of_a_wider_earlier_run_are_removed(fresh):
-    (fresh.dir / "runnerups.json").write_text("{}", encoding="utf-8")
-    (fresh.dir / "runnerups" / "tank.json").write_text("{}", encoding="utf-8")  # a role this run does not have
-    (fresh.dir / "runnerups" / "balanced-0.json").write_text("{}", encoding="utf-8")  # and the file of a role and tier, as an earlier layout wrote it
+    stamped = json.dumps({"rules_version": RULES.version})  # (files of an earlier run of these rules: one with no rules version is old, and the run refuses it)
+    (fresh.dir / "runnerups.json").write_text(stamped, encoding="utf-8")
+    (fresh.dir / "runnerups" / "melee.json").write_text(stamped, encoding="utf-8")  # a role this run does not have
+    (fresh.dir / "runnerups" / "tank-0.json").write_text(stamped, encoding="utf-8")  # and the file of a role and tier, as an earlier layout wrote it
     before = result_files(fresh.dir)
     summary = pc.run(SLUG, fresh.out, catalog=fresh.catalog, processes=1, **TINY)
-    gone = ("runnerups.json", "runnerups/tank.json", "runnerups/balanced-0.json")
+    gone = ("runnerups.json", "runnerups/melee.json", "runnerups/tank-0.json")
     assert not any((fresh.dir / name).exists() for name in gone)
     after = result_files(fresh.dir)
     assert sorted(after) == sorted(name for name in before if name not in gone)
-    assert [f["file"] for f in read(fresh.dir / "runnerups" / "index.json")["files"]] == ["balanced.json"]
+    assert [f["file"] for f in read(fresh.dir / "runnerups" / "index.json")["files"]] == ["tank.json"]
     assert any(path.name == "index.json" for path in summary.files) and "runnerups/index.json" in summary.sizes
 
 
@@ -941,10 +978,10 @@ def test_robust_json_holds_the_labels_of_the_robustness_hook_per_role_and_tier_a
     doc = read(fresh.dir / "robust.json")
     default = read(fresh.dir / "defaults.json")["race"]
     assert doc["version"] == 1 and doc["race"] == default and doc["tiers"] == [4]  # tier 10 is not in this grid
-    assert set(doc["roles"]) == {"balanced"} and set(doc["roles"]["balanced"]) == {"4"}
-    labels = doc["roles"]["balanced"]["4"]
+    assert set(doc["roles"]) == {"tank"} and set(doc["roles"]["tank"]) == {"4"}
+    labels = doc["roles"]["tank"]["4"]
     assert set(labels) == set(shards.PLACES) and labels["HEAD"].startswith("depends on") and labels["FACE"] == "robust"
-    assert calls == [(default, "balanced", 4)]
+    assert calls == [(default, "tank", 4)]
     assert not any("skipped" in n for n in summary.notes if "robustness" in n)
     assert read(fresh.dir / "defaults.json")["robustness"] == "done"
 
@@ -1002,7 +1039,7 @@ def test_an_exactness_error_stops_the_run_with_a_clear_message_and_writes_no_sha
         pc.run(SLUG, out, catalog=catalog, processes=1, **TINY)
     message = str(caught.value)
     assert "objective re-check" in message and "differ by more than" in message
-    assert "TRL" in message and "balanced role" in message and "+0" in message  # which scenario
+    assert "TRL" in message and "tank role" in message and "+0" in message  # which scenario
     assert not list((out / SLUG).glob("*.json"))  # no shard, no defaults: only chunks may exist
 
 
@@ -1022,7 +1059,7 @@ def test_a_check_that_fails_outside_the_workers_is_also_one_clear_error(tmp_path
     monkeypatch.undo()
     with pytest.raises(pc.PrecomputeError) as caught:
         pc.run(SLUG, tmp_path / "out2", catalog=catalog, processes=1, robustness=hook, **TINY_GRID)
-    assert all(part in str(caught.value) for part in ("robustness hook failed", "balanced +4", "KeyError"))
+    assert all(part in str(caught.value) for part in ("robustness hook failed", "tank +4", "KeyError"))
 
 
 def test_a_solve_that_is_not_optimal_stops_the_run(tmp_path, monkeypatch):
@@ -1092,7 +1129,7 @@ def test_with_seen_flags_the_strict_pool_has_those_items_and_the_defaults_use_st
     assert all(badge == "strict" for key, badge in badges.items() if key in keys) and "wiki" in badges.values()
     defaults = read(out / SLUG / "defaults.json")
     assert defaults["view"]["evidence"] == "strict" and defaults["strict_pool_empty"] is False
-    assert read(out / SLUG / "runnerups" / "balanced.json")["evidence"] == "strict"
+    assert read(out / SLUG / "runnerups" / "tank.json")["evidence"] == "strict"
     assert read(out / SLUG / "runnerups" / "index.json")["evidence"] == "strict"
     assert any("unknown" in n for n in summary.notes)  # w9099 is not in the catalog
     # the strict value is never above the wiki value of the same scenario, and never below the naked character
@@ -1113,7 +1150,7 @@ def test_the_plain_solve_is_recorded_in_the_shards_and_gives_the_same_values(tin
 
 def test_a_lore_item_worn_in_the_kit_is_not_offered_as_a_swap_for_another_place_of_the_same_kit(tiny):
     rows = expand(read(tiny.dir / "wiki-own.json"))
-    assert "w9004" in rows[("OGR", "balanced", 4, "dw")]["kit"]  # the Lore ring is worn once
+    assert "w9004" in rows[("OGR", "tank", 4, "dw")]["kit"]  # the Lore ring is worn once
     docs = runnerup_docs(tiny.dir)
     assert docs  # there are files to look at
     for (role, tier), doc in docs.items():
@@ -1136,7 +1173,7 @@ def test_a_two_hander_is_not_offered_for_the_main_hand_while_the_off_hand_is_wor
     shielded[primary], shielded[secondary], bare[primary] = "w9011", "w9014", "w9011"
     # the stat stick lets any item into any hand; the pool has two other main-hand items besides the worn Sword
     doc = grid.runnerup_chunk(
-        ctx, "balanced", 4, [grid.RunnerupInput("OGR", "stick", tuple(shielded), (), 0), grid.RunnerupInput("TRL", "stick", tuple(bare), (), 0)]
+        ctx, "tank", 4, [grid.RunnerupInput("OGR", "stick", tuple(shielded), (), 0), grid.RunnerupInput("TRL", "stick", tuple(bare), (), 0)]
     )
     with_shield, without = (view["places"][primary] for view in doc["views"])
     assert "w9013" not in [key for key, _ in with_shield]  # the Greatsword would have to empty the worn off hand
@@ -1195,7 +1232,7 @@ def test_worker_processes_write_the_same_files_as_one_process(tiny, tmp_path):
     out = tmp_path / "out"
     summary = pc.run(SLUG, out, catalog=tiny.catalog, processes=2, **TINY)
     assert summary.solved == TINY_SCENARIOS and not summary.violations
-    assert result_files(out / SLUG) == result_files(tiny.dir) and "runnerups/balanced.json" in result_files(tiny.dir)
+    assert result_files(out / SLUG) == result_files(tiny.dir) and "runnerups/tank.json" in result_files(tiny.dir)
 
 
 def test_the_pruned_pool_does_not_depend_on_the_race():
@@ -1203,7 +1240,7 @@ def test_the_pruned_pool_does_not_depend_on_the_race():
     buffset = buffset_of("own")
     kept = {}
     for race in ("OGR", "IKS", "HUM", "ERU"):
-        profile = make_profile(race, TRIO, 50, "balanced", buffset, None, TABLES, evidence="wiki")
+        profile = make_profile(race, TRIO, 50, "tank", buffset, None, TABLES, evidence="wiki")
         for setup in ("1h-shield", "2h", "dw"):
             kept.setdefault(setup, set()).add(tuple(i.key for i in prune(pool, profile, 4, setup, buffset)))
     assert all(len(variants) == 1 for variants in kept.values())  # the chunk prunes once for all its races
@@ -1219,18 +1256,17 @@ def context_of(tmp_path, items):
 
 def test_the_profile_of_a_view_follows_the_pool_so_the_shield_setup_needs_a_shield_the_race_can_wear(tmp_path):
     ctx = context_of(tmp_path, CATALOG)
-    assert ctx.profile("OGR", "balanced", "own", "wiki").setups == ("1h-shield", "2h", "dw")
     assert ctx.profile("OGR", "tank", "own", "wiki").setups == ("1h-shield", "2h", "dw")
     assert ctx.profile("OGR", "melee", "own", "wiki").setups == ("2h", "dw")
-    assert ctx.profile("OGR", "balanced", "own", "strict").setups == ("2h", "dw")  # the strict pool is empty: no shield in it
+    assert ctx.profile("OGR", "tank", "own", "strict").setups == ("2h", "dw")  # the strict pool is empty: no shield in it
     no_shield = [item for item in CATALOG if item["key"] != "w9014"]
     ctx = context_of(tmp_path, no_shield)
-    assert ctx.profile("OGR", "balanced", "own", "wiki").setups == ("2h", "dw")
+    assert ctx.profile("OGR", "tank", "own", "wiki").setups == ("2h", "dw")
     only_trolls = [{**item, "races": ["TRL"]} if item["key"] == "w9014" else item for item in CATALOG]
     ctx = context_of(tmp_path, only_trolls)
-    assert ctx.profile("TRL", "balanced", "own", "wiki").setups == ("1h-shield", "2h", "dw")
-    assert ctx.profile("OGR", "balanced", "own", "wiki").setups == ("2h", "dw")  # an Ogre can wear no shield of this pool
-    assert ctx.profile("TRL", "balanced", "own", "wiki") is ctx.profile("TRL", "balanced", "own", "wiki")  # still made once
+    assert ctx.profile("TRL", "tank", "own", "wiki").setups == ("1h-shield", "2h", "dw")
+    assert ctx.profile("OGR", "tank", "own", "wiki").setups == ("2h", "dw")  # an Ogre can wear no shield of this pool
+    assert ctx.profile("TRL", "tank", "own", "wiki") is ctx.profile("TRL", "tank", "own", "wiki")  # still made once
 
 
 def test_the_grid_lists_the_shield_setup_only_when_the_pool_has_a_shield_for_the_trio(tmp_path):
@@ -1240,14 +1276,14 @@ def test_the_grid_lists_the_shield_setup_only_when_the_pool_has_a_shield_for_the
     assert (summary.scenarios, summary.chunks) == (2 * 2 * 2 * 2 * 2, 2 * 2 * 2 * 2)  # races x setups x tiers x evidence x buffs
     for name in shards.SHARD_NAMES:
         shard = read(out / SLUG / name)
-        assert shard["setups"] == {"balanced": ["2h", "dw"]}
+        assert shard["setups"] == {"tank": ["2h", "dw"]}
         assert {row[3] for row in shard["scenarios"]} == {"2h", "dw"}
     assert not list((out / SLUG / "chunks").glob("*1h-shield*"))
     assert all(view[1] in ("2h", "dw") for doc in runnerup_docs(out / SLUG).values() for view in doc["views"])
-    # grid.scenarios on its own: no pool at all assumes a shield (the 5,280 of the design), a pool decides
-    assert len(grid.scenarios(TRIO, TABLES, RULES)) == 5280
+    # grid.scenarios on its own: no pool at all assumes a shield (the 3,520 of the design), a pool decides
+    assert len(grid.scenarios(TRIO, TABLES, RULES)) == 3520
     pool = [at_tier(item, 0, RULES) for item in no_shield]
-    assert len(grid.scenarios(TRIO, TABLES, RULES, items=pool)) == 15 * 6 * 11 * 2 * 2
+    assert len(grid.scenarios(TRIO, TABLES, RULES, items=pool)) == 16 * 4 * 11 * 2 * 2
     assert not [s for s in grid.scenarios(TRIO, TABLES, RULES, items=pool) if s.setup == "1h-shield"]
 
 
@@ -1255,17 +1291,17 @@ def test_a_shield_that_only_some_races_wear_still_makes_the_shield_setup_a_setup
     only_trolls = [{**item, "races": ["TRL"]} if item["key"] == "w9014" else item for item in CATALOG]
     out = tmp_path / "out"
     pc.run(SLUG, out, catalog=write_catalog(tmp_path / "catalog.json", only_trolls), processes=1, **TINY)
-    assert read(out / SLUG / "wiki-own.json")["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}  # one grid for every race
+    assert read(out / SLUG / "wiki-own.json")["setups"] == {"tank": ["1h-shield", "2h", "dw"]}  # one grid for every race
     rows = expand(read(out / SLUG / "wiki-own.json"))
-    assert "w9014" not in rows[("OGR", "balanced", 4, "1h-shield")]["kit"]  # an Ogre cannot wear it
-    assert any("w9014" in rows[("TRL", "balanced", tier, "1h-shield")]["kit"] for tier in (0, 4))
+    assert "w9014" not in rows[("OGR", "tank", 4, "1h-shield")]["kit"]  # an Ogre cannot wear it
+    assert any("w9014" in rows[("TRL", "tank", tier, "1h-shield")]["kit"] for tier in (0, 4))
 
 
 # ---- the setups of an evidence level follow the pool of that level ---------------------------------------------------------------
 
 
 def with_seen(tmp_path, keys, **options):
-    """A tiny run (two races, Balanced, +0 and +4) of the invented catalog with the given keys seen in game; returns
+    """A tiny run (two races, the Tank build, +0 and +4) of the invented catalog with the given keys seen in game; returns
     the summary and the folder of the results. ``keys`` decide the strict pool: a wiki item that is seen is strict."""
     out = tmp_path / "out"
     summary = pc.run(
@@ -1280,20 +1316,20 @@ def test_each_evidence_level_lists_the_shield_setup_only_when_its_own_pool_has_a
     shield = at_tier(next(i for i in CATALOG if i["key"] == "w9014"), 0, RULES)  # a Paladin or a Berserker can wear it
     plan = grid.scenarios(TRIO, TABLES, RULES, items={"strict": [sword], "wiki": [sword, shield]})
     pairs = {kind: {(s.role, s.setup) for s in plan if s.evidence == kind} for kind in ("strict", "wiki")}
-    assert pairs["strict"] == {("balanced", "2h"), ("balanced", "dw"), ("tank", "2h"), ("tank", "dw"), ("melee", "2h"), ("melee", "dw")}
-    assert pairs["wiki"] == pairs["strict"] | {("balanced", "1h-shield"), ("tank", "1h-shield")}
-    assert len(plan) == 15 * 11 * 2 * (6 + 8)  # races x tiers x buff sets x the role and setup pairs of the two levels
+    assert pairs["strict"] == {("tank", "2h"), ("tank", "dw"), ("melee", "2h"), ("melee", "dw")}
+    assert pairs["wiki"] == pairs["strict"] | {("tank", "1h-shield")}
+    assert len(plan) == 16 * 11 * 2 * (4 + 5)  # races x tiers x buff sets x the build and setup pairs of the two levels
     assert not [s for s in plan if s.evidence == "strict" and s.setup == "1h-shield"]
     levels = list(dict.fromkeys((s.evidence, s.buffs) for s in plan))  # the order of the module docstring: the levels in turn
     assert levels == [("strict", "own"), ("strict", "group"), ("wiki", "own"), ("wiki", "group")]
-    # a flat pool is the pool of both levels, and no pool at all assumes a shield: the 5,280 scenarios of the design
+    # a flat pool is the pool of both levels, and no pool at all assumes a shield: the 3,520 scenarios of the design
     assert {s.setup for s in grid.scenarios(TRIO, TABLES, RULES, items=[sword, shield]) if s.evidence == "strict"} == {"1h-shield", "2h", "dw"}
-    assert len(grid.scenarios(TRIO, TABLES, RULES)) == 5280
+    assert len(grid.scenarios(TRIO, TABLES, RULES)) == 3520
     # a level that is asked for needs a pool of its own; one that is not asked for does not
     with pytest.raises(ValueError, match="strict"):
         grid.scenarios(TRIO, TABLES, RULES, items={"wiki": [sword, shield]})
     wiki_only = grid.scenarios(TRIO, TABLES, RULES, evidence=("wiki",), items={"wiki": [sword, shield]})
-    assert len(wiki_only) == 15 * 11 * 2 * 8
+    assert len(wiki_only) == 16 * 11 * 2 * 5  # (the Tank's three setups and the Melee damage build's two)
 
 
 def test_the_shield_pool_of_a_level_holds_the_shields_of_that_level_and_no_deity_locked_one(tmp_path):
@@ -1324,7 +1360,7 @@ def test_a_strict_pool_without_a_shield_has_no_shield_setup_while_the_wiki_pool_
     for buffs in ("own", "group"):
         strict, wiki = (read(folder / f"{evidence}-{buffs}.json") for evidence in ("strict", "wiki"))
         assert strict["flags"] == [] and strict["pool"] == 3  # a real strict pool, not the empty one
-        assert strict["setups"] == {"balanced": ["2h", "dw"]} and wiki["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}
+        assert strict["setups"] == {"tank": ["2h", "dw"]} and wiki["setups"] == {"tank": ["1h-shield", "2h", "dw"]}
         assert {row[3] for row in strict["scenarios"]} == {"2h", "dw"} and len(strict["scenarios"]) == 2 * 2 * 2
         assert {row[3] for row in wiki["scenarios"]} == {"1h-shield", "2h", "dw"} and len(wiki["scenarios"]) == 2 * 2 * 3
         order = [r["code"] for r in strict["races"]]
@@ -1342,9 +1378,9 @@ def test_a_strict_pool_without_a_shield_has_no_shield_setup_while_the_wiki_pool_
 def test_a_strict_pool_with_a_shield_keeps_the_shield_setup(tmp_path):
     _, folder = with_seen(tmp_path, {"w9001", "w9011", "w9014"})  # the seen shield is a Paladin and Berserker one
     for name in shards.SHARD_NAMES:
-        assert read(folder / name)["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}, name
+        assert read(folder / name)["setups"] == {"tank": ["1h-shield", "2h", "dw"]}, name
     strict = expand(read(folder / "strict-own.json"))
-    assert any("w9014" in strict[("TRL", "balanced", tier, "1h-shield")]["kit"] for tier in (0, 4))  # a strict kit wears the seen shield
+    assert any("w9014" in strict[("TRL", "tank", tier, "1h-shield")]["kit"] for tier in (0, 4))  # a strict kit wears the seen shield
 
 
 def test_the_seals_and_the_flip_check_use_the_setups_of_the_default_evidence_level(tmp_path, monkeypatch):
@@ -1359,15 +1395,15 @@ def test_the_seals_and_the_flip_check_use_the_setups_of_the_default_evidence_lev
     _, folder = with_seen(tmp_path, {"w9001", "w9006", "w9011"}, robustness=None, tiers=(4,))
     assert calls == [("strict", ["2h", "dw"])]  # the default level has no shield: the shield setup is not solved for it
     robust = read(folder / "robust.json")
-    assert robust["roles"]["balanced"]["4"]  # and the seals were made, for a kit of the 2h or the dw setup
+    assert robust["roles"]["tank"]["4"]  # and the seals were made, for a kit of the 2h or the dw setup
 
 
 def test_the_invariants_compare_strict_with_wiki_only_where_both_levels_have_the_scenario():
     # the shield rows of the wiki level have no strict twin, and are not reported as missing
-    low = {("strict", "own", "balanced", "dw", 4, "OGR"): 90.0}
-    high = {**low, ("wiki", "own", "balanced", "dw", 4, "OGR"): 100.0, ("wiki", "own", "balanced", "1h-shield", 4, "OGR"): 50.0}
+    low = {("strict", "own", "tank", "dw", 4, "OGR"): 90.0}
+    high = {**low, ("wiki", "own", "tank", "dw", 4, "OGR"): 100.0, ("wiki", "own", "tank", "1h-shield", 4, "OGR"): 50.0}
     assert shards.check_invariants(high, {}) == []
-    assert any("strict above wiki" in v for v in shards.check_invariants({**high, ("strict", "own", "balanced", "dw", 4, "OGR"): 101.0}, {}))
+    assert any("strict above wiki" in v for v in shards.check_invariants({**high, ("strict", "own", "tank", "dw", 4, "OGR"): 101.0}, {}))
 
 
 def test_the_build_options_of_a_shard_are_the_two_that_decide_an_answer():
@@ -1409,6 +1445,18 @@ def test_a_canonical_run_whose_solver_never_ran_the_tie_stage_is_refused(tmp_pat
         pc.run(SLUG, tmp_path / "out", catalog=write_catalog(tmp_path / "catalog.json"), processes=1, **TINY)
 
 
+def test_a_canonical_run_whose_last_stage_did_not_finish_is_refused(tmp_path, monkeypatch):
+    """R2: the tie stage runs a last stage that settles kits of the same value and rank; a kit that stage left unsettled (a tie of more kits than it separates) is not canonical, and a canonical run refuses it."""
+    real = solve_module.solve_canonical
+
+    def unsettled(milp, time_limit=None):
+        return dataclasses.replace(real(milp, time_limit), canonical=False, tie_stage="applied")
+
+    monkeypatch.setattr(solve_module, "solve_canonical", unsettled)
+    with pytest.raises(pc.PrecomputeError, match="did not settle"):
+        pc.run(SLUG, tmp_path / "out", catalog=write_catalog(tmp_path / "catalog.json"), processes=1, **TINY)
+
+
 def test_no_solve_of_a_run_has_a_time_limit_or_other_options(tmp_path, monkeypatch):
     calls = []
     for name in ("solve", "solve_canonical"):
@@ -1433,9 +1481,9 @@ def test_an_item_a_race_cannot_wear_is_neither_in_its_kit_nor_a_swap_for_it(tmp_
     pc.run(SLUG, out, catalog=catalog, processes=1, **TINY)
     rows = expand(read(out / SLUG / "wiki-own.json"))
     legs = SLOT_INSTANCES.index("LEGS")
-    assert rows[("TRL", "balanced", 4, "dw")]["kit"][legs] == "w9027"
-    assert "w9027" not in rows[("OGR", "balanced", 4, "dw")]["kit"]
-    doc = runnerup_docs(out / SLUG)[("balanced", 4)]
+    assert rows[("TRL", "tank", 4, "dw")]["kit"][legs] == "w9027"
+    assert "w9027" not in rows[("OGR", "tank", 4, "dw")]["kit"]
+    doc = runnerup_docs(out / SLUG)[("tank", 4)]
     assert doc["views"]  # there are runner-ups to look at
     for race, setup, slots in doc["views"]:
         keys = [doc["items"][item][0] for place in slots for item, _ in place]
@@ -1495,13 +1543,13 @@ def test_the_real_shards_of_a_finished_run_are_within_the_budget():
 # ---- the cross-scenario invariants -------------------------------------------------------------------------------------
 
 
-def key6(evidence="wiki", buffs="own", role="balanced", setup="dw", tier=4, race="OGR"):
+def key6(evidence="wiki", buffs="own", role="tank", setup="dw", tier=4, race="OGR"):
     return (evidence, buffs, role, setup, tier, race)
 
 
 def test_invariants_pass_for_a_consistent_set_of_values_and_name_every_kind_of_violation():
     good = {key6(tier=0): 100.0, key6(tier=1): 110.0, key6(evidence="strict", tier=0): 90.0, key6(buffs="group", tier=0): 105.0}
-    base = {("OGR", "balanced", "own"): 50.0, ("OGR", "balanced", "group"): 55.0}
+    base = {("OGR", "tank", "own"): 50.0, ("OGR", "tank", "group"): 55.0}
     assert shards.check_invariants(good, base) == []
     lower_tier = {**good, key6(tier=1): 99.0}
     assert any("tier" in v for v in shards.check_invariants(lower_tier, base))
@@ -1545,39 +1593,39 @@ def independent_seal(race, role, tier, setup):
 def test_the_robustness_module_makes_robust_json_by_default_and_it_matches_a_run_of_the_module_on_its_own(tmp_path):
     out = tmp_path / "out"
     catalog = write_catalog(tmp_path / "catalog.json")
-    summary = pc.run(SLUG, out, catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("balanced",), tiers=(0, 4, 10))
+    summary = pc.run(SLUG, out, catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("tank",), tiers=(0, 4, 10))
     folder = out / SLUG
     doc, defaults = read(folder / "robust.json"), read(folder / "defaults.json")
     assert defaults["robustness"] == "done" and not any("robustness" in note for note in summary.notes)
     assert (doc["version"], doc["trio"], doc["race"], doc["tiers"]) == (1, SLUG, defaults["race"], [4, 10])  # +0 is not sealed
-    assert set(doc["roles"]) == {"balanced"} and set(doc["roles"]["balanced"]) == {"4", "10"}
+    assert set(doc["roles"]) == {"tank"} and set(doc["roles"]["tank"]) == {"4", "10"}
     known = {"robust", *robust_module_labels()}
     for tier in (4, 10):
-        labels = doc["roles"]["balanced"][str(tier)]
+        labels = doc["roles"]["tank"][str(tier)]
         assert list(labels) == list(shards.PLACES)  # a label for each of the 22 places, in kit order
         assert set(labels.values()) <= known, set(labels.values()) - known
-        wanted = independent_seal(doc["race"], "balanced", tier, best_independent_setup(doc["race"], "balanced", tier))
+        wanted = independent_seal(doc["race"], "tank", tier, best_independent_setup(doc["race"], "tank", tier))
         assert labels == {place: wanted[group_of(place)] for place in shards.PLACES}, tier  # a pair's places share one label
         for pair in ("EAR", "WRIST", "FINGER", "ANY"):
             assert labels[f"{pair}1"] == labels[f"{pair}2"]
-    assert any(label != "robust" for tier in ("4", "10") for label in doc["roles"]["balanced"][tier].values())  # a seal that says something
+    assert any(label != "robust" for tier in ("4", "10") for label in doc["roles"]["tank"][tier].values())  # a seal that says something
 
 
 def robust_module_labels():
     """Every label the module can give, for the trios and the rules of this repository."""
     from trioforge.solver.robust import describe_perturbations
 
-    profile = make_profile("IKS", ("MNK", "CLR", "BER"), 50, "balanced", None, None, TABLES)
+    profile = make_profile("IKS", ("MNK", "CLR", "BER"), 50, "melee", None, None, TABLES)
     return [p.label for p in describe_perturbations(profile, RULES)]
 
 
 def test_every_role_gets_its_seals_at_the_default_race(tmp_path):
     out = tmp_path / "out"
     catalog = write_catalog(tmp_path / "catalog.json")
-    pc.run(SLUG, out, catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("balanced", "melee"), tiers=(4,))
+    pc.run(SLUG, out, catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("tank", "melee"), tiers=(4,))
     doc = read(out / SLUG / "robust.json")
-    assert set(doc["roles"]) == {"balanced", "melee"} and doc["tiers"] == [4]
-    for role in ("balanced", "melee"):
+    assert set(doc["roles"]) == {"tank", "melee"} and doc["tiers"] == [4]
+    for role in ("tank", "melee"):
         wanted = independent_seal(doc["race"], role, 4, best_independent_setup(doc["race"], role, 4))
         assert doc["roles"][role]["4"] == {place: wanted[group_of(place)] for place in shards.PLACES}, role
 
@@ -1593,7 +1641,7 @@ def test_the_seals_are_computed_without_a_time_limit_and_stop_the_run_if_they_de
     monkeypatch.setattr(robust_module, "robustness_report", watched)
     out = tmp_path / "out"
     catalog = write_catalog(tmp_path / "catalog.json")
-    pc.run(SLUG, out, catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("balanced",), tiers=(4,))
+    pc.run(SLUG, out, catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("tank",), tiers=(4,))
     assert calls == [(1, ())]  # the scenario alone: no time limit, no other solver
 
     def other_kit(*args, **kwargs):
@@ -1603,8 +1651,8 @@ def test_the_seals_are_computed_without_a_time_limit_and_stop_the_run_if_they_de
 
     monkeypatch.setattr(robust_module, "robustness_report", other_kit)
     with pytest.raises(pc.PrecomputeError) as caught:
-        pc.run(SLUG, tmp_path / "again", catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("balanced",), tiers=(4,))
-    assert all(part in str(caught.value) for part in ("robustness hook failed", "balanced +4", "HEAD"))
+        pc.run(SLUG, tmp_path / "again", catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("tank",), tiers=(4,))
+    assert all(part in str(caught.value) for part in ("robustness hook failed", "tank +4", "HEAD"))
 
 
 def test_the_labels_of_a_group_are_given_to_each_place_of_it():
@@ -1633,30 +1681,30 @@ def test_a_flip_note_names_the_race_a_rule_alternative_puts_on_top_the_rule_and_
         variant("Weapon damage +10%", "tier.weapon_damage_pct", "B5", TRL=200.0, OGR=210.0),
         variant("Monk curve full until 34", "monk.weight_curve", None, TRL=120.0),
     ]
-    notes = seals.flip_notes(variants, base, "OGR", legal, order)
+    notes = seals.flip_notes(variants, base, "OGR", legal, order, 1)
     assert notes == [
-        "Iksar, if Iksar AC stacks inside the cap (test B17)",
-        "Troll, if the Monk worn-weight bonus counts inside the AC cap (test B9)",  # an illegal Wood Elf never wins
+        "Iksar, if Iksar AC stacks on top of the cap (test B17)",
+        "Troll, if the Monk worn-weight bonus counts on top of the AC cap (test B9)",  # an illegal Wood Elf never wins
         "Troll, if the Monk worn-weight curve is the other one",  # an open rule without a named test
     ]
     assert RACE_NAMES["IKS"] == "Iksar" and RACE_NAMES["TRL"] == "Troll"
     # no flip: a tie is no flip, a float's noise is none, the same winner is none, and no variant gives no note
-    assert seals.flip_notes([], base, "OGR", legal, order) == []
-    assert seals.flip_notes([variant("Iksar placement inside", "race.iksar_ac_placement", "B17", TRL=100.0 + 1e-12)], base, "OGR", legal, order) == []
-    assert seals.flip_notes([variant("Iksar placement inside", "race.iksar_ac_placement", "B17", OGR=500.0)], base, "OGR", legal, order) == []
+    assert seals.flip_notes([], base, "OGR", legal, order, 1) == []
+    assert seals.flip_notes([variant("Iksar placement inside", "race.iksar_ac_placement", "B17", TRL=100.0 + 1e-12)], base, "OGR", legal, order, 1) == []
+    assert seals.flip_notes([variant("Iksar placement inside", "race.iksar_ac_placement", "B17", OGR=500.0)], base, "OGR", legal, order, 1) == []
     # an unknown rule is named by the label of its variant
-    assert seals.flip_notes([variant("Some new variant", "some.rule", "B99", TRL=300.0)], base, "OGR", legal, order) == [
+    assert seals.flip_notes([variant("Some new variant", "some.rule", "B99", TRL=300.0)], base, "OGR", legal, order, 1) == [
         "Troll, if Some new variant (test B99)"
     ]
     # the same note is made once
     twice = [variant("A", "race.iksar_ac_placement", "B17", IKS=120.0), variant("B", "race.iksar_ac_placement", "B17", IKS=130.0)]
-    assert seals.flip_notes(twice, base, "OGR", legal, order) == ["Iksar, if Iksar AC stacks inside the cap (test B17)"]
+    assert seals.flip_notes(twice, base, "OGR", legal, order, 1) == ["Iksar, if Iksar AC stacks on top of the cap (test B17)"]
 
 
 def test_the_flip_notes_of_a_run_come_from_solving_every_race_under_each_open_rule(tmp_path, monkeypatch):
     out = tmp_path / "out"
     catalog = write_catalog(tmp_path / "catalog.json")
-    grid_options = dict(races=("OGR", "TRL"), roles=("balanced",), tiers=(4,))
+    grid_options = dict(races=("OGR", "TRL"), roles=("tank",), tiers=(4,))
     pc.run(SLUG, out, catalog=catalog, processes=1, **grid_options)
     default = read(out / SLUG / "defaults.json")
     other = default["runner_up_race"]
@@ -1672,19 +1720,19 @@ def test_the_flip_notes_of_a_run_come_from_solving_every_race_under_each_open_ru
     monkeypatch.setattr(robust_module, "describe_perturbations", describe)
     pc.run(SLUG, out, catalog=catalog, processes=1, **grid_options)  # every chunk is whole: only the seals and flips are made
     flipped = read(out / SLUG / "defaults.json")
-    note = f"{RACE_NAMES[other]}, if the Monk worn-weight bonus counts inside the AC cap (test B9)"
+    note = f"{RACE_NAMES[other]}, if the Monk worn-weight bonus counts on top of the AC cap (test B9)"
     assert note in flipped["flip_notes"] and note not in default["flip_notes"]
     assert flipped["race"] == default["race"] and flipped["robustness"] == "done"  # the page's best race is still the base one
 
 
 def test_no_flip_notes_when_the_robustness_is_off_or_the_module_is_missing(tmp_path, monkeypatch):
     catalog = write_catalog(tmp_path / "catalog.json")
-    off = pc.run(SLUG, tmp_path / "off", catalog=catalog, processes=1, robustness=False, races=("OGR", "TRL"), roles=("balanced",), tiers=(4,))
+    off = pc.run(SLUG, tmp_path / "off", catalog=catalog, processes=1, robustness=False, races=("OGR", "TRL"), roles=("tank",), tiers=(4,))
     defaults = read(tmp_path / "off" / SLUG / "defaults.json")
     assert defaults["flip_notes"] == [] and defaults["robustness"] == "skipped: disabled"
     assert not (tmp_path / "off" / SLUG / "robust.json").exists() and any("skipped: disabled" in n for n in off.notes)
     monkeypatch.setitem(sys.modules, "trioforge.solver.robust", None)
-    pc.run(SLUG, tmp_path / "gone", catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("balanced",), tiers=(4,))
+    pc.run(SLUG, tmp_path / "gone", catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("tank",), tiers=(4,))
     gone = read(tmp_path / "gone" / SLUG / "defaults.json")
     assert gone["flip_notes"] == [] and gone["robustness"].startswith("skipped:") and "not available" in gone["robustness"]
 
@@ -1694,8 +1742,8 @@ def test_a_custom_hook_still_makes_robust_json_and_the_flip_notes_come_from_the_
         return {place: "robust" for place in shards.PLACES}
 
     out = tmp_path / "out"
-    pc.run(SLUG, out, catalog=write_catalog(tmp_path / "catalog.json"), processes=1, robustness=hook, races=("OGR", "TRL"), roles=("balanced",), tiers=(4,))
-    assert set(read(out / SLUG / "robust.json")["roles"]["balanced"]["4"].values()) == {"robust"}
+    pc.run(SLUG, out, catalog=write_catalog(tmp_path / "catalog.json"), processes=1, robustness=hook, races=("OGR", "TRL"), roles=("tank",), tiers=(4,))
+    assert set(read(out / SLUG / "robust.json")["roles"]["tank"]["4"].values()) == {"robust"}
     assert isinstance(read(out / SLUG / "defaults.json")["flip_notes"], list)
 
 
@@ -1713,15 +1761,15 @@ def test_the_scope_of_a_run_is_tiers_0_4_10_for_the_grid_and_every_tier_for_the_
 
 def test_a_run_that_has_the_scope_it_was_asked_for_is_not_partial_and_a_narrowing_makes_it_partial():
     full, plan = pc.grids(TRIO, TABLES, RULES, tiers=GRID_TIERS)
-    assert plan == full and len(full) == 5280 * 3 // 11 == 1440 and {s.tier for s in full} == set(GRID_TIERS)  # +0, +4 and +10: the grid, whole
+    assert plan == full and len(full) == 3520 * 3 // 11 == 960 and {s.tier for s in full} == set(GRID_TIERS)  # +0, +4 and +10: the grid, whole
     for tiers in ((4,), (0, 4), tuple(range(11))):
         full, plan = pc.grids(TRIO, TABLES, RULES, tiers=tiers)
         assert plan == full and {s.tier for s in plan} == set(tiers)  # whatever scope is asked for is the whole of that run
-    for narrowing in ({"races": ("OGR",)}, {"roles": ("balanced",)}, {"evidence": ("wiki",)}, {"buffs": ("own",)}):
+    for narrowing in ({"races": ("OGR",)}, {"roles": ("tank",)}, {"evidence": ("wiki",)}, {"buffs": ("own",)}):
         full, plan = pc.grids(TRIO, TABLES, RULES, tiers=GRID_TIERS, **narrowing)
         assert len(plan) < len(full) and set(plan) < set(full), narrowing
     full, plan = pc.grids(TRIO, TABLES, RULES)  # no scope given: the milestone trio's, which is every tier
-    assert plan == full and len(full) == 5280
+    assert plan == full and len(full) == 3520
     full, plan = pc.grids(("PAL", "SHD", "BER"), TABLES, RULES)
     assert plan == full and {s.tier for s in full} == set(GRID_TIERS)
     with pytest.raises(ValueError, match="tier"):
@@ -1742,30 +1790,30 @@ def complete(tmp_path_factory):
 def test_a_run_of_tiers_0_4_10_that_narrows_nothing_is_not_partial(complete):
     summary = complete.summary
     assert summary.partial is False and summary.tiers == GRID_TIERS and not summary.violations
-    assert (summary.scenarios, summary.chunks) == (168, 84)  # 2 races; 8 role-setup pairs of the wiki level and 6 of the strict one; 2 buff sets; 3 tiers
+    assert (summary.scenarios, summary.chunks) == (108, 54)  # 2 races; 5 build-setup pairs of the wiki level and 4 of the strict one; 2 buff sets; 3 tiers
     for name in shards.SHARD_NAMES:
         shard = read(complete.dir / name)
         assert shard["partial"] is False and shard["tiers"] == list(GRID_TIERS), name
-        assert shard["roles"] == ["balanced", "tank", "melee"] and [race["code"] for race in shard["races"]] == ["TRL", "OGR"]
+        assert shard["roles"] == ["tank", "melee"] and [race["code"] for race in shard["races"]] == ["TRL", "OGR"]
 
 
 def test_a_run_of_its_scope_writes_one_runner_up_file_for_each_role_with_every_tier_and_an_index_that_lists_them(complete):
     folder = complete.dir / "runnerups"
     index = read(folder / "index.json")
     assert [(f["role"], f["file"], f["tiers"]) for f in index["files"]] == [
-        ("balanced", "balanced.json", [0, 4, 10]), ("tank", "tank.json", [0, 4, 10]), ("melee", "melee.json", [0, 4, 10]),
+        ("tank", "tank.json", [0, 4, 10]), ("melee", "melee.json", [0, 4, 10]),
     ]  # fmt: skip
-    assert sorted(p.name for p in folder.iterdir()) == ["balanced.json", "index.json", "melee.json", "tank.json"]  # 3 files, where there were 9
+    assert sorted(p.name for p in folder.iterdir()) == ["index.json", "melee.json", "tank.json"]  # 2 files, where there were 6
     for entry in index["files"]:
         doc = read(folder / entry["file"])
         assert doc["role"] == entry["role"] and doc["tiers"] == [0, 4, 10]
         assert [view[:2] for view in doc["views"]] == [[tier, race] for tier in GRID_TIERS for race in ("TRL", "OGR")]  # every race at every tier of the scope, once
-    assert complete.summary.sizes["runnerups/balanced.json"][0] == next(f["bytes"] for f in index["files"] if f["role"] == "balanced")
+    assert complete.summary.sizes["runnerups/tank.json"][0] == next(f["bytes"] for f in index["files"] if f["role"] == "tank")
 
 
 def test_a_run_narrowed_to_some_races_is_partial_all_the_same(complete, tmp_path):
     kwargs = dict(catalog=complete.catalog, processes=1, tables_root=complete.world, tiers=GRID_TIERS, robustness=False)
-    again = pc.run(SLUG, tmp_path / "out", races=("OGR",), roles=("balanced",), **kwargs)
+    again = pc.run(SLUG, tmp_path / "out", races=("OGR",), roles=("tank",), **kwargs)
     assert again.partial is True and again.tiers == GRID_TIERS
     for name in shards.SHARD_NAMES:
         shard = read(tmp_path / "out" / SLUG / name)
@@ -1773,13 +1821,13 @@ def test_a_run_narrowed_to_some_races_is_partial_all_the_same(complete, tmp_path
 
 
 def test_a_runner_up_file_over_the_budget_of_a_shard_is_a_violation_of_the_run(fresh, monkeypatch):
-    size = (fresh.dir / "runnerups" / "balanced.json").stat().st_size
+    size = (fresh.dir / "runnerups" / "tank.json").stat().st_size
     monkeypatch.setattr(shards, "SHARD_RAW_LIMIT", size - 1)  # one byte under the runner-up file of the tiny run
     summary = pc.run(SLUG, fresh.out, catalog=fresh.catalog, processes=1, **TINY)
     assert [line for line in summary.violations if line.startswith("runnerups/")] == [
-        f"runnerups/balanced.json is {size:,} bytes raw, over the {size - 1:,}-byte budget"
+        f"runnerups/tank.json is {size:,} bytes raw, over the {size - 1:,}-byte budget"
     ]  # the index is no data file of the page: it is not held to it
-    assert (fresh.dir / "runnerups" / "balanced.json").is_file()  # (the files are still written)
+    assert (fresh.dir / "runnerups" / "tank.json").is_file()  # (the files are still written)
 
 
 def writer_layout(tiers):
@@ -1787,7 +1835,7 @@ def writer_layout(tiers):
     row = lambda key, name: [key, name, ["HEAD"], "drop", 4, "a test zone", "wiki", None]  # noqa: E731
     return shards.Layout(
         trio=SLUG, classes=TRIO, level=50, data_release="data-2030-01-02", game_patch="2026-10-13", rules_version=RULES.version, solver={}, build_options={},
-        assumptions={}, races=[("TRL", True), ("OGR", True)], roles=["balanced"], setups={"balanced": ["dw"]}, tiers=list(tiers), caps={}, pools={},
+        assumptions={}, races=[("TRL", True), ("OGR", True)], roles=["tank"], setups={"tank": ["dw"]}, tiers=list(tiers), caps={}, pools={},
         default_evidence="wiki", expected={}, item_rows={"w90002": row("w90002", "Test Beta"), "w90001": row("w90001", "Test Alpha")},
     )  # fmt: skip
 
@@ -1803,38 +1851,38 @@ def writer_chunk(*keys):
 
 def test_the_writer_puts_every_tier_of_a_role_in_one_file_with_one_table_of_items():
     layout = writer_layout((0, 4, 10))
-    chunks = {("balanced", 4): writer_chunk("w90002"), ("balanced", 10): writer_chunk("w90001", "w90002"), ("balanced", 0): writer_chunk("w90001")}  # (in no order)
+    chunks = {("tank", 4): writer_chunk("w90002"), ("tank", 10): writer_chunk("w90001", "w90002"), ("tank", 0): writer_chunk("w90001")}  # (in no order)
     texts = shards.runnerup_texts(layout, chunks)
-    assert sorted(texts) == ["runnerups/balanced.json", "runnerups/index.json"]
-    doc = json.loads(texts["runnerups/balanced.json"])
-    assert doc["role"] == "balanced" and doc["tiers"] == [0, 4, 10]
+    assert sorted(texts) == ["runnerups/index.json", "runnerups/tank.json"]
+    doc = json.loads(texts["runnerups/tank.json"])
+    assert doc["role"] == "tank" and doc["tiers"] == [0, 4, 10]
     assert [view[:3] for view in doc["views"]] == [[tier, race, "dw"] for tier in (0, 4, 10) for race in ("TRL", "OGR")]  # by tier, the races in display order
     assert [row[0] for row in doc["items"]] == ["w90001", "w90002"]  # one table, sorted by key, holding each item once
     swaps = {(view[0], view[1]): [item for item, _ in view[3][0]] for view in doc["views"]}
     assert swaps[(0, "OGR")] == [0] and swaps[(4, "TRL")] == [1] and swaps[(10, "OGR")] == [0, 1]  # a tier's swaps point into the table of the file
     entry = json.loads(texts["runnerups/index.json"])["files"][0]
-    data = texts["runnerups/balanced.json"].encode("utf-8")
-    assert entry == {"file": "balanced.json", "role": "balanced", "tiers": [0, 4, 10], "bytes": len(data), "gzip": shards.gzip_size(data), "sha256": hashlib.sha256(data).hexdigest()}
+    data = texts["runnerups/tank.json"].encode("utf-8")
+    assert entry == {"file": "tank.json", "role": "tank", "tiers": [0, 4, 10], "bytes": len(data), "gzip": shards.gzip_size(data), "sha256": hashlib.sha256(data).hexdigest()}
     assert shards.runnerup_texts(layout, {}) == {}  # no documents, no texts: not even an index
 
 
 def test_the_writer_stamps_every_runner_up_file_and_the_index_with_the_format_number_the_reader_asks_for():
     from trioforge.site import data as reader
 
-    texts = shards.runnerup_texts(writer_layout((0, 4, 10)), {("balanced", tier): writer_chunk("w90001") for tier in (0, 4, 10)})
-    assert sorted(texts) == ["runnerups/balanced.json", "runnerups/index.json"]
+    texts = shards.runnerup_texts(writer_layout((0, 4, 10)), {("tank", tier): writer_chunk("w90001") for tier in (0, 4, 10)})
+    assert sorted(texts) == ["runnerups/index.json", "runnerups/tank.json"]
     for name, text in texts.items():
         assert json.loads(text)["version"] == shards.FORMAT == reader.FORMAT_VERSION == 1, name
 
 
 def test_the_writer_refuses_a_role_that_lacks_a_tier_of_the_scope_or_has_one_beyond_it():
     layout = writer_layout((0, 4, 10))
-    with pytest.raises(ValueError, match=r"balanced role are for the tiers \[0, 4\], and the scope of the run is \[0, 4, 10\]"):
-        shards.runnerup_texts(layout, {("balanced", 0): writer_chunk("w90001"), ("balanced", 4): writer_chunk("w90001")})
+    with pytest.raises(ValueError, match=r"tank role are for the tiers \[0, 4\], and the scope of the run is \[0, 4, 10\]"):
+        shards.runnerup_texts(layout, {("tank", 0): writer_chunk("w90001"), ("tank", 4): writer_chunk("w90001")})
     with pytest.raises(ValueError, match=r"for the tiers \[0, 4, 7, 10\]"):
-        shards.runnerup_texts(layout, {("balanced", tier): writer_chunk("w90001") for tier in (0, 4, 7, 10)})
+        shards.runnerup_texts(layout, {("tank", tier): writer_chunk("w90001") for tier in (0, 4, 7, 10)})
     with pytest.raises(ValueError, match="holds every tier of the run, and no other"):
-        shards.runnerup_texts(layout, {("balanced", 4): writer_chunk("w90001")})
+        shards.runnerup_texts(layout, {("tank", 4): writer_chunk("w90001")})
 
 
 def test_a_run_whose_tiers_leave_out_the_tier_of_the_default_view_is_refused_before_it_writes_anything(fresh):
@@ -1846,7 +1894,7 @@ def test_a_run_whose_tiers_leave_out_the_tier_of_the_default_view_is_refused_bef
     assert "defaults.json" in before
     for tiers in ((0, 10), (10,), (0,), (0, 1, 2, 3, 5, 6, 7, 8, 9, 10)):
         with pytest.raises(pc.PrecomputeError) as caught:
-            pc.run(SLUG, fresh.out, catalog=fresh.catalog, processes=1, races=("OGR", "TRL"), roles=("balanced",), tiers=tiers, robustness=False)
+            pc.run(SLUG, fresh.out, catalog=fresh.catalog, processes=1, races=("OGR", "TRL"), roles=("tank",), tiers=tiers, robustness=False)
         message = str(caught.value)
         assert "leave out +4, the tier of the default view" in message and "\n" not in message, message
     assert result_files(fresh.dir) == before  # the files of the earlier run, defaults.json among them, are as they were
@@ -1856,7 +1904,7 @@ def test_a_run_whose_tiers_leave_out_the_tier_of_the_default_view_is_refused_bef
 def test_a_run_that_asks_for_a_tier_that_does_not_exist_is_still_told_so_first(tmp_path):
     catalog = write_catalog(tmp_path / "catalog.json")
     with pytest.raises(pc.PrecomputeError, match="tier"):
-        pc.run(SLUG, tmp_path / "out", catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("balanced",), tiers=(0, 11), robustness=False)
+        pc.run(SLUG, tmp_path / "out", catalog=catalog, processes=1, races=("OGR", "TRL"), roles=("tank",), tiers=(0, 11), robustness=False)
     assert not (tmp_path / "out").exists()
 
 
@@ -1889,7 +1937,7 @@ def test_the_command_line_narrows_the_grid_and_can_skip_the_robustness(tmp_path,
     from trioforge.precompute.__main__ import main
 
     catalog = write_catalog(tmp_path / "catalog.json")
-    narrow = ["--races", "OGR,TRL", "--roles", "balanced", "--tiers", "0,4", "--evidence", "strict,wiki", "--buffs", "own", "--processes", "1"]
+    narrow = ["--races", "OGR,TRL", "--roles", "tank", "--tiers", "0,4", "--evidence", "strict,wiki", "--buffs", "own", "--processes", "1"]
     out = tmp_path / "out"
     assert main(["--trio", SLUG, "--out", str(out), "--catalog", str(catalog), *narrow]) == 0
     printed = capsys.readouterr().out

@@ -32,18 +32,29 @@ One JSON object per trio and level, with everything the engine needs to rebuild 
 ``buffs``             for each of ``own``, ``group``, ``group+enchanter`` and ``raid``: the ``buff_totals`` and the
                       ``spell_haste`` of the profile, and the resolved buff set (``set``: the ids of the
                       ``always_on`` and the ``optional`` buffs, the ``conflicts`` as ``[a, b, reasons]``, the
-                      ``cliques``, the ``cardinality`` and the ``dropped`` buffs as ``[id, name, reason, by]``)
+                      ``cliques``, the ``cardinality`` and the ``dropped`` buffs as ``[id, name, reason, by]``); and,
+                      beside each, its twin under ``own+haste``, ``group+haste``, ``group+enchanter+haste`` and
+                      ``raid+haste``: the same buffs with the haste of the spells in them, which is the set (and the
+                      profile) a kit is chosen with when the rule ``haste.assume_spell`` is true. While the rule is
+                      false the first four have no spell haste (``spell_haste`` is the 10 of a Monk's Unbound Alacrity,
+                      or 0) and the twins are what the reader's "I have a haste spell" solves with in the browser
 ``buff_table``        by spell id, each buff the sets use: ``name``, ``classes`` (class to level), the ``vec`` of
                       non-zero components as whole numbers (the names of ``constants.buff_components``; a fraction is
                       refused, so that the browser's exact sums and Python's float sums cannot differ), the ``source``
                       (``own`` or ``preset``) and ``illusion`` when it is a form
+``buff_table_haste``  the same table for the twins (every buff of those sets, with its haste in ``vec``): a buff that
+                      carries haste has two readings of one spell id, so the twins read this table and the sets of the
+                      rule read the one above. Equal to ``buff_table`` when the rule keeps the haste
+``procs``             the table of weapon procs of the trio (:func:`trioforge.model.procs.to_doc`: the socket tier, the effects with their value as ``"p/q"`` and the donors), which the weapon term of the
+                      evaluator, the model and the pruning read, or null when no proc is worth anything to the trio
 ``constants``         every constant the builder and the evaluator read (see below)
 ``monk_bins``         the Monk bonus for each whole stone of worn weight (``null`` without a Monk in the trio)
 ``tier_rules``        what ``at_tier`` reads: the stat rule, the haste and regen growth, the weight rule (a percent of the
                       base a tier, ``weight_pct``) and its floor, the arrival rules
 ``weapon_rules``      the labelled weapon damage switch (the default rate and both choices), the damage weight, the
                       dual-wield factor (a value for a trio with a Monk and one for a trio without; the
-                      profile holds the trio's own) and the hand bonuses
+                      profile holds the trio's own), the bow factor (``ranged_factor``, the profile holds it too), the
+                      skill of a bow and the hand bonuses
 ``weight_groups``     the slider groups of :data:`trioforge.model.roles.WEIGHT_GROUPS` with the three positions,
                       the settable weights, the derived ones (what each follows) and the bounds of
                       :func:`trioforge.model.roles.weights_override`
@@ -63,7 +74,8 @@ the trio's classes at the level, the regen and resist caps, the haste caps, the 
 class. A test fails if a constant is added to the formulas module and not exported.
 
 **Weapon setups.** The setups a role plays depend on the item pool it is solved with: the shield setup (``1h-shield``)
-exists only if the pool has a shield that a class of the trio can wear (:func:`trioforge.model.weapons.setups_for`).
+exists only if the pool has a shield that a class of the trio can wear, and the bow setup (``ranged``) only if it has a bow that a
+class of the trio may equip (:func:`trioforge.model.weapons.setups_for`).
 The pool depends on the evidence level (``strict`` is the strict items, ``wiki`` the strict and the wiki items, no
 deity-locked item in either: :func:`trioforge.precompute.grid.pool_dicts`), so a strict pool with no shield has no
 ``1h-shield`` where the wiki pool has it, and the precompute solves each level with its own setups.
@@ -72,7 +84,7 @@ deity-locked item in either: :func:`trioforge.precompute.grid.pool_dicts`), so a
 ``make_profile`` makes for that level when it is given the solve pool of the level, as
 :meth:`trioforge.precompute.grid.Context.profile` does. :func:`bundle` reads the pools from the catalog it is given
 (the command passes the one it reads). ``roles[role]["setups"]`` is what a profile has when there is no pool to read
-(``make_profile`` without ``items``): a shield is assumed. A shield that only some races may wear could make the setups
+(``make_profile`` without ``items``): a shield is assumed and there is no bow. A shield that only some races may wear could make the setups
 depend on the race; a bundle holds one list for each role and level, so :func:`bundle` refuses such a pool instead of
 writing a list that is wrong for some race.
 
@@ -148,18 +160,11 @@ from trioforge.data.jsonio import load_strict, render
 from trioforge.model import formulas as fm
 from trioforge.model import items as item_model
 from trioforge.model import roles, weapons
-from trioforge.model.buffs import (
-    COMPONENTS,
-    BuffSet,
-    enchanter_preset,
-    group_preset,
-    own_buffs,
-    raid_preset,
-    resolve,
-)
+from trioforge.model import procs as procs_module
+from trioforge.model.buffs import BUFF_SETS, COMPONENTS, BuffSet, buffsets
 from trioforge.model.formulas import fr
 from trioforge.model.items import SLOT_GROUPS, at_tier
-from trioforge.model.profile import EVIDENCE_LEVELS, Profile, make_profile
+from trioforge.model.profile import EVIDENCE_LEVELS, Profile, haste_caps, make_profile
 from trioforge.model.tables import REPO
 from trioforge.model.tables import load as load_tables
 from trioforge.precompute import grid
@@ -171,6 +176,8 @@ __all__ = [
     "EXACT_BLOCKS",
     "FORMAT",
     "FORMULA_CONSTANTS",
+    "HASTE_BUFF_SETS",
+    "HASTE_SUFFIX",
     "ITEM_DEFAULTS",
     "INPUTS_FIELD",
     "ITEM_TABLE_FIELDS",
@@ -197,16 +204,19 @@ FORMAT = 1
 #: the fields of a bundle, in order (a reader that checks a bundle asks for these and no others)
 BUNDLE_FIELDS = (
     "version", "data_release", "rules_version", "trio", "level", "profile_common", "evidence_levels", "races", "roles", "buffs",
-    "buff_table", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios",
+    "buff_table", "buff_table_haste", "procs", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios",
 )  # fmt: skip
+#: the end of the key of a buff set that keeps the haste of the spells (``own+haste``): what the page's "I have a haste spell" solves and shows a kit with
+HASTE_SUFFIX = "+haste"
+#: the keys of the buff sets that keep the haste of the spells, one beside each of :data:`BUFF_SETS`, in the same order
+HASTE_BUFF_SETS = tuple(f"{key}{HASTE_SUFFIX}" for key in BUFF_SETS)
 #: the blocks of a bundle in which every number is a reduced ``"p/q"`` string (no bare number; see "Rationals" above)
 EXACT_BLOCKS = ("constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios")
 #: the fields of the item table, in order
 ITEM_TABLE_FIELDS = ("version", "data_release", "rules_version", "count", "defaults", "items")
 #: the optional field of a bundle and of the item table that holds the fingerprint of the inputs of the run that made them
 INPUTS_FIELD = "inputs"
-#: the buff sets of a bundle: the trio's own buffs; plus the 13 group buffs; plus the Enchanter's haste; the full raid
-BUFF_SETS = ("own", "group", "group+enchanter", "raid")
+#: (the buff sets of a bundle are ``trioforge.model.buffs.BUFF_SETS``: the trio's own buffs; plus the 13 group buffs; plus the Enchanter's haste; the full raid)
 
 #: the module constants of :mod:`trioforge.model.formulas` and where ``constants`` of a bundle holds each (dotted)
 FORMULA_CONSTANTS = {
@@ -257,7 +267,7 @@ ITEM_DEFAULTS: dict[str, Any] = {
 
 _PROFILE_FIELDS = ("format", *(field.name for field in dataclasses.fields(Profile)))
 _RACE_FIELDS = ("race", "naked", "iksar_ac")
-_ROLE_FIELDS = ("role", "weights", "setups")
+_ROLE_FIELDS = ("role", "weights", "setups", "stance")
 _BUFF_FIELDS = ("buff_totals", "spell_haste")
 _RATIONAL = re.compile(r"(-?[0-9]+)/([1-9][0-9]*)")
 _MONK_STONES_PAST_HARDCAP = 100  # the penalty has stopped growing 90 stones past the hardcap
@@ -397,15 +407,18 @@ def _constants(codes: tuple[str, ...], level: int, tables: Any, rules: Any) -> d
         },
         "standard_caps": fm.STANDARD_CAPS,
         "weapon_index": {
+            "bonus_from_level": weapons.BONUS_FROM_LEVEL,
             "bonus_one_handed": weapons.BONUS_ONE_HANDED,
             "bonus_two_handed": weapons.BONUS_TWO_HANDED,
-            "bonus_two_handed_delay_cap": weapons.BONUS_TWO_HANDED_DELAY_CAP,
+            "bonus_delay_cap": weapons.BONUS_DELAY_CAP,
+            "bonus_delay_div": weapons.BONUS_DELAY_DIV,
+            "bonus_level_div": weapons.BONUS_LEVEL_DIV,
         },
         "regen_caps": rules.get("regen.gear_caps", level),
         "resist_cap": rules.get("resist.cap", level),
         "haste": {
-            "cap": rules.get("haste.cap_pct", level),
-            "cap_with_monk": rules.get("haste.cap_pct_with_monk", level),
+            "cap": haste_caps(rules, level)[0],  # (the rule haste.cap_pct has a level dimension: the cap at the level of the bundle)
+            "cap_with_monk": haste_caps(rules, level)[1],  # (and what Unbound Alacrity adds, haste.cap_pct_with_monk: the numbers a profile's haste cap is made of, by the same function)
             "worn_per_tier": rules.get("haste.worn_per_tier", level),
         },
         "aa": {
@@ -461,6 +474,7 @@ def _tier_rules(level: int, rules: Any) -> dict[str, Any]:
             "stat_rule": rules.get("tier.stat_rule"),
             "stat_divisor": 10,  # the 10 of the rule text: base + max(n, floor(base * n / 10))
             "negatives_scale": rules.get("tier.negatives_scale"),
+            "unscaled_stats": rules.get("tier.unscaled_stats"),
             "weight_floor10": int(floor),
             "weight_pct": rules.get("tier.weight_pct"),
             "weight_rule": item_model.WEIGHT_RULE_TEXT,
@@ -489,6 +503,8 @@ def _weapon_rules(level: int, rules: Any) -> dict[str, Any]:
             "test": rules.settled_by("tier.weapon_damage_pct"),
             "damage_weight": rules.get("weapons.damage_weight", level),
             "dual_wield_factor": rules.get("weapons.dual_wield_factor", level),  # {with_monk, without_monk}: the same in every bundle
+            "ranged_factor": rules.get("weapons.ranged_factor", level),  # the multiplier of a bow's own damage per delay in the bow setup; the profile holds it too
+            "bow_skill": weapons.BOW_SKILL,  # the skill that makes a weapon a bow, read without regard to case
             "bonus_one_handed": weapons.BONUS_ONE_HANDED,
             "bonus_two_handed": weapons.BONUS_TWO_HANDED,
             "setups": list(weapons.SETUPS),
@@ -578,7 +594,13 @@ def _setups_by_evidence(role: str, races: Sequence[str], made: Callable[..., Pro
     for label in EVIDENCE_LEVELS:
         groups: dict[tuple[str, ...], list[str]] = {}
         for race in races:
-            groups.setdefault(tuple(made(race, role, "own", label).setups), []).append(race)
+            try:
+                setups = tuple(made(race, role, "own", label).setups)
+            except ValueError:  # the role is not offered for the pool of this level (the Ranged role, for a pool with no bow): it has no setups there
+                if role != "ranged":
+                    raise
+                setups = ()
+            groups.setdefault(setups, []).append(race)
         if len(groups) > 1:
             detail = "; ".join(f"{' '.join(setups)} for {' '.join(group)}" for setups, group in groups.items())
             raise ValueError(
@@ -592,9 +614,10 @@ def _setups_by_evidence(role: str, races: Sequence[str], made: Callable[..., Pro
 
 def bundle(
     trio: Sequence[str], level: int, tables: Any, rules: Any, spells: Any, *, data_release: str | None = None,
-    catalog: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None = None, seen: Iterable[str] | None = None,
+    catalog: Mapping[str, Any] | Sequence[Mapping[str, Any]] | None = None, seen: Iterable[str] | None = None, procs: Any = None,
 ) -> dict[str, Any]:
-    """The bundle of ``trio`` at ``level`` (see the module docstring).
+    """The bundle of ``trio`` at ``level`` (see the module docstring). ``procs`` is the :class:`~trioforge.model.procs.ProcTable` of the trio, or None: the table the run is solved with, which the
+    bundle holds (``procs``) so that the browser values a kit and solves a view with the same weapon procs; a table of another trio is refused.
 
     ``tables`` and ``rules`` are those of :mod:`trioforge.model.tables` (``rules`` None: the tables' own), ``spells``
     the beneficial-spell file of ``level``. ``data_release`` is the release tag the browser compares with the shards;
@@ -608,18 +631,15 @@ def bundle(
     and for a pool that makes the weapon setups of a role depend on the race.
     """
     codes = grid.parse_trio(trio)
+    if procs is not None and tuple(procs.trio) != tuple(codes):
+        raise ValueError(f"procs: the table is for {'-'.join(procs.trio)}, not for {'-'.join(codes)}")
     rules = tables.rules if rules is None else rules
-    own = own_buffs(codes, level, spells, rules)
-    group = group_preset(spells, level=level)
-    sets = {
-        "own": resolve(own, rules),
-        "group": resolve([*own, *group], rules),
-        "group+enchanter": resolve([*own, *group, *enchanter_preset(spells, level, rules=rules)], rules),
-        "raid": resolve([*own, *raid_preset(spells, level, rules=rules)], rules),
-    }
+    sets = buffsets(codes, level, spells, rules, BUFF_SETS)  # (no spell haste in them while the rule haste.assume_spell is false)
+    sets.update({f"{key}{HASTE_SUFFIX}": made for key, made in buffsets(codes, level, spells, rules, BUFF_SETS, spell_haste=True).items()})  # (their twins keep it)
     pools = _solve_pools(catalog, codes, rules, _seen_keys(seen))
     races = grid.race_order(codes, tables)
-    offered = roles.roles_for(codes)
+    # (the Ranged role plays the bow and nothing else: it is offered when the widest pool, the wiki one, has a bow that a class of the trio can shoot; with no pool to read it is not)
+    offered = roles.roles_for(codes, bow=pools is not None and weapons.bow_available(codes, pools["wiki"], tables=tables, level=level))
     names = {entry["code"]: entry["name"] for entry in tables.races["races"]}
 
     def made(race: str, role: str, key: str, label: str | None = None) -> Profile:
@@ -643,21 +663,24 @@ def bundle(
         )
     role_rows = {}
     for role in offered:
-        part = profile(races[0][0], role, "own")
+        # (a role that only a pool offers has no profile with no pool: its weights and its setups are those of the widest pool's, and `assemble` makes it at a level alone)
+        part = profile(races[0][0], role, "own", EVIDENCE_LEVELS[-1] if role in roles.POOL_ROLES else None)
         role_rows[role] = {
             "weights": part["weights"],
             "setups": part["setups"],
+            "stance": part["stance"],
             "setups_by_evidence": _setups_by_evidence(role, [code for code, _ in races], made),
         }
     buff_rows: dict[str, Any] = {}
     table: dict[int, Any] = {}
-    for key in BUFF_SETS:
+    table_haste: dict[int, Any] = {}
+    for key in (*BUFF_SETS, *HASTE_BUFF_SETS):
         part = profile(races[0][0], offered[0], key)
         buff_rows[key] = {
             "buff_totals": part["buff_totals"], "spell_haste": part["spell_haste"], "set": _buffset(sets[key]),
         }  # fmt: skip
         for buff in (*sets[key].always_on, *sets[key].optional):
-            table.setdefault(buff.id, _buff_entry(buff))
+            (table_haste if key.endswith(HASTE_SUFFIX) else table).setdefault(buff.id, _buff_entry(buff))
 
     if data_release is None and isinstance(spells, Mapping):
         generated = (spells.get("provenance") or {}).get("generated")
@@ -674,6 +697,8 @@ def bundle(
         "roles": role_rows,
         "buffs": buff_rows,
         "buff_table": {str(buff_id): table[buff_id] for buff_id in sorted(table)},
+        "buff_table_haste": {str(buff_id): table_haste[buff_id] for buff_id in sorted(table_haste)},
+        "procs": None if procs is None else procs_module.to_doc(procs),
         "constants": _constants(codes, level, tables, rules),
         "monk_bins": monk_bins(level, rules) if "MNK" in codes else None,
         "tier_rules": _tier_rules(level, rules),
@@ -690,10 +715,12 @@ def _check_corners(data: Mapping[str, Any], profile: Any, races: list[str], offe
     evidence level to the profile with no pool, and at each evidence level to the profile of the pool of that level."""
     for race in {races[0], races[-1]}:
         for role in {offered[0], offered[-1]}:
-            for key in {BUFF_SETS[0], BUFF_SETS[-1]}:
-                if assemble(data, race, role, key) != profile(race, role, key):
+            for key in {BUFF_SETS[0], BUFF_SETS[-1], HASTE_BUFF_SETS[0], HASTE_BUFF_SETS[-1]}:
+                if role not in roles.POOL_ROLES and assemble(data, race, role, key) != profile(race, role, key):  # (a role that only a pool offers has no profile with no pool)
                     raise RuntimeError(f"the bundle does not reassemble to the profile of {race} {role} {key}")
                 for label in data["evidence_levels"]:
+                    if not data["roles"][role]["setups_by_evidence"][label]:
+                        continue  # (a role with no setup at a level is not offered there: neither side can make its profile)
                     if assemble(data, race, role, key, evidence=label) != profile(race, role, key, label):
                         raise RuntimeError(
                             f"the bundle does not reassemble to the {label} profile of {race} {role} {key}"
@@ -709,7 +736,9 @@ def assemble(
     field order of the profile. ``evidence`` (one of ``data["evidence_levels"]``) and ``deity`` replace the defaults of
     those two inputs. An ``evidence`` level also picks the weapon setups of its solve pool
     (``roles[role]["setups_by_evidence"][evidence]``), so the profile is the one the precompute makes for that level;
-    without one the setups are ``roles[role]["setups"]``, those of a profile with no pool to read (a shield is assumed).
+    without one the setups are ``roles[role]["setups"]``, those of a profile with no pool to read (a shield is assumed, a bow is
+    not). A role that only a pool offers (:data:`trioforge.model.roles.POOL_ROLES`, the Ranged role) has no profile with no pool, and
+    its ``setups`` are those of the widest pool: asking for it with no level is a ``ValueError``.
     The result is a copy, so changing it cannot change the bundle. ``ValueError`` for a race, role or buff key the
     bundle does not have, an evidence label it does not know, or a blank deity.
     """
@@ -720,6 +749,8 @@ def assemble(
         raise ValueError(f"role {role!r} is not offered to this trio (its roles are {', '.join(data['roles'])})")
     if buffs not in data["buffs"]:
         raise ValueError(f"buffs {buffs!r} is not a buff set of the bundle (use {', '.join(data['buffs'])})")
+    if evidence is None and role in roles.POOL_ROLES:
+        raise ValueError(f"role {role!r} is offered by a pool alone (a bow is never assumed): name an evidence level")
     parts = {
         **data["profile_common"],
         "race": race,
@@ -728,6 +759,7 @@ def assemble(
         "role": role,
         "weights": data["roles"][role]["weights"],
         "setups": data["roles"][role]["setups"],
+        "stance": data["roles"][role]["stance"],
         "buff_totals": data["buffs"][buffs]["buff_totals"],
         "spell_haste": data["buffs"][buffs]["spell_haste"],
     }
@@ -736,6 +768,8 @@ def assemble(
             raise ValueError(f"evidence {evidence!r} is not one of {', '.join(data['evidence_levels'])}")
         parts["evidence"] = evidence
         parts["setups"] = data["roles"][role]["setups_by_evidence"][evidence]
+        if not parts["setups"]:
+            raise ValueError(f"role {role!r} is not offered for the solve pool of the {evidence} evidence level (it has no weapon setup there)")
     if deity is not None:
         if not isinstance(deity, str) or not deity.strip():
             raise ValueError(f"deity is None or a name, not {deity!r}")
@@ -1010,7 +1044,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", required=True, type=Path, help="the folder to write into (bundles/ and items.json)")
     parser.add_argument("--trio", action="append", help="a trio such as pal-mnk-ber; repeat it (default pal-mnk-ber)")
     parser.add_argument("--level", type=int, help="the character level (default: the current level of the rules)")
-    parser.add_argument("--catalog", type=Path, help="the catalog file (default: derived/catalog.json)")
+    parser.add_argument(
+        "--catalog", type=Path,
+        help="the catalog file (default: $TRIOFORGE_CATALOG, else derived/catalog.json of --root, else the one of the main checkout of its git)",
+    )
     parser.add_argument("--root", type=Path, default=REPO, help="the repository with derived/ and rules/")
     return parser
 
@@ -1028,16 +1065,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         rules = tables.rules
         level = rules.get("level.current") if args.level is None else args.level
         trios = [grid.parse_trio(text) for text in (args.trio or ["pal-mnk-ber"])]
-        catalog_path = args.catalog if args.catalog is not None else grid.find_catalog()
+        catalog_path = args.catalog if args.catalog is not None else grid.find_catalog(args.root)
         if catalog_path is None:
             raise ValueError("no catalog found; build one or pass --catalog")
         document = load_strict(catalog_path)
         spells = load_strict(args.root / "derived" / "client" / f"spells-l{level}.json")
         version = document.get("version") if isinstance(document, dict) else None
         release = f"data-{version}" if isinstance(version, str) else None
+        effect_spells = args.root / "derived" / "client" / "effect-spells.json"
         bundles = {
             f"{grid.trio_slug(codes)}-l{level}.json": render_bundle(
-                bundle(codes, level, tables, rules, spells, data_release=release, catalog=document)
+                bundle(
+                    codes, level, tables, rules, spells, data_release=release, catalog=document,
+                    procs=grid.proc_table(document["items"], codes, rules, effect_spells) if effect_spells.is_file() else None,
+                )
             )
             for codes in trios
         }

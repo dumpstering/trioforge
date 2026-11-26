@@ -5,7 +5,7 @@ pool) whether or not the kit wore that item or took that buff, so a haste belt w
 weapons got for free, and the shown value was above the kit's. Now the assumed haste is a decision: one program for each haste a kit
 can count, each with a row that the kit counts at least that much, the best truthful value over them, every solution valued at the
 haste it counts. These tests hold that, with hand-built pools, a brute force over every kit of random instances, and the real
-catalog's war-clr-mnk balanced +4 Ogre dual-wield scenario of the probe of 2026-10-22 (a belt that the old rule rejected).
+catalog's war-clr-mnk +4 Ogre dual-wield scenario (the Melee damage build) of the probe of 2026-10-22 (a belt that the old rule rejected).
 """
 
 from __future__ import annotations
@@ -319,9 +319,11 @@ def test_pruning_keeps_the_truthful_optimum_and_does_not_depend_on_the_haste_it_
 # ---- the real scenario of the probe ---------------------------------------------------------------------------------------
 
 
-def war_clr_mnk_balanced_plus_four():
-    """The default view of war-clr-mnk (balanced role, +4, wiki evidence, own buffs) for the Ogre with dual wield: the profile,
-    the pruned pool and the buff set, as the precompute makes them."""
+def war_clr_mnk_melee_plus_four():
+    """A view of war-clr-mnk (Melee damage build, +4, wiki evidence, own buffs) for the Ogre with dual wield: the profile, the pruned pool and the buff set, as the precompute makes
+    them. The build is what matters here and the rule about spell haste is not: the own buffs of this trio carry no haste spell (a Cleric and a Monk have none), so the buffs are the
+    same whether the rule ``haste.assume_spell`` is true or false. The probe of 2026-10-22 was made for the Tank of the time, which weighed the weapon enough for the first pass to
+    miss the belt; the Tank of the builds weighs it at a factor of 0.5 and has no gap in this view (new F equals the old truth), and Melee damage, which weighs it in full, does."""
     from trioforge.precompute import grid
 
     catalog = grid.find_catalog()
@@ -329,14 +331,14 @@ def war_clr_mnk_balanced_plus_four():
         pytest.skip("derived/catalog.json is not built")
     config, _ = grid.load_inputs(grid.parse_trio("war-clr-mnk"), catalog_path=catalog, canonical=True)
     context = grid.Context(config)
-    prof = context.profile("OGR", "balanced", "own", "wiki")
+    prof = context.profile("OGR", "melee", "own", "wiki")
     buffset = context.buffsets["own"]
     pruned = prune(context.pool("wiki", 4), prof, 4, "dw", buffset, grid.BUILD_OPTIONS)
     return grid, context, prof, buffset, pruned
 
 
 def test_war_clr_mnk_wears_the_belt_of_the_four_winds_and_its_value_is_its_truthful_value():
-    grid, context, prof, buffset, pruned = war_clr_mnk_balanced_plus_four()
+    grid, context, prof, buffset, pruned = war_clr_mnk_melee_plus_four()
     old = solve_canonical(build_milp(prof, pruned, "dw", buffset, grid.BUILD_OPTIONS))
     old_truth = truthful(prof.eval_profile, old, buffset)
     new = solve_scenario(prof, pruned, "dw", buffset, grid.BUILD_OPTIONS)

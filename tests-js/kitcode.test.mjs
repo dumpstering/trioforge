@@ -111,7 +111,7 @@ function randomKit(rng) {
   return {
     v: 1,
     trio: classes.map((c) => CLASS_CODES[c].toLowerCase()).join("-"),
-    race: RACE_CODES[pick(rng, 15)],
+    race: RACE_CODES[pick(rng, 16)],
     level: 1 + pick(rng, 65),
     slots: slotIndexes.map((slotIndex) => [slotIndex, randomPageId(rng), pick(rng, 11)]),
   };
@@ -182,8 +182,11 @@ describe("constants", () => {
 
   it("RACE_CODES is the race table of rules/races.json, in file order", () => {
     const races = JSON.parse(readFileSync(new URL("../rules/races.json", import.meta.url), "utf8")).races;
-    expect(races).toHaveLength(15);
+    expect(races).toHaveLength(16);
     expect([...RACE_CODES]).toEqual(races.map((race) => race.code));
+    // a race is only ever added at the end, so that no kit link made before it changes: the Half Dark Elf is the sixteenth
+    expect(RACE_CODES.slice(0, 15).join(" ")).toBe("HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG");
+    expect(RACE_CODES[15]).toBe("HDE");
   });
 
   it("TRIO_CODES lists all 560 class triples in the documented, append-stable order", () => {
@@ -398,7 +401,7 @@ describe("round trip", () => {
         pairs += 1;
       }
     }
-    expect(pairs).toBe(560 * 15);
+    expect(pairs).toBe(560 * 16);
   });
 
   it("every level, tier and slot index survives", () => {
@@ -499,7 +502,7 @@ describe("field ranges when decoding", () => {
 
   it.each([
     ["trio", [560, 561, 2 ** 31, 2 ** 35 - 1], (v) => fragOf(1, v, 9, 50, 0), KIT_ERRORS.trio],
-    ["race", [15, 99, 2 ** 31, 2 ** 35 - 1], (v) => fragOf(1, 472, v, 50, 0), KIT_ERRORS.race],
+    ["race", [16, 99, 2 ** 31, 2 ** 35 - 1], (v) => fragOf(1, 472, v, 50, 0), KIT_ERRORS.race],
     ["level", [0, 66, 100, 1024, 2 ** 31], (v) => fragOf(1, 472, 9, v, 0), KIT_ERRORS.level],
     ["slot count", [23, 100, 2 ** 31], (v) => fragOf(1, 472, 9, 50, v), KIT_ERRORS.slotCount],
     ["slot index", [22, 23, 99, 2 ** 31], (v) => fragOf(1, ...HEAD, 1, v, 112, 4), KIT_ERRORS.slotIndex],
@@ -547,8 +550,8 @@ describe("field ranges when decoding", () => {
 // ---- rejections ----
 
 describe("rejections when decoding", () => {
-  it("rejects every version but 1: 0, 2, 3, 0x7F, 0x80, 0x81 and 0xFF", () => {
-    for (const version of [0, 2, 3, 9, 0x7f, 0x80, 0x81, 0xfe, 0xff]) {
+  it("rejects every version but 1 and 2: 0, 3, 0x7F, 0x80, 0x81 and 0xFF (version 2 is the setup marker: tests-js/kitcode-setup.test.mjs)", () => {
+    for (const version of [0, 3, 9, 0x7f, 0x80, 0x81, 0xfe, 0xff]) {
       reject(fragOf(version, ...HEAD, 0), KIT_ERRORS.version);
       reject(fragOf(version, ...HEAD, 1, 0, 112, 4), KIT_ERRORS.version);
     }
@@ -865,7 +868,7 @@ describe("the module source", () => {
   it("tells the page, in the header, what clearing the fragment does not hide", () => {
     // The navigation timing entry keeps the address the page was loaded with, fragment included.
     expect(header).toContain('performance.getEntriesByType("navigation")[0].name');
-    expect(header).toContain('never sends "#k="');
+    expect(header).toContain("analytics stay off for a page opened from a kit link"); // (Part M: the counter's script is not loaded there; the header used to say that a preview test held that a beacon never sent the kit)
   });
 
   it("tells the page, in the header, that an in-page anchor loses the kit and what to do instead", () => {

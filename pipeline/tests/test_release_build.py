@@ -1,7 +1,7 @@
 """Tests for the PC release build on a tiny real world: two trios of the invented catalog, solved for real.
 
 The world is small on purpose: the invented catalog of ``test_precompute.py`` (about 25 items, every name and number invented), a copy of the tables in
-which only the Ogre and the Troll are playable, and two trios that play the balanced role alone. The scope is the real one (+0, +4 and +10), the
+which only the Ogre and the Troll are playable, and two trios that play the Melee damage build alone. The scope is the real one (+0, +4 and +10), the
 solver is the real one, and the catalog has no strict item: wiki is the one evidence level of a release. What is held:
 
 * **resumption**: a trio that is finished is not run again; an interrupted one resumes from its chunk files, and no chunk whose inputs did not change is
@@ -29,20 +29,21 @@ from types import SimpleNamespace
 
 import pytest
 from release_helpers import FakeGit, change_sources, edit, load
-from test_precompute import small_world, write_catalog
+from test_precompute import TOOLS_INPUT, small_world, write_catalog
 from test_privacy_helpers import commit, gitenv, make_repo, privacy_files, write_key_file  # noqa: F401 (gitenv is a fixture)
 from test_privacy_helpers import git as run_git
 from test_release_assemble import make_junction
 from test_site_build import reindex
 
 from trioforge.data.jsonio import load_strict
+from trioforge.effects import files as effects_files
 from trioforge.precompute import assemble, release, shards
 from trioforge.precompute.assemble import ReleaseRefused
 
 REPO = Path(__file__).resolve().parents[2]
 PIPELINE = REPO / "pipeline"
-TRIOS = ("brd-bst-ber", "brd-rog-ber")  # the balanced role alone
-CHUNKS = 30  # the chunks of each: strict (2 setups, since its pool is empty and has no shield) and wiki (3) x buff sets (2) x tiers (3)
+TRIOS = ("brd-bst-ber", "brd-rog-ber")  # the Melee damage build alone
+CHUNKS = 24  # the chunks of each: strict (2 setups: 2h and dw) and wiki (2 setups: the Melee damage build never takes a shield) x buff sets (2) x tiers (3)
 TAG = "data-2026-10-17"
 ASSETS = tuple(f"assets/part-{n:08X}.js" for n in range(14))
 
@@ -117,7 +118,7 @@ def test_the_grid_is_run_in_a_pool_of_processes_and_every_trio_has_its_files(wor
         assert outcome.status == "done" and outcome.violations == [] and outcome.chunks == CHUNKS and outcome.scenarios == CHUNKS * 2
         folder = world.results / outcome.slug
         assert {p.name for p in folder.glob("*.json")} == {"strict-own.json", "strict-group.json", "wiki-own.json", "wiki-group.json", "defaults.json", "robust.json", "engine-l50.json"}
-        assert (folder / "runnerups" / "balanced.json").is_file() and (folder / "chunks" / release.MARKER).is_file()
+        assert (folder / "runnerups" / "melee.json").is_file() and (folder / "chunks" / release.MARKER).is_file()
     assert (world.results / "items.json").is_file()
 
 
@@ -132,6 +133,25 @@ def test_a_finished_trio_is_not_run_again(world, tmp_path):
     outcome = release.run_trio(spec_for(copy, TRIOS[0]))
     assert outcome.status == "resumed" and outcome.solved == 0 and outcome.redone == 0 and outcome.reused == outcome.chunks == CHUNKS
     assert {p: p.stat().st_mtime_ns for p in (copy.results / TRIOS[0]).rglob("*") if p.is_file()} == before  # not a file was written
+
+
+def test_the_file_of_the_effects_layer_beside_the_results_does_not_make_a_finished_trio_run_again(world, tmp_path):
+    """E6: ``exalt.json`` is written after the marker (it is made from the shipped kits, by every build, resumed trios included), so the marker's digests of the result files leave it out: a trio
+    that finished is resumed with the file in its folder, and the marker stays what it was. The file is no staleness risk: a build writes it again for every trio, the shards it is made from are
+    in the digests, and one altered by hand is replaced."""
+    copy = clone(world, tmp_path)
+    marker = copy.results / TRIOS[0] / "chunks" / release.MARKER
+    before = marker.read_bytes()
+    (copy.results / TRIOS[0] / effects_files.TRIO_FILE).write_text('{"version": 1}', encoding="utf-8")
+    assert effects_files.TRIO_FILE not in release._result_digests(copy.results / TRIOS[0])
+    outcome = release.run_trio(spec_for(copy, TRIOS[0]))
+    assert outcome.status == "resumed" and outcome.solved == 0 and outcome.redone == 0
+    assert marker.read_bytes() == before
+    (copy.results / TRIOS[0] / effects_files.TRIO_FILE).unlink()  # (the stand-in has no headers: a made-again trio would refuse it)
+    with (copy.results / TRIOS[0] / "robust.json").open("a", encoding="utf-8") as handle:
+        handle.write(chr(10))  # (a result file that changed is still caught: the trio is made again)
+    again = release.run_trio(spec_for(copy, TRIOS[0]))
+    assert again.status == "done", again.error
 
 
 def test_an_interrupted_trio_resumes_from_its_finished_chunks_and_makes_no_chunk_again(world, tmp_path):
@@ -164,9 +184,9 @@ def test_the_leftovers_of_a_write_that_was_cut_short_are_cleared_before_a_trio_i
     scratch = make_world(tmp_path / "scratch")
     release.run_trio(spec_for(scratch, TRIOS[0], limit=3))
     folder = scratch.results / TRIOS[0]
-    leftovers = [folder / "chunks" / ".s-wiki-own-balanced-dw-t04.json.ab12.tmp", folder / ".defaults.json.cd34.tmp"]
+    leftovers = [folder / "chunks" / ".s-wiki-own-melee-dw-t04.json.ab12.tmp", folder / ".defaults.json.cd34.tmp"]
     (folder / "runnerups").mkdir()
-    leftovers.append(folder / "runnerups" / ".balanced.json.ef56.tmp")
+    leftovers.append(folder / "runnerups" / ".melee.json.ef56.tmp")
     for path in leftovers:
         path.write_text("{", encoding="utf-8")
     outcome = release.run_trio(spec_for(scratch, TRIOS[0]))
@@ -232,7 +252,7 @@ def test_a_scope_other_than_the_one_the_marker_was_made_for_is_not_resumed_but_i
 
 def test_a_run_that_is_narrowed_leaves_no_marker(world, tmp_path):
     scratch = make_world(tmp_path / "scratch")
-    outcome = release.run_trio(spec_for(scratch, TRIOS[0], narrow={"races": ["OGR"], "roles": ["balanced"]}, tables_root=None))
+    outcome = release.run_trio(spec_for(scratch, TRIOS[0], narrow={"races": ["OGR"], "roles": ["melee"]}, tables_root=None))
     assert outcome.status == "partial" and not (scratch.results / TRIOS[0] / "chunks" / release.MARKER).exists()
 
 
@@ -264,7 +284,7 @@ def test_every_trio_of_the_grid_present_complete_and_at_its_scope_passes(world, 
     facts = release.check_grid(shipped(world, tmp_path), TRIOS)
     assert [f.slug for f in facts] == list(TRIOS)
     for fact in facts:
-        assert fact.tiers == (0, 4, 10) and fact.roles == ("balanced",) and fact.levels == (50,) and fact.data_tag == "data-2030-01-02" and fact.level == 50
+        assert fact.tiers == (0, 4, 10) and fact.roles == ("melee",) and fact.levels == (50,) and fact.data_tag == "data-2030-01-02" and fact.level == 50
         assert fact.chunks == CHUNKS  # the views the parity suite draws its sample from
 
 
@@ -293,7 +313,7 @@ def test_many_missing_trios_are_counted_and_the_first_few_named(world, tmp_path)
 def test_a_partial_trio_is_refused(world, tmp_path):
     folder = shipped(world, tmp_path)
     partial = make_world(tmp_path / "partial")
-    release.run_trio(spec_for(partial, TRIOS[0], narrow={"races": ["OGR", "TRL"], "roles": ["balanced"]}, tables_root=None))
+    release.run_trio(spec_for(partial, TRIOS[0], narrow={"races": ["OGR", "TRL"], "roles": ["melee"]}, tables_root=None))
     shutil.rmtree(folder / TRIOS[0])
     shutil.copytree(partial.results / TRIOS[0], folder / TRIOS[0], ignore=shutil.ignore_patterns("chunks"))
     # (the narrowed run is a run of the real tables with two of their fifteen races: its files say so)
@@ -327,7 +347,7 @@ def test_a_file_the_site_build_cannot_read_is_refused_with_its_name(world, tmp_p
 
 def test_trios_of_other_data_than_each_other_are_refused(world, tmp_path):
     folder = shipped(world, tmp_path)
-    for name in ("strict-own", "strict-group", "wiki-own", "wiki-group", "defaults", "robust", "runnerups/balanced", "runnerups/index", "engine-l50"):
+    for name in ("strict-own", "strict-group", "wiki-own", "wiki-group", "defaults", "robust", "runnerups/melee", "runnerups/index", "engine-l50"):
         edit(folder / TRIOS[1] / f"{name}.json", lambda d: d.update(data_release="data-2030-01-03"))
     reindex(folder / TRIOS[1] / "runnerups")
     with pytest.raises(ReleaseRefused, match=r"one data release") as raised:
@@ -336,7 +356,7 @@ def test_trios_of_other_data_than_each_other_are_refused(world, tmp_path):
 
 
 def test_trios_made_with_other_rules_or_for_another_level_are_not_one_release_either():
-    one = release.TrioFacts("a-b-c", (0, 4, 10), ("balanced",), (50,), "data-2030-01-02", "2026-10-13", "2026-09-22", 50)
+    one = release.TrioFacts("a-b-c", (0, 4, 10), ("melee",), (50,), "data-2030-01-02", "2026-10-13", "2026-09-22", 50)
     release.check_consistent([one, one])
     for change in ({"rules_version": "2026-10-14"}, {"game_patch": "2026-09-23"}, {"level": 55}, {"data_tag": "data-2030-01-03"}):
         other = release.TrioFacts(**{**asdict(one), "slug": "d-e-f", **change})
@@ -347,7 +367,7 @@ def test_trios_made_with_other_rules_or_for_another_level_are_not_one_release_ei
 # ---- the invariants ------------------------------------------------------------------------------------------------------------------------------
 
 
-def set_value(folder: Path, name: str, race: str, tier: int, value: float, *, slug: str = TRIOS[0], role: str = "balanced", setup: str = "dw") -> None:
+def set_value(folder: Path, name: str, race: str, tier: int, value: float, *, slug: str = TRIOS[0], role: str = "melee", setup: str = "dw") -> None:
     """Give one row of a shard another value, and the gain that keeps the naked character's value what it was."""
 
     def change(document):
@@ -358,7 +378,7 @@ def set_value(folder: Path, name: str, race: str, tier: int, value: float, *, sl
     edit(folder / slug / f"{name}.json", change)
 
 
-def value_of(folder: Path, name: str, race: str, tier: int, *, slug: str = TRIOS[0], role: str = "balanced", setup: str = "dw") -> float:
+def value_of(folder: Path, name: str, race: str, tier: int, *, slug: str = TRIOS[0], role: str = "melee", setup: str = "dw") -> float:
     return next(r for r in load(folder / slug / f"{name}.json")["scenarios"] if r[:4] == [race, role, tier, setup])[5]
 
 
@@ -377,7 +397,7 @@ def test_a_tier_that_is_worth_less_than_the_one_below_refuses_the_release(world,
 def test_a_value_below_the_naked_character_refuses_the_release(world, tmp_path):
     folder = shipped(world, tmp_path)
     document = load(folder / TRIOS[0] / "wiki-own.json")
-    row = next(r for r in document["scenarios"] if r[:4] == ["OGR", "balanced", 4, "dw"])
+    row = next(r for r in document["scenarios"] if r[:4] == ["OGR", "melee", 4, "dw"])
     set_value(folder, "wiki-own", "OGR", 4, round(row[5] - row[6] - 10.0, 2))  # ten under the naked value
     with pytest.raises(ReleaseRefused, match="below the empty kit|falls with the tier"):
         release.check_invariants(folder, TRIOS)
@@ -436,20 +456,20 @@ def test_every_bundle_is_the_one_exported_from_the_catalog_and_follows_the_shard
     assert release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root) == len(TRIOS)
 
 
-def test_wiki_is_the_one_evidence_level_of_a_release_the_strict_shards_hold_no_pool_and_no_shield(world):
+def test_wiki_is_the_one_evidence_level_of_a_release_the_strict_shards_hold_no_pool_and_the_melee_build_has_no_shield_at_either(world):
     bundle = load(world.results / TRIOS[0] / "engine-l50.json")
     shard = load(world.results / TRIOS[0] / "strict-own.json")
     assert shard["flags"] == ["strict pool empty"] and shard["pool"] == 0
-    setups = bundle["roles"]["balanced"]["setups_by_evidence"]
-    assert "1h-shield" not in setups["strict"] and "1h-shield" not in shard["setups"]["balanced"] and "1h-shield" in setups["wiki"]
+    setups = bundle["roles"]["melee"]["setups_by_evidence"]
+    assert setups["strict"] == setups["wiki"] == shard["setups"]["melee"] == ["2h", "dw"]  # (Melee damage never takes one hand and a shield: a pool cannot add it)
 
 
 def test_a_bundle_whose_strict_setups_are_not_the_shard_headers_is_refused(world, tmp_path):
     folder = shipped(world, tmp_path)
-    edit(folder / TRIOS[0] / "strict-own.json", lambda d: d["setups"].update(balanced=[*d["setups"]["balanced"], "1h-shield"]))
+    edit(folder / TRIOS[0] / "strict-own.json", lambda d: d["setups"].update(melee=[*d["setups"]["melee"], "1h-shield"]))
     with pytest.raises(ReleaseRefused, match=rf"{TRIOS[0]}.*strict") as raised:
         release.check_bundles(folder, TRIOS, catalog=world.catalog, tables_root=world.root)
-    assert "balanced" in str(raised.value) and "strict-own.json" in str(raised.value)
+    assert "melee" in str(raised.value) and "strict-own.json" in str(raised.value)
 
 
 def test_a_bundle_that_is_not_what_the_exporter_writes_from_that_catalog_is_refused(world, tmp_path):
@@ -566,18 +586,54 @@ def test_the_source_of_a_hand_listed_zone_is_compared_in_one_form_on_both_sides(
             release.check_eqlegendstools_source(rules, provenance_of(other))
 
 
-def test_no_hand_listed_zone_of_that_source_asks_nothing_of_the_catalog(tmp_path):
-    release.check_eqlegendstools_source(tmp_path / "rules", provenance_of())  # no hand-lists file at all
+def test_a_catalog_that_names_no_page_of_eql_legends_tools_is_refused_whatever_the_hand_lists_say(tmp_path):
+    """The items of the zone pages of EQ Legends Tools are the site's, not the wiki's: a catalog built without ``--eqlegendstools`` has the wiki's copy of them, and a release is not built from it,
+    with a hand-listed zone of the site or without one (the hand list used to be the only thing that asked)."""
+    nothing_named = (provenance_of(), provenance_of("derived/client/zones.json", "https://eqlwiki.com/index.php?title=Category:Items"), {"version": "x"}, {"provenance": {"inputs": "none"}},
+                     provenance_of("https://eqlegendstools.com.example.invalid/zones/nektropos-castle/", "https://eqlwiki.com/zones/nektropos-castle/"))  # fmt: skip
+    release.check_eqlegendstools_source(tmp_path / "no-hand-lists", provenance_of("derived/client/zones.json", ZONE_PAGE))  # (a catalog that names a page of the site is as it was)
+    for document in nothing_named:
+        with pytest.raises(ReleaseRefused, match=r"names no EQ Legends Tools page.*--eqlegendstools.*build the catalog again"):
+            release.check_eqlegendstools_source(tmp_path / "no-hand-lists", document)  # no hand-lists file at all
+        hand_lists_file(tmp_path / "only-developers", source=None)
+        with pytest.raises(ReleaseRefused, match=r"names no EQ Legends Tools page.*--eqlegendstools.*build the catalog again"):
+            release.check_eqlegendstools_source(tmp_path / "only-developers", document)  # only a zone of the developers' notes
+    hand_lists_file(tmp_path / "listed")
+    with pytest.raises(ReleaseRefused, match=r"Nektropos Castle.*eqlegendstools.*--eqlegendstools.*build the catalog again"):  # a hand-listed zone of the site keeps its own refusal
+        release.check_eqlegendstools_source(tmp_path / "listed", provenance_of())
+
+
+def test_no_hand_listed_zone_of_that_source_asks_nothing_more_of_a_catalog_that_names_the_site(tmp_path):
+    named = provenance_of("derived/client/zones.json", ZONE_PAGE)  # (a catalog that names no page of the site is refused whatever the hand lists say: the test before this one)
+    release.check_eqlegendstools_source(tmp_path / "rules", named)  # no hand-lists file at all
     hand_lists_file(tmp_path / "rules", source=None)  # only a zone of the developers' notes
-    release.check_eqlegendstools_source(tmp_path / "rules", provenance_of())
+    release.check_eqlegendstools_source(tmp_path / "rules", named)
+
+
+def without_the_tools_page(copy) -> None:
+    """The catalog of a copy of the world as if it had been built without ``--eqlegendstools``: its provenance names no page of the site (the catalogs of the world name one, as the committed one does)."""
+    document = json.loads(copy.catalog.read_text(encoding="utf-8"))
+    document["provenance"] = {"inputs": [record for record in document["provenance"]["inputs"] if "eqlegendstools" not in record["file"]]}
+    copy.catalog.write_text(json.dumps(document), encoding="utf-8")
 
 
 def test_a_catalog_built_without_the_eql_legends_tools_source_is_refused_before_any_hour_is_spent(world, tmp_path):
     copy = clone(world, tmp_path)
     hand_lists_file(copy.root / "rules")
+    without_the_tools_page(copy)  # (the world's catalog names the page: this one is the catalog of a build without the option)
     calls: list[str] = []
     with pytest.raises(ReleaseRefused, match=r"Nektropos Castle.*eqlegendstools"):
         build(world, tmp_path, runner=lambda spec: calls.append(spec.slug))
+    assert calls == []
+    nothing_left(copy.root)
+
+
+def test_a_catalog_built_without_the_eql_legends_tools_source_is_refused_before_any_hour_is_spent_with_no_hand_listed_zone_too(world, tmp_path):
+    copy = clone(world, tmp_path, "no-entry")  # (no hand-lists entry of the site: the refusal no longer rests on one)
+    without_the_tools_page(copy)
+    calls: list[str] = []
+    with pytest.raises(ReleaseRefused, match=r"names no EQ Legends Tools page.*--eqlegendstools"):
+        build(world, tmp_path, name="no-entry", runner=lambda spec: calls.append(spec.slug))
     assert calls == []
     nothing_left(copy.root)
 
@@ -615,6 +671,20 @@ def test_a_value_the_unpruned_optimum_does_not_confirm_refuses_the_release(world
     with pytest.raises(ReleaseRefused, match=r"pruning") as raised:
         spot(world, folder, seed=3)
     assert TRIOS[0] in str(raised.value) and "unpruned" in str(raised.value)
+
+
+def test_the_spot_check_draws_only_from_shards_that_have_a_pool(world, tmp_path):
+    """E4: a shard with no item in its pool (the strict one of a release) has nothing pruned, so a draw there could never show a pruning loss: the draw leaves such shards out."""
+    folder = shipped(world, tmp_path)
+    drawn = lambda: {release._spot_draw(folder, TRIOS[0], seed)[0] for seed in range(60)}  # noqa: E731
+    assert not json.loads((folder / TRIOS[0] / "strict-own.json").read_text(encoding="utf-8"))["items"]  # (the strict pool of this world is empty, as a release's is)
+    assert drawn() == {"wiki"}
+    wide = json.loads((folder / TRIOS[0] / "wiki-own.json").read_text(encoding="utf-8"))["items"]
+    edit(folder / TRIOS[0] / "strict-own.json", lambda document: document.update(items=wide))  # (a strict shard that has a pool is drawn from)
+    assert drawn() == {"strict", "wiki"}
+    for name in ("strict-own", "strict-group", "wiki-own", "wiki-group"):
+        edit(folder / TRIOS[0] / f"{name}.json", lambda document: document.update(items=[]))
+    assert release._spot_draw(folder, TRIOS[0], 1)[0] in ("strict", "wiki")  # (no shard has a pool: the check still has a scenario to solve)
 
 
 def test_the_spot_check_runs_in_a_pool_too(world, tmp_path):
@@ -688,7 +758,7 @@ def community_file(rules: Path, **document) -> str:
 def catalog_built_from(digest: str | None) -> dict:
     """The part of a public catalog that says what it was built from: the record of the list of reports, if there was one."""
     inputs = [{"file": "rules/community-seen.json", "sha256": digest, "date": "2026-10-15"}] if digest else []
-    return {"version": "2030-01-02", "provenance": {"inputs": inputs}}
+    return {"version": "2030-01-02", "provenance": {"inputs": [*inputs, TOOLS_INPUT]}}  # (and the page of EQ Legends Tools that every release catalog names)
 
 
 def test_with_no_file_and_a_catalog_that_was_built_with_none_the_release_has_no_entries(tmp_path):
@@ -904,6 +974,28 @@ def test_the_default_grid_is_the_560_trios_and_a_trio_that_is_not_there_is_refus
             parity_runner=pass_parity,
         )
     nothing_left(copy.root)
+
+
+def test_the_search_console_name_given_to_the_release_build_is_counted_in_the_exact_files_of_its_site(world, tmp_path, monkeypatch):
+    """The option of release-build.py (--google-verification, else $TRIOFORGE_GOOGLE_VERIFICATION, as the site build takes it) reaches the exact count: one file more at the root, and the same count as the
+    build's own list of files with that name in it."""
+    seen = []
+    real = release.check_file_count
+
+    def spy(*args, **kwargs):
+        count = real(*args, **kwargs)
+        seen.append((kwargs.get("verification"), count))
+        return count
+
+    monkeypatch.setattr(release, "check_file_count", spy)
+    name = "google0123456789abcdef.html"  # (invented)
+    _copy, plain, _lines = build(world, tmp_path, name="plain")
+    _copy, named, _lines = build(world, tmp_path, name="named", verification=name)
+    assert [verification for verification, _count in seen] == [None, name]
+    assert named.site_files == plain.site_files + 1 == seen[1][1]
+    monkeypatch.setenv("TRIOFORGE_GOOGLE_VERIFICATION", name)
+    _copy, from_environment, _lines = build(world, tmp_path, name="environment")
+    assert from_environment.site_files == plain.site_files + 1, "no option: the environment, as the site build does"
 
 
 @pytest.mark.parametrize("check", ["check_grid", "check_invariants", "check_bundles", "check_pruning", "check_file_count", "privacy_gate"])

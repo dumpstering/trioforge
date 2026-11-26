@@ -175,7 +175,7 @@ def test_a_real_profile_carries_the_race_the_builder_filters_by():
     humans = dataclasses.replace(make_item("humans", {"HEAD"}, stats={"HP": 99}), races=frozenset({"HUM"}))
     plain = make_item("plain", {"HEAD"}, stats={"HP": 10})
     for race, wanted in (("HUM", {"plain", "humans"}), ("ERU", {"plain"})):
-        real = real_profile(race, ("CLR", "WIZ", "ENC"), 50, "balanced", None, None, TABLES)
+        real = real_profile(race, ("CLR", "WIZ", "ENC"), 50, "caster", None, None, TABLES)
         assert {k for _, k in build_milp(real, [plain, humans], STICK, None, OPT).colmap.values()} == wanted, race
 
 
@@ -277,7 +277,7 @@ def test_weapon_columns_carry_the_damage_index_of_the_weapons_module():
     one = hand_columns(build_milp(prof, [SWORD, SHIELD], "1h-shield", None, BuildOptions(any_rule="explicit", haste_assumed=50)))
     assert one == pytest.approx({("PRIMARY", "sword"): 2 * F(35, 30) * F(3, 2), ("SECONDARY", "shield"): 0.0}, rel=1e-12)
     two = hand_columns(build_milp(prof, HANDS, "2h", None, BuildOptions(any_rule="explicit", haste_assumed=0)))
-    assert two == pytest.approx({("PRIMARY", "axe"): 2 * (40 + F(67, 100) * 50) / 60}, rel=1e-12)  # (the delay counts at most 50)
+    assert two == pytest.approx({("PRIMARY", "axe"): 2 * (40 + F(6875, 10000) * 50) / 60}, rel=1e-12)  # (the delay counts at most 50; T9: 0.6875 at level 50)
     stick = hand_columns(build_milp(prof, HANDS, "stick", None, BuildOptions(any_rule="explicit", haste_assumed=50)))
     assert stick and all(value == 0.0 for value in stick.values())
 
@@ -481,11 +481,11 @@ def test_the_cardinality_row_limits_the_active_buffs():
 
 def test_buffs_that_push_a_resist_over_the_cap_count_only_up_to_it():
     prof = profile(weights={"SV": 1})
-    gear = make_item("res", {"HEAD"}, sv={"FIRE": 170, "COLD": 100})
+    gear = make_item("res", {"HEAD"}, sv={"FIRE": 970, "COLD": 100})  # (T4: the resist cap is 1000 a school)
     buffset = make_buffset(optional=[make_buff(1, FIRE=40, COLD=40), make_buff(2, FIRE=100)], conflicts=[(1, 2)])
     _, _, chosen, exact = solve(prof, [gear], STICK, buffset)
-    # fire is over the cap with either buff (210 and 270 against 200): cold decides it
-    assert chosen == (1,) and exact == 200 + 140
+    # fire is over the cap with either buff (1010 and 1070 against 1000): cold decides it
+    assert chosen == (1,) and exact == 1000 + 140
 
 
 def test_the_profiles_buff_totals_must_be_the_always_on_buffs_of_the_buffset():

@@ -36,12 +36,14 @@ from jsonschema import Draft202012Validator
 
 import solver_helpers as H
 from after_an_add import AfterAnAdd, evidence_of
+from unpaged_case import with_an_unpaged_wearable
 from trioforge import bench
 from trioforge import upgrade as UP
 from trioforge.data.jsonio import load_strict
 from trioforge.export import brute, browser, fixture_cases, fixture_plan, fixture_tables, fixtures, milp_json
 from trioforge.export.fixture_plan import REQUIRED_STRATA, matrix_plan, pmb36_plan, upgrade_plan
 from trioforge.model import formulas as fm
+from trioforge.model import procs as procs_module
 from trioforge.model import roles, weapons
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, at_tier
 from trioforge.model.profile import Profile, eval_buffs, make_profile
@@ -158,7 +160,7 @@ def test_a_run_writes_every_family_and_a_manifest_that_lists_every_file(mini, in
     assert list(manifest["families"]) == list(fixtures.FAMILIES)
     counts = {name: row["count"] for name, row in manifest["families"].items()}
     assert counts["brute"] == 6 and counts["pmb36"] == 1 and counts["evaluate"] == 30 and counts["items"] == 16
-    assert counts["upgrade"] == 4 and counts["profiles"] == 1 and counts["matrix"] == 3
+    assert counts["upgrade"] == 4 and counts["profiles"] == 1 and counts["matrix"] == 4  # (the mini scale keeps one of each of its six strata, which now include spell-haste)
     assert fixtures.read_document(out / "manifest.json") == manifest
     listed = [entry["path"] for entry in manifest["files"]]
     assert listed == sorted(listed) and len(set(listed)) == len(listed)
@@ -221,12 +223,88 @@ def test_the_seed_changes_the_filler_but_not_the_core_of_the_plan():
     assert [spec.id for spec in one] == [spec.id for spec in two] and len(one) == len({spec.id for spec in one})
 
 
-def test_every_planned_role_and_setup_is_one_that_the_trio_plays():
-    for plan in (matrix_plan(3, TABLES), pmb36_plan(TABLES), upgrade_plan(3)):
+def test_every_planned_role_and_setup_is_one_that_the_trio_plays(inputs):
+    for plan, pooled in ((matrix_plan(3, TABLES), True), (pmb36_plan(TABLES), True), (upgrade_plan(3), False)):
         for spec in plan:
             level = getattr(spec, "level", 50)
-            assert spec.role in roles.roles_for(spec.trio), spec.id
-            assert spec.setup in weapons.setups_for(spec.trio, spec.role, TABLES, level=level), spec.id
+            # (a matrix or pmb36 scenario is made given the solve pool of its evidence level, so its setup is one that pool offers: the strict pool of the public catalog is empty and has
+            # no shield. A session of the upgrade family is made with no pool, a shield assumed. The Archer build is named by a pool that has a bow)
+            if pooled:
+                pool = inputs.solve_pool(spec.trio, "strict" if spec.evidence == "strict-proxy" else "wiki")
+            else:
+                pool = inputs.solve_pool(spec.trio, "wiki") if spec.role == "ranged" else None
+            assert spec.role in roles.roles_for(spec.trio, bow=spec.role == "ranged"), spec.id
+            assert spec.setup in weapons.setups_for(spec.trio, spec.role, TABLES, level=level, items=pool), spec.id
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3, 42, fixtures.DEFAULT_SEED])
+def test_every_scenario_of_the_matrix_plan_can_be_made_at_its_evidence_level(inputs, seed):
+    """A full-scale run makes every scenario of the plan (no solve is needed to see that the scenario can be made): the setup of a strict-proxy scenario is one the strict
+    pool offers, which is empty and has no shield (seeds 1, 2, 3 and 42 each had a Shield, Caster or Tank scenario on the shield setup that could not be made)."""
+    for spec in matrix_plan(seed, TABLES):
+        assert fixture_cases.make_scenario(inputs, spec).profile.setups.count(spec.setup) == 1, spec.id
+
+
+def test_every_scenario_of_the_pmb36_plan_can_be_made_at_its_evidence_level(inputs):
+    """pmb36-004, -006, -016 and -018 were strict-proxy scenarios of the Tank build on the shield setup, which the strict pool does not offer."""
+    for spec in pmb36_plan(TABLES):
+        assert fixture_cases.make_scenario(inputs, spec).profile.setups.count(spec.setup) == 1, spec.id
+
+
+def test_a_strict_proxy_pick_that_the_strict_pool_does_not_offer_is_put_on_one_it_does_and_no_other_pick_of_the_plan_moves():
+    """The picks of the plan are drawn as they always were (the same draws of the seed): only a pick that the strict pool does not offer is put on one it does, so a row
+    that could be made is what it was. The pmb36 setups below are those of the plan before this choice, but for 004, 006, 016 and 018 (the Tank build, strict proxy, on the
+    shield setup, which the empty strict pool does not offer); the digest is that of the default seed's matrix plan before it (it had no such row)."""
+    plan = pmb36_plan(TABLES)
+    before = (
+        "1h-shield 2h dw X dw X 2h dw 2h dw 1h-shield 2h 1h-shield 2h dw X dw X 2h dw 2h dw dw 2h dw 2h 2h dw 2h dw dw 2h dw 2h 2h dw"
+    ).split()
+    assert len(before) == len(plan) == 36
+    for spec, old in zip(plan, before):
+        offered = weapons.setups_for(spec.trio, spec.role, TABLES, level=spec.level, items=() if spec.evidence == "strict-proxy" else None)
+        assert spec.setup in offered, spec.id
+        if old != "X":
+            assert spec.setup == old, spec.id
+        else:
+            assert spec.evidence == "strict-proxy" and spec.role == "tank", spec.id  # (the four that had the shield setup)
+    assert [spec.number for spec, old in zip(plan, before) if old == "X"] == [4, 6, 16, 18]
+    default = matrix_plan(fixtures.DEFAULT_SEED, TABLES)
+    digest = hashlib.sha256(json.dumps([[spec.id, spec.setup, spec.role, spec.evidence] for spec in default]).encode()).hexdigest()
+    assert digest == "4242853f30c29569d0d3eb38b0551207eb771d88305afb150978bf89d6abf29c"
+
+
+def test_a_strict_proxy_pick_for_a_role_that_the_strict_pool_gives_no_setup_is_a_plain_error_not_a_division_by_zero():
+    """No plan of today reaches it (the Ranged role is a wiki scenario), but the strict pool offers the Ranged role no setup, and the place in the list of an offer that is empty was a ZeroDivisionError."""
+    pmb = fixture_plan.PMB
+    with pytest.raises(fixture_cases.FixtureError, match=r"no setup of the ranged role is on offer .* strict"):
+        fixture_plan._on_offer("ranged", ["ranged"], pmb, "ranged", TABLES, 50, "strict-proxy")
+    assert fixture_plan._on_offer("ranged", ["ranged"], pmb, "ranged", TABLES, 50, "wiki") == "ranged"  # (a wiki scenario is not held to the strict pool)
+
+
+def test_a_trio_whose_last_role_has_no_way_to_make_a_profile_is_a_plain_error_not_an_index_error(inputs, monkeypatch):
+    """The deity add of the profile lists names a way of the last role; a role that no level gives a setup has none (the bundle of a catalog with no bow, whatever the trio's classes can shoot)."""
+    monkeypatch.setattr(fixture_tables, "FIVE_TRIOS", (fixture_tables.parse_trio("BRD-RNG-BST"),))
+    real = browser.bundle
+
+    def without_a_bow(*args, **kwargs):
+        made = real(*args, **kwargs)
+        made["roles"]["ranged"]["setups"] = []
+        made["roles"]["ranged"]["setups_by_evidence"] = {label: [] for label in made["evidence_levels"]}
+        return made
+
+    monkeypatch.setattr(browser, "bundle", without_a_bow)
+    with pytest.raises(fixture_cases.FixtureError, match=r"rng-brd-bst.*no profile of the ranged role can be made"):
+        fixture_tables.profile_docs(inputs, 1, 1, level_55=False)
+
+
+def test_the_bow_scenarios_come_after_the_plan_and_are_a_role_and_a_setup_that_the_wiki_pool_gives(inputs):
+    plain, bow = matrix_plan(3, TABLES), fixture_plan.bow_plan(3, TABLES)
+    assert [spec.number for spec in bow] == list(range(len(plain) + 1, len(plain) + 1 + len(bow))) and all(spec.id not in {p.id for p in plain} for spec in bow)
+    for spec in bow:
+        # (the bow setup is named by a pool alone: a scenario of it, or of the Ranged role, is checked against the wiki pool of its trio)
+        assert spec.role in roles.roles_for(spec.trio, bow=True), spec.id
+        pool = inputs.solve_pool(spec.trio, "wiki")
+        assert spec.setup in weapons.setups_for(spec.trio, spec.role, TABLES, level=spec.level, items=pool), spec.id
 
 
 @pytest.mark.parametrize("seed", [1, 2, 20261014])
@@ -250,14 +328,14 @@ def test_the_strata_mean_what_the_plan_says_they_mean():
         assert ("iksar" in spec.tags) == (spec.race == "IKS") and ("deity" in spec.tags) == (spec.deity is not None)
 
 
-def test_the_neutral_36_is_three_roles_three_tiers_two_buff_sets_and_two_pools_with_every_role_and_setup_pair():
+def test_the_neutral_36_is_two_builds_three_tiers_three_buff_sets_and_two_pools_with_every_build_and_setup_pair():
     plan = pmb36_plan(TABLES)
     assert len(plan) == 36 and {spec.race for spec in plan} == {"OGR"} and {spec.trio for spec in plan} == {("PAL", "MNK", "BER")}
     assert {(spec.role, spec.tier, spec.buffs, spec.evidence) for spec in plan} == {
         (r, t, b, e)
-        for r in ("balanced", "tank", "melee") for t in (0, 4, 10) for b in ("own", "group") for e in ("wiki", "strict-proxy")
+        for r in ("tank", "melee") for t in (0, 4, 10) for b in ("own", "group", "raid") for e in ("wiki", "strict-proxy")
     }
-    assert len({(spec.role, spec.setup) for spec in plan}) == 8  # all eight pairs PAL/MNK/BER plays
+    assert len({(spec.role, spec.setup) for spec in plan}) == 5  # all five pairs PAL/MNK/BER plays
     assert sum(spec.prune_check for spec in plan) == 6
 
 
@@ -340,9 +418,10 @@ def test_the_stored_kit_is_worth_exactly_its_breakdown_and_never_less_than_the_m
         profile = Profile.from_dict(case["inputs"]["profile"])
         for solve in case["solves"]:
             result = solve["result"]
+            table = procs_module.from_doc(case["inputs"]["procs"], case["inputs"]["trio"]) if case["inputs"].get("procs") is not None else None  # (a case with weapon procs has its table)
             got = fm.evaluate(
                 profile, kit_of(items, result["kit"]), stored_totals(case, result["buffs"]), setup=case["inputs"]["setup"],
-                haste_assumed=result["haste_assumed"],
+                haste_assumed=result["haste_assumed"], procs=table,
             )  # fmt: skip
             assert fixture_cases.breakdown_json(got) == result["breakdown"], (case["id"], solve["label"])
             assert result["F"] == result["breakdown"]["F"] == browser.rat(got.F)
@@ -411,6 +490,17 @@ def test_a_scenario_case_says_what_the_scenario_is_and_its_profile_is_the_one_th
         spells = inputs.spells(meta["level"])
         bundle = browser.bundle(tuple(meta["trio"]), meta["level"], TABLES, RULES, spells, data_release=inputs.data_release)
         assembled = browser.assemble(bundle, meta["race"], meta["role"], meta["buffs"], evidence=label, deity=meta["deity"])
+        if "spell-haste" in case["tags"]:  # (the scenarios of this stratum are made with the haste of the spells in the buffs: the bundle, which has none, assembles the same but for what the haste changes)
+            assert meta["profile"]["spell_haste"] > assembled["spell_haste"]
+            # the two fields that the haste buffs change are checked on their own, from the buff set of the case (the one the profile was made from), before the rest of the profile is
+            # compared with the bundle's. The bundle's buffs carry no haste (the rule haste.assume_spell is false), so what its profile has of spell haste is the unbound alacrity alone;
+            # the profile of the case has the best haste among the buffs of its own set on top of that, and its buff totals are the evaluator's reading of its set's totals
+            assert RULES.get("haste.assume_spell") is False
+            ours = fixture_cases.buffset_from_doc(meta["buffset"])
+            by_id = {buff.id: buff for buff in (*ours.always_on, *ours.optional)}
+            assert meta["profile"]["spell_haste"] == max((buff.haste for buff in by_id.values()), default=0) + assembled["spell_haste"]
+            assert meta["profile"]["buff_totals"] == eval_buffs(ours.totals(()))
+            assembled = {**assembled, "spell_haste": meta["profile"]["spell_haste"], "buff_totals": meta["profile"]["buff_totals"]}  # (now the two are known to be right: the rest must match)
         if meta["weights"] is None:
             assert meta["profile"] == assembled
         else:
@@ -418,9 +508,16 @@ def test_a_scenario_case_says_what_the_scenario_is_and_its_profile_is_the_one_th
             assert meta["weights"]["base"] == assembled["weights"]
         assert meta["setup"] in meta["profile"]["setups"] and meta["weapon_pct"] == RULES.get("tier.weapon_damage_pct")
         assert fixture_cases.buffset_doc(fixture_cases.buffset_from_doc(meta["buffset"])) == meta["buffset"]
-        assert meta["buffset"]["set"] == bundle["buffs"][meta["buffs"]]["set"]
+        if "spell-haste" in case["tags"]:  # (this set keeps the haste buffs that the bundle's set drops as inert, and keeps everything the bundle's set keeps)
+            theirs = bundle["buffs"][meta["buffs"]]["set"]
+            ours = meta["buffset"]["set"]
+            assert {*theirs["optional"], *theirs["always_on"]} <= {*ours["optional"], *ours["always_on"]}
+            extra = {*ours["optional"], *ours["always_on"]} - {*theirs["optional"], *theirs["always_on"]}
+            assert extra and all(by_id[buff_id].haste > 0 for buff_id in extra)  # (and what it adds is the haste buffs: nothing else differs)
+        else:
+            assert meta["buffset"]["set"] == bundle["buffs"][meta["buffs"]]["set"]
         checked += 1
-    assert checked == 4  # three of the matrix and one of the neutral 36
+    assert checked == 5  # four of the matrix and one of the neutral 36
 
 
 def test_composed_weights_are_what_the_override_makes_of_the_roles_weights(mini_docs):
@@ -480,6 +577,20 @@ def test_the_brute_force_value_is_exact_independent_and_the_solvers(mini_docs):
         assert case["expected"]["kits"] == len(space.kits) and case["expected"]["buff_sets"] == len(space.buff_sets)
         assert fixture_cases.buffset_doc(inst.buffset) == case["inputs"]["buffset"]
         assert inst.profile.to_dict() == case["inputs"]["profile"]
+
+
+def test_a_brute_force_profile_has_the_placement_of_the_rules_unless_it_is_given_one():
+    """R3: ``brute.make_profile`` built every profile with the Monk bonus and the Iksar armor class on top; the placement is the rules' (inside), so that the brute force and the
+    solver meet the Monk curve with the client's reading, and a placement that is given is kept."""
+    pmb = ("PAL", "MNK", "BER")
+    made = brute.make_profile(pmb, "OGR", {"AC": 6}, setup="stick")
+    real = make_profile("OGR", pmb, 50, "melee", None, None, TABLES)
+    assert dict(made.placement) == dict(real.placement) == {"monk": "inside", "iksar": "inside"}
+    assert made.monk is not None  # (with the Monk curve)
+    top = {"monk": "top", "iksar": "top"}
+    assert dict(brute.make_profile(pmb, "OGR", {"AC": 6}, setup="stick", placement=top).placement) == top
+    seen = {tuple(sorted(brute.random_instance(random.Random(seed), trio_index=0, monk_curve="stand_in").profile.placement.items())) for seed in range(40)}
+    assert (("iksar", "inside"), ("monk", "inside")) in seen and (("iksar", "top"), ("monk", "top")) in seen  # (the random instances draw both)
 
 
 @pytest.mark.parametrize("seed", range(12))
@@ -832,7 +943,7 @@ def test_the_evaluations_carry_the_monk_bins_of_each_level_that_has_a_monk_and_t
 
 def test_the_aimed_evaluations_reach_the_extremes_of_the_evaluator_and_the_same_seed_gives_the_same_kits(inputs):
     assert set(fixture_tables.EVALUATE_COVERAGE) == set(fixture_tables.EVALUATE_COMMON) | set(fixture_tables.EVALUATE_EXTREMES)
-    assert set(fixture_tables.EVALUATE_RARE) == {"cha>510", "regen-capped"}
+    assert set(fixture_tables.EVALUATE_RARE) == {"cha>510", "regen-capped", "resist-capped"}  # (T4: the resist cap is 1000, which no kit of the catalog reaches)  # (haste-capped is required again: the scenarios of the stratum spell-haste are made with the haste of the spells)
     scenarios = [fixture_cases.make_scenario(inputs, spec) for spec in matrix_plan(1, TABLES)[:24]]
     docs, coverage = fixture_tables.evaluate_docs(inputs, scenarios, 300, 5)
     assert sum(coverage.get(tag, 0) >= 1 for tag in fixture_tables.EVALUATE_COMMON) >= len(fixture_tables.EVALUATE_COMMON) - 4
@@ -846,12 +957,13 @@ def test_every_profile_of_a_list_is_what_the_bundle_assembles(mini_docs, inputs)
     assert listed["bundle"] == "pal-mnk-ber-l50.bundle.json" and bundle["trio"] == ["PAL", "MNK", "BER"]
     offered = list(bundle["roles"])
     plain = {(e["race"], e["role"], e["buffs"]) for e in listed["profiles"] if not e["options"]}
-    assert plain == {(r, role, b) for r in ("HUM", "IKS") for role in offered for b in browser.BUFF_SETS}
+    assert plain == {(r, role, b) for r in ("HUM", "IKS") for role in offered for b in (*browser.BUFF_SETS, *browser.HASTE_BUFF_SETS)}  # (a profile of each twin of a buff set too)
     options = [entry["options"] for entry in listed["profiles"]]
     assert any(o.get("evidence") == "wiki" for o in options) and any("deity" in o for o in options)
     for entry in listed["profiles"]:
         assert browser.assemble(bundle, entry["race"], entry["role"], entry["buffs"], **entry["options"]) == entry["profile"]
-        buffset = inputs.buffsets(tuple(bundle["trio"]), 50)[entry["buffs"]]
+        twin = entry["buffs"].endswith(browser.HASTE_SUFFIX)  # (a twin of a buff set keeps the haste of the spells, whatever the rule says)
+        buffset = inputs.buffsets(tuple(bundle["trio"]), 50, True if twin else None)[entry["buffs"].removesuffix(browser.HASTE_SUFFIX)]
         label = entry["options"].get("evidence")  # a profile at an evidence level is made given the solve pool of the level
         made = make_profile(
             entry["race"], bundle["trio"], 50, entry["role"], buffset, None, TABLES,
@@ -859,6 +971,19 @@ def test_every_profile_of_a_list_is_what_the_bundle_assembles(mini_docs, inputs)
             items=None if label is None else inputs.solve_pool(tuple(bundle["trio"]), label),
         )  # fmt: skip
         assert made.to_dict() == entry["profile"] and Profile.from_dict(entry["profile"]) == made
+
+
+def test_the_ranged_role_is_listed_only_at_the_levels_that_offer_it_a_setup(inputs, monkeypatch):
+    """The trio with an Archer (a Ranger) has the Ranged role at the wiki level alone: its strict pool has no bow, so the role has no setup there, and no profile can be made
+    of it at that level or with no level. The profile lists are made for it all the same (the full run of the profiles family stopped at this trio)."""
+    monkeypatch.setattr(fixture_tables, "FIVE_TRIOS", (fixture_tables.parse_trio("BRD-RNG-BST"),))
+    docs = dict(fixture_tables.profile_docs(inputs, 1, 1, level_55=False))
+    bundle, listed = docs["profiles/rng-brd-bst-l50.bundle.json"], docs["profiles/rng-brd-bst-l50.profiles.json"]
+    assert bundle["roles"]["ranged"]["setups_by_evidence"] == {"strict": [], "wiki": ["ranged"]}
+    ranged = [entry for entry in listed["profiles"] if entry["role"] == "ranged"]
+    assert ranged and {entry["options"].get("evidence") for entry in ranged} == {"wiki"}
+    assert any("deity" in entry["options"] for entry in ranged)  # (the deity adds name a way that can be made, for this role too)
+    assert {(entry["role"], entry["options"].get("evidence")) for entry in listed["profiles"]} >= {("melee", None), ("melee", "strict"), ("melee", "wiki")}
 
 
 def test_the_profile_lists_hold_every_race_role_and_buff_key_with_no_evidence_level_and_with_each_one(inputs):
@@ -878,7 +1003,7 @@ def test_the_profile_lists_hold_every_race_role_and_buff_key_with_no_evidence_le
         found[way] = entry
     wanted = {
         (race, role, buffs, json.dumps(way)) for race in ("HUM", "IKS") for role in bundle["roles"]
-        for buffs in browser.BUFF_SETS for way in ways
+        for buffs in (*browser.BUFF_SETS, *browser.HASTE_BUFF_SETS) for way in ways
     }  # fmt: skip
     assert {way for way in found if "deity" not in way[3]} == wanted
     assert sum("deity" in way[3] for way in found) >= 3  # the deity is held to the list as well, with and without a level
@@ -889,7 +1014,8 @@ def test_the_profile_lists_hold_every_race_role_and_buff_key_with_no_evidence_le
         assert browser.assemble(bundle, race, role, buffs, **options) == entry["profile"]
         label = options.get("evidence")
         made = make_profile(
-            race, codes, 50, role, inputs.buffsets(codes, 50)[buffs], None, TABLES, evidence=label or "strict",
+            race, codes, 50, role, inputs.buffsets(codes, 50, True if buffs.endswith(browser.HASTE_SUFFIX) else None)[buffs.removesuffix(browser.HASTE_SUFFIX)], None, TABLES,
+            evidence=label or "strict",
             deity=options.get("deity"), items=None if label is None else pools[label],
         )  # fmt: skip
         assert made.to_dict() == entry["profile"] and Profile.from_dict(entry["profile"]) == made, (race, role, buffs, text)
@@ -980,12 +1106,16 @@ def test_the_item_table_holds_every_wearable_including_the_hidden_ones_flagged_o
     # (a strip of every trailing group would leave "Band of" of the first)
     examples = ("Band of (Fire) (RoF)", "Chestguard", "X (Level 90 required)")
     assert [browser.match_name(title) for title in examples] == ["Band of (Fire)", "Chestguard", "X"]
-    by_key = {item["key"]: item for item in wearable}
+    # the committed catalog has no wearable without a wiki page since the wiki made a page for the last one: an invented one is added in memory for the case (unpaged_case.py)
+    with_unpaged = with_an_unpaged_wearable(inputs.document)
+    shown = browser.items(with_unpaged, RULES)
+    by_key = {item["key"]: item for item in with_unpaged["items"] if places & set(item["slots"])}
     titles = {key: item["wiki"]["title"] for key, item in by_key.items() if item["wiki"] is not None}
     unpaged = [key for key, item in by_key.items() if item["wiki"] is None]  # no wiki page, no title: the match name is made of the name
     assert unpaged  # the case stays covered: a wearable with no wiki page is in the catalog
-    assert all(browser.effective_match_name(r) == browser.match_name(titles[browser.record_key(r)]) for r in table["items"] if browser.record_key(r) in titles)
-    assert all(browser.effective_match_name(r) == browser.match_name(by_key[browser.record_key(r)]["name"]) for r in table["items"] if browser.record_key(r) in unpaged)
+    assert len(shown["items"]) == len(table["items"]) + len(unpaged)
+    assert all(browser.effective_match_name(r) == browser.match_name(titles[browser.record_key(r)]) for r in shown["items"] if browser.record_key(r) in titles)
+    assert all(browser.effective_match_name(r) == browser.match_name(by_key[browser.record_key(r)]["name"]) for r in shown["items"] if browser.record_key(r) in unpaged)
     sampled = fixture_tables.item_table(inputs, 150)
     assert sampled["count"] == len(sampled["items"]) == 150 and sampled["defaults"] == table["defaults"]
     keys = [browser.record_key(r) for r in sampled["items"]]
@@ -1360,6 +1490,92 @@ def test_the_command_reports_what_it_wrote_validates_a_folder_and_refuses_bad_as
     assert fixtures.main(["--out", str(out), "--validate"]) == 1
 
 
+def _bad_folder(tmp_path, name, manifest):
+    """A folder of fixtures whose manifest is ``manifest`` (text; None: no manifest at all)."""
+    folder = tmp_path / name
+    folder.mkdir()
+    if manifest is not None:
+        (folder / "manifest.json").write_text(manifest, encoding="ascii")
+    return folder
+
+
+@pytest.mark.parametrize(
+    "manifest", [None, "[]", "5", "null", "not json", '{"format": 1}'], ids=["missing", "list", "number", "null", "not-json", "object-not-a-manifest"]
+)
+def test_validating_a_folder_with_a_bad_manifest_gives_its_problems_and_exits_1(tmp_path, capsys, manifest):
+    """A manifest that is not an object crashed the command (AttributeError, in the release check), and a missing one ended it with 2 and no list of problems: both are a folder that
+    does not validate, which is 1 with what is wrong with it."""
+    folder = _bad_folder(tmp_path, "bad", manifest)
+    assert fixtures.main(["--out", str(folder), "--validate"]) == 1
+    assert "manifest.json" in capsys.readouterr().err
+
+
+def test_the_release_of_a_manifest_that_is_an_object_is_still_checked_by_the_validation(tmp_path, capsys):
+    """The release check is kept for a manifest that read back as an object: an old one is one problem more (the schema problems come first)."""
+    folder = tmp_path / "run"
+    assert fixtures.main(["--out", str(folder), "--scale", "tiny", "--seed", "9", "--families", "brute"]) == 0
+    manifest = fixtures.read_document(folder / "manifest.json")
+    manifest["data_release"] = "data-1999-01-01"
+    (folder / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="ascii")
+    capsys.readouterr()
+    assert fixtures.main(["--out", str(folder), "--validate"]) == 1
+    assert "the data release is 'data-1999-01-01'" in capsys.readouterr().err
+
+
+# ---- the catalog of a root ------------------------------------------------------------------------------------------------------
+
+
+def _another_tree(tmp_path, inputs, count=12):
+    """A tree of its own (``rules/``, ``derived/client`` and a ``derived/catalog.json`` of the first ``count`` items that no report made): what ``--root`` names."""
+    root = tmp_path / "tree"
+    shutil.copytree(REPO / "rules", root / "rules")
+    shutil.copytree(REPO / "derived" / "client", root / "derived" / "client")
+    kept = [item for item in inputs.document["items"] if not fixture_cases._by_community_alone(item["evidence"])][:count]
+    (root / "derived").mkdir(exist_ok=True)
+    (root / "derived" / "catalog.json").write_text(json.dumps({**inputs.document, "items": kept}, allow_nan=False), encoding="utf-8")
+    return root, {item["key"] for item in kept}
+
+
+def test_the_catalog_is_looked_for_in_the_root_that_is_given_and_nowhere_else_but_the_environment_and_its_main_checkout(tmp_path, monkeypatch):
+    """The order: ``$TRIOFORGE_CATALOG``, ``derived/catalog.json`` of the root (this checkout when none is given), the one of the main checkout of the root's git. A root with
+    no catalog is not given this checkout's."""
+    monkeypatch.delenv("TRIOFORGE_CATALOG", raising=False)
+    root = tmp_path / "tree"
+    (root / "derived").mkdir(parents=True)
+    assert grid.find_catalog(root) is None  # (no fallback to the catalog of this checkout: it is another tree's)
+    (root / "derived" / "catalog.json").write_text("{}", encoding="ascii")
+    assert grid.find_catalog(root) == root / "derived" / "catalog.json"
+    assert grid.find_catalog() == grid.find_catalog(REPO) != root / "derived" / "catalog.json"  # no root: this checkout, as it was
+    named = tmp_path / "named.json"
+    named.write_text("{}", encoding="ascii")
+    monkeypatch.setenv("TRIOFORGE_CATALOG", str(named))
+    assert grid.find_catalog(root) == named and grid.find_catalog() == named  # the environment still wins, for any root
+
+
+def test_the_inputs_of_the_fixtures_read_the_catalog_of_their_root(tmp_path, monkeypatch, inputs):
+    monkeypatch.delenv("TRIOFORGE_CATALOG", raising=False)
+    root, keys = _another_tree(tmp_path, inputs)
+    made = fixture_cases.Inputs(root)
+    assert set(made.items_by_key) == keys and len(inputs.items_by_key) > len(keys)  # (not this checkout's 11,000)
+    assert fixtures.shared_inputs(root).items_by_key.keys() == keys
+    (root / "derived" / "catalog.json").unlink()
+    with pytest.raises(fixture_cases.FixtureError, match="no catalog found"):
+        fixture_cases.Inputs(root)  # (the tree with no catalog is not given this checkout's)
+
+
+def test_the_browser_command_reads_the_catalog_of_its_root(tmp_path, monkeypatch, inputs, capsys):
+    monkeypatch.delenv("TRIOFORGE_CATALOG", raising=False)
+    root, keys = _another_tree(tmp_path, inputs)
+    out = tmp_path / "o"
+    assert browser.main(["--out", str(out), "--trio", "pal-mnk-ber", "--root", str(root)]) == 0
+    table = json.loads((out / "items.json").read_text(encoding="utf-8"))
+    assert 0 < len(table["items"]) <= len(keys) < len(inputs.items_by_key)
+    (root / "derived" / "catalog.json").unlink()
+    capsys.readouterr()
+    assert browser.main(["--out", str(tmp_path / "p"), "--trio", "pal-mnk-ber", "--root", str(root)]) == 2
+    assert "no catalog found" in capsys.readouterr().err
+
+
 # ---- the committed sample ----------------------------------------------------------------------------------------------------
 
 
@@ -1391,7 +1607,8 @@ def test_the_sample_has_every_family_and_covers_every_stratum_at_least_twice(sam
         assert counts.get(stratum, 0) >= 2, stratum
     assert counts == fixture_plan.count_tags(doc["tags"] for doc in cases_of(sample_docs, "matrix").values())
     families = sample_manifest["families"]
-    assert families["brute"]["count"] == 40 and families["pmb36"]["count"] == 6 and families["evaluate"]["count"] == 150
+    # (the 40 plain instances and the 150 kits of the plan, and the cases of the bow setup that come after them: 2 instances, 7 kits)
+    assert families["brute"]["count"] == 40 + 2 + 4 and families["pmb36"]["count"] == 6 and families["evaluate"]["count"] == 150 + 7  # (and the four instances whose weapons carry procs: brute-2000 on)
     upgrades = cases_of(sample_docs, "upgrade")
     assert len(upgrades) == len(fixture_plan.SAMPLE_SESSIONS) + 3  # the sessions of the plan, and the three invented ones for Every slot
     modes = {c["inputs"]["tier_mode"]["mode"] for c in upgrades.values() if c["inputs"]["tier_mode"]}
@@ -1419,9 +1636,10 @@ def test_the_sample_results_are_the_exact_values_of_the_kits_and_the_brute_force
         profile = Profile.from_dict(case["inputs"]["profile"])
         for solve in case["solves"]:
             result = solve["result"]
+            table = procs_module.from_doc(case["inputs"]["procs"], case["inputs"]["trio"]) if case["inputs"].get("procs") is not None else None  # (a case with weapon procs has its table)
             got = fm.evaluate(
                 profile, kit_of(items, result["kit"]), stored_totals(case, result["buffs"]), setup=case["inputs"]["setup"],
-                haste_assumed=result["haste_assumed"],
+                haste_assumed=result["haste_assumed"], procs=table,
             )  # fmt: skip
             assert fixture_cases.breakdown_json(got) == result["breakdown"], case["id"]
         if case["family"] == "brute":
@@ -1436,7 +1654,7 @@ def test_the_sample_evaluations_and_vectors_are_what_the_functions_give_now(samp
         for evaluation in doc["evaluations"]:
             assert fixture_cases.breakdown_json(evaluation_of(profiles, records, evaluation)) == evaluation["breakdown"]
             seen += 1
-    assert seen == 150
+    assert seen == 150 + 7  # (the kits of the plan, and the kits of the bow setup after them)
     table = sample_docs["items/table.json"]
     assert table["count"] == 150
     by_key = {browser.record_key(record): record for record in table["items"]}
@@ -1473,6 +1691,42 @@ def test_every_upgrade_case_of_the_sample_has_its_best_two_and_three_sets_and_th
     for case in cases_of(sample_docs, "upgrade").values():
         assert [entry["k"] for entry in case["expected"]["best_sets"]] == [2, 3], case["id"]
         assert set(best_solves(case)) == {2, 3}, case["id"]
+
+
+def _hand_bag():
+    """Items of every kind a hand sees: weapons of every skill, a shield, a held item, a bow and some thrown weapons that list the hands among their slots."""
+    wv = H.WeaponVec
+    hands = ("PRIMARY", "SECONDARY")
+    return [
+        H.make_item("it_one", hands, weapon=wv("1H Slashing", 12, 30, None, False)),
+        H.make_item("it_two", ("PRIMARY",), weapon=wv("2H Slashing", 22, 40, None, True)),
+        H.make_item("it_shield", ("SECONDARY",), shield=True),
+        H.make_item("it_held", hands),
+        *(H.make_item(f"it_ranged_{n}", (*hands, "RANGE"), weapon=wv(skill, 14, 30, None, False)) for n, skill in enumerate(("Archery", "archery", "Throwing", "Throwingv1", "Throwingv2")))
+    ]  # fmt: skip
+
+
+def test_no_brute_force_lets_a_weapon_of_a_ranged_skill_into_a_hand_and_each_agrees_with_the_solver_on_every_item_hand_and_setup():
+    """The solver refuses a weapon of the archery or a throwing skill in either hand (``weapons.allowed_in_hand``, whatever slots its page lists). Both written-out brute forces
+    (``brute.hand_ok`` and the tests' ``solver_helpers.hand_ok``) let one in, so a bow instance with such an item (the bow instances draw a second slot for a bow 12 percent of the
+    time) had a brute-force maximum above the solver's (seed 5, numbers 1000 and 1012)."""
+    places = {"PRIMARY": "primary", "SECONDARY": "secondary", "RANGE": "range"}
+    for item in _hand_bag():
+        for setup in (None, "stick", "ranged", "1h-shield", "2h", "dw"):
+            for group, place in places.items():
+                if setup is None and group == "RANGE":
+                    continue  # (no setup, no range place: the solver's own function does not take the setup None)
+                want = weapons.allowed_in_hand(item, place, setup or "stick")
+                assert brute.hand_ok(item, group, setup) is want, (item.key, group, setup, "brute")
+                assert H.hand_ok(item, group, setup) is want, (item.key, group, setup, "helpers")
+                if group != "RANGE" and item.key.startswith("it_ranged"):
+                    assert want is False  # the claim itself: a bow or a thrown weapon is in no hand
+
+
+@pytest.mark.parametrize("number", [1000, 1012])
+def test_the_bow_instances_that_drew_a_ranged_weapon_into_a_hand_have_the_brute_force_value_of_the_solver(inputs, number):
+    """Seed 5: the item ``it10`` of 1000 (Archery) and the Throwing item of 1012 list the primary hand: the brute force wore them there (1629.71 against 1590.38). The cases are made now."""
+    assert fixture_cases.brute_case(inputs, 5, number)["expected"]["brute_F"] is not None
 
 
 def test_the_sample_brute_force_cases_are_the_ones_the_command_makes_now(sample_manifest, sample_docs, inputs):

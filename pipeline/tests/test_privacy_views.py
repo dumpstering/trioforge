@@ -30,6 +30,7 @@ from test_privacy_helpers import (  # noqa: F401  (fixtures are used by name)
     scan,
     scan_blob,
     tag,
+    windows_profile,
     write,
 )
 from trioforge.privacy import scan as S
@@ -232,6 +233,63 @@ def test_real_utf16_text_is_reported_once_not_again_for_the_other_byte_order(dat
 def test_utf16_text_with_crlf_lines_reports_the_same_position_from_every_pass():
     data = "line one\r\nsecond Zorblax\r\n".encode("utf-16")
     assert scan_blob("w.txt", data) == [finding("w.txt", 2, 8, "denylist", "zorblax")]
+
+
+# ---- UTF-16 that follows UTF-8 (a file appended to by a tool that writes the other encoding) ------------------
+
+LONG_ASCII = b"plain text, no NUL byte in it\n" * 300  # more than the 8 KiB that decide the encoding of a file
+
+
+@pytest.mark.parametrize("little", [True, False], ids=["le", "be"])
+def test_utf16_text_appended_to_a_long_utf8_file_is_found(little):
+    assert len(LONG_ASCII) > S.SAMPLE_SIZE
+    result = scan_blob("log.txt", LONG_ASCII + _wide("a note about Zorblax here", little))
+    assert [(f.rule, f.tag) for f in result] == [("denylist", tag("zorblax"))]
+
+
+def test_utf16_text_appended_to_a_long_utf8_file_is_found_at_its_line_and_column():
+    result = scan_blob("log.txt", LONG_ASCII + _wide("first\nsee Zorblax here", True))
+    line = LONG_ASCII.count(b"\n") + 2
+    assert [(f.line, f.rule) for f in result] == [(line, "denylist")]
+    assert result[0].col == 10  # (the column in the line as it is: a little-endian line feed leaves a NUL at the start of the next line, and the NULs between the characters count)
+
+
+@pytest.mark.parametrize("little", [True, False], ids=["le", "be"])
+def test_utf16_text_after_a_utf8_byte_order_mark_is_found(little):
+    result = scan_blob("w.txt", b"\xef\xbb\xbf" + _wide("hello Zorblax now", little))
+    assert [(f.rule, f.tag) for f in result] == [("denylist", tag("zorblax"))]
+
+
+def test_utf32_text_appended_to_a_long_utf8_file_is_found():
+    result = scan_blob("log.txt", LONG_ASCII + "see Zorblax here".encode("utf-32-le"))
+    assert [(f.rule, f.tag) for f in result] == [("denylist", tag("zorblax"))]
+
+
+def test_a_local_path_in_utf16_after_utf8_text_is_found_without_a_key():
+    path = windows_profile("Vexandra") + "\\notes"
+    result = scan_blob("log.txt", LONG_ASCII + _wide("at " + path + " ok", True), key=None)
+    assert rules(result) == ["local-path"]
+
+
+def test_utf8_text_with_a_stray_nul_byte_is_still_read_as_it_is():
+    assert [(f.rule, f.line, f.col) for f in scan_blob("w.txt", b"a\x00b Zorblax c\n")] == [("denylist", 1, 5)]
+    assert scan_blob("w.txt", b"fine\x00text\nZ\x00o\x00\n") == []  # (a name needs all its letters)
+
+
+# ---- UTF-16 at an odd offset of a binary file ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("little", [True, False], ids=["le", "be"])
+def test_utf16_text_at_an_odd_offset_of_a_binary_file_is_found_whole(little):
+    data = HEAD + b"\x01" + _wide("Zorblax", little) + TAIL
+    assert [(f.rule, f.tag) for f in scan_blob("blob.bin", data)] == [("denylist", tag("zorblax"))]
+    assert [(f.rule, f.tag) for f in scan_blob("blob.bin", HEAD + _wide("Zorblax", little) + TAIL)] == [("denylist", tag("zorblax"))]  # (and at an even one, once)
+
+
+@pytest.mark.parametrize("little", [True, False], ids=["le", "be"])
+def test_a_local_path_in_utf16_at_an_odd_offset_of_a_binary_file_is_found(little):
+    data = HEAD + b"\x01" + _wide(windows_profile("Vexandra") + "\\notes", little) + TAIL
+    assert rules(scan_blob("blob.bin", data, key=None)) == ["local-path"]
 
 
 @pytest.mark.parametrize("size", [4, 5, 6, 7, 9, 16])

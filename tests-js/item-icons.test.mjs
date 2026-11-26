@@ -195,12 +195,12 @@ describe("the rows of a view the page draws from a shard", () => {
     const app = mount();
     const baked = rows().map(pictureOf);
     const role = app.config.defaults.role;
-    $("#role-tank").checked = true;
-    change($("#role-tank"));
+    $("#role-melee").checked = true;
+    change($("#role-melee"));
     await app.whenIdle();
-    expect(app.displayed.role).toBe("tank");
-    expect(rows().map(pictureOf)).not.toEqual(baked); // (the tank's kit has a shield in the off hand)
-    expect(pictureOf(rows()[SECONDARY])).toBe("icon-shield");
+    expect(app.displayed.role).toBe("melee");
+    expect(rows().map(pictureOf)).not.toEqual(baked); // (the baked view is the Tank's, with a shield in the off hand; Melee damage plays a two-hander)
+    expect(pictureOf(rows()[SECONDARY])).not.toBe("icon-shield");
     $(`#role-${role}`).checked = true;
     change($(`#role-${role}`));
     await app.whenIdle();

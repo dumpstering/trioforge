@@ -39,6 +39,9 @@ catalog file).
 * ``fixtures/site/weapon-rate.json``: best kits of whole-pool views at the weapon tier rate 5 and 10 percent (``at_tier(weapon_pct=)``), and with no rate (``rules``: the rule
   ``tier.weapon_damage_pct``, 10), as the best-kit answers are made. At +0 no weapon has grown and the two rates give one answer.
 
+* ``fixtures/site/results-procs/pal-mnk-ber/engine-l50.json`` and ``fixtures/site/procs-family.json`` (F6): the family with a table of invented procs in its bundle (every other file holds ``"procs": null``), and Python's
+  Equip now, farm path, best sets, Every slot and mote orders with that table (``tests-js/engine-procs-family.test.mjs`` holds the worker and the page's mote order to them).
+
 ``test_site_engine_fixture.py`` makes them again and fails when a committed file differs. After a change to the exporter, the rules or
 the invented items, write them again with::
 
@@ -70,6 +73,9 @@ WEIGHTED = REPO / "fixtures" / "site" / "weighted.json"
 WEAPON_RATE = REPO / "fixtures" / "site" / "weapon-rate.json"
 MOTE_ORDERS = REPO / "fixtures" / "site" / "mote-orders.json"
 UPGRADE_VIEW = REPO / "fixtures" / "site" / "upgrade-view.json"
+PROCS_BUNDLE = REPO / "fixtures" / "site" / "results-procs" / "pal-mnk-ber" / "engine-l50.json"
+PROCS_FAMILY = REPO / "fixtures" / "site" / "procs-family.json"
+PROCS_ITEMS = REPO / "fixtures" / "site" / "results-procs" / "items.json"
 SLUG = "pal-mnk-ber"
 TRIO = ("PAL", "MNK", "BER")
 LEVEL = 50
@@ -139,8 +145,8 @@ EXTRAS: list[dict[str, Any]] = [
 #: the Equip now scenarios: (name, scenario, owned as (key, tier, count))
 CASES: list[dict[str, Any]] = [
     {
-        "name": "an Ogre, balanced, own buffs, wiki evidence, dual wield",
-        "scenario": {"race": "OGR", "role": "balanced", "buffs": "own", "evidence": "wiki", "setup": "dw"},
+        "name": "an Ogre, tank, own buffs, wiki evidence, dual wield",
+        "scenario": {"race": "OGR", "role": "tank", "buffs": "own", "evidence": "wiki", "setup": "dw"},
         "owned": [
             ("w90001", 0, 1), ("w90001", 4, 1), ("w90002", 0, 1), ("w90003", 4, 1), ("w90006", 4, 1), ("w90007", 4, 2),
             ("w90008", 0, 1), ("w90009", 4, 1), ("w90011", 4, 1), ("w90013", 4, 1), ("w90014", 4, 1), ("w90015", 0, 1),
@@ -170,6 +176,28 @@ CASES: list[dict[str, Any]] = [
             ("w80677", 4, 1), ("w80712", 4, 1), ("w90038", 4, 1), ("w80469", 4, 1),
         ],
     },
+    {
+        "name": "an Ogre, tank, group buffs and a haste spell, wiki evidence, one-hander and shield",
+        "scenario": {"race": "OGR", "role": "tank", "buffs": "group+haste", "evidence": "wiki", "setup": "1h-shield"},
+        "owned": [
+            ("w90001", 0, 1), ("w90001", 4, 1), ("w90002", 0, 1), ("w90003", 4, 1), ("w90006", 4, 1), ("w90007", 4, 2),
+            ("w90008", 0, 1), ("w90009", 4, 1), ("w90011", 4, 1), ("w90013", 4, 1), ("w90014", 4, 1), ("w90015", 0, 1),
+            ("w90020", 4, 1), ("w90021", 4, 2), ("w90022", 0, 1), ("w90023", 4, 1), ("w90026", 4, 2), ("w90027", 4, 1),
+            ("w90029", 4, 1), ("w90029", 10, 1), ("w90030", 4, 1), ("w90032", 4, 1), ("w90033", 4, 1), ("w90037", 4, 1),
+            ("w90038", 4, 1), ("w80988", 4, 2), ("w80113", 0, 1), ("w80923", 4, 1), ("w80524", 4, 1), ("w80758", 4, 1),
+            ("w90040", 4, 1), ("w90041", 4, 1), ("w90004", 4, 1),
+        ],
+    },
+    {
+        "name": "a Human, melee, the raid buffs and a haste spell, wiki evidence, two-hander",
+        "scenario": {"race": "HUM", "role": "melee", "buffs": "raid+haste", "evidence": "wiki", "setup": "2h"},
+        "owned": [
+            ("w80524", 4, 1), ("w80524", 0, 1), ("w80988", 4, 1), ("w90002", 0, 1), ("w90003", 4, 1), ("w90014", 4, 1),
+            ("w90023", 4, 1), ("w90020", 4, 1), ("w90021", 4, 1), ("w90031", 0, 1), ("w90030", 4, 1), ("w90032", 4, 1),
+            ("w90008", 0, 1), ("w90009", 4, 1), ("w90007", 4, 1), ("w90011", 4, 1), ("w90027", 4, 1), ("w80631", 4, 2),
+            ("w80677", 4, 1), ("w80712", 4, 1), ("w90038", 4, 1), ("w80469", 4, 1),
+        ],
+    },
 ]  # fmt: skip
 
 
@@ -178,7 +206,7 @@ CASES: list[dict[str, Any]] = [
 KIT_ONLY: list[dict[str, Any]] = [
     {
         "name": "an Ogre with few items: a hoop of haste, a head piece and a one-hander",
-        "scenario": {"race": "OGR", "role": "balanced", "buffs": "own", "evidence": "wiki", "setup": "dw"},
+        "scenario": {"race": "OGR", "role": "tank", "buffs": "own", "evidence": "wiki", "setup": "dw"},
         "owned": [("w90008", 0, 1), ("w90001", 4, 1), ("w80988", 4, 1)],
     },
     {
@@ -220,8 +248,19 @@ def sources_of(row: Mapping[str, Any]) -> dict[str, Any]:
     return {**none, "crafted": [{"container": "a forge", "components": []}]}
 
 
-def catalog() -> dict[str, Any]:
-    """The invented catalog of the fixture: its items are those of the shards (with their level and deity) and the extras."""
+#: The item the family with procs adds to the catalog (G4): a Lore weapon for either hand that carries an effect of its own, so that a kit that wears it in one hand has the other hand refused its proc.
+FAMILY_LORE_WEAPON: dict[str, Any] = {
+    "key": "w91101", "name": "Prop Lorebrand of the Quiet Hand", "slots": ["PRIMARY", "SECONDARY"], "stats": {"STR": 6, "ATK": 8}, "weight": 3.0, "weapon": ("1H Slashing", 14, 22, None),
+}  # fmt: skip
+#: (H3) a plain weapon for either hand, whose key is LARGER than the Lore weapon's, that carries the effect the Lore weapon carries as its second (Prop Squall): the effect has two donors, and the one that
+#: the other hand's proc is recorded from is not the smallest key among those the host can take, which the kit's Lore weapon is, but the other.
+FAMILY_PLAIN_WEAPON: dict[str, Any] = {
+    "key": "w91102", "name": "Prop Quillon of the Loud Hand", "slots": ["PRIMARY", "SECONDARY"], "stats": {"STR": 1}, "weight": 1.0, "weapon": ("1H Slashing", 3, 40, None),
+}  # fmt: skip
+
+
+def catalog(family: bool = False) -> dict[str, Any]:
+    """The invented catalog of the fixture: its items are those of the shards (with their level and deity) and the extras (and, for the family with procs, a Lore weapon)."""
     from test_precompute import make_item, weapon
 
     rows = shard_items()
@@ -247,11 +286,18 @@ def catalog() -> dict[str, Any]:
                 level=extra["level"], tier_rule=extra["tier_rule"],
             )
         )
+    if family:
+        for added, flags in ((FAMILY_LORE_WEAPON, ["lore"]), (FAMILY_PLAIN_WEAPON, [])):
+            listed.append(
+                make_item(
+                    added["key"], added["name"], added["slots"], stats=added["stats"], weight=added["weight"], weapon=weapon(*added["weapon"]), flags=flags, level="wiki", tier_rule="drop",
+                )
+            )
     listed.sort(key=lambda item: int(item["key"][1:]))
     return {"version": VERSION, "license": "CC BY-SA 4.0", "attribution": "invented", "provenance": {}, "items": listed}
 
 
-def documents() -> tuple[dict[str, Any], dict[str, Any]]:
+def documents(family: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
     """``(bundle, item table)`` of the fixture, made by the exporter from the invented catalog (no seen flags), each with the fingerprint of its inputs."""
     from trioforge.export import browser
     from trioforge.model.tables import REPO as ROOT
@@ -259,7 +305,7 @@ def documents() -> tuple[dict[str, Any], dict[str, Any]]:
 
     tables = load()
     spells = json.loads((ROOT / "derived" / "client" / f"spells-l{LEVEL}.json").read_text(encoding="utf-8"))
-    document = catalog()
+    document = catalog(family)
     made = browser.bundle(TRIO, LEVEL, tables, tables.rules, spells, data_release=f"data-{VERSION}", catalog=document)
     table = browser.items(document, tables.rules)
     catalog_sha256 = hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -275,14 +321,24 @@ def texts() -> dict[Path, str]:
     return {TRIO_FOLDER / "engine-l50.json": browser.render_bundle(made), RESULTS / "items.json": browser.render_items(table)}
 
 
-def _world() -> Any:
+_WORLDS: dict[Any, Any] = {}
+
+
+def _world(spell_haste: bool | None = None, family: bool = False) -> Any:
     """What the reference answers are worked out from: the tables, the bundle and the item table of the fixture, the four buff sets, the item records by key, and the
-    pool of each evidence level."""
+    pool of each evidence level. ``spell_haste`` None follows the rule ``haste.assume_spell`` (false: no spell haste in the buff sets); True makes the buff sets with the haste of the
+    spells, for the one case that is about a worn haste item past the cap (the bundle of the fixture has such sets under the keys of its twins, which the default world has too)."""
+    if (spell_haste, family) not in _WORLDS:
+        _WORLDS[(spell_haste, family)] = _make_world(spell_haste, family)
+    return _WORLDS[(spell_haste, family)]
+
+
+def _make_world(spell_haste: bool | None, family: bool = False) -> Any:
     from types import SimpleNamespace
 
     from trioforge.export import browser
     from trioforge.model import items as item_module
-    from trioforge.model.buffs import enchanter_preset, group_preset, own_buffs, raid_preset, resolve
+    from trioforge.model.buffs import BUFF_SETS, buffsets as make_buffsets
     from trioforge.model.tables import REPO as ROOT
     from trioforge.model.tables import load
     from trioforge.precompute import grid
@@ -290,20 +346,15 @@ def _world() -> Any:
     tables = load()
     rules = tables.rules
     spells = json.loads((ROOT / "derived" / "client" / f"spells-l{LEVEL}.json").read_text(encoding="utf-8"))
-    made, table = documents()
-    own = own_buffs(TRIO, LEVEL, spells, rules)
-    group = group_preset(spells, level=LEVEL)
-    buffsets = {
-        "own": resolve(own, rules),
-        "group": resolve([*own, *group], rules),
-        "group+enchanter": resolve([*own, *group, *enchanter_preset(spells, LEVEL, rules=rules)], rules),
-        "raid": resolve([*own, *raid_preset(spells, LEVEL, rules=rules)], rules),
-    }
+    made, table = documents(family)
+    buffsets = make_buffsets(TRIO, LEVEL, spells, rules, BUFF_SETS, spell_haste=spell_haste)  # (no spell haste in them while the rule haste.assume_spell is false, unless asked)
+    if spell_haste is None:  # (the world of the bundle: its twins of the buff sets keep the haste of the spells, which is what a reader's "I have a haste spell" solves with)
+        buffsets.update({key + browser.HASTE_SUFFIX: made_set for key, made_set in make_buffsets(TRIO, LEVEL, spells, rules, BUFF_SETS, spell_haste=True).items()})
     records = {browser.record_key(record): record for record in table["items"]}
-    selection = grid.select_items(catalog()["items"], TRIO)
+    selection = grid.select_items(catalog(family)["items"], TRIO)
     pools = {label: [item_module.at_tier(item, 0, rules) for item in grid.pool_dicts(selection, label)] for label in grid.EVIDENCE}
     return SimpleNamespace(
-        tables=tables, rules=rules, made=made, table=table, buffsets=buffsets, records=records, pools=pools, selection=selection
+        tables=tables, rules=rules, made=made, table=table, buffsets=buffsets, records=records, pools=pools, selection=selection, spell_haste=spell_haste,
     )
 
 
@@ -317,9 +368,10 @@ def _profile(world: Any, scenario: Mapping[str, Any], role: str | None = None, b
         scenario["race"], TRIO, LEVEL, role, world.buffsets[buffs], None, world.tables, evidence=scenario["evidence"],
         deity=scenario.get("deity"), items=world.pools[scenario["evidence"]],
     )
-    assert profile.to_dict() == browser.assemble(
-        world.made, scenario["race"], role, buffs, evidence=scenario["evidence"], deity=scenario.get("deity")
-    ), "the bundle does not reassemble to the profile of the scenario"
+    if not world.spell_haste:  # (the world with the haste of the spells under the keys of the rule is not what the bundle holds under them: it is held to its twins in the default world)
+        assert profile.to_dict() == browser.assemble(
+            world.made, scenario["race"], role, buffs, evidence=scenario["evidence"], deity=scenario.get("deity")
+        ), "the bundle does not reassemble to the profile of the scenario"
     return profile
 
 
@@ -372,8 +424,8 @@ def answers() -> dict[str, Any]:
 
 
 #: the roles and the buff sets a kit is valued under (every role of the bundle, and the four buff sets of the engine tests; the page offers two of the sets today)
-VIEW_ROLES = ("balanced", "tank", "melee")
-VIEW_BUFFS = ("own", "group", "group+enchanter", "raid")
+VIEW_ROLES = ("tank", "melee")
+VIEW_BUFFS = ("own", "group", "group+enchanter", "raid", "own+haste", "group+haste", "group+enchanter+haste", "raid+haste")
 
 
 def _arrangement(kit: Any) -> list[tuple[str, ...]]:
@@ -458,38 +510,45 @@ def _view(race: str, role: str, buffs: str, evidence: str, setup: str, **more: s
 #: of a group of ``roles.WEIGHT_GROUPS``; ``custom`` and ``regenT`` are the other two options of ``roles.weights_override``. The views are
 #: chosen so that the best kit is the same with and without the tie stage, which the browser's answer does not have.
 BEST_KIT_CASES: list[dict[str, Any]] = [
-    {"name": "an Ogre, balanced, own buffs, wiki evidence, dual wield, +4: armor class x2",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 2}}},
+    {"name": "an Ogre, tank, own buffs, wiki evidence, dual wield, +4: armor class x2",
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 2}}},
     {"name": "the same view with armor class x0.5",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 0.5}}},
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 0.5}}},
     {"name": "the same view with attack and haste x2",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"ATK+HASTE": 2}}},
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"ATK+HASTE": 2}}},
     {"name": "the same view with mana x2",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"MANA": 2}}},
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"MANA": 2}}},
     {"name": "the same view with regen x2 (the value moves, the kit does not)",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"regen": 2}}},
-    {"name": "an Ogre, balanced, own buffs, wiki evidence, one-hander and shield, +0: resists x2 and armor class x0.5",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "1h-shield"), "tier": 0, "weights": {"multipliers": {"AC": 0.5, "SV": 2}}},
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"regen": 2}}},
+    {"name": "an Ogre, tank, own buffs, wiki evidence, one-hander and shield, +0: resists x2 and armor class x0.5",
+     "scenario": _view("OGR", "tank", "own", "wiki", "1h-shield"), "tier": 0, "weights": {"multipliers": {"AC": 0.5, "SV": 2}}},
     {"name": "an Iksar, melee, group buffs, strict evidence, two-hander, +4: attack and haste x0.5",
      "scenario": _view("IKS", "melee", "group", "strict", "2h"), "tier": 4, "weights": {"multipliers": {"ATK+HASTE": 0.5}}},
-    {"name": "a Troll, tank, group buffs, strict evidence, one-hander and shield, +4: armor class x0.5 (kit and buffs move)",
+    {"name": "a Troll, tank, group buffs, strict evidence, one-hander and shield, +4: armor class x0.5",
      "scenario": _view("TRL", "tank", "group", "strict", "1h-shield"), "tier": 4, "weights": {"multipliers": {"AC": 0.5}}},
     {"name": "the same view with a custom hit point weight of 3",
      "scenario": _view("TRL", "tank", "group", "strict", "1h-shield"), "tier": 4, "weights": {"custom": {"HP": 3}}},
     {"name": "the same view with regen x2 over a ten-minute window",
      "scenario": _view("TRL", "tank", "group", "strict", "1h-shield"), "tier": 4, "weights": {"multipliers": {"regen": 2}, "regenT": 10}},
-    {"name": "an Iksar, balanced, raid buffs, wiki evidence, dual wield, +4: armor class x2 (the buffs move)",
-     "scenario": _view("IKS", "balanced", "raid", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 2}}},
+    {"name": "an Iksar, tank, raid buffs, wiki evidence, dual wield, +4: armor class x0.5 (the buffs move)",
+     "scenario": _view("IKS", "tank", "raid", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 0.5}}},
     {"name": "an Iksar, melee, group and the Enchanter's haste, wiki evidence, two-hander, +4: attack and haste x2",
      "scenario": _view("IKS", "melee", "group+enchanter", "wiki", "2h"), "tier": 4, "weights": {"multipliers": {"ATK+HASTE": 2}}},
     {"name": "a Troll, tank, group buffs, wiki evidence, one-hander and shield, +4, a follower of the Tribunal: armor class x2",
      "scenario": _view("TRL", "tank", "group", "wiki", "1h-shield", deity="The Tribunal"), "tier": 4, "weights": {"multipliers": {"AC": 2}}},
-    {"name": "an Iksar, balanced, raid buffs, wiki evidence, dual wield, +4: the role's own weights",
-     "scenario": _view("IKS", "balanced", "raid", "wiki", "dw"), "tier": 4},
+    {"name": "an Iksar, tank, raid buffs, wiki evidence, dual wield, +4: the role's own weights",
+     "scenario": _view("IKS", "tank", "raid", "wiki", "dw"), "tier": 4},
     {"name": "an Iksar, melee, group and the Enchanter's haste, wiki evidence, two-hander, +4: the role's own weights",
      "scenario": _view("IKS", "melee", "group+enchanter", "wiki", "2h"), "tier": 4},
     {"name": "a Troll, tank, group buffs, wiki evidence, one-hander and shield, +0, a follower of the Tribunal: the role's own weights",
      "scenario": _view("TRL", "tank", "group", "wiki", "1h-shield", deity="The Tribunal"), "tier": 0},
+    # the reader's "I have a haste spell": the twin of a buff set keeps the haste of the spells, and the browser's solve with it is Python's solve with the rule haste.assume_spell true
+    {"name": "an Ogre, tank, own buffs and a haste spell, wiki evidence, one-hander and shield, +4: the role's own weights",
+     "scenario": _view("OGR", "tank", "own+haste", "wiki", "1h-shield"), "tier": 4},
+    {"name": "an Iksar, melee, group and the Enchanter's haste and a haste spell, wiki evidence, two-hander, +4: the role's own weights",
+     "scenario": _view("IKS", "melee", "group+enchanter+haste", "wiki", "2h"), "tier": 4},
+    {"name": "a Troll, tank, raid buffs and a haste spell, wiki evidence, dual wield, +4: armor class x0.5",
+     "scenario": _view("TRL", "tank", "raid+haste", "wiki", "dw"), "tier": 4, "weights": {"multipliers": {"AC": 0.5}}},
 ]  # fmt: skip
 
 
@@ -588,16 +647,20 @@ WEAPON_RATE_CASES: list[dict[str, Any]] = [
      "scenario": _view("IKS", "melee", "group", "wiki", "2h"), "tier": 10},
     {"name": "an Iksar, melee, group buffs, wiki evidence, two-hander, +4",
      "scenario": _view("IKS", "melee", "group", "wiki", "2h"), "tier": 4},
-    {"name": "an Ogre, balanced, own buffs, wiki evidence, dual wield, +10",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 10},
-    {"name": "an Ogre, balanced, own buffs, wiki evidence, dual wield, +4",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 4},
+    {"name": "an Ogre, tank, own buffs, wiki evidence, dual wield, +10",
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 10},
+    {"name": "an Ogre, tank, own buffs, wiki evidence, dual wield, +4",
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 4},
     {"name": "a Troll, tank, group buffs, wiki evidence, one-hander and shield, +10",
      "scenario": _view("TRL", "tank", "group", "wiki", "1h-shield"), "tier": 10},
-    {"name": "an Ogre, balanced, own buffs, wiki evidence, dual wield, +10: attack and haste x2",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 10, "weights": {"multipliers": {"ATK+HASTE": 2}}},
-    {"name": "an Ogre, balanced, own buffs, wiki evidence, dual wield, +0 (no weapon has grown: the rate is not read)",
-     "scenario": _view("OGR", "balanced", "own", "wiki", "dw"), "tier": 0},
+    {"name": "an Ogre, tank, own buffs, wiki evidence, dual wield, +10: attack and haste x2",
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 10, "weights": {"multipliers": {"ATK+HASTE": 2}}},
+    {"name": "a Troll, tank, group buffs, wiki evidence, one-hander and shield, +4: attack and haste x0.5 (the kit moves with the rate)",
+     "scenario": _view("TRL", "tank", "group", "wiki", "1h-shield"), "tier": 4, "weights": {"multipliers": {"ATK+HASTE": 0.5}}},
+    {"name": "an Ogre, melee, own buffs, wiki evidence, dual wield, +10: an attack weight of 0.5 (the kit moves with the rate)",
+     "scenario": _view("OGR", "melee", "own", "wiki", "dw"), "tier": 10, "weights": {"custom": {"ATK": 0.5}}},
+    {"name": "an Ogre, tank, own buffs, wiki evidence, dual wield, +0 (no weapon has grown: the rate is not read)",
+     "scenario": _view("OGR", "tank", "own", "wiki", "dw"), "tier": 0},
 ]  # fmt: skip
 
 
@@ -692,9 +755,22 @@ def _candidates(world: Any, scenario: Mapping[str, Any], mode: Mapping[str, Any]
     return upgrade.scored_candidates(items, mode["mode"], world.rules, mode.get("D", 4), mode.get("N"))
 
 
-def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, Any], mode: Mapping[str, Any]) -> dict[str, Any]:
+def _recorded_procs(breakdown: Any) -> dict[str, Any]:
+    """The proc each hand counts in a breakdown, as ``[effect id, donor key, mode, value]`` (the donor a proc records is the item whose copy supplies it), or None for a hand that counts none."""
+    from fractions import Fraction
+
+    counted = breakdown.totals["procs"]
+    return {
+        hand: None if counted[hand] is None else [counted[hand].effect, counted[hand].donor, counted[hand].mode, _exact_text(Fraction(counted[hand].value))] for hand in ("PRIMARY", "SECONDARY")
+    }
+
+
+def _weighted_case(
+    world: Any, base: Mapping[str, Any], weights: Mapping[str, Any] | None, mode: Mapping[str, Any], options: Any = None
+) -> dict[str, Any]:
     """The answers of Python's reference for one scenario of ``CASES`` under ``weights`` and a tier mode (see the head of this file): every solve is made with the tie
-    stage and again without it, and an answer that differs is an :class:`_Unsteady` (the browser has no tie stage)."""
+    stage and again without it, and an answer that differs is an :class:`_Unsteady` (the browser has no tie stage). ``weights`` None leaves the role's own, and ``options`` (the builder's
+    :class:`~trioforge.solver.model.BuildOptions`, None: the defaults) carries a table of procs for the family of the fixture that has one (:func:`proc_family_answers`)."""
     from trioforge import upgrade
 
     scenario = base["scenario"]
@@ -710,20 +786,20 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
             raise _Unsteady
         return first
 
-    equip = both(lambda canonical: upgrade.equip_now(profile, owned, setup, buffset, canonical=canonical))
-    if equip.breakdown.F == upgrade.equip_now(own_profile, owned, setup, buffset, canonical=False).breakdown.F:
+    equip = both(lambda canonical: upgrade.equip_now(profile, owned, setup, buffset, options, canonical=canonical))
+    if weights is not None and equip.breakdown.F == upgrade.equip_now(own_profile, owned, setup, buffset, options, canonical=False).breakdown.F:
         raise _Unsteady
     start = equip  # (the path starts from Equip now)
-    path = upgrade.farm_path(profile, owned, offered, setup, buffset, PATH_STEPS, canonical=True)
-    plain = upgrade.farm_path(profile, owned, offered, setup, buffset, PATH_STEPS, canonical=False)
+    path = upgrade.farm_path(profile, owned, offered, setup, buffset, PATH_STEPS, options, canonical=True)
+    plain = upgrade.farm_path(profile, owned, offered, setup, buffset, PATH_STEPS, options, canonical=False)
     if [(s.item, s.kind, s.source_tier, s.F, _kit_idents(s.solution.kit), s.solution.buffs) for s in path] != [
         (s.item, s.kind, s.source_tier, s.F, _kit_idents(s.solution.kit), s.solution.buffs) for s in plain
     ]:
         raise _Unsteady
     sets = []
     for k in (2, 3):
-        found = upgrade.best_sets(profile, owned, offered, k, setup, buffset, canonical=True)
-        alone = upgrade.best_sets(profile, owned, offered, k, setup, buffset, canonical=False)
+        found = upgrade.best_sets(profile, owned, offered, k, setup, buffset, options, canonical=True)
+        alone = upgrade.best_sets(profile, owned, offered, k, setup, buffset, options, canonical=False)
         if found.acquisitions != alone.acquisitions or not _same(found.solution, alone.solution):
             raise _Unsteady
         sets.append(
@@ -742,9 +818,9 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
                 "hasteAssumed": found.haste_assumed,
             }
         )
-    rows = upgrade.every_slot(profile, equip, offered, setup, buffset, buffs=equip.buffs, limit=SLOT_LIMIT, owned=owned)
+    rows = upgrade.every_slot(profile, equip, offered, setup, buffset, options, buffs=equip.buffs, limit=SLOT_LIMIT, owned=owned)
     return {
-        "name": f"{base['name']}: {_describe(weights)}",
+        "name": f"{base['name']}: {_describe(weights) if weights is not None else 'the role own weights'}",
         "scenario": scenario,
         "owned": [[f"{key}@{tier}", count] for key, tier, count in base["owned"]],
         "weights": weights,
@@ -755,6 +831,7 @@ def _weighted_case(world: Any, base: Mapping[str, Any], weights: Mapping[str, An
             "kit": _kit_idents(equip.kit),
             "buffs": list(equip.buffs),
             "hasteAssumed": _counted_haste(equip),
+            **({} if options is None or options.procs is None else {"procs": _recorded_procs(equip.breakdown)}),
         },
         "farmPath": {
             "steps": PATH_STEPS,
@@ -825,7 +902,7 @@ def weighted_text(document: dict[str, Any] | None = None) -> str:
 
 
 #: the view and the owned set the Upgrade test gives the page: the default view of the trio page, and the items of fixtures/dumps/site-small.txt as the page reads them, as (key, tier, count)
-UPGRADE_VIEW_SCENARIO = {"race": "OGR", "role": "balanced", "buffs": "own", "evidence": "strict", "setup": "dw"}
+UPGRADE_VIEW_SCENARIO = {"race": "OGR", "role": "tank", "buffs": "own", "evidence": "strict", "setup": "dw"}
 UPGRADE_VIEW_OWNED = [
     ("w80631", 4, 1), ("w90020", 0, 1), ("w90029", 4, 1), ("w90011", 0, 1), ("w90023", 1, 1), ("w90001", 4, 2),
     ("w8091", 4, 1), ("w90006", 0, 1), ("w80113", 3, 1), ("w90007", 2, 2), ("w80923", 0, 1), ("w90014", 1, 1),
@@ -943,13 +1020,17 @@ def mote_cases() -> list[dict[str, Any]]:
 
     cases: list[dict[str, Any]] = []
 
-    def add(name: str, scenario: Mapping[str, Any], kit: list[str | None], buffs: list[int], limit: int | None, weights: Mapping[str, Any] | None = None) -> None:
-        profile = _composed(_profile(world, scenario), weights)
-        worn = [None if ident is None else item_module.at_tier(catalog[ident.rsplit("@", 1)[0]], int(ident.rsplit("@", 1)[1]), world.rules) for ident in kit]
-        order = motes.mote_order(profile, worn, catalog, world.rules, scenario["setup"], world.buffsets[scenario["buffs"]], buffs, limit)
+    def add(
+        name: str, scenario: Mapping[str, Any], kit: list[str | None], buffs: list[int], limit: int | None, weights: Mapping[str, Any] | None = None
+    ) -> None:
+        here = world
+        profile = _composed(_profile(here, scenario), weights)
+        worn = [None if ident is None else item_module.at_tier(catalog[ident.rsplit("@", 1)[0]], int(ident.rsplit("@", 1)[1]), here.rules) for ident in kit]
+        order = motes.mote_order(profile, worn, catalog, here.rules, scenario["setup"], here.buffsets[scenario["buffs"]], buffs, limit)
         cases.append(
             {
-                "name": name, "scenario": dict(scenario), **({"weights": weights} if weights is not None else {}), "kit": kit, "buffs": buffs, "motes": limit,
+                "name": name, "scenario": dict(scenario), **({"weights": weights} if weights is not None else {}),
+                "kit": kit, "buffs": buffs, "motes": limit,
                 "start": _exact_text(order.start), "ending": order.ending, "left": order.left, "spent": order.spent, "nextRun": order.next_run,
                 "steps": [
                     {
@@ -966,9 +1047,17 @@ def mote_cases() -> list[dict[str, Any]]:
     for case, kit in zip(KIT_ONLY, small, strict=True):
         add(f"the whole order of a small kit: {case['name']}", case["scenario"], kit["kit"], kit["buffs"], None)
     # the hoop of haste of the second small kit is worn under the raid's 70 spell haste, which leaves 15 of the cap: it counts in full at +0, so its motes add nothing but the
-    # agility it gives, and with no weight on armor class or endurance (nothing else reads agility) they add nothing at all: the order ends with the motes it could still spend
-    add(f"a hoop past the haste cap, no weight on armor class or endurance: {KIT_ONLY[1]['name']}", KIT_ONLY[1]["scenario"], small[1]["kit"], small[1]["buffs"], None,
+    # agility it gives, and with no weight on armor class or endurance (nothing else reads agility) they add nothing at all: the order ends with the motes it could still spend.
+    # The rule haste.assume_spell leaves the spell haste out of the buffs, so this case is worked out with the twin of the raid set (``raid+haste``: the browser's "I have a haste spell")
+    past_cap = {**KIT_ONLY[1]["scenario"], "buffs": "raid+haste"}
+    kit_hasty = upgrade.equip_now(_profile(world, past_cap), _owned(world, KIT_ONLY[1]["owned"]), past_cap["setup"], world.buffsets[past_cap["buffs"]], canonical=True)
+    assert kit_hasty.status == "optimal" and kit_hasty.breakdown is not None
+    add(f"a hoop past the haste cap under the spells' haste, no weight on armor class or endurance: {KIT_ONLY[1]['name']}", past_cap, _kit_idents(kit_hasty.kit), list(kit_hasty.buffs), None,
         {"multipliers": {}, "custom": {"AC": 0, "END": 0}})  # fmt: skip
+    # an extra: a kit under weights that value nothing (every settable weight 0): no mote adds anything, and the order ends at once with the motes it could still spend
+    nothing = {key: 0 for key in ("HP", "AC", "MANA", "ATK", "DEX", "HASTE", "END", "CHA", "SV")}
+    add(f"weights that value nothing, so no mote adds anything: {KIT_ONLY[1]['name']}", KIT_ONLY[1]["scenario"], small[1]["kit"], small[1]["buffs"], None,
+        {"multipliers": {}, "custom": nothing})  # fmt: skip
     for index, (case, answer) in enumerate(zip(CASES, equip, strict=True)):
         weights = draw_weights(f"{WEIGHTED_SEED}:{index}:0")
         add(f"under drawn weights, {WEIGHTED_MOTE_LIMIT} motes: {case['name']}", case["scenario"], answer["kit"], answer["buffs"], WEIGHTED_MOTE_LIMIT, weights)
@@ -1005,7 +1094,11 @@ def mote_cases() -> list[dict[str, Any]]:
     add("the same, with eight motes", ogre, overtake, ogre_buffs, 8)
     add("the same, with three motes: the run of six does not fit", ogre, overtake, ogre_buffs, 3)
     add("a head piece, the ear and the neck, with three motes: the head piece takes them, the run of six does not fit", ogre, placed(HEAD=("w90001", 4), EAR=("w91002", 0), NECK=("w91003", 10)), ogre_buffs, 3)
-    first, second, third = equip
+    # (E7) the run of the best rate is not the shortest: a weight of 1000 on haste makes the ear's run of six the better rate, and the dagger's run of two is the shortest; with one mote nothing fits,
+    # and the order says how many motes the shortest run needs (two), where it used to name the run of the best rate (six)
+    add("the dagger, the ear and the neck under a heavy weight on haste, with one mote: the shortest run is the one the order names", ogre, placed(PRIMARY=("w91001", 0), EAR=("w91002", 0), NECK=("w91003", 10)), ogre_buffs, 1,
+        {"multipliers": {}, "custom": {"HASTE": 1000}})  # fmt: skip
+    first, second, third = equip[:3]  # (the cases beyond them are the Equip now cases with a haste spell: the motes orders do not need them)
     add(f"a published-style kit, every item at +{PUBLISHED_TIER}: {CASES[0]['name']}", CASES[0]["scenario"], retier(first["kit"], PUBLISHED_TIER), first["buffs"], WEIGHTED_MOTE_LIMIT)
     add(f"every item a tier from the top: {CASES[1]['name']}", CASES[1]["scenario"], retier(second["kit"], 9), second["buffs"], None)
     add(f"every item at the top: {CASES[2]['name']}", CASES[2]["scenario"], retier(third["kit"], 10), third["buffs"], None)
@@ -1025,12 +1118,137 @@ def mote_orders_text(document: dict[str, Any] | None = None) -> str:
     return json.dumps(mote_orders() if document is None else document, indent=1, ensure_ascii=False) + "\n"
 
 
+# ---- the family with procs (F6) ------------------------------------------------------------------------------------------------------------------
+
+#: The bundle of every other file of the fixture holds no table of procs (``"procs": null``): the browser's weapon term, mote order and Upgrade answers with procs were held to nothing. This family is
+#: the same invented catalog and a Lore weapon, with a table of invented procs in the bundle (``fixtures/site/results-procs``: the bundle and the item table) and Python's answers with that table
+#: (``fixtures/site/procs-family.json``): Equip now, a farm path, the best 2 and 3 sets and Every slot (``_weighted_case`` with the table in the options and the role's own weights) and the mote
+#: order of Equip now's kits and of a weapon one mote short of the socket tier, where the proc it counts jumps from its own to the best it can host. Every name and number is invented.
+#: (G4) the fifth effect, Prop Gust, is carried by the Lore weapon FAMILY_LORE_WEAPON, which fits either hand and is the best proc of the table: a kit that wears the one copy in a hand cannot have the
+#: other hand host it, which the recorded donors show. (H3) The sixth, Prop Squall (9,200), is carried by the Lore weapon too and by the plain FAMILY_PLAIN_WEAPON, whose key is the larger: the other
+#: hand of that kit records Prop Squall from the plain weapon, not from the smallest key of its donors (the Lore weapon's, whose one copy is worn).
+PROC_EFFECTS = (
+    ("e-prop-rime", "Prop Rime", 700), ("e-prop-ember", "Prop Ember", 2400), ("e-prop-venom", "Prop Venom", 4100), ("e-prop-tumble", "Prop Tumble", 9000), ("e-prop-squall", "Prop Squall", 9200),
+    ("e-prop-gust", "Prop Gust", 9500),
+)  # fmt: skip
+PROC_DONORS = (  # (effect, item key, slots, fits the primary hand only, a Lore item)
+    ("e-prop-rime", "w80113", ("PRIMARY", "SECONDARY"), False, False),
+    ("e-prop-ember", "w80923", ("PRIMARY",), True, False),
+    ("e-prop-venom", "w80988", ("PRIMARY",), True, False),
+    ("e-prop-tumble", "w80524", ("PRIMARY",), True, False),
+    ("e-prop-gust", "w91101", ("PRIMARY", "SECONDARY"), False, True),
+    ("e-prop-squall", "w91101", ("PRIMARY", "SECONDARY"), False, True),  # (H3: the Lore weapon carries a second effect, which a plain weapon with a larger key carries as well)
+    ("e-prop-squall", "w91102", ("PRIMARY", "SECONDARY"), False, False),
+)
+PROC_CASES = (0, 1, 2)  # the scenarios of CASES it answers (dual wield, one-hander and shield, two-hander)
+#: (G4) dual wield with the Lore weapon owned once and the mace once, at +4: the kit wears the Lore weapon in the off hand (its own proc, Prop Gust) and the main hand hosts the best proc that is left
+#: (Prop Tumble), where a kit that did not know the rule would have both hands count Prop Gust.
+LORE_CASE: dict[str, Any] = {
+    "name": "an Ogre, tank, own buffs, wiki evidence, dual wield, with the Lore weapon",
+    "scenario": {"race": "OGR", "role": "tank", "buffs": "own", "evidence": "wiki", "setup": "dw"},
+    "owned": [item for item in CASES[0]["owned"] if item[0] not in ("w80988", "w80113", "w80923", "w80524")] + [("w91101", 4, 1), ("w80113", 4, 1)],
+}
+
+
+def proc_table() -> Any:
+    """The table of invented procs: five effects on the four weapons of the fixture and the Lore weapon of the family, the socket tier of the rules (+4)."""
+    from fractions import Fraction
+
+    from trioforge.model.procs import ProcDonor, ProcEffect, ProcTable
+
+    effects = tuple(ProcEffect(effect, name, Fraction(value)) for effect, name, value in PROC_EFFECTS)
+    donors = tuple(ProcDonor(effect, key, frozenset(slots), frozenset(TRIO), only, lore) for effect, key, slots, only, lore in PROC_DONORS)
+    return ProcTable(TRIO, 4, effects, donors)
+
+
+def proc_bundle() -> dict[str, Any]:
+    """The bundle of the family: the fixture's catalog and the Lore weapon, with the table of procs in it (the inputs fingerprint is that of the family's own item table: the table of procs is not an input of it)."""
+    from trioforge.export import browser
+    from trioforge.model.tables import REPO as ROOT
+    from trioforge.model.tables import load
+
+    tables = load()
+    spells = json.loads((ROOT / "derived" / "client" / f"spells-l{LEVEL}.json").read_text(encoding="utf-8"))
+    made = browser.bundle(TRIO, LEVEL, tables, tables.rules, spells, data_release=f"data-{VERSION}", catalog=catalog(True), procs=proc_table())
+    return browser.with_inputs(made, documents(True)[0]["inputs"])
+
+
+def proc_bundle_text() -> str:
+    from trioforge.export import browser
+
+    return browser.render_bundle(proc_bundle())
+
+
+def proc_items_text() -> str:
+    """The item table of the family: the fixture's, and the Lore weapon."""
+    from trioforge.export import browser
+
+    return browser.render_items(documents(True)[1])
+
+
+def proc_family_answers() -> dict[str, Any]:
+    """Python's answers with the table of procs (see above): ``{trio, level, procs, cases, motes}``. A case is :func:`_weighted_case` with the role's own weights and the table in the options."""
+    from trioforge import motes, upgrade
+    from trioforge.export import browser
+    from trioforge.model import items as item_module
+    from trioforge.solver.model import BuildOptions
+
+    world = _world(family=True)
+    options = BuildOptions(procs=proc_table())
+    cases = []
+    for number, (index, base) in enumerate([*((i, CASES[i]) for i in PROC_CASES), (0, LORE_CASE)]):
+        case = _weighted_case(world, base, None, TIER_MODES[number % len(TIER_MODES)], options)
+        scenario = base["scenario"]
+        without = upgrade.equip_now(_profile(world, scenario), _owned(world, base["owned"]), scenario["setup"], world.buffsets[scenario["buffs"]], canonical=False)
+        case["withoutProcs"] = {"F": _exact_text(without.breakdown.F), "kit": _kit_idents(without.kit)}
+        if _exact_text(without.breakdown.F) == case["equipNow"]["F"]:
+            raise SystemExit(f"{base['name']}: the table of procs does not move Equip now: change the procs")
+        cases.append({"index": index, **({"variant": "lore"} if base is LORE_CASE else {}), **case})
+    records = {key: browser.item_to_catalog(record, world.table["defaults"]) for key, record in world.records.items()}
+    mote_cases: list[dict[str, Any]] = []
+
+    def add(name: str, scenario: Mapping[str, Any], kit: list[str | None], buffs: list[int], limit: int | None) -> None:
+        profile = _profile(world, scenario)
+        worn = [None if ident is None else item_module.at_tier(records[ident.rsplit("@", 1)[0]], int(ident.rsplit("@", 1)[1]), world.rules) for ident in kit]
+        buffset = world.buffsets[scenario["buffs"]]
+        order = motes.mote_order(profile, worn, records, world.rules, scenario["setup"], buffset, buffs, limit, procs=options.procs)
+        bare = motes.mote_order(profile, worn, records, world.rules, scenario["setup"], buffset, buffs, limit)
+        mote_cases.append(
+            {
+                "name": name, "scenario": dict(scenario), "kit": kit, "buffs": buffs, "motes": limit,
+                "start": _exact_text(order.start), "ending": order.ending, "left": order.left, "spent": order.spent, "nextRun": order.next_run,
+                "steps": [
+                    {"index": s.index, "place": s.place, "key": s.key, "from": s.from_tier, "to": s.to_tier, "motes": s.motes, "spent": s.spent,
+                     "gain": _exact_text(s.gain), "F": _exact_text(s.F), "moved": _exact_moved(s.moved)}
+                    for s in order.steps
+                ],
+                "withoutProcs": [[s.place, s.key, s.from_tier, s.to_tier, _exact_text(s.gain)] for s in bare.steps],
+            }
+        )  # fmt: skip
+
+    for case in cases:
+        add(f"Equip now's kit under the table of procs, {MOTE_LIMIT} motes: {case['name']}", case["scenario"], case["equipNow"]["kit"], case["equipNow"]["buffs"], MOTE_LIMIT)
+    kit: list[str | None] = [None] * 22
+    kit[20] = "w80113@3"  # the mace one mote short of the socket tier, with a chest piece that gains at every tier
+    kit[13] = "w90001@4"
+    add("a mace one mote short of the socket tier, and a chest piece: the jump to the best proc it can host", CASES[0]["scenario"], kit, cases[0]["equipNow"]["buffs"], None)
+    if not any([[s["place"], s["key"], s["from"], s["to"], s["gain"]] for s in case["steps"]] != case["withoutProcs"] for case in mote_cases):
+        raise SystemExit("the table of procs does not move any mote order: change the procs")
+    return {"trio": SLUG, "level": LEVEL, "procs": [list(row) for row in PROC_EFFECTS], "cases": cases, "motes": mote_cases}
+
+
+def proc_family_text(document: dict[str, Any] | None = None) -> str:
+    return json.dumps(proc_family_answers() if document is None else document, indent=1, ensure_ascii=False) + "\n"
+
+
 def write_all() -> None:
     texts_made = {
         **texts(), EQUIP_NOW: equip_now_text(), KIT_VALUES: kit_values_text(), BEST_KIT: best_kit_text(), WEIGHTED: weighted_text(),
         WEAPON_RATE: weapon_rate_text(), UPGRADE_VIEW: upgrade_view_text(), MOTE_ORDERS: mote_orders_text(),
+        PROCS_BUNDLE: proc_bundle_text(), PROCS_ITEMS: proc_items_text(), PROCS_FAMILY: proc_family_text(),
     }  # fmt: skip
     for path, text in texts_made.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {path.relative_to(REPO).as_posix()} ({len(text.encode('utf-8')):,} bytes)")
 

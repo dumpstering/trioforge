@@ -24,7 +24,9 @@ its source. This module is the whole of that source:
 (:class:`trioforge.sources.eqlwiki.FetchLock`, a lock file of its own), the user agent names the project and its about page,
 and only ``https://eqlegendstools.com/zones/<slug>/`` and ``https://eqlegendstools.com/items/<slug>/`` are ever asked for:
 the site's robots.txt disallows ``/api/``, ``/scripts/`` and the rest, and :func:`allowed_url` is the only door a request
-goes through (the client refuses any other address, and a redirect is never followed).
+goes through (the client refuses any other address, and a redirect is never followed). The client also reads the site's
+robots.txt before its first request of a run, as one of that run's requests, and refuses what it disallows for us (and obeys a
+longer Crawl-delay): the list above is written to agree with it, and the file is the authority.
 
 The scheduled sources check (``scripts/sources_check.py``) never asks this site: a test holds that script to the two hosts it
 has always asked, and this module is not imported there.

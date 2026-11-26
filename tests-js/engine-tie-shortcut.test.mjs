@@ -215,8 +215,9 @@ describe("the shortcut of the tie stage (itemsAreSettled), on the committed pari
       setScenario(session, "main", c.poolOf(recorded), deepFreeze(clone(recorded.options)));
       const answer = solve(session, { scenario: "main", budgetMs: 1000, canonical: true });
       expect(answer.tieStage).toBe("applied");
-      // the first stage, the proof (a stage of its own) and the tie stage (with the items fixed, a program of its own) are each given the whole 1000 ms
-      expect(spied.log.limits.map((limit) => limit.limitMs)).toEqual([1000, 1000, 1000]);
+      // the first stage, the proof (a stage of its own), the tie stage (with the items fixed, a program of its own) and the last stage's solve that finds nothing more tied
+      // (R2: a program of its own, as well) are each given the whole 1000 ms
+      expect(spied.log.limits.map((limit) => limit.limitMs)).toEqual([1000, 1000, 1000, 1000]);
     } finally {
       closeSession(session);
     }
@@ -304,10 +305,10 @@ describe("the shortcut of the tie stage (itemsAreSettled), on the committed pari
         expect(event).not.toHaveProperty("bound");
         expect(event).not.toHaveProperty("gap");
       }
-      // the caller's solver options are the proof's too: set on the first stage, the proof and the tie stage, three programs (two if the proof were left out)
+      // the caller's solver options are the proof's too: set on the first stage, the proof, the tie stage and the solve of the last stage, four programs (three if the proof were left out)
       counts.keys.clear();
       solve(session, { scenario: "main", budgetMs: BUDGET_MS, canonical: true, highsOptions: { mip_detect_symmetry: false } });
-      expect(counts.keys.get("mip_detect_symmetry=false")).toBe(3);
+      expect(counts.keys.get("mip_detect_symmetry=false")).toBe(4);
     } finally {
       closeSession(session);
     }

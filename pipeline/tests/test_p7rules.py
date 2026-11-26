@@ -4,7 +4,7 @@
 * weight falls 9 percent of the base a tier with no minimum step, to the floor (``tier.weight_pct``, ``tier.weight_floor``);
 * Unbound Alacrity gives a trio with a Monk 10 haste on top of the spell haste and the best worn haste (``haste.unbound_alacrity``);
 * the dual-wield factor is 0.83 for a trio with a Monk and 0.69 without (``weapons.dual_wield_factor``);
-* a two-hander with no damage bonus listed gets 0.67 x min(delay, 50), a one-hander 0.5 x delay.
+* a main hand with no damage bonus listed gets the client's formula of the level (T9: it was 0.67 x min(delay, 50) for a two-hander and 0.5 x delay for a one-hander).
 
 The numbers are written out by hand, so these tests do not trust the modules they check. Every item is invented.
 """
@@ -142,7 +142,8 @@ def counted(trio, spell=0, worn=0):
 
 def test_the_rule_says_ten_haste_and_ten_more_cap():
     assert RULES.get("haste.unbound_alacrity") == "adds 10 haste and raises the cap by 10"
-    assert RULES.get("haste.cap_pct_with_monk") == 85 and RULES.get("haste.cap_pct") == 75
+    assert RULES.get("haste.cap_pct_with_monk") == "the cap of the level plus the 10 that Unbound Alacrity adds (85 at level 50)"  # (T7: the cap has a level dimension; 75 and 85 are its values at level 50)
+    assert RULES.get("haste.cap_pct").startswith("max(level, 30) + 25 up to level 50 (75 at level 50)")
 
 
 def test_a_trio_with_a_monk_counts_ten_haste_with_nothing_else():
@@ -218,23 +219,81 @@ def weapon_vec_item(dmg, delay, bonus=None, two_handed=False):
     return vec(key="w", weapon=weapon, slots=("PRIMARY", "SECONDARY"))
 
 
-def test_a_two_hander_with_no_bonus_listed_gets_067_of_the_delay_capped_at_50():
+def test_a_two_hander_with_no_bonus_listed_gets_06875_of_the_delay_capped_at_50_at_level_50():
     long = weapon_vec_item(40, 60, two_handed=True)
     short = weapon_vec_item(40, 40, two_handed=True)
-    assert weapons.damage_index_exact(long, "primary", "2h", 0) == (40 + F(67, 100) * 50) / 60
-    assert weapons.damage_index_exact(short, "primary", "2h", 0) == (40 + F(67, 100) * 40) / 40
-    assert weapon_index(long.weapon, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 50) / 60
-    assert weapon_index(short.weapon, "PRIMARY", "2h", 0, 1) == (40 + F(67, 100) * 40) / 40
+    assert weapons.damage_index_exact(long, "primary", "2h", 0) == (40 + F(6875, 10000) * 50) / 60
+    assert weapons.damage_index_exact(short, "primary", "2h", 0) == (40 + F(6875, 10000) * 40) / 40
+    assert weapon_index(long.weapon, "PRIMARY", "2h", 0, 1) == (40 + F(6875, 10000) * 50) / 60
+    assert weapon_index(short.weapon, "PRIMARY", "2h", 0, 1) == (40 + F(6875, 10000) * 40) / 40
 
 
 def test_the_cap_of_50_is_inclusive_and_a_listed_bonus_is_not_capped():
     edge = weapon_vec_item(40, 50, two_handed=True)
-    assert weapons.damage_index_exact(edge, "primary", "2h", 0) == (40 + F(67, 100) * 50) / 50
+    assert weapons.damage_index_exact(edge, "primary", "2h", 0) == (40 + F(6875, 10000) * 50) / 50
     listed = weapon_vec_item(40, 60, bonus=33, two_handed=True)
     assert weapons.damage_index_exact(listed, "primary", "2h", 0) == F(40 + 33, 60)
 
 
-def test_a_one_hander_keeps_half_the_delay_whatever_the_delay():
+def test_a_one_hander_has_half_the_delay_at_level_50_up_to_a_delay_of_50():
+    """T9: the delay counts at most 50 for a one-hander too (the client's formula), where it counted in full before."""
     slow = weapon_vec_item(10, 80)
-    assert weapons.damage_index_exact(slow, "primary", "dw", 0) == (10 + F(1, 2) * 80) / 80
-    assert weapon_index(slow.weapon, "PRIMARY", "dw", 0, 1) == (10 + F(1, 2) * 80) / 80
+    assert weapons.damage_index_exact(slow, "primary", "dw", 0) == (10 + F(1, 2) * 50) / 80
+    fast = weapon_vec_item(10, 40)
+    assert weapons.damage_index_exact(fast, "primary", "dw", 0) == (10 + F(1, 2) * 40) / 40
+    assert weapon_index(slow.weapon, "PRIMARY", "dw", 0, 1) == (10 + F(1, 2) * 50) / 80
+
+
+# ---- 6. T9: the damage bonus with none listed is the client's formula, with the level in it -----------------------------------------------------------------------
+# bonus = (level / 100) x max(damage, level) x f x min(delay, 50) / 40, f = 0.8 for a one-hander and 1.1 for a two-hander, from level 28 (the game client's own calculation)
+
+BONUS_CASES = [
+    # (level, damage, delay, two-handed, the bonus worked out by hand)
+    (50, 20, 30, False, F(15)),  # .5 x 50 x .8 x 30 / 40: half the delay, as the old rule had it at level 50
+    (50, 50, 40, False, F(20)),  # the damage is at the level: still half the delay
+    (50, 60, 30, False, F(18)),  # a weapon with more damage than the level: .5 x 60 x .8 x 30 / 40
+    (50, 10, 80, False, F(25)),  # the delay counts at most 50 for a one-hander too: .5 x 50 x .8 x 50 / 40
+    (50, 40, 60, True, F(34375, 1000)),  # .5 x 50 x 1.1 x 50 / 40: 0.6875 x the delay up to 50 (the old rule had 0.67)
+    (50, 40, 40, True, F(2750, 100)),  # .6875 x 40
+    (50, 70, 60, True, F(48125, 1000)),  # .5 x 70 x 1.1 x 50 / 40
+    (40, 20, 30, False, F(96, 10)),  # .4 x max(20, 40) x .8 x 30 / 40
+    (40, 55, 30, True, F(40, 100) * 55 * F(11, 10) * 30 / 40),
+    (28, 10, 40, False, F(28, 100) * 28 * F(4, 5) * 40 / 40),  # the first level of the bonus
+    (27, 10, 40, False, F(0)),  # none below level 28
+    (1, 99, 60, True, F(0)),
+]
+
+
+@pytest.mark.parametrize(("level", "damage", "delay", "two_handed", "want"), BONUS_CASES)
+def test_the_fallback_bonus_is_the_clients_level_formula(level, damage, delay, two_handed, want):
+    assert weapons.fallback_bonus(damage, delay, two_handed, level) == want
+    assert formulas.fallback_bonus(damage, delay, two_handed, level) == want  # (the evaluator's own copy of the definition)
+
+
+@pytest.mark.parametrize(("level", "damage", "delay", "two_handed", "bonus"), BONUS_CASES)
+@pytest.mark.parametrize("listed", [None, 0])
+def test_the_damage_index_of_a_weapon_with_no_bonus_listed_has_the_level_in_it(level, damage, delay, two_handed, bonus, listed):
+    thing = weapon_vec_item(damage, delay, bonus=listed, two_handed=two_handed)
+    setup = "2h" if two_handed else "1h-shield"
+    want = (F(damage) + bonus) / delay * (1 + F(25, 100))
+    assert weapons.damage_index_exact(thing, "primary", setup, 25, level=level) == want
+    assert weapon_index(thing.weapon, "PRIMARY", setup, 25, 1, level=level) == want
+    prof = dataclasses.replace(profile_of(("WAR", "CLR", "WIZ")).eval_profile, level=level, weights={"DMG": 1})
+    kit = [None] * len(SLOT_INSTANCES)
+    kit[SLOT_INSTANCES.index("PRIMARY")] = thing
+    assert formulas.evaluate(prof, kit, setup=setup, haste_assumed=25).parts["WEAPON"] == want  # (the evaluator reads the level of the profile)
+
+
+def test_a_listed_bonus_and_the_off_hand_and_a_bow_do_not_read_the_level():
+    listed = weapon_vec_item(40, 60, bonus=33, two_handed=True)
+    for level in (20, 50, 70):
+        assert weapons.damage_index_exact(listed, "primary", "2h", 0, level=level) == F(73, 60)
+    off = weapon_vec_item(18, 36)
+    assert weapons.damage_index_exact(off, "secondary", "dw", 0, dw_factor=F(4, 5), level=30) == weapons.damage_index_exact(off, "secondary", "dw", 0, dw_factor=F(4, 5), level=60)
+
+
+def test_the_bonus_rule_says_the_formula_and_the_constants_of_the_model_are_its_numbers():
+    value = RULES.get("weapons.fallback_bonus")
+    assert value == {"from_level": 28, "one_handed": 0.8, "two_handed": 1.1, "delay_cap": 50}
+    assert (weapons.BONUS_FROM_LEVEL, weapons.BONUS_ONE_HANDED, weapons.BONUS_TWO_HANDED, weapons.BONUS_DELAY_CAP) == (28, F(4, 5), F(11, 10), 50)
+    assert RULES.seal("weapons.fallback_bonus") == "measured"

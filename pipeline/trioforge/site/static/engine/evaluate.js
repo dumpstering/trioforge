@@ -1,11 +1,11 @@
 // The exact value of a kit: a port of `evaluate` in pipeline/trioforge/model/formulas.py on BigInt rationals (rational.js), held to the breakdowns
 // that Python wrote (tests-js/engine-evaluate.test.mjs: the parity fixtures, and one test per term).
 //
-//   evaluate(profile, kit, buffsChosen, {setup, hasteAssumed, monkBins, buffset}) -> {F, breakdown}
+//   evaluate(profile, kit, buffsChosen, {setup, hasteAssumed, monkBins, buffset, procs}) -> {F, breakdown}
 //
 //   profile      what `assembleProfile` gives, Profile.to_dict(): the fields the evaluator reads are `level`, `naked`, `weights`, `pools`,
 //                `buff_totals`, `haste_cap`, `softcap`, `cs_pct`, `pe_pct`, `defense_cap`, `monk`, `iksar_ac`, `placement`, `caps`, `bands` and
-//                `dw_factor`; the others are not looked at.
+//                `dw_factor` and `ranged_factor` (the latter optional: a profile written without it has 1); the others are not looked at.
 //   kit          a list of the 22 places of SLOT_INSTANCES, each null or an item as `atTier` gives it (the fields read are `key`, `stats`, `sv`,
 //                `haste`, `weight10`, `weapon` and `is_shield`; `stats` and `sv` hold whole numbers).
 //   buffsChosen  null (or undefined): the buffs of the profile, the always-on ones. Else the ids of the optional buffs that are on, which
@@ -14,10 +14,11 @@
 //                an id that is always on is already counted, and an id that is not in the set is an error. The set must be the profile's:
 //                its always-on buffs must give exactly `profile.buff_totals` (so a choice is a choice on top of the buffs the profile has),
 //                or it is an error.
-//   options      `setup` (null, "1h-shield", "2h", "dw" or "stick": which hands score weapon damage), `hasteAssumed` (the haste percent the
+//   options      `setup` (null, "1h-shield", "2h", "dw", "stick" or "ranged": which places score weapon damage; "ranged" scores the bow in the range place), `hasteAssumed` (the haste percent the
 //                weapon index assumes: a number, or a Rational), `monkBins` (the `monk_bins` block of the bundle; needed when the profile has
 //                a Monk curve) and `buffset` (`{set, table}` as the bundle writes them: `bundle.buffs[key].set` and `bundle.buff_table`, or the
-//                `buffset` of a fixture profile).
+//                `buffset` of a fixture profile), and `procs` (the table of weapon procs of the trio, `readProcs` of procs.js, or none: with one, the hands that swing add the proc they count to the
+//                weapon part with no haste factor, and `breakdown.totals.procs` says which, as Python's does).
 //
 // The result is {F, breakdown}: F is a Rational (`F.toNumber()` is for display), and `breakdown` has exactly the fields of Python's
 // `Breakdown`: F, `parts` (the 14 parts of PART_NAMES) and `totals` (attributes, pools, counted, end_average, sheet, haste, regen, resists,
@@ -47,6 +48,8 @@
 // bonus of every whole stone of worn weight (`monkTable`, the table that `evaluate` looks the bonus of a kit up in), the constants (CONSTANTS) and
 // the units they are counted in (UNITS: a percent, and the tenths of a stone of a weight), so that its source holds no number but 0 and 1.
 
+import { safe } from "./plain.js";
+import { PER_MINUTE_TO_INDEX } from "./procs.js";
 import { ONE, Rational, RationalError, ZERO } from "./rational.js";
 
 /** A profile, a kit, a choice of buffs or an option that is not what the evaluator reads. */
@@ -70,7 +73,10 @@ const COMPONENTS = names(
   "AC", "STR", "STA", "AGI", "DEX", "WIS", "INT", "CHA", "HP", "MANA", "END", "ATK", "HPREG", "MANAREG", "ENDREG", "FIRE", "COLD", "MAGIC", "POISON", "DISEASE", "HASTE",
 );
 const ITEM_STAT_COUNT = 15;
-const SETUPS = names(null, "1h-shield", "2h", "dw", "stick");
+const SETUPS = names(null, "1h-shield", "2h", "dw", "stick", "ranged");
+/** The group of a kit that holds a bow, which the "ranged" setup scores (RANGE_HAND of weapons.py), and the skill that makes a weapon a bow (BOW_SKILL there, read without regard to case). */
+export const RANGE_GROUP = "RANGE";
+export const BOW_SKILL = "archery";
 const HAND_PLACES = names("PRIMARY", "SECONDARY");
 const PLACEMENTS = names("top", "inside");
 export const PART_NAMES = names("HP", "MANA", "END", "AC", "EVASION", "ATK", "DEX", "HASTE", "REGEN", "RESISTS", "CHA", "WEAPON", "MONK", "IKSAR");
@@ -105,16 +111,16 @@ export const CONSTANTS = Object.freeze({
   endCurve: curve([q(100n), q(201n)], [q(1n), q(5n, 2n), q(5n, 4n)]),
   strToAtk: q(666667n, 1000000n),
   agiToAc: q(1111n, 5000n),
-  dexPastKnee: q(1n, 10n),
+  dexPastKnee: q(1n),
   sheet: Object.freeze({ itemMult: q(4n, 3n), defenseDiv: q(3n), spellAcDiv: q(4n), agiDiv: q(20n) }),
-  weaponIndex: Object.freeze({ bonusOneHanded: q(1n, 2n), bonusTwoHanded: q(67n, 100n), bonusTwoHandedDelayCap: q(50n) }),
+  weaponIndex: Object.freeze({ bonusFromLevel: q(28n), bonusOneHanded: q(4n, 5n), bonusTwoHanded: q(11n, 10n), bonusDelayCap: q(50n), bonusDelayDiv: q(40n), bonusLevelDiv: q(100n) }),
 });
 
 const STAT_CAP = CONSTANTS.statCap;
 const POOLS_COUNTED = Number(CONSTANTS.poolsCounted.numerator);
 /** The cap of a stat on its own (STR for attack, AGI for evasion, CHA): one slope up to the cap, none after. */
 const CAPPED = curve([STAT_CAP], [ONE, ZERO]);
-/** DEX: a point a point to the knee, a tenth of a point to the cap, none after. */
+/** DEX: a point a point to the knee and on to the cap (the client has no break at 255 for it), none after. */
 const DEX_CURVE = curve([CONSTANTS.statKnee, STAT_CAP], [ONE, CONSTANTS.dexPastKnee, ZERO]);
 const FOUR = q(4n);
 /**
@@ -136,12 +142,14 @@ const BUFF_SET = new Set(BUFF_KEYS);
 const SCHOOL_SET = new Set(SCHOOLS);
 const SETUP_SET = new Set(SETUPS);
 const PLACEMENT_SET = new Set(PLACEMENTS);
-const OPTION_KEYS = new Set(["setup", "hasteAssumed", "monkBins", "buffset"]);
+const OPTION_KEYS = new Set(["setup", "hasteAssumed", "monkBins", "buffset", "procs"]);
 
 const PLACES = SLOT_INSTANCES.length;
 const PRIMARY = SLOT_INSTANCES.indexOf("PRIMARY");
 const SECONDARY = SLOT_INSTANCES.indexOf("SECONDARY");
-const HANDS = names(PRIMARY, SECONDARY);
+const RANGE = SLOT_INSTANCES.indexOf(RANGE_GROUP);
+/** The places the weapon index is asked about: the two hands, and the range place for the bow setup. */
+const WEAPON_PLACES = names(PRIMARY, SECONDARY, RANGE);
 const AC = COMPONENT_INDEX.get("AC");
 const HP = COMPONENT_INDEX.get("HP");
 const MANA = COMPONENT_INDEX.get("MANA");
@@ -168,15 +176,8 @@ const AMOUNT_LIMIT = 2 ** 40;
 
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** A name from the data, safe to put in a message: short, and only letters, digits and a few signs. */
-function safe(name) {
-  if (typeof name !== "string" || name.length === 0 || name.length > 32) return "?";
-  for (let i = 0; i < name.length; i += 1) {
-    const code = name.charCodeAt(i);
-    if (!((code >= 0x30 && code <= 0x39) || (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a) || code === 0x5f || code === 0x2d || code === 0x2e)) return "?";
-  }
-  return name;
-}
+/** A name from the data, safe to put in a message (plain.js: a module of its own, so that the readers of the data do not need the evaluator for it). */
+export { safe };
 
 function own(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
@@ -356,8 +357,23 @@ function compileProfile(raw) {
   const defenseCap = nonNegative(own(raw, "defense_cap"), "profile.defense_cap");
   const iksarAc = nonNegative(own(raw, "iksar_ac"), "profile.iksar_ac");
   const dwFactor = nonNegative(own(raw, "dw_factor"), "profile.dw_factor");
+  // the multiplier of the damage per delay of a bow in the range place of the bow setup; a profile written without it has 1
+  const rangedFactor = own(raw, "ranged_factor") === undefined ? ONE : nonNegative(own(raw, "ranged_factor"), "profile.ranged_factor");
   // the flat haste of Unbound Alacrity (10 with a Monk in the trio); a profile written without it has none
   const hasteBonus = own(raw, "haste_bonus") === undefined ? ZERO : nonNegative(own(raw, "haste_bonus"), "profile.haste_bonus");
+  // the Berserker stance (`stance` of formulas.py): null or { swing_factor, agi_share }; a profile written without it has none. The factor multiplies the swing of the hands after the haste cap, and
+  // the share is what counts of agility in the sheet armor class and the evasion
+  const stanceRaw = own(raw, "stance");
+  let swing = ONE;
+  let agiShare = ONE;
+  if (stanceRaw !== undefined && stanceRaw !== null) {
+    record(stanceRaw, "profile.stance");
+    if (Object.keys(stanceRaw).length !== 2) throw new EvaluateError("profile.stance must be null or a swing_factor and an agi_share");
+    swing = number(own(stanceRaw, "swing_factor"), "profile.stance.swing_factor");
+    agiShare = number(own(stanceRaw, "agi_share"), "profile.stance.agi_share");
+    if (swing.sign() <= 0) throw new EvaluateError("profile.stance.swing_factor must be above 0");
+    if (agiShare.sign() < 0 || agiShare.compare(ONE) > 0) throw new EvaluateError("profile.stance.agi_share must be from 0 to 1");
+  }
 
   const monkRaw = own(raw, "monk");
   let monk = null;
@@ -410,6 +426,9 @@ function compileProfile(raw) {
     defenseTerm: defenseCap.div(CONSTANTS.sheet.defenseDiv),
     iksarAc,
     dwFactor,
+    rangedFactor,
+    swing,
+    agiShare,
     monk,
     monkInside: placementRaw.monk === "inside",
     iksarInside: placementRaw.iksar === "inside",
@@ -646,20 +665,21 @@ function chosenTotals(buffset, chosen) {
 
 // ---- the options -----------------------------------------------------------------------------------------------------------------------
 
-const NO_OPTIONS = Object.freeze({ setup: null, haste: ZERO, monkBins: undefined, buffset: undefined });
+const NO_OPTIONS = Object.freeze({ setup: null, haste: ZERO, monkBins: undefined, buffset: undefined, procs: undefined });
 
 function readOptions(options) {
   if (options === undefined || options === null) return NO_OPTIONS;
   if (!isRecord(options)) throw new EvaluateError("options must be an object, such as {setup: 'dw', hasteAssumed: 25}");
   for (const key of Object.keys(options)) {
-    if (!OPTION_KEYS.has(key)) throw new EvaluateError(`options has an option (${safe(key)}) that the evaluator does not read (it reads setup, hasteAssumed, monkBins and buffset)`);
+    if (!OPTION_KEYS.has(key)) throw new EvaluateError(`options has an option (${safe(key)}) that the evaluator does not read (it reads setup, hasteAssumed, monkBins, buffset and procs)`);
   }
   const setup = options.setup === undefined ? null : options.setup;
-  if (!SETUP_SET.has(setup)) throw new EvaluateError("options.setup must be null, '1h-shield', '2h', 'dw' or 'stick'");
+  if (!SETUP_SET.has(setup)) throw new EvaluateError("options.setup must be null, '1h-shield', '2h', 'dw', 'stick' or 'ranged'");
   let haste = ZERO;
   if (options.hasteAssumed instanceof Rational) haste = options.hasteAssumed;
   else if (options.hasteAssumed !== undefined) haste = number(options.hasteAssumed, "options.hasteAssumed");
-  return { setup, haste, monkBins: options.monkBins, buffset: options.buffset === null ? undefined : options.buffset };
+  const procs = options.procs === null ? undefined : options.procs;
+  return { setup, haste, monkBins: options.monkBins, buffset: options.buffset === null ? undefined : options.buffset, procs };
 }
 
 // ---- the formulas ----------------------------------------------------------------------------------------------------------------------
@@ -686,24 +706,38 @@ function topPools(pools, values) {
 }
 
 /**
- * The damage bonus of a weapon whose page lists none (`weapons._bonus`): half the delay for a one-hander, 0.67 x the delay for a two-hander, the delay counting
- * at most 50 for a two-hander. `delay` is a Rational.
+ * The damage bonus of a weapon whose page lists none (`weapons._bonus`, the rule `weapons.fallback_bonus`): none below level 28, and from there `(level / 100) x max(damage, level) x f x min(delay, 50) / 40`,
+ * with f 0.8 for a one-hander and 1.1 for a two-hander (the constants of `CONSTANTS.weaponIndex`). `delay` is a Rational.
  */
-export function fallbackBonus(twoHanded, delay) {
-  const { bonusOneHanded, bonusTwoHanded, bonusTwoHandedDelayCap } = CONSTANTS.weaponIndex;
-  return twoHanded ? bonusTwoHanded.mul(smaller(delay, bonusTwoHandedDelayCap)) : bonusOneHanded.mul(delay);
+export function fallbackBonus(twoHanded, delay, damage, level) {
+  const { bonusFromLevel, bonusOneHanded, bonusTwoHanded, bonusDelayCap, bonusDelayDiv, bonusLevelDiv } = CONSTANTS.weaponIndex;
+  const at = q(BigInt(level));
+  if (at.compare(bonusFromLevel) < 0) return ZERO;
+  return at.div(bonusLevelDiv).mul(larger(damage, at)).mul(twoHanded ? bonusTwoHanded : bonusOneHanded).mul(smaller(delay, bonusDelayCap)).div(bonusDelayDiv);
 }
 
-function weaponIndex(weapon, hand, setup, haste, dwFactor) {
+/** The level a weapon index is worked out at when the caller names none (DEFAULT_LEVEL of rules.py): the evaluator and the builder always read the level of the profile. */
+export const DEFAULT_LEVEL = 50;
+
+/** Whether a weapon of a kit is a bow: of the archery skill, in any case (`weapon_index` of formulas.py reads the same). */
+const isBowWeapon = (weapon) => typeof weapon.skill === "string" && weapon.skill.toLowerCase() === BOW_SKILL;
+
+/** A weapon of the archery skill or of a throwing skill, in any case (`_ranged_skill` in weapons.py and in formulas.py): never scored in a hand, never allowed in one. */
+export const RANGED_SKILL = /^(archery$|throwing)/i;
+
+function weaponIndex(weapon, hand, setup, haste, dwFactor, rangedFactor, level) {
   if (setup === null || setup === "stick" || !(weapon.dmg > 0) || !(weapon.delay > 0)) return ZERO;
   let allowed;
-  if (setup === "2h") allowed = hand === PRIMARY && weapon.two_handed;
+  if (setup === "ranged") allowed = hand === RANGE && isBowWeapon(weapon); // the hands of the bow setup score nothing
+  else if (hand === RANGE) allowed = false; // and the range place scores in no other setup
+  else if (setup === "2h") allowed = hand === PRIMARY && weapon.two_handed;
   else if (setup === "dw") allowed = !weapon.two_handed;
   else allowed = hand === PRIMARY && !weapon.two_handed; // "1h-shield"
-  if (!allowed) return ZERO;
+  if (!allowed || (hand !== RANGE && RANGED_SKILL.test(weapon.skill ?? ""))) return ZERO; // (the builder refuses such a weapon a hand)
   const speed = ONE.add(haste.div(HUNDRED));
   if (hand === SECONDARY) return new Rational(BigInt(weapon.dmg), BigInt(weapon.delay)).mul(speed).mul(dwFactor);
-  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : fallbackBonus(weapon.two_handed, whole(weapon.delay));
+  if (hand === RANGE) return new Rational(BigInt(weapon.dmg), BigInt(weapon.delay)).mul(speed).mul(rangedFactor); // a bow's own damage per delay: no bonus, which is a main hand's
+  const bonus = weapon.bonus !== null && weapon.bonus !== 0 ? whole(weapon.bonus) : fallbackBonus(weapon.two_handed, whole(weapon.delay), whole(weapon.dmg), level);
   return whole(weapon.dmg).add(bonus).div(weapon.delay).mul(speed);
 }
 
@@ -769,7 +803,7 @@ function readKit(kit) {
  */
 export function evaluate(profile, kit, buffsChosen, options) {
   const p = profileOf(profile);
-  const { setup, haste: hasteAssumed, monkBins, buffset } = readOptions(options);
+  const { setup, haste: hasteAssumed, monkBins, buffset, procs } = readOptions(options);
   const { gear, shield, weight10, bestHaste } = readKit(kit);
 
   let buff = p.buff;
@@ -828,7 +862,7 @@ export function evaluate(profile, kit, buffsChosen, options) {
     .mul(wornAc.add(shieldAc))
     .add(p.defenseTerm)
     .add(buff[AC].div(sheetConstants.spellAcDiv))
-    .add(smaller(total[AGI], STAT_CAP).div(sheetConstants.agiDiv))
+    .add(smaller(total[AGI], STAT_CAP).div(sheetConstants.agiDiv).mul(p.agiShare))
     .add(insideBonus);
   const y = p.softcapFloor.add(shieldAc);
   const past = p.rate.mul(x).add(p.otherRate.mul(y));
@@ -859,9 +893,24 @@ export function evaluate(profile, kit, buffsChosen, options) {
   }
 
   let weaponPart = ZERO;
-  for (const hand of HANDS) {
+  const swinging = []; // by place: the hands that swing (a weapon in an Any place, or under the stick or the bow, scores no index and carries no proc)
+  for (const hand of WEAPON_PLACES) {
     const item = kit[hand];
-    if (item !== null && item.weapon !== null) weaponPart = weaponPart.add(w.DMG.mul(weaponIndex(item.weapon, hand, setup, hasteAssumed, p.dwFactor)));
+    if (item !== null && item.weapon !== null) {
+      let index = weaponIndex(item.weapon, hand, setup, hasteAssumed, p.dwFactor, p.rangedFactor, p.level);
+      if (hand !== RANGE) index = index.mul(p.swing); // (the stance's factor: after the haste, on the hands that swing and not on a bow)
+      weaponPart = weaponPart.add(w.DMG.mul(index));
+      if (index.sign() !== 0) swinging[hand] = item;
+    }
+  }
+  let procTotals;
+  if (procs !== undefined) {
+    // the procs of the hands that swing: DMG x the proc each counts / 600, with no haste factor; a Lore item the kit wears anywhere is no donor for a hand it is not in
+    const worn = new Set(kit.filter((one) => one !== null && procs.loreKeys.has(one.key)).map((one) => one.key));
+    const { primary, secondary } = w.DMG.sign() === 0 ? { primary: null, secondary: null } : procs.best(swinging[PRIMARY], swinging[SECONDARY], p.dwFactor, worn);
+    const index = (primary === null ? ZERO : primary.value).add(secondary === null ? ZERO : secondary.value.mul(p.dwFactor)).div(PER_MINUTE_TO_INDEX);
+    procTotals = { PRIMARY: primary, SECONDARY: secondary, index, part: w.DMG.mul(index) };
+    weaponPart = weaponPart.add(procTotals.part);
   }
 
   const parts = {
@@ -869,7 +918,7 @@ export function evaluate(profile, kit, buffsChosen, options) {
     MANA: w.MANA.mul(manaTotal),
     END: w.END.mul(endTotal),
     AC: p.perSheetPoint.mul(capped),
-    EVASION: p.evasion.mul(pwl(total[AGI], CAPPED)),
+    EVASION: p.evasion.mul(pwl(total[AGI], CAPPED)).mul(p.agiShare),
     ATK: w.ATK.mul(attack),
     DEX: w.DEX.mul(pwl(total[DEX], DEX_CURVE)),
     HASTE: w.HASTE.mul(hasteCounted),
@@ -907,6 +956,7 @@ export function evaluate(profile, kit, buffsChosen, options) {
     resists: Object.freeze(resists),
     weight10: whole(weight10),
     atk: attack,
+    ...(procTotals === undefined ? {} : { procs: procTotals }),
   };
   const breakdown = Object.freeze({ F, parts: Object.freeze(parts), totals: Object.freeze(totals) });
   return Object.freeze({ F, breakdown });
@@ -925,7 +975,8 @@ export function evaluateTruthful(profile, kit, buffsChosen, options) {
   // nothing but the weapon part depends on the assumed haste, and each weapon's index is its value at 0 haste times 1 + haste / 100 (the same rationals as a second
   // evaluation at the counted haste, which the tests compare), so the kit is not evaluated twice
   const weapon = first.breakdown.parts.WEAPON;
-  const scaled = weapon.mul(ONE.add(counted.div(HUNDRED)));
+  const procPart = first.breakdown.totals.procs === undefined ? ZERO : first.breakdown.totals.procs.part; // (a proc is paced by the minute: the haste scales the swing's share of WEAPON and leaves the proc's as it is)
+  const scaled = weapon.sub(procPart).mul(ONE.add(counted.div(HUNDRED))).add(procPart);
   const F = first.F.sub(weapon).add(scaled);
   const breakdown = Object.freeze({ F, parts: Object.freeze({ ...first.breakdown.parts, WEAPON: scaled }), totals: first.breakdown.totals });
   return Object.freeze({ F, breakdown });

@@ -6,9 +6,10 @@
 // made; a bundle given raw is read every time, which is slow) and the weapon rate, 5 or 10 percent a tier (the rate of `weapon_rules` when
 // none is given, as `at_tier` takes the rule `tier.weapon_damage_pct`). It gives the numbers the model sees when the item is worn at the tier:
 //
-//   * Stats (AC STR STA AGI DEX WIS INT CHA HP MANA END ATK) and resists: `base + max(n, floor(base * n / 10))` when the base is above zero;
-//     a negative stat is not scaled (`tier.negatives_scale` is false, and rules that say otherwise are refused: how a negative stat would
-//     grow is not defined anywhere).
+//   * Stats (AC STR STA AGI DEX WIS INT CHA HP MANA END) and resists: `base + max(n, floor(base * n / 10))` when the base is above zero;
+//     a negative stat moves toward zero by the same amount, `max(n, floor(|base| * n / 10))`, and never passes zero (`tier.negatives_scale`, the game
+//     client's own calculation, and rules that say anything else are refused). Attack (ATK) is not scaled at all (`tier.unscaled_stats`, the same
+//     source): an item's attack at +4 or +10 is its +0 value.
 //   * Worn haste and the three regens: a flat `haste_per_tier` / `regen_per_tier` a tier when the base is above zero. Haste is a field of its
 //     own, not one of the stats.
 //   * Weight, in tenths of a stone: `max(floor, w - w * pct * n // 100)` for a weight w above zero, `pct` the rule `tier.weight_pct` (9, a percent of the
@@ -24,6 +25,7 @@
 // every number is a safe integer (at most a thousand million in size, so that a product of three stays one), and a quotient is taken from a
 // multiple of its divisor.
 
+import { isPlainObject as isPlain, safe } from "./plain.js";
 import { BundleError, readBundle } from "./profile.js";
 import { Rational, RationalError } from "./rational.js";
 import { wornHaste } from "./tiers.js";
@@ -63,6 +65,7 @@ export const ITEM_DEFAULTS = Object.freeze({
 
 const MAX_TIER = 10;
 const STAT_RULE_TEXT = "base + max(n, floor(base*n/10))";
+const NEGATIVES_RULE_TEXT = "toward zero by max(n, floor(|base|*n/10)), never past zero";
 const DAMAGE_RULE_TEXT = "dmg + dmg * n * pct // 100";
 const WEIGHT_RULE_TEXT = "max(floor, w - w * pct * n // 100)";
 const WEAPON_PCTS = [5, 10];
@@ -95,8 +98,9 @@ function compile(bundle) {
   const tier = bundle.tier_rules;
   const weapon = bundle.weapon_rules;
   if (tier.stat_rule !== STAT_RULE_TEXT) throw new BundleError(`bundle.tier_rules.stat_rule is not the rule that atTier implements (${STAT_RULE_TEXT})`);
-  if (tier.negatives_scale !== false) {
-    throw new BundleError("bundle.tier_rules.negatives_scale is not false, but how a negative stat grows with the tier is not defined; atTier leaves negative stats unscaled");
+  if (tier.negatives_scale !== NEGATIVES_RULE_TEXT) throw new BundleError(`bundle.tier_rules.negatives_scale is not the rule that atTier implements (${NEGATIVES_RULE_TEXT})`);
+  if (!Array.isArray(tier.unscaled_stats) || tier.unscaled_stats.some((name) => typeof name !== "string" || !STAT_KEYS.includes(name))) {
+    throw new BundleError(`bundle.tier_rules.unscaled_stats must be a list of stats of the model (${STAT_KEYS.join(", ")})`);
   }
   if (wholeRule(tier.max_tier, "bundle.tier_rules.max_tier") !== MAX_TIER) throw new BundleError(`bundle.tier_rules.max_tier must be ${MAX_TIER}`);
   const divisor = wholeRule(tier.stat_divisor, "bundle.tier_rules.stat_divisor", { min: 1 });
@@ -118,6 +122,7 @@ function compile(bundle) {
     hastePerTier: wholeRule(tier.haste_per_tier, "bundle.tier_rules.haste_per_tier"),
     regenPerTier: wholeRule(tier.regen_per_tier, "bundle.tier_rules.regen_per_tier"),
     weaponPct,
+    unscaled: new Set(tier.unscaled_stats),
   });
 }
 
@@ -142,21 +147,7 @@ export function checkTierRules(rules) {
 
 // ---- the record -------------------------------------------------------------------------------------------------------------------
 
-function isPlain(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
 
-/** A name for a message: short, and only letters, digits and a few signs. */
-function safe(name) {
-  if (typeof name !== "string" || name.length === 0 || name.length > 32) return "?";
-  for (let i = 0; i < name.length; i += 1) {
-    const code = name.charCodeAt(i);
-    if (!((code >= 0x30 && code <= 0x39) || (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a) || code === 0x5f || code === 0x2d || code === 0x2e)) return "?";
-  }
-  return name;
-}
 
 function recordKey(id, key) {
   if (typeof key === "string" && key.length > 0) return key;
@@ -188,9 +179,11 @@ function quotient(x, d) {
   return (x - (x % d)) / d;
 }
 
-/** The stat rule: `base + max(n, base * n // 10)` above zero; zero and negatives unchanged. */
+/** The stat rule: `base + max(n, base * n // 10)` above zero; below zero the stat moves toward zero by `max(n, |base| * n // 10)`, never past it; zero stays. */
 function scaled(base, n, divisor) {
-  return base > 0 ? base + Math.max(n, quotient(base * n, divisor)) : base;
+  if (base > 0) return base + Math.max(n, quotient(base * n, divisor));
+  if (base < 0) return base + Math.min(-base, Math.max(n, quotient(-base * n, divisor)));
+  return base;
 }
 
 function checkTier(tier) {
@@ -242,7 +235,11 @@ export function atTier(item, tier, rules, options) {
   const outStats = {};
   for (const name of STAT_KEYS) {
     const base = rawStats[name];
-    if (base !== undefined && base !== null && base !== 0) outStats[name] = scaled(amount(base, `stat ${name}`, label), n, rule.divisor);
+    if (base !== undefined && base !== null && base !== 0) {
+      const value = amount(base, `stat ${name}`, label);
+      const tiered = rule.unscaled.has(name) ? value : scaled(value, n, rule.divisor);
+      if (tiered !== 0) outStats[name] = tiered; // (a negative stat that the tiers have shrunk to nothing is gone, like any zero)
+    }
   }
   for (const name of REGEN_KEYS) {
     const base = rawStats[name];
@@ -261,7 +258,10 @@ export function atTier(item, tier, rules, options) {
   const outSv = {};
   for (const name of SV_KEYS) {
     const base = rawSv[name];
-    if (base !== undefined && base !== null && base !== 0) outSv[name] = scaled(amount(base, `resist ${name}`, label), n, rule.divisor);
+    if (base !== undefined && base !== null && base !== 0) {
+      const tiered = scaled(amount(base, `resist ${name}`, label), n, rule.divisor);
+      if (tiered !== 0) outSv[name] = tiered;
+    }
   }
 
   // who may wear it

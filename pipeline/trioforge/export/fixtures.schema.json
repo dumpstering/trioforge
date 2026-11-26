@@ -54,7 +54,8 @@
             "regen": {"$ref": "#/$defs/exactTree"},
             "resists": {"$ref": "#/$defs/exactTree"},
             "weight10": {"$ref": "#/$defs/rational"},
-            "atk": {"$ref": "#/$defs/rational"}
+            "atk": {"$ref": "#/$defs/rational"},
+            "procs": {"$ref": "#/$defs/exactTree"}
           },
           "required": ["attributes", "pools", "counted", "end_average", "sheet", "haste", "regen", "resists", "weight10", "atk"],
           "additionalProperties": false
@@ -70,7 +71,7 @@
         "race": {"type": "string"},
         "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
         "level": {"type": "integer", "minimum": 1},
-        "role": {"enum": ["balanced", "tank", "melee", "caster"]},
+        "role": {"enum": ["tank", "shield", "melee", "ranged", "castertank", "caster"]},
         "evidence": {"enum": ["strict", "wiki"]},
         "aa": {"type": "object"},
         "naked": {"type": "object"},
@@ -89,15 +90,27 @@
         "bands": {"type": ["object", "null"]},
         "dw_factor": {"type": "number"},
         "weights": {"type": "object"},
-        "setups": {"type": "array", "items": {"enum": ["1h-shield", "2h", "dw", "stick"]}},
+        "setups": {"type": "array", "items": {"enum": ["1h-shield", "2h", "dw", "stick", "ranged"]}},
         "deity": {"type": ["string", "null"]},
         "haste_bonus": {"type": "number", "minimum": 0},
-        "nd_pct": {"type": "number", "minimum": 0}
+        "nd_pct": {"type": "number", "minimum": 0},
+        "ranged_factor": {"type": "number", "minimum": 0},
+        "stance": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "properties": {"swing_factor": {"type": "number", "exclusiveMinimum": 0}, "agi_share": {"type": "number", "minimum": 0, "maximum": 1}},
+              "required": ["swing_factor", "agi_share"],
+              "additionalProperties": false
+            }
+          ]
+        }
       },
       "required": [
         "format", "race", "trio", "level", "role", "evidence", "aa", "naked", "buff_totals", "spell_haste", "haste_cap", "softcap",
         "cs_pct", "pe_pct", "defense_cap", "monk", "iksar_ac", "placement", "pools", "caps", "bands", "dw_factor", "weights",
-        "setups", "deity", "haste_bonus", "nd_pct"
+        "setups", "deity", "haste_bonus", "nd_pct", "ranged_factor", "stance"
       ],
       "additionalProperties": false
     },
@@ -265,11 +278,11 @@
         "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
         "level": {"type": "integer", "minimum": 1},
         "race": {"type": "string"},
-        "role": {"enum": ["balanced", "tank", "melee", "caster"]},
+        "role": {"enum": ["tank", "shield", "melee", "ranged", "castertank", "caster"]},
         "buffs": {"enum": ["own", "group", "group+enchanter", "raid", null]},
         "evidence": {"enum": ["wiki", "strict-proxy", "synthetic"]},
         "deity": {"type": ["string", "null"]},
-        "setup": {"enum": ["1h-shield", "2h", "dw", "stick", null]},
+        "setup": {"enum": ["1h-shield", "2h", "dw", "stick", "ranged", null]},
         "tier": {"type": ["integer", "null"], "minimum": 0, "maximum": 10},
         "weapon_pct": {"enum": [5, 10]},
         "profile": {"$ref": "#/$defs/profile"},
@@ -294,6 +307,12 @@
         "buffset": {"$ref": "#/$defs/buffset"},
         "note": {"type": "string"},
         "seed": {"type": "string"},
+        "procs": {
+          "type": "object",
+          "properties": {"socket_tier": {"type": "integer", "minimum": 0}, "effects": {"type": "array"}, "donors": {"type": "array"}},
+          "required": ["socket_tier", "effects", "donors"],
+          "additionalProperties": false
+        },
         "owned": {
           "type": "array",
           "items": {
@@ -495,7 +514,7 @@
             "type": "object",
             "properties": {
               "profile": {"type": "integer", "minimum": 0},
-              "setup": {"enum": ["1h-shield", "2h", "dw", "stick", null]},
+              "setup": {"enum": ["1h-shield", "2h", "dw", "stick", "ranged", null]},
               "haste": {"type": "integer", "minimum": 0},
               "buffs": {"oneOf": [{"type": "null"}, {"type": "array", "items": {"type": "integer"}}]},
               "kit": {"$ref": "#/$defs/kit"},
@@ -528,7 +547,7 @@
             "properties": {
               "race": {"type": "string"},
               "role": {"type": "string"},
-              "buffs": {"enum": ["own", "group", "group+enchanter", "raid"]},
+              "buffs": {"enum": ["own", "group", "group+enchanter", "raid", "own+haste", "group+haste", "group+enchanter+haste", "raid+haste"]},
               "options": {
                 "type": "object",
                 "properties": {"evidence": {"enum": ["strict", "wiki"]}, "deity": {"type": "string", "minLength": 1}},
@@ -558,7 +577,7 @@
             "type": "object",
             "properties": {
               "trio": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
-              "role": {"enum": ["balanced", "tank", "melee", "caster"]},
+              "role": {"enum": ["tank", "shield", "melee", "ranged", "castertank", "caster"]},
               "mana_reachable": {"type": "boolean"},
               "base": {"type": "object", "additionalProperties": {"type": "number"}},
               "multipliers": {"type": "object", "additionalProperties": {"type": "number"}},
@@ -711,6 +730,8 @@
         "roles": {"type": "object"},
         "buffs": {"type": "object"},
         "buff_table": {"type": "object"},
+        "buff_table_haste": {"type": "object"},
+        "procs": {"type": ["object", "null"]},
         "constants": {"type": "object"},
         "monk_bins": {"type": ["object", "null"]},
         "tier_rules": {"type": "object"},
@@ -720,7 +741,7 @@
       },
       "required": [
         "version", "data_release", "rules_version", "trio", "level", "profile_common", "evidence_levels", "races", "roles", "buffs",
-        "buff_table", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios"
+        "buff_table", "buff_table_haste", "procs", "constants", "monk_bins", "tier_rules", "weapon_rules", "weight_groups", "regen_ratios"
       ],
       "additionalProperties": false
     },

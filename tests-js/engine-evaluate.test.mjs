@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CONSTANTS, EvaluateError, MONK_STONES_PAST_HARDCAP, PART_NAMES, SLOT_INSTANCES, UNITS, evaluate, monkTable, profileOf } from "../pipeline/trioforge/site/static/engine/evaluate.js";
 import { atTier } from "../pipeline/trioforge/site/static/engine/items.js";
-import { assembleProfile, readBundle } from "../pipeline/trioforge/site/static/engine/profile.js";
+import { assembleProfile, buffsetOf, readBundle } from "../pipeline/trioforge/site/static/engine/profile.js";
 import { Rational } from "../pipeline/trioforge/site/static/engine/rational.js";
 import { mulberry32 } from "./engine-models.mjs";
 import { SAMPLE, describeFull } from "./engine-fixtures.mjs";
@@ -159,7 +159,7 @@ function assembledTests(set) {
       for (const entry of listed.profiles) {
         const assembled = assembleProfile(bundle, { race: entry.race, role: entry.role, buffs: entry.buffs, ...entry.options });
         const plain = clone(entry.profile);
-        const buffset = Object.freeze({ set: bundle.buffs[entry.buffs].set, table: bundle.buff_table });
+        const buffset = Object.freeze(buffsetOf(bundle, entry.buffs)); // (a twin of a buff set reads the table of the haste spells)
         const chosen = bundle.buffs[entry.buffs].set.optional.slice(0, 3);
         for (const [index, kit] of kits.entries()) {
           const options = { setup: entry.profile.setups[index % entry.profile.setups.length], hasteAssumed: 25, monkBins: bundle.monk_bins ?? undefined, buffset };
@@ -260,7 +260,7 @@ describe("one test per term", () => {
     for (const total of texts(200, 201, 202)) expect(totalsOf(cases, "STR").has(total), total).toBe(true);
   });
 
-  it("knee 255: the stat knee (STA for HP, DEX past a tenth of a point); the WIS and INT curve does not bend there", () => {
+  it("knee 255: the one knee of the client (STA for HP); DEX, WIS and INT do not bend there (T5: DEX counts in full to 510)", () => {
     const cases = exactly("knee-255");
     for (const total of texts(254, 255, 256)) {
       for (const name of ["STA", "DEX", "WIS", "INT"]) expect(totalsOf(cases, name).has(total), `${name} ${total}`).toBe(true);
@@ -435,7 +435,7 @@ describe("one test per term", () => {
 
   it("weapon damage: every setup against the hands that fill it, a listed bonus or none, three assumed hastes", () => {
     const cases = exactly("weapons");
-    expect(new Set(cases.map((stored) => stored.setup))).toEqual(new Set([null, "1h-shield", "2h", "dw", "stick"]));
+    expect(new Set(cases.map((stored) => stored.setup))).toEqual(new Set([null, "1h-shield", "2h", "dw", "stick", "ranged"]));
     expect(cases.some((stored) => stored.breakdown.parts.WEAPON !== "0/1")).toBe(true);
     expect(cases.some((stored) => stored.breakdown.parts.WEAPON === "0/1")).toBe(true);
     expect(new Set(cases.map((stored) => stored.haste))).toEqual(new Set([0, 12.5, 25, 100]));
@@ -570,7 +570,7 @@ function constantsTests(bundles) {
       for (const name of NAMES) {
         expect(exported.has(name), `${label}: ${name}`).toBe(true);
         let want = exported.get(name);
-        if (name === "weaponIndex") want = { bonusOneHanded: want.bonus_one_handed, bonusTwoHanded: want.bonus_two_handed, bonusTwoHandedDelayCap: want.bonus_two_handed_delay_cap };
+        if (name === "weaponIndex") want = { bonusFromLevel: want.bonus_from_level, bonusOneHanded: want.bonus_one_handed, bonusTwoHanded: want.bonus_two_handed, bonusDelayCap: want.bonus_delay_cap, bonusDelayDiv: want.bonus_delay_div, bonusLevelDiv: want.bonus_level_div };
         if (name === "sheet") want = { itemMult: want.item_mult, defenseDiv: want.defense_div, spellAcDiv: want.spell_ac_div, agiDiv: want.agi_div };
         expect(JSON.stringify(CONSTANTS[name]), `${label}: ${name}`).toBe(JSON.stringify(want));
       }
@@ -1037,7 +1037,7 @@ describe("malformed input", () => {
   describe("the buff set of a choice", () => {
     const NOT_THE_PROFILES = /not the buff set of the profile/;
     const profileOf = (key) => assembleProfile(BUNDLE, { race: "HUM", role: "tank", buffs: key });
-    const setOf = (key) => Object.freeze({ set: BUNDLE.buffs[key].set, table: BUNDLE.buff_table });
+    const setOf = (key) => Object.freeze(buffsetOf(BUNDLE, key));
     const run = (profileKey, setKey, chosen) => () =>
       evaluate(profileOf(profileKey), new Array(PLACES).fill(null), chosen, { monkBins: BUNDLE.monk_bins, buffset: setOf(setKey) });
 

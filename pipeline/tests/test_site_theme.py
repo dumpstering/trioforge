@@ -86,9 +86,10 @@ def test_the_other_pairs_of_the_theme_hold_aa(theme):
         ("--btn-text", "--btn-face"), ("--on-accent", "--accent-fill"), ("--text", "--btn-face"),
     ]:  # fmt: skip
         assert contrast(t[foreground], t[background]) >= 4.5, f"{theme}: {foreground} on {background} is {contrast(t[foreground], t[background]):.2f}:1"
-    for foreground, background in [("--btn-light", "--btn-face"), ("--btn-dark", "--btn-face"), ("--focus", "--surface"), ("--focus", "--tint")]:
+    for foreground, background in [("--btn-light", "--btn-face"), ("--btn-dark", "--btn-face")]:
         assert contrast(t[foreground], t[background]) >= 1.0  # (the bevel's edges are decoration; the control's text is checked above)
-    assert contrast(t["--focus"], t["--surface"]) >= 3.0 and contrast(t["--control"], t["--btn-face"]) >= 1.0
+    for foreground, background in [("--focus", "--surface"), ("--focus", "--tint"), ("--control", "--btn-face")]:  # (parts of the interface that tell a visitor where they are or what is a control: 3:1)
+        assert contrast(t[foreground], t[background]) >= 3.0, f"{theme}: {foreground} on {background} is {contrast(t[foreground], t[background]):.2f}:1"
 
 
 def test_the_dark_blocks_agree_on_the_veil_and_the_two_themes_define_one():

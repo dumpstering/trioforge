@@ -10,7 +10,8 @@ works on the model below, and the browser never sees a results file: it fetches 
 What this reader asks of the files, on top of the format:
 
 * **One run.** Every file names ``data_release``, ``game_patch`` and ``rules_version``; they must be the same in all of them.
-  The four shards must hold the same races, roles and tiers, and each grid must be complete: every race x role x tier x (the
+  The four shards must hold the same races, roles and tiers (a role that a shard lists with no setup, as the Ranged role, which plays the bow
+  and nothing else, has none where the pool has no bow, counts as its role there with no rows, and the bundle says so), and each grid must be complete: every race x role x tier x (the
   role's setups) has exactly one scenario, so a combination the page offers always has an answer, and a combination with none
   is never offered. **The tiers are the scope of the run** (+0, +4 and +10 for most trios, every tier for the milestone trio): a
   shard records them (``tiers``), the reader holds its rows to the record, and the tiers of the four shards are the tiers the page
@@ -80,6 +81,8 @@ from typing import Any, NoReturn
 
 from trioforge.classes import CLASS_CODES
 from trioforge.data.jsonio import JsonFileError, loads_strict, render
+from trioforge.model.roles import POOL_ROLES, opening_role
+from trioforge.oldresults import current_rules_version, stale
 
 __all__ = [
     "BUFFS",
@@ -119,6 +122,7 @@ __all__ = [
     "RunnerUpView",
     "RunnerUps",
     "SCHOOLS",
+    "LISTED_FIRST",
     "SETUPS",
     "STAT_NAMES",
     "SV_NAMES",
@@ -162,9 +166,19 @@ SLOT_GROUPS = frozenset(SLOT_INSTANCES)
 #: slots a catalog item may list that no place of a kit has (a thrown weapon fits the range place and the ammo place)
 OTHER_SLOTS = ("AMMO", "CHARM", "POWERSOURCE")
 ITEM_SLOTS = (SLOT_GROUPS - {"ANY"}) | set(OTHER_SLOTS)
-ROLES = ("balanced", "tank", "melee", "caster")
-SETUPS = ("1h-shield", "2h", "dw", "stick")
-RACE_CODES = tuple("HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG".split())
+#: the builds that never play the bow setup (the casting ones; trioforge.model.weapons)
+NO_BOW_ROLES = ("shield", "castertank", "caster")
+ROLES = ("tank", "shield", "melee", "ranged", "castertank", "caster")  # the builds, in the order the page shows them (trioforge.model.roles.ROLES; a test holds the two equal)
+SETUPS = ("1h-shield", "2h", "dw", "stick", "ranged")
+#: the setup a build lists first where that is not the first of SETUPS (a copy of ``trioforge.model.weapons``'s, which a test holds equal): the first setup of equal value wins a tie
+LISTED_FIRST = {"caster": "stick"}
+
+
+def setup_order(role: str) -> tuple[str, ...]:
+    """The order of the setups of ``role``: that of :data:`SETUPS`, with the setup the build lists first put first."""
+    first = LISTED_FIRST.get(role)
+    return SETUPS if first is None else (first, *(setup for setup in SETUPS if setup != first))
+RACE_CODES = tuple("HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG HDE".split())
 SCHOOLS = ("MAGIC", "FIRE", "COLD", "DISEASE", "POISON")
 EVIDENCE = ("strict", "wiki")
 BUFFS = ("own", "group")
@@ -308,6 +322,7 @@ class Shard:
     scenarios: tuple[Scenario, ...]
     solver: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)  # as the precompute recorded it
     build_options: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
+    unplayed: tuple[str, ...] = field(default=(), repr=False, compare=False)  # the roles the file lists with no setup at all (so no rows): none is offered at this level
     races: tuple[str, ...] = field(init=False, repr=False, compare=False)  # in file order
     roles: tuple[str, ...] = field(init=False, repr=False, compare=False)  # in ROLES order
     tiers: tuple[int, ...] = field(init=False, repr=False, compare=False)  # ascending
@@ -320,7 +335,7 @@ class Shard:
         roles = tuple(role for role in ROLES if any(s.role == role for s in self.scenarios))
         tiers = tuple(sorted({s.tier for s in self.scenarios}))
         setups = {
-            role: tuple(setup for setup in SETUPS if any(s.role == role and s.setup == setup for s in self.scenarios))
+            role: tuple(setup for setup in setup_order(role) if any(s.role == role and s.setup == setup for s in self.scenarios))
             for role in roles
         }
         for name, value in (("_index", index), ("races", races), ("roles", roles), ("tiers", tiers), ("_setups", setups)):
@@ -330,13 +345,14 @@ class Shard:
         return self._index.get((race, role, tier, setup))
 
     def setups_for(self, role: str) -> tuple[str, ...]:
-        """The setups this role has scenarios for, in :data:`SETUPS` order. A setup not listed is never offered."""
+        """The setups this role has scenarios for, in :func:`setup_order` of the role. A setup not listed is never offered."""
         return self._setups.get(role, ())
 
     def best_setup(self, race: str, role: str, tier: int) -> str:
         """The role's best setup at this race and tier: the highest value, the earlier setup on a tie."""
         candidates = [self._index[(race, role, tier, setup)] for setup in self.setups_for(role)]
-        return max(candidates, key=lambda s: (s.value, -SETUPS.index(s.setup))).setup
+        order = setup_order(role)
+        return max(candidates, key=lambda s: (s.value, -order.index(s.setup))).setup
 
 
 @dataclass(frozen=True)
@@ -363,7 +379,7 @@ class RunnerUpFile:
 
     role: str
     tiers: tuple[int, ...]
-    name: str  # "balanced.json"
+    name: str  # "tank.json"
     size: int
     sha256: str
 
@@ -476,6 +492,7 @@ class Defaults:
     runner_up: str
     margin: float
     flips: tuple[str, ...]  # what could change the answer, as short notes
+    close_races: tuple[str, ...]  # the creation-legal races within the close percent of the best, the default first; empty when the best race stands alone
     role: str
     tier: int
     evidence: str
@@ -844,12 +861,33 @@ def _shard(directory: Path, name: str, slug: str) -> tuple[Shard, dict[str, Any]
         scenarios.append(
             Scenario(race, role, tier, setup, kit, value, gain, totals[totals_index], buff_lists[buffs_index], haste_assumed)
         )
-    shard = Shard(evidence, buffs, items, tuple(scenarios), solver, build_options)
+    listed = doc.get("setups") if isinstance(doc.get("setups"), Mapping) else {}
+    unplayed = tuple(role for role in ROLES if listed.get(role) == [] and not any(s.role == role for s in scenarios))
+    shard = Shard(evidence, buffs, items, tuple(scenarios), solver, build_options, unplayed)
     _check_grid(file, shard)
     recorded = [file.whole(tier, f"tiers[{n}]", 0, MAX_TIER) for n, tier in enumerate(file.sequence(file.field(doc, "tiers", ""), "tiers"))]
     if recorded != list(shard.tiers):  # the scope the run was given is what its rows must be of: a shard that lost the rows of a tier is no shard of it
         file.fail("tiers", f"records {_plus(recorded) or 'none'}, but its rows are of {_plus(shard.tiers)}")
-    return shard, {"level": level, "release": release, "rules_version": rules_version, "partial": partial}
+    return shard, {"level": level, "release": release, "rules_version": rules_version, "partial": partial, "legal": _legal_races(file, doc)}
+
+
+def _legal_races(file: _File, doc: Mapping[str, Any]) -> frozenset[str] | None:
+    """The races that can be created, as a shard's header says (``races``: ``[{"code", "legal"}]``); None for a header that has no such list. A list with a row that is not
+    ``{"code": a race, "legal": true or false}`` (or that names a race twice) refuses the shard: the checks of the default race, the runner-up and the close races are made
+    against this list, and one that cannot be read must not switch them off."""
+    if "races" not in doc:
+        return None
+    legal: set[str] = set()
+    seen: set[str] = set()
+    for n, row in enumerate(file.sequence(doc["races"], "races")):
+        if not isinstance(row, dict) or row.get("code") not in RACE_CODES or not isinstance(row.get("legal"), bool):
+            file.fail(f"races[{n}]", 'must be {"code": a race code, "legal": true or false}')
+        if row["code"] in seen:
+            file.fail(f"races[{n}]", f"lists {row['code']} twice")
+        seen.add(row["code"])
+        if row["legal"]:
+            legal.add(row["code"])
+    return frozenset(legal)
 
 
 def _plus(tiers: Iterable[int]) -> str:
@@ -857,9 +895,18 @@ def _plus(tiers: Iterable[int]) -> str:
     return ", ".join(f"+{tier}" for tier in tiers)
 
 
+#: the shard whose roles are the trio's: the wiki pool is the widest, so a role that some pool has a setup for has rows there
+WIDEST = (EVIDENCE[-1], BUFFS[0])
+
+
+def _grid_roles(shard: Shard) -> tuple[str, ...]:
+    """The roles of a shard for the grid: those it has rows of, and those it lists with no setup (a role that plays the bow and nothing else has none where the pool has no bow)."""
+    return tuple(role for role in ROLES if role in shard.roles or role in shard.unplayed)
+
+
 def _grid(shard: Shard) -> tuple[Any, ...]:
     """What every shard must hold alike: the races, the roles and the tiers. The setups are each shard's own."""
-    return (frozenset(shard.races), shard.roles, shard.tiers)
+    return (frozenset(shard.races), _grid_roles(shard), shard.tiers)
 
 
 def _grid_difference(shard: Shard, first: Shard, first_name: str) -> str:
@@ -869,8 +916,8 @@ def _grid_difference(shard: Shard, first: Shard, first_name: str) -> str:
         parts.append(f"its tiers are {_plus(shard.tiers) or 'none'}, and {first_name}.json's are {_plus(first.tiers) or 'none'}")
     if frozenset(shard.races) != frozenset(first.races):
         parts.append(f"its races are {' '.join(shard.races) or 'none'}, and {first_name}.json's are {' '.join(first.races) or 'none'}")
-    if shard.roles != first.roles:
-        parts.append(f"its roles are {', '.join(shard.roles) or 'none'}, and {first_name}.json's are {', '.join(first.roles) or 'none'}")
+    if _grid_roles(shard) != _grid_roles(first):
+        parts.append(f"its roles are {', '.join(_grid_roles(shard)) or 'none'}, and {first_name}.json's are {', '.join(_grid_roles(first)) or 'none'}")
     return "; ".join(parts)
 
 
@@ -1026,7 +1073,7 @@ def _robust(
     The sealed view is taken from the rows here (the best setup is the one with the highest value, the earlier on a tie) and not
     from the file: robust.json does not record it yet. When the precompute writes the view it sealed, this is the one place to
     read it instead. The two can differ only if two setups of a role are worth the same to the two decimals the rows keep."""
-    grid = shards[(EVIDENCE[0], BUFFS[0])]
+    grid = shards[WIDEST]
     level = shards[(defaults.evidence, defaults.buffs)]
     file = _read(directory, "robust")
     doc = _header(file, slug)
@@ -1056,11 +1103,13 @@ def _robust(
     return Robust(race, tuple(views))
 
 
-def _defaults(directory: Path, slug: str, shards: Mapping[tuple[str, str], Shard], run: tuple[tuple[str, str, str], str]) -> Defaults:
+def _defaults(
+    directory: Path, slug: str, shards: Mapping[tuple[str, str], Shard], run: tuple[tuple[str, str, str], str], legal: frozenset[str] | None = None
+) -> Defaults:
     file = _read(directory, "defaults")
     doc = _header(file, slug)
     _same_run(file, doc, *run)
-    grid = shards[(EVIDENCE[0], BUFFS[0])]  # the races, roles and tiers are those of every shard
+    grid = shards[WIDEST]  # the races and tiers are those of every shard, and the roles those of the widest pool's
     view = file.mapping(file.field(doc, "view", ""), "view")
     role = file.choice(file.field(view, "role", "view"), "view.role", grid.roles)
     tier = file.choice(file.field(view, "tier", "view"), "view.tier", grid.tiers)
@@ -1068,23 +1117,38 @@ def _defaults(directory: Path, slug: str, shards: Mapping[tuple[str, str], Shard
     buffs = file.choice(file.field(view, "buffs", "view"), "view.buffs", BUFFS)
     level = shards[(evidence, buffs)]  # the answer is a kit of this shard, so its setup is one this shard has for the role
     strict_empty = file.flag(file.field(doc, "strict_pool_empty", ""), "strict_pool_empty")
+    offered = [offer for offer in ROLES if level.setups_for(offer)]  # (the builds the default level has a setup for: what the precompute opens the page from)
+    try:
+        opening = opening_role(parse_slug(slug), offered)
+    except ValueError as error:
+        file.fail("view.role", f"has no build to open on: {error}")
+    if role != opening:
+        file.fail("view.role", f"is {role}, but the page of {slug} opens on the {opening} build, the one its classes open on")
     race = file.choice(file.field(doc, "race", ""), "race", grid.races)
+    if legal is not None and race not in legal:  # (``legal``: the races the shards say can be created)
+        file.fail("race", f"is {race}, which cannot be created at character creation: the default race is the best one that can be")
     runner_up = file.field(doc, "runner_up_race", "")
     if runner_up is None:
         file.fail("runner_up_race", "is null: the page names a runner-up, so the run needs two races that can be created")
     runner_up = file.choice(runner_up, "runner_up_race", grid.races)
     if runner_up == race:
         file.fail("runner_up_race", "must be a different race from race")
+    if legal is not None and runner_up not in legal:
+        file.fail("runner_up_race", f"is {runner_up}, which cannot be created at character creation: the runner-up is the next best race that can be")
     margin = file.number(file.field(doc, "margin", ""), "margin")
     if margin < 0:
         file.fail("margin", "must not be negative")
+    close_raw = file.sequence(file.field(doc, "close_races", ""), "close_races")
+    close = tuple(file.choice(code, f"close_races[{n}]", grid.races) for n, code in enumerate(close_raw))
+    if len(set(close)) != len(close) or len(close) == 1 or (close and close[0] != race) or (legal is not None and any(code not in legal for code in close)):
+        file.fail("close_races", "is empty, or lists two races or more that can be created, each once, the default race first")
     setup = file.choice(file.field(doc, "setup", ""), "setup", level.setups_for(role))
     value = file.number(file.field(doc, "F", ""), "F")
     flips_raw = file.sequence(file.field(doc, "flip_notes", ""), "flip_notes")
     flips = tuple(file.text(note, f"flip_notes[{n}]") for n, note in enumerate(flips_raw))
     robustness = file.text(file.field(doc, "robustness", ""), "robustness")
     why = _why(file, doc["why"]) if "why" in doc else None
-    return Defaults(race, runner_up, margin, flips, role, tier, evidence, buffs, setup, value, strict_empty, robustness, why)
+    return Defaults(race, runner_up, margin, flips, close, role, tier, evidence, buffs, setup, value, strict_empty, robustness, why)
 
 
 def _why(file: _File, raw: Any) -> Why:
@@ -1267,8 +1331,9 @@ def _bundle(directory: Path, meta: Meta, shards: Mapping[tuple[str, str], Shard]
         file.fail("level", f"must be {meta.level}, the level of the shards")
     if doc["evidence_levels"] != list(EVIDENCE):
         file.fail("evidence_levels", f"must be {list(EVIDENCE)}")
-    if list(file.mapping(doc["buffs"], "buffs")) != list(browser.BUFF_SETS):
-        file.fail("buffs", f"must be the buff sets {', '.join(browser.BUFF_SETS)}, in this order")
+    wanted = [*browser.BUFF_SETS, *browser.HASTE_BUFF_SETS]
+    if list(file.mapping(doc["buffs"], "buffs")) != wanted:
+        file.fail("buffs", f"must be the buff sets {', '.join(wanted)}, in this order")
     counted = [0]
     for block in browser.EXACT_BLOCKS:
         _exact(file, doc[block], block, counted)
@@ -1297,11 +1362,22 @@ def _bundle(directory: Path, meta: Meta, shards: Mapping[tuple[str, str], Shard]
                     f"is {listed} but the {shard.evidence} shards have {list(shard.setups_for(role))} for it: "
                     "the item pools of the bundle and of the shards differ",
                 )
+    for shard in shards.values():  # a role that a shard lists with no setup is one that has no weapon setup at its level: the bundle says so
+        for role in shard.unplayed:
+            if role in roles:
+                by_level = roles[role].get("setups_by_evidence") if isinstance(roles[role], dict) else None
+                listed = by_level.get(shard.evidence) if isinstance(by_level, dict) else None
+                if listed != []:
+                    file.fail(f"roles.{role}.setups_by_evidence.{shard.evidence}", f"is {listed!r}, but the {shard.evidence} shards have no rows of the {role} role")
     # the exporter's reader puts profiles together from it: the first and the last race, role and buff set, with and without a level
     for race in {races[0], races[-1]}:
         for role in {next(iter(roles)), list(roles)[-1]}:
             for buffs in {browser.BUFF_SETS[0], browser.BUFF_SETS[-1]}:
                 for evidence in (None, *EVIDENCE):
+                    if evidence is not None and not roles[role].get("setups_by_evidence", {}).get(evidence):
+                        continue  # (a role with no setup at a level is not offered there: there is no profile of it)
+                    if evidence is None and role in POOL_ROLES:
+                        continue  # (and a role that only a pool offers has none with no level)
                     try:
                         made = browser.assemble(doc, race, role, buffs, **({} if evidence is None else {"evidence": evidence}))
                     except (ValueError, KeyError, TypeError, AttributeError) as error:
@@ -1477,6 +1553,50 @@ def _check_shield_setups(file: _File, bundle: Mapping[str, Any], records: Iterab
                 )
 
 
+def _check_bow_setups(file: _File, bundle: Mapping[str, Any], records: Iterable[Mapping[str, Any]], slug: str) -> None:
+    """The ``ranged`` setup of a bundle is the other setup that the item pool decides (``weapons.setups_for``): Tank, Melee damage and the Archer have it at an evidence
+    level if the pool of that level (the strict items, and for the wiki level the wiki items too; no deity's item, none that is no good for the best-in-slot lists, none that the
+    trio cannot wear) holds a bow, a weapon of the archery skill that fits the range place; the Shield caster, the Caster tank and the Caster never have it. Held to
+    the table as the shield setup is: a level that lists the setup needs a bow in its pool, and a level where the pool has a bow that every race can wear needs it."""
+    trio = set(bundle["trio"])
+    races = {row["code"] for row in bundle["races"]}
+    bows = []
+    for record in records:
+        weapon = record.get("weapon")
+        if "RANGE" not in record["slots"] or not isinstance(weapon, Mapping) or str(weapon.get("skill") or "").casefold() != "archery":
+            continue
+        if not (isinstance(weapon.get("dmg"), int) and weapon["dmg"] > 0 and isinstance(weapon.get("delay"), int) and weapon["delay"] > 0):
+            continue
+        evidence = record["evidence"]
+        if record.get("deity") is not None or "not-for-bis" in evidence.get("codes", ()) or not _admits(record.get("classes"), trio):
+            continue
+        record_races = record.get("races")
+        everyone = record_races is None or any(str(code).upper() == "ALL" for code in record_races) or races <= set(record_races)
+        bows.append((evidence["level"], everyone))
+    for level, pool in (("strict", ("strict",)), ("wiki", ("strict", "wiki"))):
+        some = any(found in pool for found, _ in bows)
+        every = any(found in pool and everyone for found, everyone in bows)
+        for role, row in bundle["roles"].items():
+            where = f"roles.{role}.setups_by_evidence.{level}"
+            listed = "ranged" in file.sequence(row["setups_by_evidence"][level], where)  # "in" is true of a text that holds it and of an object that has it
+            if role in NO_BOW_ROLES:
+                if listed:
+                    file.fail(where, f"lists ranged, a setup the {role} build never has: the files are not from one run: " f"run the precompute again for {slug}")
+                continue
+            if listed and not some:
+                file.fail(
+                    where,
+                    f"lists ranged, but items.json has no bow for the trio in the {level} pool: the files are not from one run: "
+                    f"run the precompute again for {slug}",
+                )
+            if not listed and every:
+                file.fail(
+                    where,
+                    f"lacks ranged, but items.json has a bow in the {level} pool that every race can wear: the files are not from one run: "
+                    f"run the precompute again for {slug}",
+                )
+
+
 def load_items(results_dir: str | Path, trios: Sequence[TrioResults]) -> BrowserFile:
     """Read and check the item table of a folder of results against every trio in it (see the module docstring)."""
     browser = _browser()
@@ -1521,6 +1641,7 @@ def load_items(results_dir: str | Path, trios: Sequence[TrioResults]) -> Browser
     for trio in trios:
         bundle_file = _File(trio.meta.slug, engine_name(trio.meta.level).removesuffix(".json"), trio.bundle.document, trio.bundle.raw)
         _check_shield_setups(bundle_file, trio.bundle.document, records, trio.meta.slug)
+        _check_bow_setups(bundle_file, trio.bundle.document, records, trio.meta.slug)
     for trio in trios:
         for item in used_items(trio):
             found = by_key.get(item.key)
@@ -1542,11 +1663,15 @@ def load_items(results_dir: str | Path, trios: Sequence[TrioResults]) -> Browser
     return BrowserFile(ITEMS_NAME, file.raw, doc)
 
 
-def load_trio(directory: str | Path) -> TrioResults:
-    """Read and check all the results of one trio. The folder's name is the trio (``pal-mnk-ber``)."""
+def load_trio(directory: str | Path, *, rules_version: str | None = None) -> TrioResults:
+    """Read and check all the results of one trio. The folder's name is the trio (``pal-mnk-ber``). Results of an earlier release (they hold the Balanced build, which no
+    longer exists) or of other rules than ``rules_version`` (the checkout's rules file by default) are refused whole, whichever files they have."""
     folder = Path(directory)
     slug = folder.name
     trio = parse_slug(slug)
+    refused = stale(slug, folder, rules_version)
+    if refused:
+        raise ResultsError(refused)
     shards: dict[tuple[str, str], Shard] = {}
     metas: dict[str, dict[str, Any]] = {}
     for name in SHARD_NAMES:
@@ -1574,7 +1699,7 @@ def load_trio(directory: str | Path) -> TrioResults:
     run = ((tag, date, patch), rules_version)
     partial = any(meta["partial"] for meta in metas.values())
     meta = Meta(slug, trio, metas[first_name]["level"], tag, date, patch, rules_version, partial)
-    defaults = _defaults(folder, slug, shards, run)
+    defaults = _defaults(folder, slug, shards, run, metas[first_name]["legal"])
     return TrioResults(
         meta=meta,
         shards=shards,
@@ -1675,7 +1800,7 @@ def _effect_rows(file: _File, doc: Mapping[str, Any], records: Mapping[str, Any]
             file.fail(f"{where}.f", "is there for a focus only")
 
 
-def _shared_exalt(results: Path, items_doc: Mapping[str, Any], records: Mapping[str, Any]) -> dict[str, Any] | None:
+def _shared_exalt(results: Path, items_doc: Mapping[str, Any], records: Mapping[str, Any], rules_version: str) -> dict[str, Any] | None:
     if not (results / EFFECTS_NAME).is_file():
         return None
     file = _read(results, EFFECTS_NAME.removesuffix(".json"), folder=False)
@@ -1686,7 +1811,9 @@ def _shared_exalt(results: Path, items_doc: Mapping[str, Any], records: Mapping[
         file.fail("version", f"must be {EXALT_VERSION}")
     if file.field(doc, "data_release", "") != items_doc["data_release"]:
         file.fail("data_release", f"is {doc['data_release']!r}, but items.json says {items_doc['data_release']!r}: the files are not from one run")
-    file.date(file.field(doc, "rules_version", ""), "rules_version")
+    made = file.date(file.field(doc, "rules_version", ""), "rules_version")
+    if made != rules_version:
+        file.fail("rules_version", f"is {made!r}, but the rules file says {rules_version!r}: the files are not from one run")
     file.text(file.field(doc, "license", ""), "license", limit=40)
     file.text(file.field(doc, "attribution", ""), "attribution", limit=1000)
     if doc.get("spells_us") is not None and not _SHA256.match(str(doc["spells_us"])):
@@ -1722,7 +1849,7 @@ def _trio_exalt(
         file.fail("classes", f"must be {list(trio.meta.trio)}")
     if file.field(doc, "race", "") != trio.defaults.race or file.field(doc, "tier", "") != trio.defaults.tier:
         file.fail("race", "and tier must be the race and the tier of the default answer (the plan is made for that kit)")
-    offered = set(next(iter(trio.shards.values())).roles)
+    offered = set(trio.shards[WIDEST].roles)  # (the roles of the widest pool, as the page offers them: the first shard is the strict pool, which has no bow in a release and so no ranged build)
     for role, entry in file.mapping(file.field(doc, "roles", ""), "roles").items():
         where = f"roles.{role}"
         if role not in offered:
@@ -1776,15 +1903,16 @@ def _trio_exalt(
     return doc
 
 
-def load_exalt(results_dir: str | Path, trios: Sequence[TrioResults], items_doc: Mapping[str, Any]) -> Exalt | None:
+def load_exalt(results_dir: str | Path, trios: Sequence[TrioResults], items_doc: Mapping[str, Any], *, rules_version: str | None = None) -> Exalt | None:
     """Read and check the files of the effects layer in a folder of results (the format is in :mod:`trioforge.effects.files`), or ``None`` when it has none.
 
     The shared file ``effects.json`` and the ``exalt.json`` of a trio are each optional, but a trio file without the shared one is refused, and a file must come from the
-    run of the item table, name only effects, items and classes that exist, and be within its budget. A trio without a file has no section on its page."""
+    run of the item table (and of the rules: the shared file's ``rules_version`` is the rules file's, ``rules_version`` by default the checkout's, as for the trios' files),
+    name only effects, items and classes that exist, and be within its budget. A trio without a file has no section on its page."""
     results = Path(results_dir)
     records = {_record_key_of(record): record for record in items_doc["items"]}
     present = exalt_slugs(results, [trio.meta.slug for trio in trios])  # (raises for a trio file with no shared file)
-    shared = _shared_exalt(results, items_doc, records)
+    shared = _shared_exalt(results, items_doc, records, current_rules_version() if rules_version is None else rules_version)
     if shared is None:
         return None
     rows = {row["id"]: row for row in shared["effects"]}

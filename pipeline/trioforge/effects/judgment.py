@@ -16,6 +16,11 @@ from trioforge import rules as rules_module
 __all__ = ["Judgment", "default"]
 
 
+def _ranged(templates: dict, factors: dict) -> dict:
+    """The Ranged template: the Melee template with each weight that ``roles.ranged_template`` names multiplied by its factor (as ``model.roles`` makes it)."""
+    return {key: value * factors.get(key, 1) for key, value in templates["melee"].items()}
+
+
 @dataclass(frozen=True)
 class Judgment:
     """The constants, as the rules give them. ``relevance`` and ``dispel_relevance`` are ``(tank, melee, caster)``."""
@@ -47,6 +52,12 @@ class Judgment:
     unverified_names: frozenset[str]
     rows_kept: dict[str, int]
     templates: dict[str, dict[str, float]]
+    proc_ppm: dict[str, float]
+    proc_dex: float
+    proc_landing: float
+    proc_own_cut: float
+    proc_score_kinds: frozenset[str]
+    socket_proc: int
 
     @classmethod
     def from_rules(cls, rules: Any) -> Judgment:
@@ -81,7 +92,13 @@ class Judgment:
             restricted_fraction=restricted["fraction"],
             unverified_names=frozenset(get("effects.unverified_names")),
             rows_kept=get("effects.rows_kept"),
-            templates=get("roles.templates"),
+            templates={**get("roles.templates"), "ranged": _ranged(get("roles.templates"), get("roles.ranged_template"))},
+            proc_ppm=get("effects.proc_per_minute"),
+            proc_dex=get("effects.proc_reference_dex"),
+            proc_landing=get("effects.proc_landing"),
+            proc_own_cut=get("effects.proc_own_cut"),
+            proc_score_kinds=frozenset(get("effects.proc_score_kinds")),
+            socket_proc=get("tier.socket_open")["proc"],
         )
 
     def weight_of(self, kind: str) -> float:
@@ -89,13 +106,14 @@ class Judgment:
         return self.spell_weight.get(kind, self.spell_weight["other"])
 
     def relevance_of(self, kind: str, role: str, classes: tuple[str, ...] | list[str], groups: dict[str, frozenset[str]]) -> float:
-        """The relevance of a kind of click to a role; a balanced role takes the mean over the templates the trio can play."""
+        """The relevance of a kind of click to a build, from the column of the build's kind in the rule (tank, melee, caster). ``role`` is one of the builds; a call that names none
+        (``None``, or a name that is no build) is refused with a ``ValueError``: there is no mean over the columns to fall back to."""
         table = {"dispel": self.dispel_relevance}.get(kind) or self.relevance.get(kind) or self.relevance["other"]
-        index = {"tank": 0, "melee": 1, "caster": 2}
-        if role in index:
-            return table[index[role]]
-        present = [name for name in ("tank", "melee", "caster") if any(c in groups[name] for c in classes)]
-        return sum(table[index[name]] for name in present) / len(present)
+        # a Ranger is a melee class (the Archer build reads the melee column); a Shield caster is a tank class that casts, so it reads the tank column; a Caster tank is a caster
+        index = {"tank": 0, "shield": 0, "melee": 1, "ranged": 1, "castertank": 2, "caster": 2}
+        if role not in index:
+            raise ValueError(f"the relevance of a click is that of a build, and {role!r} is not one ({', '.join(index)})")
+        return table[index[role]]
 
 
 _default: Judgment | None = None

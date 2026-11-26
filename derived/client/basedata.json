@@ -1,5 +1,5 @@
 {
- "provenance": {"inputs":[{"file":"Resources/basedata.txt","sha256":"85a093b47e713771f2713d57d61f8dc24e9dc205e3753aa23005fd91d50f004e","date":"2026-05-11"}],"generator":"trioforge.sources.client_tables 0.0.1","generated":"2026-10-13"},
+ "provenance": {"inputs":[{"file":"Resources/basedata.txt","sha256":"85a093b47e713771f2713d57d61f8dc24e9dc205e3753aa23005fd91d50f004e","date":"2026-05-11"}],"generator":"trioforge.sources.client_tables 0.0.1","generated":"2026-11-24"},
  "rows": [
   {"class":1,"level":1,"hp":25.0,"mana":0.0,"end":15.0,"hp_regen":2.0,"end_regen":5.0,"hp_fac":0.083,"mana_fac":0.0,"end_fac":0.075},
   {"class":2,"level":1,"hp":22.0,"mana":15.0,"end":15.0,"hp_regen":2.0,"end_regen":5.0,"hp_fac":0.073,"mana_fac":0.075,"end_fac":0.065},

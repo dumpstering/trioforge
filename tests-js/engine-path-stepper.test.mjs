@@ -349,10 +349,11 @@ describe("by hand", () => {
       const session = make({ highs: spied.highs, now: () => clock });
       try {
         const begun = [];
-        const path = createFarmPath(session, owned(), candidates(), request({ budgetMs: 1500, steps: 6, onBegin: (number) => begun.push(number) }));
+        // (R14: a step is two solves of 600 here, its own and the look for an earlier equal addition, so the budget is 2500 where it was 1500 for a step of one solve)
+        const path = createFarmPath(session, owned(), candidates(), request({ budgetMs: 2500, steps: 6, onBegin: (number) => begun.push(number) }));
         path.start(); // Equip now ends at 600
-        expect(path.next()).toMatchObject({ index: 1 }); // begun with 900 left, ends at 1200
-        expect(path.next()).toMatchObject({ index: 2 }); // begun with 300 left, ends at 1800
+        expect(path.next()).toMatchObject({ index: 1 }); // begun with 1900 left, ends at 1800
+        expect(path.next()).toMatchObject({ index: 2 }); // begun with 700 left, ends at 3000
         expect(path.next()).toBeNull(); // nothing is left
         expect(path.result().stopped).toBe("time");
         expect(begun).toEqual([1, 2]);

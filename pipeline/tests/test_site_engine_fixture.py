@@ -23,6 +23,9 @@ from engine_fixture import (
     KIT_VALUES,
     MOTE_ORDERS,
     PATH_STEPS,
+    PROCS_BUNDLE,
+    PROCS_FAMILY,
+    PROCS_ITEMS,
     RESULTS,
     SLOT_LIMIT,
     TIER_MODES,
@@ -45,6 +48,11 @@ from engine_fixture import (
     kit_values_text,
     mote_orders,
     mote_orders_text,
+    proc_bundle_text,
+    proc_family_answers,
+    proc_family_text,
+    proc_items_text,
+    proc_table,
     texts,
     upgrade_view_answers,
     upgrade_view_text,
@@ -93,6 +101,16 @@ def test_the_mote_orders_cover_every_ending_the_limit_the_weights_mixed_tiers_an
     cases = document["cases"]
     assert {case["ending"] for case in cases} == {"top", "motes", "no-gain"}  # (a kit at the top, a limit, nothing that is left gains)
     assert any("weights" in case for case in cases) and any(case["motes"] is None for case in cases) and any(case["motes"] is not None for case in cases)
+    # a worn haste item past the cap (the spell haste of the raid leaves it 15 of the cap): its motes add nothing and the order ends in "no-gain". It needs the haste of the spells in the buffs,
+    # which the rule haste.assume_spell leaves out: the case is on the buff set that keeps it (the twin "raid+haste" of the bundle, the one a reader's "I have a haste spell" box chooses); the case of
+    # weights that value nothing is an extra to it
+    past_the_cap = [case for case in cases if case["scenario"]["buffs"].endswith("+haste") and case["ending"] == "no-gain"]
+    assert len(past_the_cap) == 1 and past_the_cap[0]["weights"] == {"multipliers": {}, "custom": {"AC": 0, "END": 0}}
+    # (T1: the attack of an item no longer grows with its tier, so an item whose only stat is attack gains nothing from a mote: the best kit of the baked page wears one, and its order ends in "no-gain" with it left)
+    assert [case["name"] for case in cases if case["ending"] == "no-gain" and not case["scenario"]["buffs"].endswith("+haste")] == [
+        f"weights that value nothing, so no mote adds anything: {KIT_ONLY[1]['name']}",
+        "the best kit of the fixture's baked page, as Wear this shows it",
+    ]
     assert any(step["motes"] > 1 for case in cases for step in case["steps"]), "a run of more than one mote"
     assert any(case["ending"] == "motes" and case["nextRun"] is not None for case in cases), "a run that does not fit the motes left"
     assert any(case["ending"] == "motes" and case["nextRun"] is None for case in cases) and all(case["nextRun"] is None for case in cases if case["ending"] != "motes")
@@ -139,7 +157,7 @@ def test_the_kit_values_are_those_of_the_equip_now_kits_under_the_views_that_kee
         assert len({buffs for kit, _, buffs in seen if kit == index}) >= 3  # the buff sets the engine tests vary: at least three of the four
     assert {kit for kit, _, _ in seen} == set(range(len(document["kits"])))  # and every kit has a view
     # a shared kit is worth what it is as the answer it came from: valued at the haste it counts, the same kit under the same view is worth the same
-    first = next(row for row in document["values"] if (row["kit"], row["role"], row["buffs"]) == (0, "balanced", "own"))
+    first = next(row for row in document["values"] if (row["kit"], row["role"], row["buffs"]) == (0, "tank", "own"))
     assert first["hasteAssumed"] == equip_now["cases"][0]["hasteAssumed"] and first["value"] == equip_now["cases"][0]["value"]
 
 
@@ -173,7 +191,7 @@ def test_each_case_is_a_scenario_the_bundle_offers_and_its_answer_wears_only_wha
         assert len(answer["kit"]) == 22 and worn and all(owned[ident] >= times for ident, times in worn.items()), case["name"]
         assert "w90040@4" not in worn  # a cap the trio cannot wear is owned and not worn
         assert answer["hasteAssumed"] >= 0 and answer["value"] > 0 and "/" in answer["F"]
-    assert len({case["scenario"]["race"] for case in CASES}) == 3  # three races, three roles, three buff sets
+    assert len({case["scenario"]["race"] for case in CASES}) == 4  # four races (the two cases of the haste twins add a Human), two roles, five buff sets (the own, the group, the Enchanter's and the two twins)
 
 
 @pytest.fixture(scope="module")
@@ -215,7 +233,7 @@ def test_the_best_kit_views_cover_the_sliders_the_buff_sets_a_deity_and_an_answe
     cases = best_kit["cases"]
     weighted = [row for row in cases if "weights" in row]
     assert len(weighted) >= 10 and len(weighted) < len(cases)  # and a few at the role's own weights
-    assert {row["scenario"]["buffs"] for row in cases} == {"own", "group", "group+enchanter", "raid"}
+    assert {row["scenario"]["buffs"] for row in cases} == {"own", "group", "group+enchanter", "raid", "own+haste", "group+enchanter+haste", "raid+haste"}  # (and the twins of the sets that keep the haste of the spells)
     assert any("deity" in row["scenario"] for row in cases) and {row["tier"] for row in cases} >= {0, 4}
     groups = {group: factor for row in weighted for group, factor in row["weights"].get("multipliers", {}).items()}
     assert set(groups) == {"AC", "MANA", "ATK+HASTE", "SV", "regen"}
@@ -375,3 +393,80 @@ def test_the_committed_upgrade_view_is_what_the_reference_gives():
     steps = document["path"]
     assert len(steps) == 3 and all(step["gainValue"] > 0 for step in steps)
     assert len(document["owned"]) == len(UPGRADE_VIEW_OWNED)
+
+
+# ---- F6: the family with a table of procs in its bundle ---------------------------------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def family():
+    return proc_family_answers()
+
+
+def test_the_committed_bundle_with_procs_and_its_answers_are_what_the_reference_gives(family):
+    assert PROCS_BUNDLE.is_file() and PROCS_FAMILY.is_file(), "the family with procs is missing; run pipeline/tests/engine_fixture.py"
+    assert PROCS_BUNDLE.read_text(encoding="utf-8") == proc_bundle_text(), "results-procs/.../engine-l50.json is stale; run pipeline/tests/engine_fixture.py"
+    assert PROCS_FAMILY.read_text(encoding="utf-8") == proc_family_text(family), "procs-family.json is stale; run pipeline/tests/engine_fixture.py"
+    assert PROCS_ITEMS.read_text(encoding="utf-8") == proc_items_text(), "results-procs/items.json is stale; run pipeline/tests/engine_fixture.py"
+
+
+def test_the_bundle_with_procs_is_the_plain_bundle_with_the_table_and_the_inputs_of_the_family_and_nothing_else():
+    plain = json.loads((TRIO_FOLDER / "engine-l50.json").read_text(encoding="utf-8"))
+    held = json.loads(PROCS_BUNDLE.read_text(encoding="utf-8"))
+    assert plain["procs"] is None and held["procs"] is not None
+    assert {key: value for key, value in held.items() if key not in ("procs", "inputs")} == {key: value for key, value in plain.items() if key not in ("procs", "inputs")}
+    from trioforge.model import procs as procs_module
+
+    assert held["procs"] == procs_module.to_doc(proc_table()) and len(held["procs"]["effects"]) == 6 and held["procs"]["socket_tier"] == 4
+    # (G4, H3) the family's item table is the fixture's and two weapons more (the Lore weapon, and a plain one that carries the same effect as it does), and the bundle's fingerprint is the one of that table
+    table = json.loads(PROCS_ITEMS.read_text(encoding="utf-8"))
+    plain_table = json.loads((RESULTS / "items.json").read_text(encoding="utf-8"))
+    assert held["inputs"] == table["inputs"] != plain["inputs"]
+    added = [row for row in table["items"] if row not in plain_table["items"]]
+    assert [row["name"] for row in added] == ["Prop Lorebrand of the Quiet Hand", "Prop Quillon of the Loud Hand"]
+    assert len(table["items"]) == len(plain_table["items"]) + 2 and all(row in table["items"] for row in plain_table["items"])
+    lore = [donor for donor in held["procs"]["donors"] if donor[1] == "w91101"]
+    assert [(donor[0], donor[5]) for donor in lore] == [("e-prop-gust", 1), ("e-prop-squall", 1)]  # (the one Lore item of the table, which carries two effects)
+    assert [donor[1] for donor in held["procs"]["donors"] if donor[5] == 1] == ["w91101", "w91101"]
+    # (H3) Prop Squall has two donors, the Lore weapon and a plain one whose key is the LARGER: the smallest key of its donors is the Lore weapon's
+    assert [donor[1] for donor in held["procs"]["donors"] if donor[0] == "e-prop-squall"] == ["w91101", "w91102"]
+
+
+def test_the_table_of_procs_moves_every_answer_of_the_family(family):
+    assert [(case["index"], case.get("variant")) for case in family["cases"]] == [(0, None), (1, None), (2, None), (0, "lore")]
+    for case in family["cases"]:
+        assert case["equipNow"]["F"] != case["withoutProcs"]["F"], case["name"]  # (the table is worth something to the kit)
+        assert len(case["farmPath"]["path"]) >= 1 and all(set_["acquired"] for set_ in case["bestSets"]) and any(row["swaps"] for row in case["everySlot"]["rows"])
+    jump = next(case for case in family["motes"] if "socket tier" in case["name"])
+    first = jump["steps"][0]
+    assert (first["key"], first["from"], first["to"]) == ("w80113", 3, 4)  # the mace's step to +4 comes first: the best proc it can host (9,500) against its own (700)
+    assert [[s["place"], s["key"], s["from"], s["to"], s["gain"]] for s in jump["steps"]] != jump["withoutProcs"]
+
+
+def test_the_kit_of_the_lore_case_wears_the_lore_weapon_and_the_other_hand_is_refused_its_proc(family):
+    """(G4) The Lore weapon carries the best proc of the table (Prop Gust, 9,500); the kit wears the one copy in a hand, so the other hand cannot host it and records the next one, Prop Squall
+    (9,200), where a kit that did not know the rule would have both hands count Prop Gust. (H3) The Lore weapon carries Prop Squall too, and so does a plain weapon whose key is the larger: the donor
+    of the other hand's proc is the plain one, not the smallest key of the donors it could host (the Lore weapon's, whose one copy is worn). The recorded donors are what the browser's evaluator is
+    held to. (The kit wears the Lore weapon in the main hand now, as the two hands are worth the same either way once Prop Squall can be hosted in either; before H3 the off hand wore it, because the
+    next best proc, Prop Tumble, could be hosted by the main hand only.)"""
+    case = next(one for one in family["cases"] if one.get("variant") == "lore")
+    counted = case["equipNow"]["procs"]
+    assert counted["PRIMARY"] == ["e-prop-gust", "w91101", "n", "9500/1"]  # (a native proc: the copy that is worn)
+    assert counted["SECONDARY"] == ["e-prop-squall", "w91102", "h", "9200/1"]  # (hosted from the other donor: the Lore copy is worn in the other hand, though its key is the smaller)
+    import dataclasses
+
+    from solver_helpers import make_item
+
+    table = proc_table()
+    mace, brand = make_item("w80113", {"PRIMARY", "SECONDARY"}, tier=4), make_item("w91101", {"PRIMARY", "SECONDARY"}, tier=4, lore=True)
+    ruled = table.best(brand, mace, Fraction(1, 2), frozenset({"w91101"}))
+    assert [e.donor for e in ruled if e is not None] == ["w91101", "w91102"]
+    # (H3) the donors the mace could host Prop Squall from, the smallest key first: the Lore weapon's, unless the kit wears it (then it is the plain one's, whatever its key)
+    assert table.sources(mace, "SECONDARY", "e-prop-squall") == ("w91101", "w91102")
+    assert table.sources(mace, "SECONDARY", "e-prop-squall", frozenset({"w91101"})) == ("w91102",)
+    assert "w91101" < "w91102"  # (the rule of the smallest key alone would have recorded the Lore weapon, whose copy the other hand wears)
+    # the same table with the weapon not a Lore item (two copies exist): both hands count Prop Gust, so it is the rule that refuses the main hand
+    plain = dataclasses.replace(table, donors=tuple(dataclasses.replace(d, lore=False) for d in table.donors))
+    naive = plain.best(brand, mace, Fraction(1, 2), frozenset())
+    assert [e.effect for e in naive if e is not None] == ["e-prop-gust", "e-prop-gust"]
+    assert [kit for kit in (case["equipNow"]["kit"][20], case["equipNow"]["kit"][21])] == ["w91101@4", "w80113@4"]

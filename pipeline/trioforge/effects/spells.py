@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ __all__ = [
     "has_haste_buff",
     "limit_text",
     "parse_family",
+    "pick_pool",
     "pick_spell",
     "spell_from_row",
 ]
@@ -87,9 +89,11 @@ def spell_from_row(row: dict[str, Any], level: int) -> dict[str, Any]:
 class SpellBook:
     """The rows of the derived spell file, found by name, and the spells every class gets up to the cap."""
 
-    def __init__(self, rows: list[dict[str, Any]], cap: int, source_sha256: str | None = None) -> None:
+    def __init__(self, rows: list[dict[str, Any]], cap: int, source_sha256: str | None = None, derived_for: Iterable[str] | None = None) -> None:
         self.cap = cap
         self.rows = rows
+        #: the effect names of the catalog the file was derived for (:func:`trioforge.effects.derive.generate`), or None for a file made before the record
+        self.derived_for: frozenset[str] | None = None if derived_for is None else frozenset(derived_for)
         self.source_sha256 = source_sha256  # the SHA-256 of the client's spell text the rows were read from
         self.by_name: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
@@ -104,7 +108,26 @@ class SpellBook:
         if not isinstance(document, dict) or not isinstance(document.get("spells"), list) or type(document.get("cap")) is not int:
             raise ValueError(f"{Path(path).name} is not a derived spell file for the effects layer")
         inputs = (document.get("provenance") or {}).get("inputs") or [{}]
-        return cls(document["spells"], document["cap"], inputs[0].get("sha256"))
+        names = document.get("catalog_names")
+        if names is not None and (not isinstance(names, list) or not all(isinstance(name, str) for name in names)):
+            raise ValueError(f"{Path(path).name} is not a derived spell file for the effects layer (catalog_names is a list of effect names)")
+        return cls(document["spells"], document["cap"], inputs[0].get("sha256"), names)
+
+    def check_names(self, names: Iterable[str]) -> None:
+        """Refuse a catalog that names an effect this file was not derived for (``ValueError``, naming them and the command that derives the file again).
+
+        A spell is kept by name only when an item of the catalog called it by that name, so an effect that the catalog got after the file was made has no spell here, counts 0 as a
+        proc and says nothing. A name fewer than the file was derived for is no harm. A file made before the record (``derived_for`` None) says nothing of its names, so nothing can be
+        refused for it: the guard starts with the next derive of the file, which writes the record."""
+        wanted = set(names)
+        if self.derived_for is None:
+            return
+        missing = sorted(wanted - self.derived_for)
+        if missing:
+            shown = ", ".join(missing[:5]) + (f" and {len(missing) - 5} more" if len(missing) > 5 else "")
+            raise ValueError(
+                f"the catalog names {len(missing)} effect names that effect-spells.json was not derived for ({shown}): derive it again (python -m trioforge.effects.derive)"
+            )
 
     def class_spells(self) -> list[dict[str, Any]]:
         """Every spell some class gets at the cap or below, as records for a caster of the cap."""
@@ -146,8 +169,8 @@ def classify_spell(spell: dict[str, Any], j: Judgment) -> dict[str, Any]:
     def first(*ids: int) -> dict[str, Any] | None:
         return next((e for e in effects if e["spa"] in ids), None)
 
-    def out(category: str, magnitude: float | None = None, unit: str | None = None) -> dict[str, Any]:
-        return {"category": category, "magnitude": magnitude, "unit": unit}
+    def out(category: str, magnitude: float | None = None, unit: str | None = None, **parts: Any) -> dict[str, Any]:
+        return {"category": category, "magnitude": magnitude, "unit": unit, **parts}
 
     if 81 in spas:
         return out("resurrect", abs(_value(first(81))), "exp_pct")
@@ -161,22 +184,42 @@ def classify_spell(spell: dict[str, Any], j: Judgment) -> dict[str, Any]:
     if not instant and spas & {1, 2, 4, 5, 6, 7, 8, 9, 69, 55, 59, 46, 47, 48, 49, 50}:
         hp = [e for e in hp if e["spa"] != 79]  # a lasting buff that also adds current HP (max HP plus HP) is a buff
     if hp:
-        e = max(hp, key=lambda x: abs(_value(x)))
-        v = _value(e)
-        once = instant or e["spa"] == 79  # SPA 79 is a one-time change even inside a lasting spell (a rune plus a heal)
-        mana = first(15)
-        if v < 0 and spell["target"] == SELF and mana is not None and _value(mana) > 0:
-            return out("mana", abs(_value(mana)), "mana")  # hit points spent for mana: the gain is mana
-        if v < 0:
-            if spell["target"] == 13:
-                return out("lifetap", abs(v), "hp")
-            if once:
-                return out("damage", abs(v), "hp")
-            return out("dot", *_over_time(abs(v), spell))
-        if v > 0:
-            if once:
-                return out("heal", v, "hp")
-            return out("heal_over_time", *_over_time(v, spell))
+        # A spell is sized by its whole, not by its larger single number: the one-time parts (an instant spell's, and SPA 79, a one-time change even inside a lasting spell: a rune plus a heal, a
+        # direct hit plus a poison) and each lasting part for every tick (:func:`_over_time`, which also says the unit: a total over the duration, or the number of one tick for a permanent spell).
+        # The parts of one sign add up; the sign is the one with the larger whole (a tie goes to the sign of the first part), and the parts of the other sign are another effect, not netted off.
+        # The category is the damage or heal of one time when no part of the sign lasts, and the damage or heal over time when one does. The magnitude is the whole and its unit the lasting
+        # part's, but the two parts are also kept apart (``once``, ``lasting``: what the valuation of a proc reads, :mod:`trioforge.effects.value`): a direct hit is worth the rate and a poison is
+        # held to one copy up. A permanent spell keeps its number of each tick as its magnitude (unit hp_per_tick) and never adds its one-time number to it.
+        once = {1: 0, -1: 0}  # (whole numbers stay whole: a spell of one effect gives the number it gave, in the type it gave it, and so the bytes of the files)
+        ticks = {1: 0, -1: 0}
+        for e in hp:
+            v = _value(e)
+            if v != 0:
+                (once if instant or e["spa"] == 79 else ticks)[1 if v > 0 else -1] += abs(v)
+        lasting_of = {sign: _over_time(ticks[sign], spell) for sign in (1, -1)}  # (the lasting part of each sign: its number, and its unit)
+        wholes = {sign: once[sign] + lasting_of[sign][0] for sign in (1, -1)}
+        lead = next((1 if _value(e) > 0 else -1 for e in hp if _value(e) != 0), 0)
+        if lead != 0:
+            sign = lead if wholes[lead] >= wholes[-lead] else -lead
+            lasting_number, lasting_unit = lasting_of[sign]
+            has_lasting = ticks[sign] != 0
+            parts = {"once": once[sign], "lasting": lasting_number if has_lasting else 0}
+            # the kind of a mixed spell follows its larger part: over time when the lasting total is more than the one-time total (a permanent spell has no end to its total: it is over time), a tie is the one-time kind
+            lasting = has_lasting and (lasting_unit == "hp_per_tick" or lasting_number > once[sign])
+            if not has_lasting:
+                magnitude, unit = once[sign], "hp"
+            elif lasting_unit == "hp_per_tick":
+                magnitude, unit = lasting_number, lasting_unit  # (a number of each tick is no number to add a one-time number to)
+            else:
+                magnitude, unit = wholes[sign], lasting_unit
+            mana = first(15)
+            if sign < 0 and spell["target"] == SELF and mana is not None and _value(mana) > 0:
+                return out("mana", abs(_value(mana)), "mana")  # hit points spent for mana: the gain is mana
+            if sign < 0:
+                if spell["target"] == 13:
+                    return out("lifetap", magnitude, unit, **parts)
+                return out("dot", magnitude, unit, **parts) if lasting else out("damage", magnitude, unit, **parts)
+            return out("heal_over_time", magnitude, unit, **parts) if lasting else out("heal", magnitude, unit, **parts)
     if 192 in spas:
         return out("hate", abs(_value(first(192))), "hate")
     e = first(11)
@@ -406,19 +449,23 @@ def _signature(spell: dict[str, Any]) -> tuple[Any, ...]:
     return tuple((e["spa"], e["base"], e["limit"], e["formula"], e["max"]) for e in spell["effects"])
 
 
-def pick_spell(spells: list[dict[str, Any]], kind: str) -> tuple[dict[str, Any], bool]:
-    """Choose among same-named spells: the lowest id (the classic spell), after preferring the type that fits the effect kind (a proc is an offensive spell, a
-    worn effect a permanent one). Sanity: NPC-scale damage (over 20,000) and ids from 20,000 up are not trusted for the proc preference.
-    Returns ``(spell, ambiguous)``."""
+def pick_pool(spells: list[dict[str, Any]], kind: str) -> list[dict[str, Any]]:
+    """The same-named spells that :func:`pick_spell` chooses among, by id: those of the type that fits the effect kind (a proc is an offensive spell, a worn effect a
+    permanent one), else all of them. Sanity: NPC-scale damage (over 20,000) and ids from 20,000 up are not trusted for the proc preference."""
     ordered = sorted(spells, key=lambda x: x["id"])
-    pool = ordered
     if kind == "proc":
         detrimental = [x for x in ordered if x["beneficial"] == 0 and x["id"] < 20000 and _max_hp(x) <= 20000]
-        pool = detrimental or ordered
-    elif kind == "worn":
+        return detrimental or ordered
+    if kind == "worn":
         permanent = [x for x in ordered if x["permanent"] or x["duration_ticks"] >= 3000]
-        pool = permanent or ordered
-    return pool[0], len({_signature(x) for x in ordered}) > 1
+        return permanent or ordered
+    return ordered
+
+
+def pick_spell(spells: list[dict[str, Any]], kind: str) -> tuple[dict[str, Any], bool]:
+    """Choose among same-named spells: the lowest id (the classic spell) of :func:`pick_pool`. Returns ``(spell, ambiguous)``: whether the same-named spells differ."""
+    ordered = sorted(spells, key=lambda x: x["id"])
+    return pick_pool(spells, kind)[0], len({_signature(x) for x in ordered}) > 1
 
 
 # ---- what a class casts --------------------------------------------------------------------------------------------------

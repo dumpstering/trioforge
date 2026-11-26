@@ -14,15 +14,31 @@ jobs:
   python:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # The suite is an hour of work, and with the tests that need Node it cannot finish in one job inside the 30 minutes that the hardening test allows: it runs as a matrix of shards, each a share of the test FILES
+    # (pipeline/tests/shards.py: a file is in exactly one shard; test_shards.py holds that the shards cover every file once and that this list is the one the code has). A shard that fails does not stop the others.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/5", "2/5", "3/5", "4/5", "5/5"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The tests of the site build, of the bundles and of the release checks need Node and esbuild. Without them they skip, and a green run would say nothing of the site.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      - run: npm ci --ignore-scripts
       - run: python -m pip install --require-hashes -r requirements.lock
-      - run: python -m pytest
+      # TRIOFORGE_REQUIRE_NODE turns the skip of a test that needs Node into a failure, so a runner without it cannot go green by skipping them. The browser tests do not run here.
+      - run: python -m pytest --shard "$SHARD"
+        env:
+          TRIOFORGE_REQUIRE_NODE: "1"
+          SHARD: ${{ matrix.shard }}
 
   js:
     runs-on: ubuntu-24.04

@@ -82,7 +82,7 @@ def test_no_column_and_no_survivor_exists_for_an_item_that_no_race_can_wear(opti
     vecs = list(pool().values())
     seen_setups = set()
     for race in RACES:
-        profile = make_profile(race, TRIO, 50, "balanced", None, None, TABLES, items=vecs)
+        profile = make_profile(race, TRIO, 50, "tank", None, None, TABLES, items=vecs)
         for setup in profile.setups:
             seen_setups.add(setup)
             keys = {key for _, key in build_milp(profile, vecs, setup, None, options).colmap.values()}
@@ -101,7 +101,7 @@ def test_a_shield_that_no_race_can_wear_does_not_make_the_shield_setup():
     everybody = at_tier(catalog_item(9106, "Zorblax Guard of Everybody", GUARD.format(race="ALL")), 0, RULES)
     assert nobody.is_shield and nobody.races == frozenset() and everybody.is_shield and everybody.races is None
     for race in RACES:
-        without = make_profile(race, TRIO, 50, "balanced", None, None, TABLES, items=[nobody])
-        with_one = make_profile(race, TRIO, 50, "balanced", None, None, TABLES, items=[nobody, everybody])
+        without = make_profile(race, TRIO, 50, "tank", None, None, TABLES, items=[nobody])
+        with_one = make_profile(race, TRIO, 50, "tank", None, None, TABLES, items=[nobody, everybody])
         assert "1h-shield" not in without.setups, race
         assert "1h-shield" in with_one.setups, race

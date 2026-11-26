@@ -8,9 +8,11 @@ Test data is invented. Strings shaped like log lines are built at run time (see
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -36,6 +38,7 @@ from test_privacy_helpers import (  # noqa: F401  (fixtures are used by name)
     tag,
     write,
 )
+from test_privacy_content_rules import reason_json
 from trioforge.privacy import gitio
 from trioforge.privacy import scan as S
 
@@ -285,6 +288,40 @@ def test_a_name_shaped_like_a_log_line_is_a_finding_even_without_the_key(repo):
     code, out, err = call_main(["--identity", ALLOWED], cwd=repo)
     assert code == 1, out + err
     assert [f["rule"] for f in parse_output(out)] == ["log-loot"]
+
+
+@pytest.mark.parametrize("encoding", ["UTF-16", "UTF-16LE", "UTF-32"])
+def test_the_identity_scan_reads_the_listing_in_utf8_whatever_encoding_the_users_git_prints_in(repo, keyfile, encoding):
+    """``i18n.logOutputEncoding`` re-encodes the names in the listing of who made each commit, which the split on NUL then cut into pieces: the scan said "identity: unreadable" for a clean repository and
+    could never reach the name check. The listing says ``--encoding=UTF-8`` and ``--no-show-signature`` (as the two listings of the history scan do): a clean repository scans clean, a bad identity is
+    found as one, and a denylisted name is found as a name."""
+    commit_as(repo, name="Test User")
+    git(repo, "config", "i18n.logOutputEncoding", encoding)
+    done = run_cli(["--identity", ALLOWED, "--key-file", keyfile], repo)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert parse_output(done.stdout) == []
+    commit_as(repo, name="Test User", email="someone.else@example.invalid")
+    done = run_cli(["--identity", ALLOWED, "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert [(f["path"].startswith("<commit:"), f["rule"]) for f in parse_output(done.stdout)] == [(True, "identity")], "the bad identity is found as one, not as an unreadable record"
+    commit_as(repo, name="Zorblax Quimmet")
+    done = run_cli(["--identity", ALLOWED, "--key-file", keyfile], repo)
+    assert sorted(f["rule"] for f in parse_output(done.stdout)) == ["denylist", "denylist", "identity"]
+    assert "zorblax" not in (done.stdout + done.stderr).lower()
+
+
+def test_a_signature_check_in_the_users_git_config_does_not_put_gpg_lines_into_the_identity_listing(repo, keyfile, monkeypatch, tmp_path):
+    """``log.showSignature=true`` prints gpg's lines ahead of a signed commit's record: the first field was then not a commit id, and the scan said "identity: unreadable" for it. gpg's home is the test's own folder."""
+    if shutil.which("gpg") is None:
+        pytest.skip("gpg is not installed: git has no signature to check")
+    monkeypatch.setenv("GNUPGHOME", str(tmp_path / "gnupg-home"))
+    (tmp_path / "gnupg-home").mkdir()
+    commit_as(repo, name="Test User")
+    commit_with_a_signature_header(repo)
+    git(repo, "config", "log.showSignature", "true")
+    done = run_cli(["--identity", ALLOWED, "--key-file", keyfile], repo)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert parse_output(done.stdout) == []
 
 
 @pytest.mark.parametrize("which", ["author", "committer"])
@@ -555,6 +592,217 @@ def test_a_gitlink_that_was_committed_earlier_is_still_refused_when_staging_othe
     done = run_cli(["--staged", "--key-file", keyfile], repo)
     assert done.returncode == 1
     assert ("vendor/sub", "submodule") in found(done)
+
+
+# ---- history: every path a blob has had, every path a merge adds, every gitlink -------------------
+
+
+def test_history_reads_a_blob_under_every_path_it_has_had(repo, keyfile):
+    """``git rev-list --objects`` names a blob once, under one path. A seen-in-game reason is a finding in a ``.json`` file, so the blob of a catalog that was
+    committed under that name and then renamed is still one."""
+    write(repo, "derived/data.json", reason_json("Seen in game."))
+    git(repo, "add", "derived/data.json")
+    commit(repo, "a catalog")
+    git(repo, "mv", "derived/data.json", "notes.txt")
+    commit(repo, "renamed")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert ("derived/data.json", "seen-reason") in found(done)
+    assert ("notes.txt", "seen-reason") not in found(done)  # (the name that is not JSON does not read it as JSON)
+
+
+def test_history_reads_a_blob_once_for_each_kind_of_path_it_has_had(repo, keyfile):
+    """A line may be allowed for one path and not another, so the copy of an allowed line at another path is a finding: only for that path, as in a staged scan."""
+    line = loot_line()
+    privacy_files(repo, allow_lines=[("docs/a.txt", "log-loot", hashlib.sha256(line.encode("utf-8")).hexdigest())])
+    for name in ("docs/a.txt", "docs/b.txt", "docs/c.txt"):
+        write(repo, name, line + "\n")
+    git(repo, "add", "docs")
+    commit(repo, "three copies")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert found(done) == [("docs/b.txt", "log-loot")]  # (one of the two paths that are not allowed: they are one kind, and the blob is read once for it)
+
+
+def test_history_reads_a_blob_that_has_many_names_once_for_each_kind_not_for_each_name(repo, keyfile, monkeypatch):
+    reads = []
+    original = S._FileScan.scan_content
+
+    def counting(self, source):
+        reads.append(self.path)
+        return original(self, source)
+
+    monkeypatch.setattr(S._FileScan, "scan_content", counting)
+    for number in range(12):
+        write(repo, f"copies/{number:02d}.txt", "the same text\n")
+    write(repo, "copies/data.json", "the same text\n")
+    git(repo, "add", "copies")
+    commit(repo, "copies")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert sorted(path for path in reads if path.startswith("copies/")) == ["copies/00.txt", "copies/data.json"]  # (JSON or not: two kinds)
+
+
+def test_history_checks_a_path_that_only_a_merge_adds(repo, keyfile):
+    """``git log --name-only`` does not list the paths of a merge. A path that the merge result alone adds (the blob is one that exists under another name, so
+    ``rev-list --objects`` does not name it either) is checked all the same."""
+    write(repo, "a.txt", "same\n")
+    git(repo, "add", "a.txt")
+    commit(repo, "base")
+    git(repo, "checkout", "-q", "-b", "side")
+    write(repo, "s.txt", "side\n")
+    git(repo, "add", "s.txt")
+    commit(repo, "side")
+    git(repo, "checkout", "-q", "main")
+    write(repo, "m.txt", "main\n")
+    git(repo, "add", "m.txt")
+    commit(repo, "main")
+    git(repo, "merge", "-q", "--no-commit", "--no-ff", "side")
+    write(repo, "zorblax-notes.txt", "same\n")
+    git(repo, "add", "zorblax-notes.txt")
+    commit(repo, "merge")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert found(done) == [(f"[private:{tag('zorblax')}]-notes.txt", "denylist")]
+
+
+def test_a_gitlink_that_history_holds_is_refused_as_the_staged_scan_refuses_it(repo, keyfile):
+    git(repo, "update-index", "--add", "--cacheinfo", GITLINK)
+    commit(repo, "a submodule")
+    git(repo, "rm", "-q", "--cached", "vendor/sub")
+    commit(repo, "without it")  # (the tip is clean: only the history has it)
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert found(done) == [("vendor/sub", "submodule")]
+
+
+def merge_that_adds_a_path_of_its_own(repo):
+    """A history whose merge result alone adds a path (the blob is one that exists under another name), as in the test of the merge."""
+    write(repo, "a.txt", "same\n")
+    git(repo, "add", "a.txt")
+    commit(repo, "base")
+    git(repo, "checkout", "-q", "-b", "side")
+    write(repo, "s.txt", "side\n")
+    git(repo, "add", "s.txt")
+    commit(repo, "side")
+    git(repo, "checkout", "-q", "main")
+    write(repo, "m.txt", "main\n")
+    git(repo, "add", "m.txt")
+    commit(repo, "main")
+    git(repo, "merge", "-q", "--no-commit", "--no-ff", "side")
+    write(repo, "zorblax-notes.txt", "same\n")
+    git(repo, "add", "zorblax-notes.txt")
+    commit(repo, "merge")
+
+
+@pytest.mark.parametrize("setting", ["combined", "dense-combined", "first-parent", "separate", "off"])
+def test_the_listing_of_history_does_not_depend_on_how_the_users_git_shows_merges(repo, keyfile, setting):
+    """``log.diffMerges=combined`` made git print no entry for a merge in the form the parse reads, and every scan then stopped with "git log output not understood"; the listing now says how
+    merges are shown, and what it takes from a merge is what it took."""
+    merge_that_adds_a_path_of_its_own(repo)
+    git(repo, "config", "log.diffMerges", setting)
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert found(done) == [(f"[private:{tag('zorblax')}]-notes.txt", "denylist")]
+
+
+@pytest.mark.parametrize("setting", ["false", "true"])
+def test_a_gitlink_in_a_root_commit_is_refused_whatever_log_showroot_says(repo, keyfile, setting):
+    """``log.showRoot=false`` made ``git log --raw`` print nothing for a root commit, so a gitlink in the first commit of a branch was not found (and the blob of a root commit was read under one path)."""
+    write(repo, "a.txt", "clean\n")
+    git(repo, "add", "a.txt")
+    commit(repo, "base")
+    git(repo, "checkout", "-q", "--orphan", "other")
+    git(repo, "rm", "-rf", "-q", "--cached", ".")
+    git(repo, "update-index", "--add", "--cacheinfo", GITLINK)
+    commit(repo, "a root with a submodule")
+    git(repo, "checkout", "-q", "-f", "main")
+    git(repo, "config", "log.showRoot", setting)
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert found(done) == [("vendor/sub", "submodule")]
+
+
+def test_a_root_commit_that_names_a_blob_under_two_kinds_of_path_is_read_for_both_with_log_showroot_false(repo, keyfile):
+    write(repo, "derived/data.json", reason_json("Seen in game."))
+    git(repo, "add", "derived/data.json")
+    commit(repo, "a catalog, in the root commit")
+    git(repo, "mv", "derived/data.json", "notes.txt")
+    commit(repo, "renamed")
+    git(repo, "config", "log.showRoot", "false")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert ("derived/data.json", "seen-reason") in found(done)
+
+
+@pytest.mark.parametrize("encoding", ["UTF-16", "UTF-16LE", "UTF-32"])
+def test_a_commit_message_is_read_in_whatever_encoding_the_users_git_prints_it(repo, keyfile, encoding):
+    """``i18n.logOutputEncoding`` makes git re-encode every message it prints; read as it came, the listing split on NUL cut a UTF-16 or UTF-32 message into single characters, and a denylisted term
+    in a commit message was NOT found (the scan said clean). The listing says ``--encoding=UTF-8``."""
+    write(repo, "a.txt", "clean\n")
+    git(repo, "add", "a.txt")
+    commit(repo, "notes about zorblax here")
+    git(repo, "config", "i18n.logOutputEncoding", encoding)
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert any(rule == "denylist" and path.startswith("<commit:") for path, rule in found(done)), found(done)
+    assert "zorblax" not in (done.stdout + done.stderr).lower()
+
+
+def commit_with_a_signature_header(repo, message="a signed one"):
+    """The head commit rewritten with a ``gpgsig`` header (a malformed signature: what git needs to run its signature check), written as an object and put on the branch."""
+    body = git(repo, "cat-file", "commit", "HEAD").stdout.decode("utf-8")
+    header, _, text = body.partition("\n\n")
+    signature = "gpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEEinvented0000000000000000000000000000\n =abcd\n -----END PGP SIGNATURE-----"
+    made = git(repo, "hash-object", "-t", "commit", "-w", "--stdin", input=(header + "\n" + signature + "\n\n" + text).encode("utf-8")).stdout.decode().strip()
+    git(repo, "update-ref", "refs/heads/main", made)
+    return made
+
+
+def test_a_signature_check_in_the_users_git_config_does_not_put_gpg_lines_into_the_listings(repo, keyfile, monkeypatch, tmp_path):
+    """``log.showSignature=true`` prints gpg's own lines ahead of what ``git log`` was asked for, as soon as a commit has a signature header (commits merged in a web page have one): the first part of
+    the raw listing was then not an entry, and every scan stopped with "git log output not understood"; the message listing got the lines glued to its first record. Both listings say
+    ``--no-show-signature``. gpg's home is the test's own folder: nothing is created in the user's."""
+    if shutil.which("gpg") is None:
+        pytest.skip("gpg is not installed: git has no signature to check")
+    monkeypatch.setenv("GNUPGHOME", str(tmp_path / "gnupg-home"))
+    (tmp_path / "gnupg-home").mkdir()
+    write(repo, "zorblax-notes.txt", "clean\n")
+    git(repo, "add", "zorblax-notes.txt")
+    commit(repo, "thanks to zorblax for the notes")
+    commit_with_a_signature_header(repo)
+    git(repo, "config", "log.showSignature", "true")
+    shown = git(repo, "log", "-1", "--format=%h").stdout.decode("utf-8", "replace")
+    assert "gpg" in shown.lower() or "signature" in shown.lower(), "the setting does put lines into git's output here (or this test shows nothing)"
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    paths = [path for path, _rule in found(done)]
+    assert (f"[private:{tag('zorblax')}]-notes.txt", "denylist") in found(done)
+    assert any(rule == "denylist" and path.startswith("<commit:") for path, rule in found(done))
+    assert not any("gpg" in path.lower() for path in paths), paths
+    assert "not understood" not in done.stdout + done.stderr
+
+
+def test_a_gitlink_on_a_branch_that_is_not_checked_out_is_refused_too(repo, keyfile):
+    write(repo, "a.txt", "clean\n")
+    git(repo, "add", "a.txt")
+    commit(repo, "base")
+    git(repo, "checkout", "-q", "-b", "feature")
+    git(repo, "update-index", "--add", "--cacheinfo", GITLINK)
+    commit(repo, "a submodule")
+    git(repo, "checkout", "-q", "main")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert found(done) == [("vendor/sub", "submodule")]
+
+
+def test_a_history_with_no_path_problem_is_still_clean_and_counts_each_blob_once(repo, keyfile):
+    write(repo, "docs/a.md", "one\n")
+    write(repo, "docs/b.md", "one\n")
+    write(repo, "docs/c.md", "two\n")
+    git(repo, "add", "docs")
+    commit(repo, "files")
+    done = run_cli(["--history", "--key-file", keyfile], repo)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "privacy scan:" in done.stdout and "0 findings" in done.stdout
 
 
 # ---- --all reads the index ----------------------------------------------------------------------

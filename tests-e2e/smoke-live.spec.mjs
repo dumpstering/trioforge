@@ -14,7 +14,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { chromium, expect, test } from "@playwright/test";
+import { ANALYTICS_ORIGIN } from "../playwright.config.mjs";
 import { NOTFOUND_PATH, NOTFOUND_POLICY, checksDir, itemPageKeys, main, sample, trioSlugs } from "../scripts/smoke_live.mjs";
 
 test.describe.configure({ timeout: 240_000 });
@@ -564,5 +565,67 @@ test("--pace puts every request of the check, the browser's included, through on
     // the first request and the last came at least n - 1 paces apart, less two seconds for requests the browser makes of itself (it is not the pages' own) and for the way there. This is a floor on
     // the time of a deliberate wait, which only a slow machine makes longer; no gap between two requests is measured, because the way of one request can be late and the next not.
     expect(times.at(-1) - times[0]).toBeGreaterThanOrEqual((times.length - 1) * 500 - 2000);
+  });
+});
+
+// ---- a counting site (--analytics), a tag that was put into the pages, and the kit link --------------------------------------------------------------------------
+
+/** Run the command in this process with a browser whose two hosts of the counter are answered by the test (nothing leaves the machine): the script is a stand-in that does nothing, the report is taken and dropped. */
+async function smokeWithTheCounterAnswered(base, ...argv) {
+  const out = [];
+  const err = [];
+  const asked = [];
+  const folder = mkdtempSync(join(tmpdir(), "smoke-live-e2e-"));
+  FOLDERS.push(folder);
+  const launch = async () => {
+    const browser = await chromium.launch();
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async (options) => {
+      const context = await newContext(options);
+      await context.route(/^https:\/\/(static\.)?cloudflareinsights\.com\//, (route) => {
+        asked.push(route.request().url());
+        return route.request().url().endsWith(".js") ? route.fulfill({ status: 200, contentType: "text/javascript", body: "" }) : route.fulfill({ status: 204, body: "" });
+      });
+      return context;
+    };
+    return browser;
+  };
+  const code = await main(["--base", base, "--out", folder, "--wait", "20", "--settle", "0.3", "--expect-data", "none", ...argv], { log: (line) => out.push(line), error: (line) => err.push(line), now: () => NOW, launch });
+  return { code, out, err, asked };
+}
+
+const TAG = '<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon=\'{"token": "0123456789abcdef0123456789abcdef"}\'></script>';
+
+test("a counting site passes --analytics: its pages are counted (the counter is asked for, and answered by the test), and the page opened from a kit link asks for nothing of it @once", async ({ request }) => {
+  expect((await request.get(`${ANALYTICS_ORIGIN}/`)).ok()).toBe(true);
+  await withStandIn(ANALYTICS_ORIGIN, givesNotFoundPolicy, async (site) => {
+    const result = await smokeWithTheCounterAnswered(site.origin, ...SMALL, "--analytics");
+    expect(result.err).toEqual([]);
+    expect(result.code).toBe(0);
+    expect(result.asked.length, "the counted pages did ask for the counter").toBeGreaterThan(0);
+  });
+});
+
+test("a counting tag that was put into the pages (what the dashboard switch of Cloudflare does) is found in both modes, and in --analytics mode the kit link page is found asking for the counter too @once", async ({ baseURL }) => {
+  const injected = compose(givesNotFoundPolicy, edit("</body>", `${TAG}</body>`));
+  await withStandIn(ANALYTICS_ORIGIN, injected, async (site) => {
+    const result = await smokeWithTheCounterAnswered(site.origin, ...SMALL, "--analytics");
+    const { problems } = failed({ ...result, err: result.err });
+    const tags = problems.filter((line) => line.includes("counting tag"));
+    expect(tags).toHaveLength(3); // the trio page, the item page and the 404 page: every page that was opened
+    expect(tags.some((line) => line.startsWith(`- ${TRIO}:`)) && tags.some((line) => line.startsWith(`- ${NOTFOUND_PATH}:`))).toBe(true);
+    // the kit link page is found three ways (Q5), and the check says exactly these three lines about it, in this order (R4): the counter's script element in the page, the entry of its resource timing, and
+    // the request that the browser reported (read after the page has been sent away). Any other line about it (a failed look into the page, a page that could not be loaded) is a failure of this test.
+    const kit = problems.filter((line) => line.includes("(a kit link)"));
+    expect(kit).toHaveLength(3);
+    expect(kit[0].startsWith(`- ${TRIO} (a kit link): has 1 counter script element in the page: a page opened from a kit link is never counted`)).toBe(true);
+    expect(kit[1]).toMatch(/\(a kit link\): resource timing lists 1 request to the counter's hosts \(first: static\.cloudflareinsights\.com\) in the page$/);
+    expect(kit[2]).toMatch(/\(a kit link\): made [1-9][0-9]* requests? to the counter's hosts \(first: (static\.)?cloudflareinsights\.com\): a page opened from a kit link is never counted/);
+  });
+  await withStandIn(baseURL, injected, async (site) => {
+    const result = await smokeWithTheCounterAnswered(site.origin, ...SMALL);
+    const { problems } = failed(result);
+    expect(problems.filter((line) => line.includes("counting tag")), "the plain mode finds it as well").toHaveLength(3);
+    expect(problems.filter((line) => line.includes("(a kit link)")), "the plain mode opens no kit link page").toEqual([]);
   });
 });

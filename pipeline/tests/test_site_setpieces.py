@@ -220,10 +220,9 @@ def test_the_moving_things_of_every_page_are_at_most_three(site):  # noqa: F811
     out, _ = site
     manifest = __import__("json").loads((STATIC / "art" / "manifest.json").read_text(encoding="utf-8"))["assets"]
     moving = {key for key, entry in manifest.items() if entry["kind"] == "strip" and len(entry["frames"]) > 1}
-    for name in [*PAGES.values(), NOT_FOUND, "item/w1/index.html"]:
+    for name in [*PAGES.values(), NOT_FOUND, "item/w90001/index.html"]:  # (an item page of the fixture: the page must be there, or the test reads nothing of it)
         path = out / name
-        if not path.is_file():
-            continue
+        assert path.is_file(), f"{name} is not in the build: the test would read nothing of it"
         html = parse(path.read_text(encoding="utf-8"))
         counted = [n for n in html.find("body").iter() if n.tag == "span" and "art" in n.classes and any(c[4:] in moving - {"mail"} for c in n.classes if c.startswith("art-"))]  # (the mail moves only while its link is hovered or has the focus)
         assert len(counted) <= 3, (name, len(counted))

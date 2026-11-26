@@ -15,14 +15,16 @@ twice in the matrix, in the sample and in every scale that is not a test scale:
 =========================  ==========================================================================================
 ``iksar``                  the race is Iksar (a racial armor class on top of the capped sheet)
 ``deity``                  the profile has a deity, so the deity-locked items of that deity stand in the pool
-``setup:2h`` ...           the weapon setup (``2h``, ``dw``, ``1h-shield``, ``stick``)
+``setup:2h`` ...           the weapon setup (``2h``, ``dw``, ``1h-shield``, ``stick``, ``ranged``)
 ``shield``                 a real shield in the off hand: the ``1h-shield`` setup. The run checks the solved kit too
                            (``shield-worn``) and the sample keeps two of those
 ``buffs:own`` ...          the buff key (``own``, ``group``, ``group+enchanter``, ``raid``)
 ``monk-below-10``          a trio with a Monk below +10, where the worn weight moves the Monk bonus
 ``mixed-mana``             three mana pools that mix WIS and INT (the pool selection needs binaries)
 ``end-trio``               a trio with no mana pool, so END is the resource
-``role:...``               the role (``balanced``, ``tank``, ``melee``, ``caster``)
+``role:...``               the build (``tank``, ``shield``, ``melee``, ``ranged``, ``castertank``, ``caster``)
+``spell-haste``            the buff sets carry the haste of the spells (the rule ``haste.assume_spell`` is false, so no other scenario's profile has any): the
+                           profile can reach the haste cap, which the evaluations of it check (``haste-capped``)
 ``tier:0`` ...             the tier of the pool (0, 4 and 10)
 ``composed-weights``       weights composed from at least two of the sliders, the custom weights and the regen window
 =========================  ==========================================================================================
@@ -44,6 +46,10 @@ from trioforge.precompute.grid import parse_trio
 
 __all__ = [
     "BRUTE_COUNT",
+    "PROCS_BASE",
+    "PROCS_EVERY",
+    "RANGED_BASE",
+    "RANGED_EVERY",
     "MINI_STRATA",
     "REQUIRED_STRATA",
     "SAMPLE_SESSIONS",
@@ -53,11 +59,13 @@ __all__ = [
     "Scale",
     "ScenarioSpec",
     "UpgradeSpec",
+    "bow_plan",
     "brute_plan",
     "count_tags",
     "matrix_plan",
     "pick_cover",
     "pmb36_plan",
+    "ranged_brute_plan",
     "scenario_tags",
     "tag_counts",
     "upgrade_plan",
@@ -69,10 +77,11 @@ BRUTE_COUNT = 330
 #: the Upgrade sessions of the committed sample: one of each tier mode, and between them steps that add a new item, another
 #: copy and an owned-item tier upgrade (a run checks that they do), and a session whose first step upgrades an owned copy and whose
 #: second copies the upgraded item (test_a_best_set_may_upgrade_an_owned_copy...: 12 had it for the catalog of 2026-10-14, 9 has it for
-#: the one of 2026-10-27; which session has it depends on the items the seed has the visitor own, so the test looks for the shape), and
+#: the one of 2026-10-27 and 15 for the one of 2026-11-24, which is why 15 was added and 9 stays; which session has it depends on the items the
+#: seed has the visitor own, so the test looks for the shape), and
 #: a session in the mode "as it arrives" whose Every slot rows offer an item the visitor has, in every copy the kit wears elsewhere
-#: (the page says "get another copy": 14 for the catalog of 2026-10-27; the JS tests look for the shape)
-SAMPLE_SESSIONS = (2, 7, 9, 14)
+#: (the page says "get another copy": 14 for the catalog of 2026-10-27 and for that of 2026-11-24; the JS tests look for the shape)
+SAMPLE_SESSIONS = (2, 7, 9, 14, 15)
 #: what the sessions of a run of three or more must show between them: each kind of step, each tier mode, an owned item that
 #: is locked to a deity
 UPGRADE_REQUIRED = (
@@ -81,11 +90,11 @@ UPGRADE_REQUIRED = (
 
 REQUIRED_STRATA = (
     "iksar", "deity", "setup:2h", "setup:dw", "setup:1h-shield", "setup:stick", "shield", "buffs:own", "buffs:group",
-    "buffs:group+enchanter", "buffs:raid", "monk-below-10", "mixed-mana", "end-trio", "role:balanced", "role:tank",
-    "role:melee", "role:caster", "tier:0", "tier:4", "tier:10", "composed-weights",
+    "buffs:group+enchanter", "buffs:raid", "monk-below-10", "mixed-mana", "end-trio", "role:shield", "role:tank",
+    "role:melee", "role:caster", "role:castertank", "role:ranged", "spell-haste", "tier:0", "tier:4", "tier:10", "composed-weights",
 )  # fmt: skip
 #: what the small scale of the tests keeps (one of each, not two)
-MINI_STRATA = ("composed-weights", "deity", "iksar", "evidence:strict-proxy", "prune-check")
+MINI_STRATA = ("composed-weights", "deity", "iksar", "evidence:strict-proxy", "prune-check", "spell-haste")
 
 # trios (normalized to the class order of the pages)
 PMB = parse_trio("PAL-MNK-BER")  # a Monk, a tank and a hybrid; one mana pool
@@ -96,11 +105,29 @@ PURE = parse_trio("WIZ-MAG-ENC")  # all casters, INT only
 MONKC = parse_trio("WAR-CLR-MNK")  # a Monk with a tank and a caster
 HYBRID = parse_trio("RNG-BRD-BST")  # melee classes with some mana
 HEAL = parse_trio("CLR-DRU-SHM")  # casters, WIS only
+RANGER = parse_trio("RNG-DRU-MNK")  # a Ranger with a Monk and a caster: the Ranged role beside the Monk's worn weight
 LATTICE_TRIOS = (PMB, END, MIX, CAST, PURE, MONKC, HYBRID, HEAL)
 LATTICE_RACES = (
-    "HUM", "OGR", "ERU", "TRL", "DWF", "HIE", "BAR", "HFL", "GNM", "KER", "FRG", "HEF", "DEF", "ELF", "IKS",
+    "HUM", "OGR", "ERU", "TRL", "DWF", "HIE", "BAR", "HFL", "GNM", "KER", "FRG", "HEF", "DEF", "ELF", "IKS", "HDE",
 )  # fmt: skip
 DEFAULT_LEVEL = 50
+
+
+def _on_offer(setup: str, full: list[str], trio: tuple[str, ...], role: str, tables: Any, level: int, evidence: str) -> str:
+    """``setup``, a pick from ``full`` (the setups ``role`` plays for ``trio`` with no pool to read, a shield assumed), as a scenario of ``evidence`` can have it.
+
+    A scenario is made given the solve pool of its evidence level (:func:`trioforge.export.fixture_cases.make_scenario`), and its profile can only play the setups that
+    pool offers. The wiki pool of the public catalog has a shield, which the plan assumes; the pool of the strict level is empty (the fixtures refuse a catalog with a strict item),
+    so it offers no shield: a strict-proxy pick that is not on offer goes to the setup at the same place in the list that is. A pick that is on offer is never moved, so the draws
+    of a seed and every row that could be made are what they were."""
+    if evidence != "strict-proxy" or setup not in full:
+        return setup
+    offered = weapons.setups_for(trio, role, tables, level=level, items=())
+    if not offered:
+        from trioforge.export.fixture_cases import FixtureError  # (here: fixture_cases imports this module)
+
+        raise FixtureError(f"no setup of the {role} role is on offer to {'-'.join(trio)} at the strict level (its pool is empty), so a strict-proxy scenario cannot be planned for it")
+    return setup if setup in offered else offered[full.index(setup) % len(offered)]
 
 
 # ---- scenarios (matrix and pmb36) -------------------------------------------------------------------------------------
@@ -131,6 +158,7 @@ class ScenarioSpec:
     regen_T: float | None = None
     prune_check: bool = False
     note: str = ""
+    spell_haste: bool = False  # the buff sets carry the haste of the spells whatever the rule ``haste.assume_spell`` says (the profile then can reach the haste cap)
     tags: tuple[str, ...] = field(default=(), compare=False)
 
     @property
@@ -163,6 +191,8 @@ def scenario_tags(spec: ScenarioSpec, tables: Any) -> tuple[str, ...]:
         tags.add("mixed-mana")
     if spec.composed:
         tags.add("composed-weights")
+    if spec.spell_haste:
+        tags.add("spell-haste")
     if spec.level != DEFAULT_LEVEL:
         tags.add(f"level:{spec.level}")
     if spec.prune_check:
@@ -179,25 +209,25 @@ def _specials() -> list[ScenarioSpec]:
     """The recipes written out by hand: each stratum is in at least two of them (and in the lattice besides)."""
     s = _special
     return [
-        s(1, PMB, "IKS", "balanced", "dw", 4, "group", note="Iksar on a Monk trio below +10"),
+        s(1, PMB, "IKS", "melee", "dw", 4, "group", note="Iksar on a Monk trio below +10"),
         s(2, END, "IKS", "melee", "2h", 10, "raid", note="Iksar, an END trio at +10, the raid buffs"),
         s(3, MIX, "IKS", "tank", "1h-shield", 0, "own", note="Iksar with a shield and three mixed mana pools"),
         s(4, MIX, "HUM", "tank", "1h-shield", 4, "group", deity="Innoruuk", note="a deity admits its locked items"),
         s(5, END, "OGR", "melee", "dw", 4, "own", "strict-proxy", deity="Rallos Zek", note="strict proxy and a deity"),
-        s(6, CAST, "ERU", "balanced", "stick", 10, "group", deity="Innoruuk", note="casters, mixed mana, a deity"),
+        s(6, CAST, "ERU", "caster", "stick", 10, "group", deity="Innoruuk", note="casters, mixed mana, a deity"),
         s(7, PMB, "OGR", "melee", "2h", 0, "own", prune_check=True, note="a Monk at +0 with a two-hander"),
         s(8, PMB, "HUM", "tank", "1h-shield", 10, "raid", note="a shield at +10 under the raid buffs"),
-        s(9, PURE, "ERU", "balanced", "stick", 0, "group+enchanter", note="casters with the Enchanter's haste"),
-        s(10, MIX, "DWF", "caster", "stick", 4, "group+enchanter", "strict-proxy", note="the caster role, strict proxy"),
+        s(9, PURE, "ERU", "caster", "stick", 0, "group+enchanter", note="casters with the Enchanter's haste"),
+        s(10, MIX, "DWF", "shield", "stick", 4, "group+enchanter", "strict-proxy", note="the Shield caster build, strict proxy"),
         s(11, END, "HUM", "tank", "1h-shield", 0, "own", note="an END trio tanking with a shield"),
-        s(12, MONKC, "HIE", "caster", "stick", 10, "raid", prune_check=True, note="a Monk trio in the caster role"),
+        s(12, MONKC, "HIE", "shield", "stick", 10, "raid", prune_check=True, note="a Monk trio in the Shield caster build"),
         s(
-            13, PMB, "OGR", "balanced", "dw", 4, "raid", prune_check=True,
+            13, PMB, "OGR", "melee", "dw", 4, "raid", prune_check=True,
             multipliers=(("AC", 2), ("regen", 0.5)), custom=(("HP", 1.5),), regen_T=5,
             note="every kind of weight override at once",
         ),  # fmt: skip
         s(
-            14, MIX, "HUM", "caster", "stick", 10, "own", multipliers=(("MANA", 2), ("ATK+HASTE", 0.5)),
+            14, MIX, "HUM", "shield", "stick", 10, "own", multipliers=(("MANA", 2), ("ATK+HASTE", 0.5)),
             custom=(("SV", 2.5),), regen_T=1.5, note="sliders, a custom resist weight and a window",
         ),  # fmt: skip
         s(
@@ -205,13 +235,17 @@ def _specials() -> list[ScenarioSpec]:
             regen_T=7.5, note="a custom ATK under a slider and a long window",
         ),  # fmt: skip
         s(16, MONKC, "OGR", "tank", "1h-shield", 4, "group", note="a Monk with a shield below +10"),
-        s(17, PMB, "OGR", "balanced", "dw", 4, "group", level=55, prune_check=True, note="level 55"),
+        s(17, PMB, "OGR", "melee", "dw", 4, "group", level=55, prune_check=True, note="level 55"),
         s(18, END, "HUM", "melee", "2h", 10, "own", level=55, note="level 55, no mana"),
         s(
             19, PMB, "IKS", "tank", "2h", 0, "group+enchanter", multipliers=(("ATK+HASTE", 2),), regen_T=0,
             note="Iksar Monk with composed weights and a zero window",
         ),  # fmt: skip
-        s(20, HYBRID, "ERU", "balanced", "dw", 4, "raid", deity="Karana", prune_check=True, note="a hybrid trio and a deity"),
+        s(20, HYBRID, "ERU", "melee", "dw", 4, "raid", deity="Karana", prune_check=True, note="a hybrid trio and a deity"),
+        s(21, PURE, "ERU", "castertank", "1h-shield", 4, "own", spell_haste=True, note="the Caster tank build with the haste of the spells in the buffs: casters with the Enchanter's line"),
+        s(22, CAST, "HIE", "castertank", "stick", 10, "raid", spell_haste=True, note="the Caster tank build with the stick at +10, the raid buffs, the haste of the spells in them"),
+        s(23, HYBRID, "TRL", "ranged", "ranged", 10, "raid", spell_haste=True, note="the Archer build: a Ranger and two melee classes, the raid buffs with the haste of the spells"),
+        s(24, RANGER, "HUM", "ranged", "ranged", 4, "group", spell_haste=True, note="the Archer build with a Monk below +10, the haste of the spells in the buffs"),
     ]
 
 
@@ -226,11 +260,12 @@ def matrix_plan(seed: int, tables: Any, *, filler: int = 28, lattice: int = 48) 
         role = roles[(i // len(LATTICE_TRIOS)) % len(roles)]
         setups = weapons.setups_for(trio, role, tables, level=DEFAULT_LEVEL)
         number += 1
+        evidence = "strict-proxy" if i % 7 == 3 else "wiki"
         specs.append(
             ScenarioSpec(
                 "matrix", number, trio, LATTICE_RACES[(i * 4 + 1) % len(LATTICE_RACES)], role,
-                setups[(i // 3) % len(setups)], (0, 4, 10)[(2 * i + i // 8) % 3], BuffKeys[(i + i // 4) % 4],
-                "strict-proxy" if i % 7 == 3 else "wiki", prune_check=i % 3 == 0, note="lattice",
+                _on_offer(setups[(i // 3) % len(setups)], setups, trio, role, tables, DEFAULT_LEVEL, evidence),
+                (0, 4, 10)[(2 * i + i // 8) % 3], BuffKeys[(i + i // 4) % 4], evidence, prune_check=i % 3 == 0, note="lattice",
             )
         )
     rng = random.Random(f"{seed}:matrix")
@@ -240,17 +275,60 @@ def matrix_plan(seed: int, tables: Any, *, filler: int = 28, lattice: int = 48) 
         role = rng.choice(roles_for(trio))
         number += 1
         composed = rng.random() < 0.2
+        # (the draws are made in this order, whatever the evidence: the setup is drawn before the evidence is, and put on one the evidence's pool offers afterwards)
+        race = rng.choice(LATTICE_RACES)
+        setups = weapons.setups_for(trio, role, tables, level=DEFAULT_LEVEL)
+        pick = rng.choice(setups)
+        tier = rng.choice((0, 4, 10))
+        buffs = rng.choice(BuffKeys)
+        evidence = "strict-proxy" if rng.random() < 0.25 else "wiki"
         specs.append(
             ScenarioSpec(
-                "matrix", number, trio, rng.choice(LATTICE_RACES), role,
-                rng.choice(weapons.setups_for(trio, role, tables, level=DEFAULT_LEVEL)), rng.choice((0, 4, 10)),
-                rng.choice(BuffKeys), "strict-proxy" if rng.random() < 0.25 else "wiki",
+                "matrix", number, trio, race, role, _on_offer(pick, setups, trio, role, tables, DEFAULT_LEVEL, evidence), tier, buffs, evidence,
                 multipliers=(("AC", rng.choice((0.5, 2))), ("regen", rng.choice((0.5, 2)))) if composed else (),
                 custom=(("HP", rng.choice((0.75, 2, 3.25))),) if composed else (),
                 regen_T=rng.choice((1, 3, 6, 12.5)) if composed else None, note="random",
             )
         )
     return [_tagged(spec, tables) for spec in specs]
+
+
+#: the numbers of the bow instances of the brute-force family: after the ones of the plan (``BRUTE_COUNT`` of them), which are drawn as they always were
+RANGED_BASE = 1000
+RANGED_EVERY = 20  # one bow instance for every twenty plain ones the scale has (every second one a truthful one)
+
+
+#: the numbers of the instances with a table of weapon procs: after the bow instances, one for every ``PROCS_EVERY`` plain ones the scale has
+PROCS_BASE = 2000
+PROCS_EVERY = 10
+
+
+def procs_brute_plan(count: int = BRUTE_COUNT) -> list[int]:
+    """The numbers of the instances with a table of procs that go with ``count`` plain ones: ``PROCS_BASE`` and up, one for every ``PROCS_EVERY`` plain ones."""
+    return [PROCS_BASE + n for n in range(count // PROCS_EVERY)]
+
+
+def bow_plan(seed: int, tables: Any) -> list[ScenarioSpec]:
+    """The scenarios of the bow setup and the Ranged role, numbered after the whole plan of :func:`matrix_plan` (a scale that takes part of that plan puts them after the
+    part, and the part is what it was): they are added to the family, and no scenario of the plan is replaced. Of the wiki pool (the proxy of the strict level may hold no
+    bow)."""
+    first = len(matrix_plan(seed, tables)) + 1
+    rows = [
+        (HYBRID, "ERU", "ranged", "ranged", 4, "group", True, "the Ranged role: a Ranger and two melee classes"),
+        (RANGER, "OGR", "ranged", "ranged", 0, "own", True, "the Ranged role with a Monk below +10"),
+        (PMB, "OGR", "tank", "ranged", 10, "raid", False, "the bow setup in the Tank role of a trio with a Paladin"),
+        (END, "TRL", "melee", "ranged", 4, "own", True, "the bow setup in the Melee role, a trio with no mana"),
+    ]
+    specs = [
+        ScenarioSpec("matrix", first + n, trio, race, role, setup, tier, buffs, prune_check=prune, note=note)
+        for n, (trio, race, role, setup, tier, buffs, prune, note) in enumerate(rows)
+    ]
+    return [_tagged(spec, tables) for spec in specs]
+
+
+def ranged_brute_plan(count: int = BRUTE_COUNT) -> list[int]:
+    """The numbers of the bow instances that go with ``count`` plain ones: ``RANGED_BASE`` and up, one for every ``RANGED_EVERY`` plain ones."""
+    return [RANGED_BASE + n for n in range(count // RANGED_EVERY)]
 
 
 def _all_trios() -> list[tuple[str, ...]]:
@@ -266,18 +344,19 @@ def _tagged(spec: ScenarioSpec, tables: Any) -> ScenarioSpec:
 
 
 def pmb36_plan(tables: Any) -> list[ScenarioSpec]:
-    """The neutral PAL/MNK/BER 36: three roles x tiers 0, 4 and 10 x own and group buffs x the wiki pool and its strict
-    proxy, all for an Ogre. The setups go round the ones each role plays, so every role-and-setup pair is in the 36."""
+    """The neutral PAL/MNK/BER 36: the two builds the trio is offered (Tank and Melee damage) x tiers 0, 4 and 10 x own, group and raid buffs x the wiki pool and
+    its strict proxy, all for an Ogre. The setups go round the ones each build plays, so every build-and-setup pair is in the 36."""
     specs = []
-    for role in ("balanced", "tank", "melee"):
+    for role in ("tank", "melee"):
         setups = weapons.setups_for(PMB, role, tables, level=DEFAULT_LEVEL)
         for k, (tier, buffs, evidence) in enumerate(
-            (t, b, e) for t in (0, 4, 10) for b in ("own", "group") for e in ("wiki", "strict-proxy")
+            (t, b, e) for t in (0, 4, 10) for b in ("own", "group", "raid") for e in ("wiki", "strict-proxy")
         ):
             number = len(specs) + 1
             specs.append(
                 ScenarioSpec(
-                    "pmb36", number, PMB, "OGR", role, setups[(k + k // 4) % len(setups)], tier, buffs, evidence,
+                    "pmb36", number, PMB, "OGR", role,
+                    _on_offer(setups[(k + k // 4) % len(setups)], setups, PMB, role, tables, DEFAULT_LEVEL, evidence), tier, buffs, evidence,
                     prune_check=number % 6 == 1, note="the neutral 36",
                 )
             )
@@ -336,22 +415,22 @@ def upgrade_plan(seed: int) -> list[UpgradeSpec]:
     owned items with and without the deity, and both evidence levels. The seed only changes which items are owned."""
     rows = [
         # trio, race, role, setup, buffs, evidence, mode, D, N, owned, locked, deity, focus
-        (PMB, "OGR", "balanced", "dw", "group", "wiki", "ready4", 4, None, 60, 1, None, "all"),
+        (PMB, "OGR", "melee", "dw", "group", "wiki", "ready4", 4, None, 60, 1, None, "all"),
         (PMB, "HUM", "tank", "1h-shield", "own", "wiki", "arrives", 3, None, 40, 2, "Karana", "owned"),
         (END, "IKS", "melee", "2h", "group", "strict-proxy", "fixed", 4, 6, 48, 1, None, "all"),
-        (MIX, "DWF", "caster", "stick", "own", "wiki", "ready4", 4, None, 36, 0, None, "all"),
-        (PURE, "ERU", "balanced", "stick", "group", "wiki", "arrives", 0, None, 24, 1, None, "all"),
+        (MIX, "DWF", "shield", "stick", "own", "wiki", "ready4", 4, None, 36, 0, None, "all"),
+        (PURE, "ERU", "caster", "stick", "group", "wiki", "arrives", 0, None, 24, 1, None, "all"),
         (MONKC, "OGR", "tank", "dw", "group+enchanter", "wiki", "fixed", 4, 10, 56, 2, "Brell Serilis", "all"),
-        (HYBRID, "HUM", "balanced", "dw", "own", "strict-proxy", "ready4", 4, None, 44, 0, None, "owned"),
+        (HYBRID, "HUM", "melee", "dw", "own", "strict-proxy", "ready4", 4, None, 44, 0, None, "owned"),
         (PMB, "OGR", "melee", "2h", "raid", "wiki", "arrives", 4, None, 70, 1, None, "all"),
         (END, "TRL", "tank", "1h-shield", "own", "wiki", "fixed", 4, 2, 32, 1, "Rallos Zek", "owned"),
-        (CAST, "HIE", "balanced", "stick", "group", "strict-proxy", "arrives", 2, None, 30, 0, None, "all"),
+        (CAST, "HIE", "caster", "stick", "group", "strict-proxy", "arrives", 2, None, 30, 0, None, "all"),
         (MIX, "HUM", "tank", "1h-shield", "group", "wiki", "ready4", 4, None, 64, 2, "Innoruuk", "all"),
-        (PMB, "IKS", "balanced", "dw", "own", "wiki", "fixed", 4, 10, 52, 1, None, "owned"),
-        (HEAL, "BAR", "balanced", "stick", "raid", "wiki", "ready4", 4, None, 28, 1, None, "all"),
+        (PMB, "IKS", "melee", "dw", "own", "wiki", "fixed", 4, 10, 52, 1, None, "owned"),
+        (HEAL, "BAR", "caster", "stick", "raid", "wiki", "ready4", 4, None, 28, 1, None, "all"),
         (MONKC, "HUM", "melee", "2h", "own", "strict-proxy", "arrives", 4, None, 46, 0, None, "all"),
-        (HYBRID, "OGR", "balanced", "dw", "group+enchanter", "wiki", "fixed", 4, 8, 38, 1, "Karana", "owned"),
-        (PURE, "HUM", "balanced", "stick", "own", "wiki", "ready4", 4, None, 20, 0, None, "all"),
+        (HYBRID, "OGR", "melee", "dw", "group+enchanter", "wiki", "fixed", 4, 8, 38, 1, "Karana", "owned"),
+        (PURE, "HUM", "caster", "stick", "own", "wiki", "ready4", 4, None, 20, 0, None, "all"),
     ]
     del seed  # the plan is fixed; the seed picks the owned items when the session is made
     specs = [UpgradeSpec(n, *row, note="session") for n, row in enumerate(rows, start=1)]
@@ -380,11 +459,15 @@ def tag_counts(specs: Any) -> dict[str, int]:
     return count_tags(spec.tags for spec in specs)
 
 
+#: strata that a cover of two or more copies keeps one copy more of: the tests of the weights read three compositions from the committed sample
+EXTRA_COPIES = {"composed-weights": 1}
+
+
 def pick_cover(specs: list[Any], wanted: tuple[str, ...], copies: int) -> list[Any]:
     """The fewest specs, in plan order, that carry every tag of ``wanted`` at least ``copies`` times (a greedy cover: the next
-    spec is the one that serves the most tags still short, the earliest on a tie). Raises ``ValueError`` if the plan has too
-    few."""
-    short = {tag: copies for tag in wanted}
+    spec is the one that serves the most tags still short, the earliest on a tie; a cover of two copies or more keeps the extra copies of
+    :data:`EXTRA_COPIES`). Raises ``ValueError`` if the plan has too few."""
+    short = {tag: copies + (EXTRA_COPIES.get(tag, 0) if copies >= 2 else 0) for tag in wanted}
     chosen: list[Any] = []
     while any(short.values()):
         best = max(
@@ -424,14 +507,15 @@ class Scale:
     weights: int
     items: int | None
     compress: bool
+    bow: bool = False  # the cases of the bow setup, added after the others: the scenarios of :func:`bow_plan`, the bow instances, and some kits of the bow setup for the evaluator
 
 
 SCALES = {
-    "full": Scale("full", BRUTE_COUNT, None, None, None, 5000, 5, None, 500, None, True),
+    "full": Scale("full", BRUTE_COUNT, None, None, None, 5000, 5, None, 500, None, True, True),
     "mini": Scale("mini", 6, (MINI_STRATA, 1), 1, 1, 30, 1, 2, 10, 16, True),
     "tiny": Scale("tiny", 2, (("composed-weights",), 1), 0, 0, 10, 1, 2, 5, 6, True),
     "sample": Scale(
         "sample", 40, (REQUIRED_STRATA + ("evidence:strict-proxy", "level:55", "prune-check"), 2), 6, len(SAMPLE_SESSIONS), 150, 1, None, 60, 150,
-        False,
+        False, True,
     ),
 }

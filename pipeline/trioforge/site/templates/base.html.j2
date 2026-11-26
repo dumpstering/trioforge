@@ -27,6 +27,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% block head_policy %}{% endblock %}
+{#- The token of a build with page counts, as inert data (no script): the page script adds the counter's script to a page that was opened with no kit link (static/counter.js). The 404 page empties this block. -#}
+{% block counter_data %}
+{% if analytics_token is defined and analytics_token %}
+<meta name="trioforge-counter" content="{{ analytics_token }}">
+{% endif %}
+{% endblock %}
 <title>{{ page_title }}</title>
 <meta name="description" content="{{ page_description }}">
 {% if canonical %}
@@ -97,7 +103,7 @@
 <symbol id="i-model" viewBox="0 0 16 16"><path d="M8 2.6L13.4 8 8 13.4 2.6 8z" fill="none" stroke="currentColor" stroke-width="1.8"></path></symbol>
 </svg>
 {# The page script, in a block of its own: a page that replaces the block has none of the frame's scripts but the boot script. The 404 page does, with a script of its own (it must not run the code
-    that takes a kit link out of the address, and it must not carry an analytics beacon, which belongs to the pages that do: a beacon goes inside this block, after the page script). #}
+    that takes a kit link out of the address, and the page counter is added by the page script and by nothing else: no page carries a script for it, build.check_counter holds the build to that). #}
 {% block page_script %}
 <script type="module" src="{{ assets.app }}"></script>
 {% endblock %}

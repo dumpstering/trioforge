@@ -36,22 +36,22 @@ def render_defaults() -> str:
     races = [(code, n < len(codes) - 2) for n, code in enumerate(codes)]
     layout = shards.Layout(
         trio="pal-mnk-ber", classes=("PAL", "MNK", "BER"), level=50, data_release="data-2030-01-02", game_patch="2026-10-13",
-        rules_version="2026-10-13", solver={}, build_options={}, assumptions={}, races=races, roles=["balanced"],
-        setups={"balanced": ["dw"]}, tiers=[4], caps={}, pools={}, default_evidence="strict", expected={}, item_rows={},
+        rules_version="2026-10-13", solver={}, build_options={}, assumptions={}, races=races, roles=["tank"],
+        setups={"tank": ["dw"]}, tiers=[4], caps={}, pools={}, default_evidence="strict", expected={}, item_rows={},
     )
     order = [code for code, _ in races]
     base = {code: 100.0 + (n % 3) for n, code in enumerate(order)}
-    default = shards.default_race(base, layout.legal_races(), order)["race"]
+    default = shards.default_race(base, layout.legal_races(), order, 1)["race"]
     rules = ["race.iksar_ac_placement", "monk.bonus_placement", "mana.wis_bands", "tier.weapon_damage_pct", "monk.weight_curve", "some.rule"]
     variants = [
         seals.Variant(f"Variant {k}", rules[k % len(rules)], f"B{k}" if k % 3 else None, {code: 150.0 for n, code in enumerate(order) if (n + k) % 4 == 0})
         for k in range(8)
     ]
-    notes = seals.flip_notes(variants, base, default, layout.legal_races(), order)
+    notes = seals.flip_notes(variants, base, default, layout.legal_races(), order, 1)
     per_race = {code: (base[code], "dw") for code in order}
     doc = shards.defaults_doc(
-        layout, view={"role": "balanced", "tier": 4, "evidence": "strict", "buffs": "own"}, per_race=per_race, strict_empty=False,
-        robustness="done", flip_notes=notes,
+        layout, view={"role": "tank", "tier": 4, "evidence": "strict", "buffs": "own"}, per_race=per_race, strict_empty=False,
+        robustness="done", flip_notes=notes, close_pct=1,
     )
     return shards.render(doc)
 
@@ -80,7 +80,7 @@ def test_the_flip_notes_and_the_defaults_file_are_the_same_bytes_in_processes_wi
     written = {seed: output[0] for seed, output in outputs.items()}
     assert len(set(written.values())) == 1, {seed: text[-300:] for seed, text in written.items()}
     doc = json.loads(written[SEEDS[0]])
-    assert len(doc["flip_notes"]) >= 3 and len(doc["races"]) == 15  # there is something to compare
+    assert len(doc["flip_notes"]) >= 3 and len(doc["races"]) == 16  # there is something to compare
     # the control: the seeds do change the order a set of the same races is handed out in, so a set that fed the file would have shown
     assert len({control for _, control in outputs.values()}) > 1, "the seeds did not change the order of a set of strings"
 

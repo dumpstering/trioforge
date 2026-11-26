@@ -10,10 +10,10 @@
 // that gain divided by k, exactly; an item that gains at no k has no run. An item whose one-tier gain is not above nothing is the only one looked at past k = 1. A step takes the run with the
 // highest rate (of equal rates the shorter run, then the place that comes first in the kit's order) and applies the whole of it: one line of the list, k motes spent. With a limit of motes a run
 // longer than the motes left is not eligible. The order ends when every item is at +10 ("top": an empty kit ends so too), when the motes asked for are spent or no eligible run fits in what is
-// left ("motes", with `nextRun` the length of the run that did not fit, or null when the limit was reached), or when no item has a run ("no-gain": nothing that is left gains anything, at any
+// left ("motes", with `nextRun` the fewest motes of the runs left, the shortest, or null when the limit was reached), or when no item has a run ("no-gain": nothing that is left gains anything, at any
 // length). It is greedy: the best run after the runs before it, not a proven best plan.
 //
-//   createMoteWalk({profile, kit, itemAt, setup, monkBins, buffset, buffs, motes}) -> {start, step(), ending(), left(), spent(), nextRun()}
+//   createMoteWalk({profile, kit, itemAt, setup, monkBins, procs, buffset, buffs, motes}) -> {start, step(), ending(), left(), spent(), nextRun()}
 //       the walk: `kit` the 22 places, each an item as `atTier` gives it (frozen, with its `key` and its `tier`) or null (undefined is taken as null, as Python takes None); `itemAt(key, tier)` the
 //       item at another tier (it throws for an item with no record: that is found at the start, as the reference finds it, and is a MoteError); `setup`, `monkBins` and `buffset` the evaluator's
 //       options; `buffs` the ids of the optional buffs of the set that the kit is valued with (copied once; given with no buff set, a MoteError); `motes` the limit, or null for every one.
@@ -90,7 +90,7 @@ function placeOf(item, at) {
   return item;
 }
 
-export function createMoteWalk({ profile, kit, itemAt, setup, monkBins, buffset, buffs = [], motes = null }) {
+export function createMoteWalk({ profile, kit, itemAt, setup, monkBins, procs, buffset, buffs = [], motes = null }) {
   if (motes !== null && (!Number.isInteger(motes) || motes < 0)) throw new MoteError(`motes is null or a whole number of at least 0, not ${String(motes)}`);
   if (!Array.isArray(kit) || kit.length !== PLACES) throw new MoteError(`a kit has ${PLACES} places`);
   if (typeof itemAt !== "function") throw new MoteError("itemAt is a function from an item's key and a tier to the item at that tier");
@@ -108,7 +108,7 @@ export function createMoteWalk({ profile, kit, itemAt, setup, monkBins, buffset,
       throw error instanceof MoteError ? error : new MoteError(`no record for item ${item.key}`, { cause: error });
     }
   }
-  const options = { setup, monkBins, buffset: hasBuffset ? buffset : undefined };
+  const options = { setup, monkBins, buffset: hasBuffset ? buffset : undefined, procs };
   const value = (trial) => evaluateTruthful(profile, trial, hasBuffset ? chosen : null, options);
   let current = value(slots);
   const start = current.F;
@@ -136,7 +136,7 @@ export function createMoteWalk({ profile, kit, itemAt, setup, monkBins, buffset,
         return null;
       }
       let best = null; // the best run that fits what is left
-      let bestAny = null; // the best run, fitting or not
+      let shortest = null; // the fewest motes of any run, fitting or not
       for (let place = 0; place < PLACES; place += 1) {
         const item = slots[place];
         if (item === null || item.tier >= MAX_TIER) continue;
@@ -153,16 +153,16 @@ export function createMoteWalk({ profile, kit, itemAt, setup, monkBins, buffset,
           }
         }
         if (run === null) continue; // (no run: not at any length)
-        if (bestAny === null || beats(run, bestAny)) bestAny = run;
+        if (shortest === null || run.k < shortest) shortest = run.k;
         if ((motes === null || run.k <= motes - spent) && (best === null || beats(run, best))) best = run;
       }
-      if (bestAny === null) {
+      if (shortest === null) {
         ended = "no-gain";
         return null;
       }
       if (best === null) {
         ended = "motes";
-        nextRun = bestAny.k;
+        nextRun = shortest;
         return null;
       }
       const old = slots[best.place];

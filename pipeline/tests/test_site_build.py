@@ -197,9 +197,9 @@ def test_the_build_writes_the_pages_the_data_the_assets_and_the_headers(site):
     for evidence in ("strict", "wiki"):
         for buffs in ("own", "group"):
             assert (out / "data" / "pal-mnk-ber" / f"{evidence}-{buffs}.json").is_file()
-    for role in ("balanced", "tank", "melee"):
+    for role in ("tank", "melee"):
         assert (out / "data" / "pal-mnk-ber" / "runnerups" / f"{role}.json").is_file()  # a file for each role, with every tier of the run in it
-    assert sorted(p.name for p in (out / "data" / "pal-mnk-ber" / "runnerups").iterdir()) == ["balanced.json", "melee.json", "tank.json"]  # and none for a tier
+    assert sorted(p.name for p in (out / "data" / "pal-mnk-ber" / "runnerups").iterdir()) == ["melee.json", "tank.json"]  # and none for a tier
     assert not (out / "data" / "pal-mnk-ber" / "runnerups.json").exists()  # the single file of the earlier format
     assert not (out / "data" / "pal-mnk-ber" / "runnerups" / "index.json").exists()  # the index is checked, not served
     assert (out / "data" / "pal-mnk-ber" / "robust.json").is_file()
@@ -294,7 +294,7 @@ def test_the_404_page_leads_back_to_the_home_page_and_the_live_trios_and_is_no_p
 def test_the_trio_page_bakes_the_default_kit_without_javascript(site, results):
     out, _ = site
     html = page(out, PAGES["trio"])
-    scenario = results.shards[("strict", "own")].scenario("OGR", "balanced", 4, "dw")
+    scenario = results.shards[("strict", "own")].scenario("OGR", "tank", 4, "dw")
     body = html.by_id("kit-body")
     rows = body.find_all("tr")
     assert len(rows) == 22
@@ -362,7 +362,7 @@ def test_the_switches_are_native_labelled_controls_with_only_offered_options(sit
     assert race.tag == "select"
     assert html.find("label", **{"for": "sw-race"}).text() == "Race"
     groups = race.find_all("optgroup")
-    assert [g.get("label") for g in groups] == ["Available at character creation", "Needs a race or primary unlock"]
+    assert [g.get("label") for g in groups] == ["Available at character creation", "Selectable after an unlock"]
     legal = [o.get("value") for o in groups[0].find_all("option")]
     assert legal[0] == "OGR" and sorted(legal) == ["OGR", "TRL"]
     assert [o.get("value") for o in groups[1].find_all("option")] == ["ELF"]  # Wood Elf cannot start Paladin/Monk/Berserker
@@ -370,12 +370,12 @@ def test_the_switches_are_native_labelled_controls_with_only_offered_options(sit
     assert race.find("option", selected=True).get("value") == "OGR"
     assert "best" in race.find("option", value="OGR").text()
     roles = html.by_id("sw-role")
-    assert roles.tag == "fieldset" and roles.find("legend").text() == "Role"
+    assert roles.tag == "fieldset" and roles.find("legend").text() == "Build"
     radios = roles.find_all("input", type="radio")
-    assert [r.get("value") for r in radios] == ["balanced", "tank", "melee"]
+    assert [r.get("value") for r in radios] == ["tank", "melee"]
     assert radios[0].has("checked") and not radios[1].has("checked")
     for radio in radios:
-        assert html.find("label", **{"for": radio.get("id")}).text() in ("Balanced", "Tank", "Melee")
+        assert html.find("label", **{"for": radio.get("id")}).text() in ("Tank", "Melee damage")
     tier = html.by_id("sw-tier")
     assert [o.get("value") for o in tier.find_all("option")] == ["0", "4", "10"]
     assert tier.find("option", selected=True).get("value") == "4"
@@ -387,14 +387,13 @@ def test_a_role_never_offers_a_setup_it_has_no_scenario_for(site):
     html = page(out, PAGES["trio"])
     offered = {r.get("value"): r.get("data-setups").split() for r in html.by_id("sw-role").find_all("input")}
     assert offered == {
-        "balanced": ["1h-shield", "2h", "dw"],
         "tank": ["1h-shield", "2h", "dw"],
         "melee": ["2h", "dw"],
     }
     setups = {r.get("value"): r for r in html.find_all("input", name="setup")}
     assert sorted(setups) == ["1h-shield", "2h", "dw"]  # no "stick" radio: no role of this trio has it
     assert setups["dw"].has("checked")
-    # the Balanced role (the default) shows its three; a hidden radio is also disabled so it cannot be reached
+    # the Tank build (the default) shows its three; a hidden radio is also disabled so it cannot be reached
     assert not any(r.has("hidden") for r in setups.values())
 
 
@@ -431,7 +430,7 @@ def test_a_setup_that_only_the_other_evidence_level_has_is_a_hidden_choice_not_a
     html = page(out, PAGES["trio"])
     assert html.find_all("input", name="ev") == []
     offered = {r.get("value"): r.get("data-setups").split() for r in html.by_id("sw-role").find_all("input")}
-    assert offered == {"balanced": ["2h", "dw"], "tank": ["2h", "dw"], "melee": ["2h", "dw"]}  # what the default level has
+    assert offered == {"tank": ["2h", "dw"], "melee": ["2h", "dw"]}  # what the default level has
     setups = {r.get("value"): r for r in html.find_all("input", name="setup")}
     assert sorted(setups) == ["1h-shield", "2h", "dw"]  # the wiki level has the setup, so the page has a choice for it ...
     shield = setups["1h-shield"]
@@ -506,7 +505,7 @@ def test_why_this_kit_shows_totals_against_caps_with_seals_and_rules(site):
     assert text["Sheet AC"][0] == "666"
     assert "439" in text["Sheet AC"][1]  # the softcap with Combat Stability and Physical Enhancement
     assert text["Haste"][0] == "57%" and "85" in text["Haste"][1]  # a Monk in the trio raises the cap to 85
-    assert text["Magic resist"][0] == "86" and "200" in text["Magic resist"][1]
+    assert text["Magic resist"][0] == "86" and "1,000" in text["Magic resist"][1]  # (T4: the resist cap is 1000)
     assert text["Hit points"][0] == "2,880"
     links = [a.get("href") for a in why.find_all("a")]
     assert "/rules/#haste.cap_pct_with_monk" in links
@@ -549,12 +548,40 @@ def test_runner_ups_and_the_robust_core_are_baked_for_the_default_view(site):
     assert head[0].find(data_f="r-name").text() == "Crown of the Tribunal" and head[0].find(data_f="r-delta").text() == "+7"
     assert [li.find(data_f="r-delta").text() for li in head[1:]] == ["−12", "−19"]  # the others can only lose value
     assert not head[1].find_all(data_f="r-deity") and rows[13].find_all("li")[0].find(data_f="r-delta").text() == "−9"
-    assert html.by_id("runnerups").get("data-files").split() == ["balanced", "tank", "melee"]  # the file of each role holds every tier
+    assert html.by_id("runnerups").get("data-files").split() == ["tank", "melee"]  # the file of each role holds every tier
     assert "default assumptions" in html.by_id("runnerups").find("p").text()
     robust = html.by_id("robust-summary").text()
     assert robust == "20 of 22 picks hold in every check. The other 2 depend on an assumption:"
     items = [li.text() for li in html.by_id("robust-list").find_all("li")]
     assert any(i.startswith("Waist: Riverstone Buckle Strap") and 'depends on the "AC" & mana weight (x2)' in i for i in items)
+
+
+def test_a_runner_up_row_says_there_is_no_alternative_only_where_it_has_none(site):
+    """The sentence "No close alternatives" was baked into every row of the table, hidden in each row that has swaps (some 1.6 KB of a real page, which the budget of the page counts). It is baked
+    only in a row that has no swap, where it is shown; the page code makes it when another view leaves a slot without one (trio.js NO_ALTERNATIVES, the generator's words) and takes it away again."""
+    out, _ = site
+    rows = page(out, PAGES["trio"]).by_id("runnerups-body").find_all("tr")
+    assert any(not r.find_all("li") for r in rows) and any(r.find_all("li") for r in rows)  # (the fixture has both kinds of row)
+    for row in rows:
+        said = row.find_all(data_f="r-none")
+        swaps = row.find(data_f="swaps")
+        if row.find_all("li"):
+            assert said == [] and not swaps.has("hidden")
+        else:
+            assert [n.text() for n in said] == [view_module.NO_ALTERNATIVES] and not said[0].has("hidden") and swaps.has("hidden")
+    script = (REPO / "pipeline" / "trioforge" / "site" / "static" / "trio.js").read_text(encoding="utf-8")
+    assert f'const NO_ALTERNATIVES = "{view_module.NO_ALTERNATIVES}";' in script
+
+
+def test_the_rows_of_the_trio_page_carry_no_class_that_a_data_attribute_or_nothing_says(site):
+    """The page pays for its markup by the byte (the budget counts it). The change in the kit value of a runner-up is the span the page code finds by its ``data-f`` and the stylesheet styles by it (a class
+    of ``delta`` on each of the 66 said it a second time), and the stats of a kit row have a ``data-f`` and no stylesheet or script that reads a class of ``kit-stats``."""
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    assert html.find_all(cls="delta") == [] and html.find_all(cls="kit-stats") == []
+    assert html.by_id("runnerups-body").find_all(data_f="r-delta")  # (the spans are there)
+    css = next((out / "assets").glob("site-*.css")).read_text(encoding="utf-8").replace('"', "")
+    assert "[data-f=r-delta]" in css and ".runnerups [data-f=r-delta]" in css  # (the figure keeps its muted colour: the stylesheet names it by its data-f; the class of the same name stays for the Upgrade answer, which the page code makes)
 
 
 def test_every_trio_item_name_is_html_escaped_everywhere(site):
@@ -816,16 +843,18 @@ def test_the_csp_names_the_one_trusted_types_policy_the_code_creates_and_no_othe
     static/tt-policy.js: no other name, no wildcard, no `default`, no duplicates."""
     directives = dict(part.strip().split(" ", 1) for part in build.CSP.split(";") if part.strip())
     assert directives["require-trusted-types-for"] == "'script'"
-    policy = re.search(r'POLICY_NAME = "([a-z]+)"', (STATIC / "tt-policy.js").read_text(encoding="utf-8")).group(1)
+    policy = re.search(r'POLICY_NAME = "([a-z]+)"', (STATIC / "tt-record.js").read_text(encoding="utf-8")).group(1)
     assert directives["trusted-types"] == policy == "trioforge"
     assert not {"'allow-duplicates'", "*", "default", "'none'"} & set(directives["trusted-types"].split())
     out, _ = site
     blocks = header_blocks(read(out, "_headers"))
     assert blocks["/*"]["Content-Security-Policy"] == build.CSP
-    # the policy is made in one place, the optimizer's client: a second bundle that made it would be refused as a duplicate
-    for name in sorted(p.relative_to(out).as_posix() for p in (out / "assets").rglob("*.js")):
-        made = "createPolicy" in read(out, name)
-        assert made == name.startswith("assets/engine/client-"), name
+    # the policy is made by whichever of two bundles asks first, the page script (for the page counter) and the optimizer's client, and the two keep one record of it (static/tt-record.js, under a named
+    # property of the window): a second bundle that made it on its own would be refused as a duplicate
+    made = [name for name in sorted(p.relative_to(out).as_posix() for p in (out / "assets").rglob("*.js")) if "createPolicy" in read(out, name)]
+    assert [re.sub(r"-[A-Z0-9]{8}", "-HASH", name) for name in made] == ["assets/app-HASH.js", "assets/engine/client-HASH.js"]
+    for name in made:
+        assert "trioforge.tt-policy" in read(out, name), f"{name} keeps the record of the policy where the other bundle finds it"
 
 
 # ---- the Jinja environment ------------------------------------------------------------------------------------------------------
@@ -873,7 +902,7 @@ def test_every_page_carries_the_disclaimer_the_attribution_and_a_report_link(sit
     trio_report = next(a.get("href") for a in page(out, PAGES["trio"]).find("footer").find_all("a") if "/issues/new" in a.get("href"))
     query = parse_qs(urlparse(trio_report).query)
     assert query["template"] == ["wrong-item.yml"]
-    assert query["page"] == [f"{SITE_URL}/trio/pal-mnk-ber/?race=OGR&role=balanced&tier=4&setup=dw&buffs=own"]  # with the view
+    assert query["page"] == [f"{SITE_URL}/trio/pal-mnk-ber/?race=OGR&role=tank&tier=4&setup=dw&buffs=own"]  # with the view
     assert "Paladin / Monk / Berserker" in query["title"][0]
     assert parse_qs(urlparse(next(a.get("href") for a in page(out, PAGES["rules"]).find("footer").find_all("a") if "/issues/new" in a.get("href"))).query)["template"] == ["rule-correction.yml"]
 
@@ -893,7 +922,7 @@ def test_the_report_link_of_the_trio_page_carries_the_view_it_opens_on(site):
     address = urlparse(query["page"][0])
     assert f"{address.scheme}://{address.netloc}{address.path}" == f"{SITE_URL}/trio/pal-mnk-ber/"  # the trio is in the address
     # race, role, tier, weapons and buffs, all of them (the weapons even where they are the role's best), in this order; no evidence: wiki is the one level
-    assert parse_qsl(address.query) == [("race", "OGR"), ("role", "balanced"), ("tier", "4"), ("setup", "dw"), ("buffs", "own")]
+    assert parse_qsl(address.query) == [("race", "OGR"), ("role", "tank"), ("tier", "4"), ("setup", "dw"), ("buffs", "own")]
     assert "Paladin / Monk / Berserker" in query["title"][0]
 
 
@@ -1213,8 +1242,8 @@ def test_a_data_date_that_is_not_a_calendar_date_is_not_put_into_the_sitemap(tmp
 
     real = data.load_trio
 
-    def reads_another_date(folder):
-        results = real(folder)
+    def reads_another_date(folder, **kwargs):  # (the build passes the version of the rules file it was given: L8)
+        results = real(folder, **kwargs)
         return dataclasses.replace(results, meta=dataclasses.replace(results.meta, data_date=not_a_date))
 
     monkeypatch.setattr(data, "load_trio", reads_another_date)
@@ -1229,7 +1258,7 @@ def test_a_runner_up_view_for_another_setup_than_the_roles_best_is_not_baked_in(
     scratch = tmp_path / "results"
     shutil.copytree(RESULTS, scratch)
     folder = scratch / "pal-mnk-ber" / "runnerups"
-    target = folder / "balanced.json"
+    target = folder / "tank.json"
     document = json.loads(target.read_text(encoding="utf-8"))
     next(v for v in document["views"] if v[:2] == [4, "OGR"])[2] = "2h"
     target.write_text(json.dumps(document), encoding="utf-8")
@@ -1255,7 +1284,7 @@ def test_the_rules_page_lists_every_rule_with_its_seal_source_and_open_test(site
     for label in ("Client file", "Developer", "Measured", "Player reports", "Model"):
         assert label in legend
     cap = html.by_id("haste.cap_pct")
-    assert "75" in cap.text() and "Player reports" in cap.text()
+    assert "75" in cap.text() and "Measured" in cap.text() and "level 60" in cap.text()  # (T7: the cap has a level dimension, and the client's calculation is its source)
     assert "Maintainer's private observation" in html.by_id("naked.cap").text()
     raw = read(out, PAGES["rules"])
     assert "private-measured" not in raw and "private-player" not in raw
@@ -1265,6 +1294,20 @@ def test_the_rules_page_lists_every_rule_with_its_seal_source_and_open_test(site
     assert any(a.text().startswith("B1") for a in open_tests)
     assert not any(a.text().startswith("B4") for a in open_tests)  # B4 was done: mana.wis_bands is settled
     assert "https://github.com/EQEmu/Server" in [a.get("href") for a in html.by_id("hp.sta_curve").find_all("a")]
+
+
+def test_the_rules_page_says_in_one_sentence_that_some_rules_come_from_the_game_clients_own_calculation(site):
+    """Part T: the owner lifted the rule that kept client-code formulas out of the repository. A rule taken from the client's calculation cites the one fixed label as its source, with the seal measured, and the page says so once."""
+    out, _ = site
+    html = page(out, PAGES["rules"])
+    assert "Some rules now come from the game client's own calculations" in html.by_id("game-client-note").text()
+    label = "EverQuest Legends client, build of 2026-11-17: the client's own calculation"
+    node = html.by_id("tier.unscaled_stats")
+    assert label in node.text() and "Measured" in node.text()
+    assert "the game client's own calculation" in html.by_id("seal-legend").text()
+    raw = read(out, PAGES["rules"])
+    assert 'game-client"' not in raw, "the kind is the file's word; the page shows the label"
+    assert not re.search(r"[Ee][Qq][Gg][Aa][Mm][Ee]|\.[Ee][Xx][Ee]|R[V]A|0[Xx]", label)  # (the label names no program file, executable suffix, relative address or hexadecimal prefix)
 
 
 def test_the_rules_page_shows_alternatives_for_open_rules(site):
@@ -1456,7 +1499,7 @@ def test_the_page_budgets_hold(site):
     largest = max(gz(p.read_bytes()) for p in (out / "data" / "pal-mnk-ber").glob("*-*.json"))
     assert summary.sizes["largest_shard_gzip"] == largest
     runnerups = sorted((out / "data" / "pal-mnk-ber" / "runnerups").glob("*.json"))
-    assert [p.name for p in runnerups] == ["balanced.json", "melee.json", "tank.json"]  # one for each role, every tier in it
+    assert [p.name for p in runnerups] == ["melee.json", "tank.json"]  # one for each role, every tier in it
     for path in runnerups:
         assert path.stat().st_size <= 200 * 1024 and gz(path.read_bytes()) <= 50 * 1024, path.name  # the budget of a shard holds for it too
     assert summary.sizes["largest_runnerup"] == max(p.stat().st_size for p in runnerups)
@@ -1508,7 +1551,7 @@ def test_a_shard_of_200_kb_raw_and_50_kb_gzip_is_within_budget():
         "trio/pal-mnk-ber/index.html": html,
         "assets/app-AAAAAAAA.js": b"let a=1;",
         "data/pal-mnk-ber/strict-own.json": shard,
-        "data/pal-mnk-ber/runnerups/balanced.json": b"[1,-2.5]\n" * (20 * 1024),  # a runner-up file holds every tier and is held to the budget of a shard
+        "data/pal-mnk-ber/runnerups/tank.json": b"[1,-2.5]\n" * (20 * 1024),  # a runner-up file holds every tier and is held to the budget of a shard
     }
     sizes = build.check_budgets(
         files,
@@ -1542,9 +1585,9 @@ def test_a_runner_up_file_over_the_budget_of_a_shard_is_refused_naming_the_file(
         "trio/pal-mnk-ber/index.html": b"<html></html>",
         "assets/app-AAAAAAAA.js": b"let a=1;",
         "data/pal-mnk-ber/runnerups/index.json": noise.randbytes(80 * 1024),  # the index lists the files, and the page never fetches it
-        "data/pal-mnk-ber/runnerups/balanced.json": b"{" + b" " * (201 * 1024) + b"}",  # 201 KB raw, almost nothing gzipped
-        "data/pal-mnk-ber/runnerups/tank.json": noise.randbytes(60 * 1024),  # within 200 KB raw, 60 KB gzipped
-        "data/pal-mnk-ber/runnerups/melee.json": b"[1]\n" * 1000,
+        "data/pal-mnk-ber/runnerups/tank.json": b"{" + b" " * (201 * 1024) + b"}",  # 201 KB raw, almost nothing gzipped
+        "data/pal-mnk-ber/runnerups/melee.json": noise.randbytes(60 * 1024),  # within 200 KB raw, 60 KB gzipped
+        "data/pal-mnk-ber/runnerups/shield.json": b"[1]\n" * 1000,
     }
     with pytest.raises(build.BudgetError) as caught:
         build.check_budgets(
@@ -1553,9 +1596,9 @@ def test_a_runner_up_file_over_the_budget_of_a_shard_is_refused_naming_the_file(
             first_load_assets={"trio/pal-mnk-ber/index.html": ["assets/app-AAAAAAAA.js"]},
         )
     message = str(caught.value)
-    assert "runner-up file data/pal-mnk-ber/runnerups/balanced.json is 201.0 KB (limit 200 KB)" in message
-    assert "runner-up file data/pal-mnk-ber/runnerups/tank.json is 60.0 KB gzip (limit 50 KB)" in message
-    assert "melee.json" not in message and "index.json" not in message  # the others are within it
+    assert "runner-up file data/pal-mnk-ber/runnerups/tank.json is 201.0 KB (limit 200 KB)" in message
+    assert "runner-up file data/pal-mnk-ber/runnerups/melee.json is 60.0 KB gzip (limit 50 KB)" in message
+    assert "shield.json" not in message and "index.json" not in message  # the others are within it
 
 
 def test_a_site_of_more_files_than_the_budget_is_refused_with_the_count():
@@ -1815,8 +1858,9 @@ def test_results_made_with_other_rules_stop_the_build(tmp_path):
     document = json.loads((REPO / "rules" / "rules.json").read_text(encoding="utf-8"))
     document["version"] = "2026-10-20"
     other.write_text(json.dumps(document), encoding="utf-8")
-    with pytest.raises(build.BuildError, match="rules version"):
+    with pytest.raises(data.ResultsError, match=r"records rules_version 2026-\d\d-\d\d.*this is rules version 2026-10-20") as refused:  # (the reader's refusal, which names both versions)
         run_build(tmp_path / "dist", tmp_path, rules=other)
+    assert json.loads((REPO / "rules" / "rules.json").read_text(encoding="utf-8"))["version"] in str(refused.value)
 
 
 def test_a_default_race_that_is_not_the_best_legal_race_stops_the_build(tmp_path):
@@ -1837,7 +1881,7 @@ def test_the_default_race_may_not_be_a_race_that_cannot_start_the_trio(tmp_path)
     document = json.loads(path.read_text(encoding="utf-8"))
     document.update(race="ELF", runner_up_race="OGR")  # Wood Elf has the highest value in the fixture but cannot start it
     path.write_text(json.dumps(document), encoding="utf-8")
-    with pytest.raises(build.BuildError, match="creation"):
+    with pytest.raises(data.ResultsError, match=r"race: .*cannot be created"):  # (the reader refuses it first, from the shards' own header; the build's check of the same stays behind it)
         run_build(tmp_path / "dist", tmp_path, results=scratch)
 
 
@@ -1900,7 +1944,7 @@ def set_value(setup: str, value: float):
 
     def change(document):
         for row in document["scenarios"]:
-            if row[:4] == ["OGR", "balanced", 4, setup]:
+            if row[:4] == ["OGR", "tank", 4, setup]:
                 row[5] = value
 
     return change
@@ -1911,7 +1955,7 @@ def test_the_default_setup_is_the_best_of_the_default_race_exactly_with_no_slack
     precompute chose (the best by the exact F) has the highest rounded F too: a setup worth one cent less in the rows is not the best, and
     a tie of the rounded values is no error (the exact values decide a tie, and the rows cannot tell)."""
     pristine = data.load_trio(RESULTS / "pal-mnk-ber")
-    best = pristine.shards[("strict", "own")].scenario("OGR", "balanced", 4, "dw").value
+    best = pristine.shards[("strict", "own")].scenario("OGR", "tank", 4, "dw").value
     assert best == pristine.defaults.value == 10720.0 and pristine.defaults.setup == "dw"
     build.check_defaults(pristine)
     ahead = edited_copy(tmp_path / "one-cent-ahead", "strict-own", set_value("2h", best + 0.01))  # the margin still holds to 0.01: only the setup is wrong
@@ -1948,11 +1992,11 @@ def test_a_default_view_that_the_results_cannot_answer_is_a_build_error_not_an_a
     refused(with_defaults(setup="stick"), "default setup stick")
     refused(dataclasses.replace(results, meta=dataclasses.replace(results.meta, trio=("PAL", "MNK", "ZZZ"))), "tables of races and classes")
     # a row missing from the default view's shard (a reader that has checked the grid never lets this by)
-    holey = dataclasses.replace(shard, scenarios=tuple(s for s in shard.scenarios if (s.race, s.role, s.tier, s.setup) != ("TRL", "balanced", 4, "2h")))
-    refused(dataclasses.replace(results, shards={**results.shards, ("strict", "own"): holey}), "TRL balanced \\+4 2h")
+    holey = dataclasses.replace(shard, scenarios=tuple(s for s in shard.scenarios if (s.race, s.role, s.tier, s.setup) != ("TRL", "tank", 4, "2h")))
+    refused(dataclasses.replace(results, shards={**results.shards, ("strict", "own"): holey}), "TRL tank \\+4 2h")
     # a role with no setup at all in the shard
-    bare = dataclasses.replace(shard, scenarios=tuple(s for s in shard.scenarios if s.role != "balanced"))
-    refused(dataclasses.replace(results, shards={**results.shards, ("strict", "own"): bare}), "balanced")
+    bare = dataclasses.replace(shard, scenarios=tuple(s for s in shard.scenarios if s.role != "tank"))
+    refused(dataclasses.replace(results, shards={**results.shards, ("strict", "own"): bare}), "tank")
     # and not an assert: it would be gone under `python -O`
     tree = ast.parse(inspect.getsource(build.check_defaults))
     assert not [node for node in ast.walk(tree) if isinstance(node, ast.Assert)]
@@ -1975,7 +2019,7 @@ def retarget(scratch: Path, **changes) -> dict:
     best = {
         race: max(
             (shard.scenario(race, shown["role"], shown["tier"], setup) for setup in shard.setups_for(shown["role"])),
-            key=lambda s: (s.value, -data.SETUPS.index(s.setup)),
+            key=lambda s: (s.value, -data.setup_order(shown["role"]).index(s.setup)),
         )
         for race in shard.races
     }
@@ -1991,6 +2035,9 @@ def retarget(scratch: Path, **changes) -> dict:
         for file in runnerups.glob("*.json"):
             doc = json.loads(file.read_text(encoding="utf-8"))
             doc.update(evidence=changes["evidence"], evidence_fallback=changes["evidence"] != "strict")
+            if "views" in doc:  # (the runner-ups are for the best setup of the level the answer is made from: where that level's best differs, the views say it)
+                for view in doc["views"]:
+                    view[2] = shard.best_setup(view[1], doc["role"], view[0])
             file.write_text(json.dumps(doc), encoding="utf-8")
         reindex(runnerups)
         index = json.loads((runnerups / "index.json").read_text(encoding="utf-8"))
@@ -2003,8 +2050,8 @@ def test_the_baked_answer_is_the_view_that_defaults_json_names_not_a_fixed_one(t
     need_node()
     scratch = tmp_path / "results"
     shutil.copytree(RESULTS, scratch)
-    expected = retarget(scratch, role="tank", tier=10)
-    assert expected["setup"] == "1h-shield"
+    expected = retarget(scratch, tier=10)  # (the build stays the one the classes open on: the reader refuses a defaults.json that opens on another; the tier moves, and with it the best setup)
+    assert expected["setup"] == "1h-shield"  # (the fixture's Tank plays the dual wield at +4, where it was made, and the one-hander and shield at +10)
     out = tmp_path / "dist"
     run_build(out, tmp_path, results=scratch)
     html = page(out, PAGES["trio"])
@@ -2038,7 +2085,7 @@ def test_whatever_level_the_answer_is_made_from_the_page_has_no_evidence_wording
         assert not html.by_id("kit-body").find_all(data_f="seal") and not html.by_id("kit-body").find_all(data_f="seal-icon")
         for word in ("(none yet)", "seen in game", "Seen in game", "strict evidence", "wiki evidence", "items the wiki lists"):
             assert word not in text, word
-        assert html.by_id("best-race-view").text() == "Balanced view at +4 with your own buffs"
+        assert html.by_id("best-race-view").text() == "Tank view at +4 with your own buffs"
         assert "evidence" not in html.by_id("view-summary").text().lower()
         assert "evidence" not in html.by_id("runnerups").find("p").text().lower() and "evidence" not in html.by_id("runnerups-na").text().lower()
     names = [row.find(data_f="name").text() for row in page(out, PAGES["trio"]).by_id("kit-body").find_all("tr")]
@@ -2186,17 +2233,17 @@ def test_the_margin_names_the_scoring_rules_and_the_view_it_is_the_best_of(site)
     html = page(out, PAGES["trio"])
     best = html.by_id("best-race")
     # the headline names its view itself, so that the claim is never read without it; the figure of the margin is in it
-    assert best.text() == "Best race for this trio: Ogre (+813 over Troll), judged in the Balanced view at +4 with your own buffs."
-    assert set(html.find(cls="margin").get("data-rules").split()) == {"roles.balanced", "roles.templates"}
-    assert html.by_id("best-race-view").text() == "Balanced view at +4 with your own buffs"
+    assert best.text() == "Best race for this trio: Ogre (+813 over Troll), judged in the Tank view at +4 with your own buffs."
+    assert set(html.find(cls="margin").get("data-rules").split()) == {"roles.templates"}
+    assert html.by_id("best-race-view").text() == "Tank view at +4 with your own buffs"
     # the rules it is judged by wait in a closed expander under it: a phone shows the answer first, whatever the notes say
     why = html.by_id("race-why")
     assert why.tag == "details" and not why.has("open") and why.parent is best.parent
     assert why.find("summary").text() == "How the best race was judged, and what could change it"
     rules = html.by_id("best-race-rules")
     assert rules.parent is why and rules.text().startswith("How the score works:")
-    assert [a.get("href") for a in rules.find_all("a")] == ["/rules/#roles.balanced", "/rules/#roles.templates"]
-    assert [s.text() for s in rules.find_all(cls="seal")] == ["Model", "Model"]
+    assert [a.get("href") for a in rules.find_all("a")] == ["/rules/#roles.templates"]
+    assert [s.text() for s in rules.find_all(cls="seal")] == ["Model"]  # (one rule: the templates)
     note = html.by_id("best-race-note")  # what could change it, in the same expander
     assert note.parent is why and note.text().startswith("Could change if an open test goes the other way:")
 
@@ -2269,7 +2316,7 @@ def test_the_tier_cells_the_arrival_cells_and_the_copies_follow_the_tier_rules(s
     assert rules_of(row.find(data_f="arrival")) == rules_of(row.find(data_f="reach")) == {"tier.arrival", "tier.exp_needed"}
     line = html.by_id("kit-rules")
     assert [a.get("href") for a in line.find_all("a")] == ["/rules/#tier.stat_rule", "/rules/#tier.arrival", "/rules/#tier.exp_needed"]
-    assert [s.text() for s in line.find_all(cls="seal")] == ["Player reports", "Developer", "Player reports"]
+    assert [s.text() for s in line.find_all(cls="seal")] == ["Measured", "Developer", "Player reports"]  # (T1: the stat rule is the client's calculation too)
     assert html.find("caption", id_="kit-caption").find(data_f="v-tier").get("data-rules") == "tier.stat_rule"
 
 
@@ -2280,17 +2327,128 @@ def test_the_haste_the_weapons_are_scored_at_follows_the_haste_rules(site):
     line = html.by_id("weapons-haste")
     assert line.text().startswith("Scored at 66% haste")
     assert [a.get("href") for a in line.find_all("a")] == ["/rules/#haste.cap_pct_with_monk", "/rules/#haste.worn_per_tier"]
-    assert [s.text() for s in line.find_all(cls="seal")] == ["Player reports", "Player reports"]
+    assert [s.text() for s in line.find_all(cls="seal")] == ["Measured", "Player reports"]  # (T7: the cap of the haste is the client's calculation; the step of worn haste a tier is a player report)
+
+
+def test_the_haste_notes_say_both_answers_with_the_numbers_in_plain_words():
+    """T10: without a haste spell the best worn haste counts in full up to the cap; with the trio's spell only the cap minus the spell counts, so a smaller haste item is enough and the slot goes to stats."""
+    row, box = view_module.haste_notes("Swift Like the Wind", 60, 75, 0, ticked=False)
+    assert row == (
+        "Only the highest worn haste counts. With no haste spell it counts in full, up to 75%. With Swift Like the Wind (60% haste) only 15 points of worn haste count (75 minus 60), "
+        "so a smaller haste item reaches the cap and its slot goes to stats. Tick \"I have a haste spell\" to see that kit."
+    )
+    assert box == (
+        "Swift Like the Wind gives 60% haste, so worn haste counts only up to 15 points: a smaller haste item is enough, and its slot goes to stats. "
+        "Without a spell the best worn haste counts in full, up to 75%. Tick the box to see that kit."
+    )
+    row, box = view_module.haste_notes("Valor of Marr", 25, 85, 10, ticked=True)  # a trio with a Monk: the cap of the page includes the flat 10 of Unbound Alacrity
+    assert "up to 75%. With Valor of Marr (25% haste) only 50 points of worn haste count (75 minus 25)" in row and "Unbound Alacrity adds a flat 10 on top" in row
+    assert row.endswith("The kit below is chosen with the spell.") and box.endswith("The kit below is chosen with the spell.")
+    row, box = view_module.haste_notes("Overwhelming Pace", 80, 75, 0, ticked=False)  # a spell above the cap: no worn haste counts
+    assert "With Overwhelming Pace (80% haste) no worn haste counts (the spell alone reaches the 75 that count), so the slot of a haste item goes to stats." in row  # (R12: it said "75 minus 80")
+    assert box.startswith("Overwhelming Pace gives 80% haste, so no worn haste counts: the slot of a haste item goes to stats.")
+
+
+def test_the_haste_notes_say_the_kit_is_chosen_with_the_spell_only_once_it_is_drawn():
+    """R10: with the box ticked the notes said "The kit below is chosen with the spell." while the page still showed the precomputed kit without it (the solve was out, or had failed). ``pending``
+    says the kit below is still that one: ticked and pending, the notes say so; ticked and not pending, the kit is the solved one; not ticked, the box is offered (and pending changes nothing)."""
+    still = "The kit below is still the one without the spell."
+    chosen = "The kit below is chosen with the spell."
+    row, box = view_module.haste_notes("Valor of Marr", 25, 85, 10, ticked=True, pending=True)
+    assert row.endswith(still) and box.endswith(still) and chosen not in row + box
+    row, box = view_module.haste_notes("Valor of Marr", 25, 85, 10, ticked=True, pending=False)
+    assert row.endswith(chosen) and box.endswith(chosen) and still not in row + box
+    plain = view_module.haste_notes("Valor of Marr", 25, 85, 10, ticked=False)
+    assert plain == view_module.haste_notes("Valor of Marr", 25, 85, 10, ticked=False, pending=True)
+    assert plain[0].endswith('Tick "I have a haste spell" to see that kit.') and plain[1].endswith("Tick the box to see that kit.")
+
+
+def test_the_haste_notes_read_right_at_the_edges():
+    """R12: a spell at or above the cap printed a negative subtraction ("75 minus 80"), one point printed "1 points", and the box note of a Monk trio left out the flat 10 that the row note has."""
+    for percent in (75, 80, 120):
+        row, box = view_module.haste_notes("Overwhelming Pace", percent, 75, 0)
+        assert "minus" not in row and f"{percent} minus" not in row and "(the spell alone reaches the 75 that count)" in row
+        assert box.startswith(f"Overwhelming Pace gives {percent}% haste, so no worn haste counts:")
+    row, box = view_module.haste_notes("Alacrity", 74, 75, 0)
+    assert "only 1 point of worn haste counts (75 minus 74)" in row and "points" not in row.split("(75 minus 74)")[0].split("only")[1]
+    assert "counts only up to 1 point:" in box and "1 points" not in row + box
+    row, box = view_module.haste_notes("Alacrity", 40, 75, 0)
+    assert "only 35 points of worn haste count (75 minus 40)" in row and "counts only up to 35 points:" in box
+    monk_row, monk_box = view_module.haste_notes("Valor of Marr", 25, 85, 10)
+    assert "Unbound Alacrity adds a flat 10 on top." in monk_row and "Unbound Alacrity adds a flat 10 on top." in monk_box
+    assert "Unbound Alacrity" not in box  # (a trio with no Monk has no flat 10)
+    assert monk_box.index("flat 10") < monk_box.index("Without a spell")  # (after what the spell leaves, before what happens without one)
+
+
+def test_the_stance_sentence_follows_what_the_stance_does_to_agility_and_to_a_bow():
+    """R11: the sentence said that agility gives no armor class or evasion whatever the stance's agility share, and that the weapons swing 2.1 times as fast for a bow, to which the model does not
+    apply the factor (a bow's shot is not a swing of the hands). The sentence of the hands and the sentence of a bow are two, and agility is said only when the share is not 1."""
+    hands = view_module.stance_sentence({"swing_factor": 2.1, "agi_share": 0})
+    assert hands == "The Berserker stance is on: the weapons swing 2.1 times as fast, applied after the haste cap and on top of whatever haste counts, and agility gives no armor class or evasion."
+    counts = view_module.stance_sentence({"swing_factor": 2.1, "agi_share": 1})
+    assert counts == "The Berserker stance is on: the weapons swing 2.1 times as fast, applied after the haste cap and on top of whatever haste counts." and "agility" not in counts
+    half = view_module.stance_sentence({"swing_factor": 2.1, "agi_share": 0.5})
+    assert half.endswith(", and only 50% of agility counts toward armor class and evasion.")
+    bow = view_module.stance_sentence({"swing_factor": 2.1, "agi_share": 0}, bow=True)
+    assert bow == "The Berserker stance speeds up the swing of the hands, not a bow's shot, and agility gives no armor class or evasion."
+    assert "the weapons swing" not in bow
+    assert view_module.stance_sentence({"swing_factor": 2.1, "agi_share": 1}, bow=True) == "The Berserker stance speeds up the swing of the hands, not a bow's shot."
+
+
+def test_the_page_bakes_the_stance_note_of_the_hands_and_the_one_of_a_bow(site):
+    """R11: the page holds both sentences, written by the generator (the page code only shows the one that fits the setup): the note of the hands as it was, and a hidden one for a bow."""
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    hands, bow = html.by_id("stance-note"), html.by_id("stance-note-bow")
+    stance = {"swing_factor": 2.1, "agi_share": 0}
+    assert hands.text().startswith(view_module.stance_sentence(stance))
+    assert hands.has("hidden") and bow.has("hidden") and bow.text() == view_module.stance_sentence(stance, bow=True)  # (no link of the rule in it: the note of the hands has it, and the page may not grow)
+
+
+def test_the_best_haste_spell_of_each_buff_choice_is_named_from_the_bundle():
+    doc = json.loads((RESULTS / "pal-mnk-ber" / "engine-l50.json").read_text(encoding="utf-8"))
+    spells = view_module.haste_spells(doc)
+    assert spells == {"own": ("Valor of Marr", 25), "group": ("Alacrity", 40), "group+enchanter": ("Swift Like the Wind", 60), "raid": ("Swift Like the Wind", 60)}
+    assert view_module.haste_spells({**doc, "buffs": {k: v for k, v in doc["buffs"].items() if not k.endswith("+haste")}}) == {}  # (no twin, no spell)
+
+
+def test_the_page_says_both_haste_answers_next_to_the_haste_figure_and_next_to_the_box(site):
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    row, box = view_module.haste_notes("Valor of Marr", 25, 85, 10, ticked=False)
+    note = html.find(data_f="haste-note")
+    assert note.text() == row and note.has("class") and "row-note" in note.get("class")
+    hint = html.by_id("haste-spell-note")
+    assert hint.text() == box and not hint.has("hidden")
+    check = html.by_id("buffs-haste")
+    assert json.loads(check.get("data-spells")) == {"own": ["Valor of Marr", 25], "group": ["Alacrity", 40], "group+enchanter": ["Swift Like the Wind", 60], "raid": ["Swift Like the Wind", 60]}
+    assert (check.get("data-free"), check.get("data-bonus")) == ("75", "10")
+
+
+def test_the_page_says_the_berserker_stance_of_the_build_that_plays_it_in_the_assumptions_in_plain_words(site):
+    """T8: the trio has a Berserker, so its Melee build plays the stance: the radio of the build says so (``data-stance``), the note under Weapons says it in plain words with the rule's factor and
+    links the rule, and the folded line and the Weapons line say it when the page opens on a build that plays it (this page opens on the Tank, so they do not, and the page code adds the words)."""
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    roles = {node.get("value"): node for node in html.find_all("input", name="role")}
+    assert roles["melee"].get("data-stance") == "Berserker stance"
+    assert all(node.get("data-stance") is None for code, node in roles.items() if code != "melee")
+    note = html.by_id("stance-note")
+    assert note.text().startswith("The Berserker stance is on: the weapons swing 2.1 times as fast, applied after the haste cap and on top of whatever haste counts, and agility gives no armor class or evasion.")  # (R5: it said worn haste "keeps its full value", which the haste note beside it contradicts when a spell is up: the cap comes first, then the stance's factor)
+    assert "full value" not in note.text() and "uncapped" not in note.text()
+    assert note.has("hidden") and [a.get("href") for a in note.find_all("a")] == ["/rules/#stance.berserker"]
+    assert [s.text() for s in note.find_all(cls="seal")] == ["Measured"]
+    assert html.find(data_f="assume-stance").text() == "" and "Berserker" not in html.by_id("assumes").find(data_f="s-assumes").text()
 
 
 def test_the_runner_up_deltas_and_the_gaps_between_setups_follow_the_scoring_rules(site):
     out, _ = site
     html = page(out, PAGES["trio"])
-    assert set(html.by_id("runnerups-body").get("data-rules").split()) == {"roles.templates", "roles.balanced"}  # (once, on the body of the table: the swaps of every row are under it)
+    assert set(html.by_id("runnerups-body").get("data-rules").split()) == {"roles.templates"}  # (once, on the body of the table: the swaps of every row are under it)
     assert not html.find(cls="swaps").get("data-rules")
-    assert set(html.by_id("w-others").get("data-rules").split()) == {"roles.templates", "roles.balanced"}
+    assert set(html.by_id("w-others").get("data-rules").split()) == {"roles.templates"}
     note = html.by_id("runnerups-rules")
-    assert [a.get("href") for a in note.find_all("a")] == ["/rules/#roles.balanced", "/rules/#roles.templates"]
+    assert [a.get("href") for a in note.find_all("a")] == ["/rules/#roles.templates"]
     assert all(followed_by_a_seal(a) for a in note.find_all("a"))
 
 
@@ -2298,16 +2456,16 @@ def test_the_assumes_line_states_the_aa_defaults_and_no_deity(site):
     out, _ = site
     html = page(out, PAGES["trio"])
     aa = html.by_id("assume-aa")
-    assert aa.text() == "AA: Combat Stability 3, Physical Enhancement Model; no deity"  # the seal of the weaker of the two rules after them
+    assert aa.text() == "AA: Combat Stability 3, Physical Enhancement, Natural Durability 4 Model; no deity"  # the seal of the weakest of the three rules after them
     assert [s.text() for s in aa.find_all(cls="seal")] == ["Model"]
-    assert [a.get("href") for a in aa.find_all("a")] == ["/rules/#ac.softcap.combat_stability_pct", "/rules/#ac.softcap.physical_enhancement_pct"]
+    assert [a.get("href") for a in aa.find_all("a")] == ["/rules/#ac.softcap.combat_stability_pct", "/rules/#ac.softcap.physical_enhancement_pct", "/rules/#hp.natural_durability_pct"]
     assert aa.parent.tag == "details" and aa.parent.get("id") == "assumes" and aa.parent.get("class") == "assumes"  # (the AA line is inside the folded line of the assumptions, which has the lead in its summary)
     assert aa.parent.find("summary").find(data_f="a-lead").text() == "Assumptions"
     from trioforge.site import view
 
-    assert view.aa_text(3, True) == "Combat Stability 3, Physical Enhancement"
-    assert view.aa_text(3, False) == "Combat Stability 3, no Physical Enhancement"  # a trio of casters only (until test B10)
-    assert view.aa_text(0, False) == "no Combat Stability, no Physical Enhancement"
+    assert view.aa_text(3, True, 4) == "Combat Stability 3, Physical Enhancement, Natural Durability 4"
+    assert view.aa_text(3, False, 4) == "Combat Stability 3, no Physical Enhancement, Natural Durability 4"  # a trio of casters only (until test B10)
+    assert view.aa_text(0, False, 0) == "no Combat Stability, no Physical Enhancement, no Natural Durability"
 
 
 def test_the_softcap_carries_the_seal_of_its_weakest_input_rule_and_links_all_three(site):
@@ -2328,7 +2486,7 @@ def test_the_weakest_of_several_rules_is_the_one_a_number_made_from_all_of_them_
     from trioforge.site import content, view
 
     book = content.load_rulebook(REPO / "rules" / "rules.json")
-    refs = [view.rule_ref(book, rule_id) for rule_id in ("ac.softcap.past_cap_rate", "ac.softcap.combat_stability_pct", "haste.cap_pct", "level.current")]
+    refs = [view.rule_ref(book, rule_id) for rule_id in ("ac.softcap.past_cap_rate", "ac.softcap.combat_stability_pct", "hp.sta_curve", "level.current")]  # (a rule with the seal player: hp.sta_curve; haste.cap_pct is measured since T7)
     assert [r.seal for r in refs] == ["client", "model", "player", "developer"]
     assert view.weakest(refs).seal == "model" and view.weakest(refs[:1]).seal == "client"
     assert view.weakest([refs[0], refs[3], refs[2]]).seal == "player"
@@ -2384,7 +2542,7 @@ def test_license_data_has_the_attribution_and_the_licence_sentence_of_the_site()
 def test_every_data_file_carries_the_release_the_licence_and_the_attribution(site):
     out, _ = site
     files = sorted((out / "data").rglob("*.json"))
-    assert len(files) == 4 + 3 + 1 + 1  # four shards, three runner-up files (one for each role, every tier in it), the robust file, the list of the pictures of the items
+    assert len(files) == 4 + 2 + 1 + 1  # four shards, two runner-up files (one for each build, every tier in it), the robust file, the list of the pictures of the items
     for path in files:
         document = json.loads(path.read_text(encoding="utf-8"))
         assert list(document)[:4] == ["v", "release", "license", "attribution"], path.name
@@ -2430,7 +2588,7 @@ def test_the_rows_of_the_kit_have_the_icon_of_their_item_or_their_place_and_the_
     assert icons["Any slot 1"] == [["art", "art-icon-ring"]]  # (a ring in an any row: what its page heading has, the place's picture, and not the pouch: it fits no held place)
     assert icons["Any slot 2"] == []  # (an empty held row: none, as it was)
     crests = {radio.get("value"): [sorted(n.classes) for n in trio.find("label", **{"for": radio.get("id")}).find_all("span")] for radio in trio.find_all("input", type="radio") if radio.get("name") == "role"}
-    assert crests["tank"] == [["art", "art-crest-tank"]] and crests["melee"] == [["art", "art-crest-damage"]] and crests["balanced"] == [] and crests.get("caster", []) == []
+    assert crests["tank"] == [["art", "art-crest-tank"]] and crests["melee"] == [["art", "art-crest-damage"]] and crests.get("caster", []) == []
 
 
 def test_the_404_page_has_the_treetop_village_in_a_frame_with_a_caption_as_decoration_and_keeps_its_text_and_links(site):
@@ -2523,7 +2681,7 @@ def test_the_switches_sit_in_one_panel_behind_a_line_that_says_what_is_shown(sit
     assert panel.find("section", cls="controls") and panel.find("details", cls="assumes") and not panel.has("data-open")  # (the assumptions are one folded details element now)
     order = [n.get("id") for n in html.find("main").iter() if n.get("id") in ("view-bar", "switches", "status", "wear-h")]
     assert order == ["view-bar", "switches", "status", "wear-h"]  # what is shown, the switches, the messages, the answer
-    assert html.by_id("view-summary").text() == "Showing Ogre · Balanced · +4 dual wield, your own buffs"
+    assert html.by_id("view-summary").text() == "Showing Ogre · Tank · +4 dual wield, your own buffs"
     for ident in ("sw-race", "sw-tier", "sw-role", "assume-buffs", "assume-weapons"):
         assert panel.by_id(ident)  # all of them are inside the panel that folds
 
@@ -3378,8 +3536,19 @@ def test_races_are_ordered_legal_first_with_the_best_race_on_top():
     assert ordered[0].name == "Ogre" and ordered[2].name == "Wood Elf"
     everyone = view.race_options(list(data.RACE_CODES), trio=("PAL", "MNK", "BER"), best="OGR")
     assert [o.code for o in everyone if not o.legal] == ["DEF", "ELF"]  # Dark Elf, Wood Elf: no Paladin, Monk or Berserker; alphabetical
-    assert len(everyone) == 15
+    assert len(everyone) == 16
     assert everyone[0].code == "OGR"
+
+
+def test_the_half_dark_elf_is_in_the_group_of_the_races_that_can_start_a_trio_with_one_of_its_classes_and_in_the_unlock_group_otherwise():
+    from trioforge.site import view
+
+    codes = ["HUM", "OGR", "HDE"]
+    legal = view.race_options(codes, trio=("PAL", "MNK", "BER"), best="OGR")  # a Berserker: the Half Dark Elf can start it
+    assert [(o.code, o.name, o.legal) for o in legal] == [("OGR", "Ogre", True), ("HDE", "Half Dark Elf", True), ("HUM", "Human", True)]
+    locked = view.race_options(codes, trio=("WAR", "CLR", "PAL"), best="HUM")  # no Warrior, Cleric or Paladin among its seven classes
+    assert [(o.code, o.legal) for o in locked] == [("HUM", True), ("OGR", True), ("HDE", False)]  # (the unlock group is the races that cannot start the trio: after the others)
+    assert locked[-1].name == "Half Dark Elf"
 
 
 def test_the_command_line_builds_and_reports_sizes(tmp_path):
@@ -3481,7 +3650,7 @@ def test_decisions_records_the_two_budgets_of_the_script_the_build_enforces():
 
 
 def test_the_rules_loader_still_accepts_the_repository_rules():
-    assert rules_module.load().version == "2026-10-13"
+    assert rules_module.load().version == "2026-11-19"
 
 
 # ---- the optimizer's files: client, worker, WebAssembly and the manifest ----------------------------------------------------------------
@@ -3865,7 +4034,9 @@ def test_the_engine_bundles_are_modules_without_string_sinks_and_without_static_
         assert not re.search(r"""(?:\bfrom|\bimport)\s*["']node:""", text), f"{role} imports a Node module"
     worker = (out / manifest["worker"]["path"].lstrip("/")).read_text(encoding="utf-8")
     client = (out / manifest["client"]["path"].lstrip("/")).read_text(encoding="utf-8")
-    assert not re.search(r"https?://", client), "the client names a site"
+    # the client carries the record of the page's one policy (static/tt-record.js: the page script has a copy too), which lets one address outside the site through, for the page counter's own way in: the
+    # script of the counter; the client never asks for it
+    assert re.findall(r"""https?://[^\s"'`)]+""", client) == ["https://static.cloudflareinsights.com/beacon.min.js"], "the client names one site, the counter's script, and no other"
     # the solver's own text mentions one address, in the help of a message about the LP file format; nothing fetches it
     assert re.findall(r"""https?://[^\s"')]+""", worker) == ["http://web.mit.edu/lpsolve/doc/CPLEX-format.htm"]
     # the solver's own loader asks for a Node module only when it finds itself in Node; that import is left as it is (external)
@@ -4394,7 +4565,7 @@ def test_a_bundle_whose_tier_rules_the_engine_cannot_use_is_refused_with_the_fil
 
 def test_a_bundle_that_is_not_what_the_engines_reader_takes_is_refused_with_the_file_named():
     need_node()
-    table, results = engine_files(change_bundle=lambda d: d["roles"]["balanced"].update(setups=[]))
+    table, results = engine_files(change_bundle=lambda d: d["roles"]["tank"].update(setups=[]))
     with pytest.raises(build.BuildError, match=r"pal-mnk-ber/engine-l50\.json"):
         build.check_engine_data(table, [results])
 
@@ -4692,6 +4863,7 @@ def test_a_chunk_of_the_section_that_holds_the_code_of_a_shared_kit_is_refused(n
 def tiny_bundle(tmp_path, page_source, *, static_kit=False):
     """Bundle a tiny page script and a tiny copy of the files of the Upgrade section with the options of the build; returns the metafile. The section loads the code of a shared kit
     (the panel, which imports the decoder and the module that Share is made of) by a dynamic import, or, with ``static_kit``, by a static one."""
+    need_node()  # (the one guard: with TRIOFORGE_REQUIRE_NODE=1 a missing Node fails here instead of skipping)
     loads_kit = 'import "./shared-kit.js";\n' if static_kit else ""
     files = {
         "app.js": page_source,
@@ -4711,8 +4883,6 @@ def tiny_bundle(tmp_path, page_source, *, static_kit=False):
         (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / name).write_text(text, encoding="utf-8")
     node, esbuild = shutil.which("node"), build.REPO_ROOT / "node_modules" / "esbuild" / "bin" / "esbuild"
-    if node is None or not esbuild.is_file():
-        pytest.skip("Node and esbuild are needed")
     done = subprocess.run(
         [node, str(esbuild), "--bundle", "--format=esm", "--splitting", f"--metafile={tmp_path / 'meta.json'}", f"--outdir={tmp_path / 'out'}", "--log-level=warning", "app.js"],
         cwd=tmp_path,
@@ -4844,3 +5014,165 @@ def test_a_page_script_that_imports_a_chunk_at_once_is_refused():
     build.check_page_script(fine)  # (what the chunk itself imports is its own business)
     with pytest.raises(build.BuildError, match="page script"):
         build.check_page_script({"outputs": {"site-DDDDDDDD.css": {"imports": []}}})  # no page script at all: the metafile is not what was asked for
+
+
+def test_the_builds_own_check_that_the_default_race_can_start_the_trio_is_reached_when_the_header_of_the_shards_says_it_can(tmp_path):
+    """The reader refuses a default race that the header of the shards lists as not creatable (the test before this one). The build's check of the same, from the tables of
+    races and classes, is the second line: here the header lists the race as creatable, so the reader lets it through and the build's check is the one that stops it."""
+    scratch = tmp_path / "results"
+    shutil.copytree(RESULTS, scratch)
+    folder = scratch / "pal-mnk-ber"
+    for name in ("strict-own", "strict-group", "wiki-own", "wiki-group"):
+        path = folder / f"{name}.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        for row in document["races"]:
+            row["legal"] = True
+        path.write_text(json.dumps(document), encoding="utf-8")
+    path = folder / "defaults.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document.update(race="ELF", runner_up_race="OGR", margin=210.25)  # (Wood Elf has the highest value of the fixture: 10930.25 against 10720.0)
+    for row in document["races"]:
+        row["legal"] = True
+    path.write_text(json.dumps(document), encoding="utf-8")
+    trio = data.load_trio(folder)  # the reader has no objection: the shards say the race can be created
+    assert trio.defaults.race == "ELF"
+    with pytest.raises(build.BuildError, match=r"pal-mnk-ber: the default race ELF cannot start a Paladin / Monk / Berserker at character creation"):
+        build.check_defaults(trio)
+    document.update(race="OGR", runner_up_race="ELF", margin=0.0)  # the same for the runner-up: the build's check is the one that reads the tables
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(build.BuildError, match=r"pal-mnk-ber: the runner-up race ELF cannot start a Paladin / Monk / Berserker at character creation"):
+        build.check_defaults(data.load_trio(folder))
+
+
+# ---- Natural Durability, which the HP model applies, is on the Assumes line and cited on the Hit points row (Part L, L6) -----------------------------------------------
+
+
+def test_the_assumes_line_names_natural_durability_and_the_row_of_the_hit_points_cites_its_rule(site):
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    aa = html.by_id("assume-aa")
+    assert aa.text().startswith("AA: Combat Stability 3, Physical Enhancement, Natural Durability 4")
+    assert "/rules/#hp.natural_durability_pct" in [a.get("href") for a in aa.find_all("a")]
+    hp = next(r for r in html.by_id("totals-body").find_all("tr") if r.find("th").text() == "Hit points")
+    assert [a.get("href") for a in hp.find_all("a")] == ["/rules/#hp.pools_counted", "/rules/#hp.natural_durability_pct"]  # (the pools counted, and the AA that raises the part of them that comes from STA)
+    assert set(hp.get("data-rules").split()) == {"hp.pools_counted", "hp.natural_durability_pct"}
+    assert [s.text() for s in hp.find_all(cls="seal")] == ["Measured", "Player reports"]  # (each rule carries its own seal: the row shows no stronger seal than its inputs earn)
+    assert all(followed_by_a_seal(a) for a in hp.find_all("a"))
+
+
+def test_the_natural_durability_rank_on_the_page_is_the_one_the_model_assumes_and_the_line_says_no_when_there_is_none():
+    from trioforge.site import view
+
+    assert view.aa_text(3, True, 4) == "Combat Stability 3, Physical Enhancement, Natural Durability 4"
+    assert dict(view._aa_labels(3, True, 4))["Natural Durability 4"] == "hp.natural_durability_pct"
+    assert view.aa_text(0, False, 0).endswith("no Natural Durability")
+    caps = view.trio_caps(("PAL", "MNK", "BER"), 50, rules_module.load())
+    assert caps.nd_rank == 4  # (read from the profile that the totals are made from: the model's own choice)
+
+
+def test_no_number_of_the_trio_page_is_one_that_natural_durability_changes(site):
+    """The line and the row's second rule are words and links: every number the page shows is what it was (the totals, the kit value, the caps)."""
+    out, _ = site
+    html = page(out, PAGES["trio"])
+    values = {r.find("th").text(): [c.text() for c in r.find_all("td")[:2]] for r in html.by_id("totals-body").find_all("tr")}
+    assert values["Hit points"] == ["2,880", "no cap"] and values["Sheet AC"][0] == "666" and values["Haste"][0] == "57%" and values["Magic resist"][0] == "86"
+    assert html.by_id("kit-value").text() == "10,720"
+    assert "Natural Durability 4" not in html.by_id("totals-body").text(), "the row names the rule, and the percent is in no cell"
+
+
+# ---- the bow note carries the seal of its rule, like every other rule link (Part L, L7) ----------------------------------------------------------------------
+
+
+def test_a_page_that_opens_on_the_bow_has_the_seal_of_the_bow_rule_beside_the_link_of_the_bow_note(tmp_path, monkeypatch):
+    need_node()
+    real = view_module.trio_page
+
+    def opening_on_the_bow(*args, **kwargs):
+        page_of_trio = real(*args, **kwargs)
+        return dataclasses.replace(page_of_trio, default={**page_of_trio.default, "setup": "ranged"})
+
+    monkeypatch.setattr(view_module, "trio_page", opening_on_the_bow)
+    run_build(tmp_path / "dist", tmp_path, noindex=True)
+    note = page(tmp_path / "dist", PAGES["trio"]).find("p", cls="bow-note")
+    (link,) = note.find_all("a")
+    assert link.get("href") == "/rules/#weapons.ranged_factor" and followed_by_a_seal(link)
+    assert [s.text() for s in note.find_all(cls="seal")] == ["Model"]
+
+
+def test_the_seal_of_the_bow_rule_is_the_one_of_the_weapons_rule_the_page_code_borrows_it_from():
+    """trio.js makes the bow note when the visitor picks the bow, and takes the seal of the line above it ("How weapons are scored"): the two rules must carry the same seal."""
+    from trioforge.site import content
+
+    book = content.load_rulebook(REPO / "rules" / "rules.json")
+    bow, weapons = view_module.rule_ref(book, "weapons.ranged_factor"), view_module.rule_ref(book, "weapons.damage_weight")
+    assert (bow.seal, bow.seal_icon, bow.seal_label) == (weapons.seal, weapons.seal_icon, weapons.seal_label)
+    template = (REPO / "pipeline" / "trioforge" / "site" / "templates" / "trio.html.j2").read_text(encoding="utf-8")
+    assert "{{ rule_seal(page.bow_rule) }}" in template and 'href="/rules/#{{ page.bow_rule.id }}"' in template, "the link and its seal come from one rule reference, checked against the rulebook"
+
+
+# ---- the reader checks the results against the rules the build is given, not the checkout's (Part L, L8) ----------------------------------------------------------
+
+
+def other_rules_file(tmp_path: Path, version: str) -> Path:
+    """A copy of the rules file with another version (the same rules)."""
+    path = tmp_path / "rules-other.json"
+    document = json.loads((REPO / "rules" / "rules.json").read_text(encoding="utf-8"))
+    document["version"] = version
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
+def results_of_rules(folder: Path, version: str) -> Path:
+    """The results folder with every file that records the version of the rules made to record ``version`` (as a precompute run with another checkout's rules writes it)."""
+    for path in folder.rglob("*.json"):
+        text = path.read_bytes().decode("utf-8")  # (bytes, not text: the runner-up index holds the size of each file, and a changed line ending would change it)
+        changed = re.sub(r'("rules_version"\s*:\s*)"[^"]*"', rf'\1"{version}"', text)
+        if changed != text:
+            path.write_bytes(changed.encode("utf-8"))
+    for index in folder.rglob("runnerups/index.json"):  # (the index holds the size and the digest of each runner-up file: they are of the files as they are now)
+        document = json.loads(index.read_text(encoding="utf-8"))
+        for entry in document["files"]:
+            raw = (index.parent / entry["file"]).read_bytes()
+            entry.update(bytes=len(raw), gzip=len(gzip.compress(raw, 9, mtime=0)), sha256=hashlib.sha256(raw).hexdigest())
+        index.write_bytes(json.dumps(document, separators=(",", ":")).encode("utf-8"))
+    return folder
+
+
+def exalt_results_of(tmp_path: Path) -> Path:
+    from trioforge.effects import fixtures
+
+    scratch = tmp_path / "results"
+    shutil.copytree(RESULTS, scratch)
+    fixtures.write_site_fixture(scratch)  # (the two files of the effects layer, beside the shards: all the readers are held to the version)
+    return scratch
+
+
+def test_results_made_with_the_rules_that_the_build_is_given_are_read_although_the_checkout_has_other_rules(tmp_path):
+    """The readers of the results (the shards, and the files of the effects layer) are held to the rules file of ``--rules``: results of another checkout's version build with that checkout's rules file."""
+    version = "2026-12-01"
+    assert version != json.loads((REPO / "rules" / "rules.json").read_text(encoding="utf-8"))["version"]
+    scratch = results_of_rules(exalt_results_of(tmp_path), version)
+    summary = run_build(tmp_path / "dist", tmp_path, noindex=True, results=scratch, rules=other_rules_file(tmp_path, version))
+    assert (tmp_path / "dist" / "data" / "effects.json").is_file() and summary.pages
+
+
+def test_the_files_of_the_effects_layer_are_refused_when_they_are_not_of_the_rules_file_of_the_build(tmp_path):
+    version = "2026-12-01"
+    scratch = results_of_rules(exalt_results_of(tmp_path), version)  # (everything is of the other version, so that the shards are not what is refused)
+    path = scratch / "effects.json"
+    path.write_bytes(re.sub(r'("rules_version"\s*:\s*)"[^"]*"', r'\1"2026-11-19"', path.read_bytes().decode("utf-8")).encode("utf-8"))  # (but the shared file is the checkout's)
+    with pytest.raises(data.ResultsError, match=r"effects\.json: rules_version: is '2026-11-19', but the rules file says '2026-12-01'"):
+        run_build(tmp_path / "dist", tmp_path, noindex=True, results=scratch, rules=other_rules_file(tmp_path, version))
+
+
+# ---- the switch that turns a skip for lack of Node into a failure covers this guard too (Part L, L9) -----------------------------------------------------------
+
+
+def test_a_bundle_test_fails_when_node_is_required_and_missing_and_skips_when_it_is_not(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: None)  # (no node on this machine)
+    monkeypatch.setenv("TRIOFORGE_REQUIRE_NODE", "1")
+    with pytest.raises(pytest.fail.Exception, match="Node and esbuild are needed"):
+        tiny_bundle(tmp_path / "required", "globalThis.page = 1;\n")
+    monkeypatch.delenv("TRIOFORGE_REQUIRE_NODE")
+    with pytest.raises(pytest.skip.Exception):
+        tiny_bundle(tmp_path / "optional", "globalThis.page = 1;\n")

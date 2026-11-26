@@ -23,7 +23,7 @@ beforeAll(async () => {
 
 const TABLE = readItemTable(JSON.parse(ITEMS_BYTES.toString("utf8")));
 const BUNDLE = readBundle(JSON.parse(BUNDLE_BYTES.toString("utf8")));
-const VIEW = { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" };
+const VIEW = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" };
 const TRIBUNAL = "The Tribunal";
 const solveView = (over = {}) => bestKit({ highs, records: TABLE.records, bundle: BUNDLE, scenario: VIEW, tier: 4, budgetMs: 120_000, ...over });
 const keysOf = (items) => items.map((item) => item.key);
@@ -123,7 +123,7 @@ describe("the best kit of a view (bestKit)", () => {
     expect(got.answer).toMatchObject({ status: "optimal", proven: true, label: null, canonical: false, tieStage: null });
     expect(got.answer.kit).toHaveLength(22);
     expect(got.answer.F.toString()).toMatch(/^\d+\/\d+$/);
-    expect(got.profile).toMatchObject({ race: "OGR", role: "balanced", evidence: "wiki", level: 50 });
+    expect(got.profile).toMatchObject({ race: "OGR", role: "tank", evidence: "wiki", level: 50 });
     expect(got.pool).toHaveLength(44);
     expect(got.pruned.length).toBeGreaterThan(0);
     expect(got.pruned.length).toBeLessThan(got.pool.length);
@@ -185,13 +185,13 @@ describe("the best kit of a view (bestKit)", () => {
   });
 
   describe("takes the weights of the role as the bundle has them, or composes the weights of the request", () => {
-    const base = BUNDLE.roles.balanced.weights;
+    const base = BUNDLE.roles.tank.weights;
 
     it("without weights, and with weights that are the role's own: the profile of the bundle, its weights the very ones of the bundle", () => {
       for (const weights of [undefined, {}, { multipliers: {} }, { multipliers: { AC: 1, "ATK+HASTE": 1, MANA: 1, SV: 1, regen: 1 } }, { custom: {}, regenT: null }]) {
         const got = solveView({ weights });
         expect(got.profile.weights, JSON.stringify(weights)).toBe(base);
-        expect(got.profile).toEqual(assembleProfile(BUNDLE, { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki" }));
+        expect(got.profile).toEqual(assembleProfile(BUNDLE, { race: "OGR", role: "tank", buffs: "own", evidence: "wiki" }));
       }
     });
 
@@ -202,8 +202,8 @@ describe("the best kit of a view (bestKit)", () => {
       expect(got.profile.weights).toEqual(want);
       expect(got.profile.weights).not.toEqual(base);
       expect(Object.isFrozen(got.profile) && Object.isFrozen(got.profile.weights)).toBe(true);
-      expect(got.profile.pools).toEqual(assembleProfile(BUNDLE, { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki" }).pools);
-      expect(BUNDLE.roles.balanced.weights).toBe(base); // and the bundle's own weights are as they were
+      expect(got.profile.pools).toEqual(assembleProfile(BUNDLE, { race: "OGR", role: "tank", buffs: "own", evidence: "wiki" }).pools);
+      expect(BUNDLE.roles.tank.weights).toBe(base); // and the bundle's own weights are as they were
     });
 
     it("leaves mana to the trio: a trio with no mana pool has no weight on mana, whatever the request asks", () => {
@@ -248,7 +248,7 @@ describe("the best kit of a view (bestKit)", () => {
       "a weapon setup the role does not play at that level": { scenario: { ...VIEW, role: "melee", setup: "1h-shield" } },
       "a weapon setup that is not one": { scenario: { ...VIEW, setup: "spear" } },
       "a blank deity": { scenario: { ...VIEW, deity: "   " } },
-      "no evidence level": { scenario: { race: "OGR", role: "balanced", buffs: "own", setup: "dw" } },
+      "no evidence level": { scenario: { race: "OGR", role: "tank", buffs: "own", setup: "dw" } },
       "an evidence level that is not text": { scenario: { ...VIEW, evidence: 5 } },
       "a tier above 10": { tier: 11 },
       "a tier below 0": { tier: -1 },
@@ -322,7 +322,7 @@ describe("the best kit of a view (bestKit)", () => {
 
   it("gives the builder's options to the pruning, the model and the solve: an assumed haste of the request's own is the haste of the answer", () => {
     expect(solveView({ options: { haste_assumed: 30 } }).answer.hasteAssumed).toBe(30);
-    expect(solveView().answer.hasteAssumed).toBe(54); // and the model's rule, when there are none (44 and the 10 of the Monk's Unbound Alacrity)
+    expect(solveView().answer.hasteAssumed).toBe(29); // and the model's rule, when there are none: the worn haste of the kit (19) and the 10 of the Monk's Unbound Alacrity, with no haste spell in the buffs
     expect(() => solveView({ options: { depth: 3 } })).toThrow();
   });
 });

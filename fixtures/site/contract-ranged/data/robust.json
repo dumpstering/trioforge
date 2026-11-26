@@ -1,0 +1,15 @@
+{
+ "v": 2,
+ "release": "data-2030-01-02",
+ "license": "CC BY-SA 4.0",
+ "attribution": "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, tier-scaled",
+ "race": "OGR",
+ "views": [
+  ["tank",4,"2h","wiki","own",["ATK+HASTE x0.5","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust"]],
+  ["tank",10,"dw","wiki","own",["ATK+HASTE x0.5","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","ATK+HASTE x0.5","robust"]],
+  ["melee",4,"2h","wiki","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","AC x0.5","AC x0.5","robust","robust"]],
+  ["melee",10,"dw","wiki","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","AC x2","AC x2","robust","robust"]],
+  ["ranged",4,"ranged","wiki","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","AC x2","AC x2","robust","robust"]],
+  ["ranged",10,"ranged","wiki","own",["robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust","robust"]]
+ ]
+}

@@ -102,7 +102,7 @@ def build_fixture(catalog: dict[str, Any], built: files.Built | None = None) -> 
     used_items: set[str] = set()
     for slug in trio_sample():
         classes = [part.upper() for part in slug.split("-")]
-        for role in roles_for(classes):
+        for role in roles_for(classes, bow=None):
             options = layer_module.layer(classes, role, built.ctx)
             rows = {name: [files._row(o) for o in options[name]] for name in files.LISTS}  # noqa: SLF001
             lists[f"{slug}/{role}"] = {"classes": classes, "role": role, "options": rows}

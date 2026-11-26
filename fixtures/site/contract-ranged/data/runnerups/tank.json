@@ -1,0 +1,32 @@
+{
+ "v": 2,
+ "release": "data-2030-01-02",
+ "license": "CC BY-SA 4.0",
+ "attribution": "Item data adapted from eqlwiki.com (CC BY-SA 4.0) by the eqlwiki contributors; quest giver data compiled by EQL Tools (CC BY-SA 4.0) from eqlwiki; changes: parsed, normalized, filtered, tier-scaled",
+ "role": "tank",
+ "tiers": [0,4,10],
+ "items": [
+  ["w9015","Test Omicron Crown","drop",4,"Test Zone (a Test Omicron Crown keeper)","wiki",["Tunare"]],
+  ["w9002","Test Beta Helm","drop",4,"Test Zone (a Test Beta Helm keeper)","wiki",[]],
+  ["w9007","Test Eta Earring","drop",4,"Test Zone (a Test Eta Earring keeper)","wiki",[]],
+  ["w9024","Test Oméga Shoulders","drop",4,"Test Zone (a Test Oméga Shoulders keeper)","wiki",["Brell Serilis","Karana"]],
+  ["w9025","Test Lesser Cloak","drop",4,"Test Zone (a Test Lesser Cloak keeper)","wiki",[]],
+  ["w9023","Test Psi Ring","drop",4,"Test Zone (a Test Psi Ring keeper)","wiki",["Karana"]],
+  ["w9003","Test Gamma Ring","drop",4,"Test Zone (a Test Gamma Ring keeper)","wiki",[]],
+  ["w9101","Test Bow Alpha","drop",4,"Test Zone (a Test Bow Alpha keeper)","wiki",[]],
+  ["w9102","Test Bow Beta","drop",4,"Test Zone (a Test Bow Beta keeper)","wiki",[]],
+  ["w9001","Test Alpha Helm","drop",4,"Test Zone (a Test Alpha Helm keeper)","wiki",[]],
+  ["w9014","Test Xi Shield","drop",4,"Test Zone (a Test Xi Shield keeper)","wiki",[]],
+  ["w9011","Test Lambda Sword","drop",4,"Test Zone (a Test Lambda Sword keeper)","wiki",[]],
+  ["w9103","Test Charm Gamma","drop",4,"Test Zone (a Test Charm Gamma keeper)","wiki",[]],
+  ["w9012","Test Mu Blade","drop",4,"Test Zone (a Test Mu Blade keeper)","wiki",[]]
+ ],
+ "views": [
+  [0,"TRL","1h-shield",[[[0,254.12],[1,-52.05]],[],[[2,-51.23]],[[2,-51.23]],[],[[3,189.65]],[],[[4,-81.84]],[],[],[],[[5,-108.57]],[[6,-375.9]],[],[],[],[],[[7,-134.39],[8,-146.61]],[[0,1.19],[9,-252.93],[1,-326.03],[10,-350.23]],[[0,1.19],[9,-252.93],[1,-326.03],[10,-350.23]],[[11,-33.57]],[]]],
+  [0,"OGR","1h-shield",[[[0,254.12],[1,-41.52]],[],[[2,-45.97]],[[2,-45.97]],[],[[3,189.65]],[],[[4,-81.84]],[],[],[],[[5,-108.57]],[[6,-307.47]],[],[],[],[],[[7,-123.86],[8,-136.08]],[[0,1.19],[9,-252.93],[1,-294.45],[10,-344.97]],[[0,1.19],[9,-252.93],[1,-294.45],[10,-344.97]],[[11,-33.57]],[]]],
+  [4,"TRL","2h",[[[0,191.58],[9,-51.63]],[],[[2,-67.4]],[[2,-67.4]],[],[[3,139.44]],[],[[4,-40.43]],[],[],[],[[5,-163.63]],[[6,-402.74]],[],[],[],[],[[7,-168.51],[8,-190.51]],[[0,118.78],[9,-124.42],[10,-216.34],[1,-234.67]],[[0,118.78],[9,-124.42],[10,-216.34],[1,-234.67]],[],[]]],
+  [4,"OGR","2h",[[[0,191.58],[9,-51.63]],[],[[2,-67.4]],[[2,-67.4]],[],[[3,139.44]],[],[[4,-40.43]],[],[],[],[[5,-163.63]],[[6,-402.74]],[],[],[],[],[[7,-168.51],[8,-190.51]],[[0,118.78],[9,-124.42],[10,-216.34],[1,-234.67]],[[0,118.78],[9,-124.42],[10,-216.34],[1,-234.67]],[],[]]],
+  [10,"TRL","dw",[[[0,176.62],[9,-135.66]],[],[[2,-77.28]],[[2,-77.28]],[],[[3,198.01]],[],[[4,-35.75]],[],[],[],[[5,-209.08]],[[6,-496.92]],[],[],[],[],[[7,-229.64],[8,-248.72]],[[0,137.39],[9,-174.89],[12,-273.29],[10,-282.91]],[[0,137.39],[9,-174.89],[12,-273.29],[10,-282.91]],[[11,-18.75]],[[13,-41.33]]]],
+  [10,"OGR","dw",[[[0,176.62],[9,-135.66]],[],[[2,-77.28]],[[2,-77.28]],[],[[3,198.01]],[],[[4,-35.75]],[],[],[],[[5,-209.08]],[[6,-496.92]],[],[],[],[],[[7,-229.64],[8,-248.72]],[[0,137.39],[9,-174.89],[12,-273.29],[10,-282.91]],[[0,137.39],[9,-174.89],[12,-273.29],[10,-282.91]],[[11,-18.75]],[[13,-41.33]]]]
+ ]
+}

@@ -15,9 +15,14 @@ const PORT = Number(process.env.TRIOFORGE_PREVIEW_PORT ?? 8788);
 export const ORIGIN = `http://127.0.0.1:${PORT}`;
 // the section Effects to exalt needs the two files of the effects layer, which the fixture results (made before the layer) do not have: a second preview is built from a copy of them that has
 // them (scripts/preview.mjs, TRIOFORGE_PREVIEW_EXALT=1; real results have the files and are used as they are), and only tests-e2e/exalt.spec.mjs uses it.
-// Each preview builds into a folder of its own (site/dist-e2e, site/dist-exalt), never into site/dist, which holds only what `python -m trioforge.site.build --out site/dist` writes.
+// Each preview builds into a folder of its own (site/dist-e2e, site/dist-exalt, site/dist-analytics), never into site/dist, which holds only what `python -m trioforge.site.build --out site/dist` writes.
 const EXALT_PORT = Number(process.env.TRIOFORGE_PREVIEW_EXALT_PORT ?? PORT + 1);
 export const EXALT_ORIGIN = `http://127.0.0.1:${EXALT_PORT}`;
+
+// the third preview is a build with page counts (an invented token: the real one is never in the repository), for tests-e2e/analytics.spec.mjs; the beacon's own script is never fetched, the test answers for it
+const ANALYTICS_PORT = Number(process.env.TRIOFORGE_PREVIEW_ANALYTICS_PORT ?? PORT + 2);
+export const ANALYTICS_ORIGIN = `http://127.0.0.1:${ANALYTICS_PORT}`;
+export const ANALYTICS_TOKEN = "0123456789abcdef0123456789abcdef";
 
 const WINDOWS = { desktop: { width: 1280, height: 900 }, phone: { width: 360, height: 740 } };
 const matrix = Object.entries(WINDOWS).flatMap(([size, viewport]) =>
@@ -66,6 +71,13 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 180_000,
       env: { TRIOFORGE_PREVIEW_PORT: String(EXALT_PORT), TRIOFORGE_PREVIEW_EXALT: "1", TRIOFORGE_PREVIEW_DIST: "site/dist-exalt" },
+    },
+    {
+      command: "node scripts/preview.mjs",
+      url: `${ANALYTICS_ORIGIN}/`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+      env: { TRIOFORGE_PREVIEW_PORT: String(ANALYTICS_PORT), TRIOFORGE_PREVIEW_ANALYTICS_TOKEN: ANALYTICS_TOKEN, TRIOFORGE_PREVIEW_DIST: "site/dist-analytics" },
     },
   ],
 });

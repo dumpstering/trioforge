@@ -139,7 +139,7 @@ describe("what the open section shows", () => {
   it("is the plan in the file for the kit shown, the lists and the carry list, with the names of the file", async () => {
     const { app } = mount();
     await open(app);
-    const role = "balanced";
+    const role = "tank";
     expect($("#exalt-plan-lead").textContent).toContain("as the site worked it out");
     expect(planNames()).toEqual(EXALT.roles[role].plan.map((row) => names.get(row.e)));
     const hosts = [...document.querySelectorAll("#exalt-plan-table tbody th")].map((th) => th.textContent);
@@ -238,9 +238,9 @@ describe("the plan follows the kit", () => {
     await flush(app);
     await vi.waitFor(() => expect($("#exalt-plan-lead").textContent).toContain("matched in your browser"));
     const shard = read(resolve(CONTRACT, "data/strict-own.json"));
-    const row = shard.rows.find((r) => r[0] === "OGR" && r[1] === "balanced" && r[2] === 0 && r[3] === app.shown.scenario.setup);
+    const row = shard.rows.find((r) => r[0] === "OGR" && r[1] === "tank" && r[2] === 0 && r[3] === app.shown.scenario.setup);
     const kit = shard.kits[row[4]].map((index, place) => (index < 0 ? null : { place: PLACES[place], key: shard.items[index][0] })).filter(Boolean);
-    const want = matched("balanced", kit, 0);
+    const want = matched("tank", kit, 0);
     expect(planNames()).toEqual(want.rows.map((r) => names.get(r.e)));
     expect(want.rows).toEqual([]); // (nothing opens at +0)
     expect($("#exalt-noroom").textContent).toContain("below the tier its socket opens at");
@@ -249,7 +249,7 @@ describe("the plan follows the kit", () => {
     tier.dispatchEvent(new Event("change", { bubbles: true }));
     await flush(app);
     await vi.waitFor(() => expect($("#exalt-plan-lead").textContent).toContain("as the site worked it out"));
-    expect(planNames()).toEqual(EXALT.roles.balanced.plan.map((r) => names.get(r.e)));
+    expect(planNames()).toEqual(EXALT.roles.tank.plan.map((r) => names.get(r.e)));
     expect(calls.filter((c) => c === ITEM_PATH)).toHaveLength(1);
   });
 
@@ -257,17 +257,17 @@ describe("the plan follows the kit", () => {
     const { app, calls } = mount();
     await open(app);
     expect($(".exalt-source").hidden).toBe(true);
-    const keys = EXALT.roles.balanced.plan.map((row) => row.h);
+    const keys = EXALT.roles.tank.plan.map((row) => row.h);
     const unique = [...new Set(keys)];
     const kit = Array.from({ length: 22 }, () => null);
-    unique.forEach((key, index) => (kit[index === 0 ? 0 : PLACES.indexOf(EXALT.roles.balanced.plan.find((row) => row.h === key).p)] = { key, name: `Mine ${index}`, tier: index % 2 === 0 ? 4 : 1 }));
+    unique.forEach((key, index) => (kit[index === 0 ? 0 : PLACES.indexOf(EXALT.roles.tank.plan.find((row) => row.h === key).p)] = { key, name: `Mine ${index}`, tier: index % 2 === 0 ? 4 : 1 }));
     app.setEquipKit({ kit, record: (key) => records.get(key) ?? null, defaults: ITEMS.defaults });
     await flush(app);
     expect($(".exalt-source").hidden).toBe(false);
     $('input[name="exalt-source"][value="equip"]').click();
     await flush(app);
     await vi.waitFor(() => expect($("#exalt-plan-lead").textContent).toContain("Equip now"));
-    const want = matched("balanced", kit.map((it, i) => (it ? { place: PLACES[i], key: it.key, tier: it.tier } : null)).filter(Boolean), 0);
+    const want = matched("tank", kit.map((it, i) => (it ? { place: PLACES[i], key: it.key, tier: it.tier } : null)).filter(Boolean), 0);
     expect(planNames()).toEqual(want.rows.map((r) => names.get(r.e)));
     expect(want.rows.length).toBeGreaterThan(0);
     const lowKeys = new Set(kit.filter((it) => it && it.tier === 1).map((it) => it.key));
@@ -318,7 +318,7 @@ describe("what goes wrong", () => {
     tier.dispatchEvent(new Event("change", { bubbles: true }));
     await flush(app);
     await vi.waitFor(() => expect($("#exalt-plan-lead").textContent).toContain("Couldn't load the item list"));
-    expect(planNames()).toEqual(EXALT.roles.balanced.plan.map((r) => names.get(r.e)));
+    expect(planNames()).toEqual(EXALT.roles.tank.plan.map((r) => names.get(r.e)));
   });
 
   it("says that the code could not be had", async () => {
@@ -385,7 +385,7 @@ describe("the kit shown is the default kit only when the view is the default vie
   });
 
   it("is the default kit when the address names the default view", async () => {
-    const { app } = mount({ search: "?race=OGR&role=balanced&tier=4&buffs=own" });
+    const { app } = mount({ search: "?race=OGR&role=tank&tier=4&buffs=own" });
     expect(app.exaltShown.exact).toBe(true);
     await open(app);
     expect($("#exalt-plan-lead").textContent).toContain("as the site worked it out");
@@ -412,12 +412,12 @@ describe("a failure leaves nothing of an earlier view", () => {
 
   it("clears the old plan and the old lists, and says so, when the file does not fit the view (a plan row of an effect the shared file lacks)", async () => {
     const odd = structuredClone(EXALT);
-    odd.roles.tank.plan[0].e = "e999";
+    odd.roles.melee.plan[0].e = "e999";
     const { app } = mount({ behaviour: { "/data/pal-mnk-ber/exalt.json": { json: odd } } });
     await open(app);
     expect($("#exalt-plan-table")).not.toBeNull();
-    document.querySelector('input[name="role"][value="tank"]').checked = true;
-    document.querySelector('input[name="role"][value="tank"]').dispatchEvent(new Event("change", { bubbles: true }));
+    document.querySelector('input[name="role"][value="melee"]').checked = true;
+    document.querySelector('input[name="role"][value="melee"]').dispatchEvent(new Event("change", { bubbles: true }));
     await flush(app);
     await vi.waitFor(() => expect($("#exalt-plan-lead").textContent).toContain("Couldn't show"));
     expect($("#exalt-plan-table")).toBeNull();
@@ -427,8 +427,8 @@ describe("a failure leaves nothing of an earlier view", () => {
 
   it("treats a role with no list of a kind, or a list that is no list, as having none", async () => {
     const odd = structuredClone(EXALT);
-    delete odd.roles.balanced.worn;
-    odd.roles.balanced.proc = "none";
+    delete odd.roles.tank.worn;
+    odd.roles.tank.proc = "none";
     const { app } = mount({ behaviour: { "/data/pal-mnk-ber/exalt.json": { json: odd } } });
     await open(app);
     expect($("#exalt-plan-table")).not.toBeNull();
@@ -449,7 +449,7 @@ describe("names and links", () => {
     const { app } = mount();
     await open(app);
     expect($("#exalt-plan-table tbody th a")).not.toBeNull(); // (the kit of the page: every item has a page)
-    const hosts = EXALT.roles.balanced.plan.map((row) => row.h);
+    const hosts = EXALT.roles.tank.plan.map((row) => row.h);
     const slots = ["HEAD", "FACE", "EAR", "NECK", "BACK", "WRIST", "FINGER", "WAIST", "ARMS", "SHOULDERS", "HANDS", "CHEST", "LEGS", "FEET"];
     const hidden = { ...ITEMS.items[0], evidence: { level: "hidden" }, key: hosts[0], name: "Secret", slots };
     app.setEquipKit(equipKit([{ key: hosts[0], name: "Secret", tier: 4 }], (key) => (key === hosts[0] ? hidden : null)));
@@ -465,7 +465,7 @@ describe("names and links", () => {
   it("falls back to the names of the files for a kit entry that has no name, and never writes undefined", async () => {
     const { app } = mount();
     await open(app);
-    const hosts = [...new Set(EXALT.roles.balanced.plan.map((row) => row.h))];
+    const hosts = [...new Set(EXALT.roles.tank.plan.map((row) => row.h))];
     const record = (key) => ITEMS.items.find((r) => (r.key ?? `w${r.id}`) === key) ?? null;
     app.setEquipKit(equipKit(hosts.map((key) => ({ key, name: undefined, tier: 4 })), record));
     await flush(app);

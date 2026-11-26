@@ -331,6 +331,70 @@ describe("a release that comes while the page is open", () => {
     expect(h.client.stats().updated).toBe(false);
   });
 
+  it.each([
+    ["the page of an error of the host", "<html><body>503 Service Unavailable</body></html>"],
+    ["a text that is not JSON at all", "{\"data_release\": "],
+    ["JSON that is no manifest of the site", "{\"not\": \"a manifest\"}"],
+  ])("E13: is told with the error when the manifest read again is %s: another text is no release unless it is a manifest", async (_name, garbage) => {
+    const consent = newConsent();
+    const h = harness({
+      consent,
+      workerFetch: {
+        serve: (url) => {
+          if (new URL(url).pathname !== h.site.itemsPath) return undefined;
+          h.state.manifest = () => garbage;
+          return new Response("gone", { status: 404 });
+        },
+      },
+    });
+    await expect(h.client.solve(equipNow())).rejects.toMatchObject({ code: "engine-load", message: expect.stringMatching(/404/) });
+    expect(consent.updated).not.toHaveBeenCalled();
+    expect(h.client.stats().updated).toBe(false);
+    expect(h.workers[0].terminated).toBe(false);
+  });
+
+  it.each([
+    ["a manifest of a newer format (a version and a field this client does not know)", (site) => JSON.stringify({ ...site.manifestJson, version: 3, data_release: "data-2026-10-20", novelty: { later: true } })],
+    ["an object with nothing but the release", () => JSON.stringify({ data_release: "data-2026-10-20" })],
+    ["a manifest that this client cannot read at all, of another release", (site) => JSON.stringify({ ...site.manifestJson, items: null, data_release: "data-2026-10-20" })],
+  ])("F12: is a release when the manifest read again is %s: any JSON object whose data_release is a text other than ours is one", async (_name, make) => {
+    const consent = newConsent();
+    const h = harness({
+      consent,
+      workerFetch: {
+        serve: (url) => {
+          if (new URL(url).pathname !== h.site.itemsPath) return undefined;
+          h.state.manifest = () => make(h.site);
+          return new Response("gone", { status: 404 });
+        },
+      },
+    });
+    await expect(h.client.solve(equipNow())).rejects.toMatchObject({ code: "engine-load", message: expect.stringMatching(UPDATED) });
+    expect(consent.updated).toHaveBeenCalledTimes(1);
+    expect(h.client.stats().updated).toBe(true);
+  });
+
+  it.each([
+    ["the same release in a format this client cannot read", (site) => JSON.stringify({ ...site.manifestJson, version: 3, novelty: 1 })],
+    ["a release that is not a text", (site) => JSON.stringify({ ...site.manifestJson, version: 3, data_release: 20261020 })],
+    ["a list", () => JSON.stringify([{ data_release: "data-2026-10-20" }])],
+  ])("F12: is no release when the manifest read again is %s", async (_name, make) => {
+    const consent = newConsent();
+    const h = harness({
+      consent,
+      workerFetch: {
+        serve: (url) => {
+          if (new URL(url).pathname !== h.site.itemsPath) return undefined;
+          h.state.manifest = () => make(h.site);
+          return new Response("gone", { status: 404 });
+        },
+      },
+    });
+    await expect(h.client.solve(equipNow())).rejects.toMatchObject({ code: "engine-load", message: expect.stringMatching(/404/) });
+    expect(consent.updated).not.toHaveBeenCalled();
+    expect(h.client.stats().updated).toBe(false);
+  });
+
   it("does not look again for an error of the request itself: a bad request is not a release", async () => {
     const consent = newConsent();
     const h = harness({ consent });

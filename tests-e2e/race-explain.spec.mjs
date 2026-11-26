@@ -75,8 +75,8 @@ test("a row whose item has worn haste shows the chip without opening its Stats, 
   await axe(page, testInfo);
   await page.locator("#sw-tier").selectOption("10");
   await expect(page.locator("#kit-body .kit-haste:visible")).toHaveText("Haste 25%");
-  await pick(page, "role-balanced");
-  await expect(page.locator("#kit-caption")).toContainText("Balanced");
+  await pick(page, "role-tank");
+  await expect(page.locator("#kit-caption")).toContainText("Tank");
   await expect(page.locator("#kit-body .kit-haste:visible")).toHaveCount(0);
   expect(watch.problems()).toEqual([]);
 });
@@ -84,7 +84,7 @@ test("a row whose item has worn haste shows the chip without opening its Stats, 
 test("the haste row of the totals says that only the highest worn haste counts", async ({ page, watch }) => {
   await open(page, TRIO);
   const row = page.locator("#totals-body tr").filter({ has: page.locator('th:text-is("Haste")') });
-  await expect(row.locator(".row-note")).toHaveText("Only the highest worn haste counts.");
+  await expect(row.locator(".row-note")).toHaveText(/^Only the highest worn haste counts\./); // (T10: with a haste spell among the buffs the note goes on with the two answers)
   await expect(page.locator("#totals-body .row-note")).toHaveCount(1);
   expect(watch.problems()).toEqual([]);
 });

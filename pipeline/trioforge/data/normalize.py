@@ -62,7 +62,7 @@ The item has the fields of the plan (key, name, wiki, slots, classes, races, dei
 weight, size, weapon, effects, required_level, recommended_level, sources, era_tags, tier_rule,
 parse_warnings) and a few more that the real pages need: ``item_type`` (``Type: Shield``, or
 ``Skill: Shield``) with ``item_type_source``, ``container_capacity`` (a bag's ``Capacity``),
-``instrument_mods`` (``Wind Resonance: 12`` gives ``{"Wind": 12}``), ``categories``, ``lucy_img_id``,
+``instrument_mods`` (``Wind Resonance: 12`` and ``Wind Instrument: 12`` give ``{"Wind": 12}``), ``categories``, ``lucy_img_id``,
 ``charges`` (only when the page states them) and ``parse_warnings_overflow``. ``sources.sold_by`` entries are
 ``{"zone", "npc"}``, because the evidence ladder needs the vendor's zone; a drop entry may have ``notes``.
 ``sources.quests`` are the targets of the quest links (what a quest is looked up by) and ``sources.quest_labels``,
@@ -109,6 +109,7 @@ __all__ = [
     "FLAGS",
     "GENERIC_EFFECT_TARGETS",
     "ITEM_TYPE_SOURCES",
+    "PREDATING_RACES",
     "RACE_ALIASES",
     "RACE_CODES",
     "SCHEMA_PATH",
@@ -133,7 +134,11 @@ SLOTS = (
     "PRIMARY SECONDARY CHARM POWERSOURCE"
 ).split()
 CLASS_CODES = "WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER".split()
-RACE_CODES = "HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG".split()
+RACE_CODES = "HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG HDE".split()  # (HDE, the Half Dark Elf: no page of an item lists it yet, and its page gives no abbreviation; the code is the project's)
+#: The races that came after the item pages were written. A page that lists every other race by name (the fifteen older ones) means everyone, as one that lists all sixteen does, so such a list is
+#: ALL and the Half Dark Elf can wear the item. A rule with a judgment behind it: the pages predate the race, and whether the item can be used by it in the game is unverified. A page that says
+#: "ALL except HDE" makes the exclusion itself and is read as written.
+PREDATING_RACES = frozenset({"HDE"})
 RACE_ALIASES = {"VAH": "KER"}  # the wiki writes the Vah Shir as VAH; the catalog's code for them is KER (Kerran)
 STAT_KEYS = "AC STR STA AGI DEX WIS INT CHA HP MANA END ATK HASTE HPREG MANAREG ENDREG".split()
 SV_KEYS = "FIRE COLD MAGIC POISON DISEASE CORRUPTION".split()
@@ -409,6 +414,10 @@ _ORPHAN = re.compile(r"\s*(casting time|cast time|cooldown|recast delay|recast t
 _CHARGES_RE = re.compile(r"\bcharges?\b\s*:?\s*([0-9]{1,6})\b|\b([0-9]{1,6})\s+charges?\b", _ASCII)
 _REQUIRED_LEVEL_RE = re.compile(r"\brequired\s+level\b\s*:?\s*([0-9]{1,3})\b", _ASCII)
 _RESONANCE_LINE = re.compile(r"([A-Za-z]{2,20}) resonance\s*:?\s*([+-]?[0-9]{1,4})", _ASCII)
+# the stringed family has the one key the catalog gives it (from "String Resonance"), whatever the word a tooltip writes: a family has one key, so a reader that sums by kind does not split it
+_INSTRUMENT_FAMILY_KEYS = {"Stringed": "String"}
+# the same modifier in the other spelling a tooltip has: "Brass Instrument: 10" (a colon is needed: "Skill: Brass Instruments" is a weapon skill)
+_INSTRUMENT_LINE = re.compile(r"([A-Za-z]{2,20}) instruments?\s*:\s*([+-]?[0-9]{1,4})", _ASCII)
 _BONUS_LEVEL = re.compile(r"\s*@\s*lvl?\.?\s*[0-9]+\s*$", _ASCII)  # "34 @ lvl 50": the bonus at a level
 _LEVEL_SENTENCE = re.compile(r"(required|recommended) level(?: of)?\s*:?\s*([0-9]+)\s*\.?", _ASCII)
 _DEITY_WORD = re.compile(r"\b(?:deity|diety|deities|dieties)\b", _ASCII)
@@ -551,6 +560,8 @@ class _CodeList:
         chosen = everyone - self.codes if self.everyone and self.excluding else everyone if self.everyone else self.codes
         if chosen == everyone:
             return ["ALL"]
+        if self.where == "race" and not self.everyone and chosen == everyone - PREDATING_RACES:
+            return ["ALL"]  # a list of every race the page knew: it predates the newer ones (see PREDATING_RACES)
         return [code for code in self.universe if code in chosen]
 
 
@@ -676,7 +687,7 @@ class _Block:
         if _ORPHAN.match(line):
             self.continuation(line)  # no effect before it: a warning, never an error
             return
-        resonance = _RESONANCE_LINE.fullmatch(line)
+        resonance = _RESONANCE_LINE.fullmatch(line) or _INSTRUMENT_LINE.fullmatch(line)
         if resonance:
             self.resonance(resonance.group(1).capitalize(), resonance.group(2))
             return
@@ -916,6 +927,7 @@ class _Block:
 
     def resonance(self, kind: str, value: str) -> None:
         """``Wind Resonance: 12``: a bard instrument's modifier for one family of instruments."""
+        kind = _INSTRUMENT_FAMILY_KEYS.get(kind, kind)
         if not self.once("RESONANCE " + kind.upper()):
             return
         if len(self.instrument_mods) >= MAX_INSTRUMENT_MODS:

@@ -98,7 +98,7 @@ function parityTests(set, compositions) {
         checked += 1;
       }
     }
-    expect(checked).toBeGreaterThanOrEqual(3);
+    expect(checked).toBeGreaterThanOrEqual(2); // (the one bundle of the sample has two builds, the Tank and Melee damage: it had three roles with Balanced)
   });
 }
 
@@ -107,9 +107,9 @@ describeFull("the full set", (full) => {
   parityTests(full, 500);
 
   it("keeps the role's own regen weight to the last digit when its stored value is a rounded fraction", () => {
-    // Balanced of CLR/SHD/SHM has END = 17/60, which a double cannot hold: read as the decimal it prints as, 30 x END is a hair under 8.5
+    // Tank of CLR/SHD/SHM has END = 17/60, which a double cannot hold: read as the decimal it prints as, 30 x END is a hair under 8.5
     const rules = readBundle(full.read("profiles/clr-shd-shm-l50.bundle.json"));
-    const base = rules.roles.balanced.weights;
+    const base = rules.roles.tank.weights;
     expect(base.ENDREG).toBe(8.5);
     expect(Rational.fromNumber(base.END).mul(30).equals(Rational.fromNumber(base.ENDREG))).toBe(false);
     expect(weightsOverride(rules, base, { regenT: 3 }).ENDREG).toBe(base.ENDREG);
@@ -120,26 +120,26 @@ describeFull("the full set", (full) => {
 
 describe("the examples", () => {
   it("has the Tank weights of the bundle that the examples are written for", () => {
-    expect(BASE).toMatchObject({ AC: 6, ATK: 2, DMG: 1200, HASTE: 1.5, HP: 1, HPREG: 30, MANA: 0.5, MANAREG: 15, END: 0.5, ENDREG: 15, DEX: 0.1 });
+    expect(BASE).toMatchObject({ AC: 12, ATK: 2.67, DMG: 600.75, HASTE: 1.5, HP: 1, HPREG: 30, MANA: 0.15, MANAREG: 4.5, END: 0.5, ENDREG: 15, DEX: 0.1 });
   });
 
   it("scales a custom weight by its slider, and the damage weight follows the attack weight", () => {
-    // Tank: ATK 2 and DMG 600 x 2 = 1200. Custom ATK 3 under ATK+HASTE x2 is an ATK of 6, and 600 x 6 = 3600 of DMG
+    // Tank: ATK 2.67 and DMG 225 x 2.67 = 600.75. Custom ATK 3 under ATK+HASTE x2 is an ATK of 6, and 225 x 6 = 1350 of DMG
     const result = override(BASE, { "ATK+HASTE": 2 }, { ATK: 3 });
     expect(result.ATK).toBe(6);
-    expect(result.DMG).toBe(3600);
+    expect(result.DMG).toBe(1350);
     expect(result.HASTE).toBe(3); // the role's own 1.5, doubled
   });
 
   it("puts every part at once", () => {
     const result = override(BASE, { "ATK+HASTE": 2, AC: 0.5, regen: 2, SV: 0.5, MANA: 2 }, { ATK: 3, HP: 2 }, 60);
-    expect([result.ATK, result.HASTE, result.DMG]).toEqual([6, 3, 3600]);
-    expect([result.AC, result.MANA]).toEqual([3, 1]);
+    expect([result.ATK, result.HASTE, result.DMG]).toEqual([6, 3, 1350]);
+    expect([result.AC, result.MANA]).toEqual([6, 0.3]);
     for (const school of SCHOOLS) expect(result[`SV_${school}`]).toBe(0.2);
     expect([result.HP, result.DEX, result.END]).toEqual([2, BASE.DEX, BASE.END]);
     // regen: 10 x 60 x the weight in effect (the slider on MANA does not feed MANAREG), then the regen slider x2
     expect(result.HPREG).toBe(2400);
-    expect(result.MANAREG).toBe(600);
+    expect(result.MANAREG).toBe(180);
     expect(result.ENDREG).toBe(600);
   });
 
@@ -152,7 +152,7 @@ describe("the examples", () => {
 
   it("sets the value of a regen point to ten ticks a minute times the window", () => {
     const result = override(BASE, {}, {}, 1.5);
-    expect([result.HPREG, result.MANAREG, result.ENDREG]).toEqual([15, 7.5, 7.5]);
+    expect([result.HPREG, result.MANAREG, result.ENDREG]).toEqual([15, 2.25, 7.5]);
     for (const [name, value] of Object.entries(BASE)) if (!name.endsWith("REG")) expect(result[name], name).toBe(value);
     const none = override(BASE, {}, {}, 0);
     expect([none.HPREG, none.MANAREG, none.ENDREG]).toEqual([0, 0, 0]);
@@ -174,10 +174,10 @@ describe("the examples", () => {
     expect(override(noAttack, { "ATK+HASTE": 2 }, { ATK: 3 }).DMG).toBe(10);
   });
 
-  it("keeps, for a Balanced with a Caster in it, the ratio of its own damage to its attack weight", () => {
-    const balanced = { ATK: 53 / 30, DMG: 1000, HP: 1 };
-    const result = override(balanced, {}, { ATK: 2 });
-    const want = Rational.fromNumber(1000).mul(2).div(Rational.fromNumber(balanced.ATK)).toNumber();
+  it("keeps, for a Tank with a Caster in it, the ratio of its own damage to its attack weight", () => {
+    const tank = { ATK: 53 / 30, DMG: 1000, HP: 1 };
+    const result = override(tank, {}, { ATK: 2 });
+    const want = Rational.fromNumber(1000).mul(2).div(Rational.fromNumber(tank.ATK)).toNumber();
     expect(result.DMG).toBe(want);
     expect(result.DMG).toBeLessThan(600 * 2);
     expect(override({ ATK: 2, DMG: 1200 }, {}, { ATK: 4 }).DMG).toBe(2400);
@@ -433,7 +433,7 @@ describe("the rules of the bundle", () => {
     const rules = rulesWith((raw) => {
       raw.weight_groups.multipliers = ["1/1", "3/1"];
     });
-    expect(weightsOverride(rules, BASE, { multipliers: { AC: 3 } }).AC).toBe(18);
+    expect(weightsOverride(rules, BASE, { multipliers: { AC: 3 } }).AC).toBe(36);
     expect(() => weightsOverride(rules, BASE, { multipliers: { AC: 0.5 } })).toThrow(/multiplier/);
   });
 

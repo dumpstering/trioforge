@@ -73,6 +73,7 @@
 // Data hygiene (spec 8.5): lookups go through Map or objects without a prototype; a key such as __proto__ is refused; the
 // walk over plain data keeps its own stack and counts its depth and its nodes, so no input can exhaust the call stack.
 
+import { isPlainObject } from "./plain.js";
 import { Rational, RationalError } from "./rational.js";
 
 export const PROTOCOL_VERSION = 1;
@@ -102,6 +103,11 @@ export const LOADING_BEAT_MS = 1000;
  */
 export const STARTUP_STALL_MS = 20_000;
 export const STARTUP_COMPILE_MS = 60_000;
+/**
+ * A worker that has to download has said nothing at all to the page this long after its start: it reads the list of files (STARTUP_STALL_MS) and waits for the first byte (as long again) before
+ * its first report, so the page's limit comes after both and a margin, and is for a worker that never reports (its script did not run) and raised no error either.
+ */
+export const STARTUP_FIRST_SIGN_MS = 2 * STARTUP_STALL_MS + 5_000;
 
 /**
  * A worker that has worked before is asked whether it is still there before a request is posted to it: one that was stopped without a word (`self.close()`,
@@ -159,11 +165,7 @@ const badReply = (detail) => new ProtocolError("protocol", detail);
 
 // ---- plain data ---------------------------------------------------------------------------------------------------------------
 
-export function isPlainObject(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+export { isPlainObject };
 
 /**
  * The own entries of a plain object, read once each. An accessor, a hidden property or a symbol makes it something that is not plain
@@ -900,7 +902,7 @@ const nullOr = (value, test) => value === null || test(value);
 
 // ---- an answer: what Equip now, a step of the path and a best set have in common ------------------------------------------------
 
-/** The most percent of haste a profile can assume (the caps are 75 and 85; 1,000 is the size of a total of the shards). */
+/** The most percent of haste a profile can assume (the caps are the cap of the level, 75 at level 50 and 100 from level 60, and 10 more with a Monk; 1,000 is the size of a total of the shards). */
 const MAX_HASTE = 1000;
 /** The most experience and the most copies that reaching a tier costs: 2^10 - 1 from +0 to +10. */
 const MAX_EXPERIENCE = 1023;

@@ -5,6 +5,7 @@ The effects, donors and hosts are small and made up here, so each rule has a cas
 import pytest
 
 from trioforge.effects import judgment, plan
+from trioforge.effects import spells as sp
 from trioforge.effects.layer import Context
 
 J = judgment.default()
@@ -27,7 +28,7 @@ def context(effects, shares=None, classes=CLASSES):
     cov = {e["id"]: {c: {"share": shares.get(c, 0.0), "n": 1, "of": 1} for c in classes} for e in effects if e["kind"] == "focus"}
     return Context(
         J, effects, {e["id"]: e for e in effects}, cov, {c: {} for c in classes}, {c: {} for c in classes}, {c: 1.0 for c in classes}, {}, 1.0,
-        {c: False for c in classes}, {},
+        {c: False for c in classes}, {}, sp.SpellBook([], 50),
     )  # fmt: skip
 
 
@@ -39,7 +40,7 @@ def host(slots, classes=("ALL",)):
     return {"slots": list(slots), "classes": list(classes)}
 
 
-def place(options, kit, hosts, effects, tier=4, classes=CLASSES, role="balanced", shares=None):
+def place(options, kit, hosts, effects, tier=4, classes=CLASSES, role="tank", shares=None):
     return plan.plan_kit(options, kit, hosts, context(effects, shares, classes), classes, role, tier)
 
 
@@ -261,7 +262,7 @@ def test_a_mana_click_needs_a_class_that_casts():
     e = effect("m", "click", [donor("dm", ["NECK"])], category="mana")
     ctx = context([e], classes=("WAR", "MNK", "BER"))
     ctx.mass.update({"WAR": 0.0, "MNK": 0.0, "BER": 0.0})
-    result = plan.plan_kit({"click": [option("m")]}, [("NECK", "n")], {"n": host(["NECK"])}, ctx, ("WAR", "MNK", "BER"), "balanced", 4)
+    result = plan.plan_kit({"click": [option("m")]}, [("NECK", "n")], {"n": host(["NECK"])}, ctx, ("WAR", "MNK", "BER"), "tank", 4)
     assert noroom(result) == {("click", "m"): "class"}
 
 

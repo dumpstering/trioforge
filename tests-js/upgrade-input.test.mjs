@@ -699,7 +699,7 @@ describe("what the answers read", () => {
     expect(pairs[5]).toEqual(["w90001@4", 2]);
     const request = {
       v: 1, kind: "scenario", trio: "pal-mnk-ber", level: 50, mode: "equip-now",
-      scenario: { race: "OGR", role: "balanced", buffs: "own", evidence: "strict", setup: "dw" },
+      scenario: { race: "OGR", role: "tank", buffs: "own", evidence: "strict", setup: "dw" },
       owned: pairs, budgetMs: 5000,
     }; // fmt: skip
     expect(validateRequest(request).owned).toEqual(pairs);

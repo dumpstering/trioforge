@@ -109,7 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--catalog", type=Path, help="the item catalog (default $TRIOFORGE_CATALOG, then derived/catalog.json)")
     parser.add_argument("--plain", action="store_true", help="plain solves, no tie stage: faster, kits are not canonical")
     parser.add_argument("--races", type=_list(str.upper), help="narrow the grid to these races, e.g. OGR,TRL (a partial run)")
-    parser.add_argument("--roles", type=_list(str.lower), help="narrow the grid to these roles, e.g. balanced,melee (a partial run)")
+    parser.add_argument("--roles", type=_list(str.lower), help="narrow the grid to these roles, e.g. tank,melee (a partial run)")
     parser.add_argument(
         "--tiers", type=_list(_whole),
         help="the scope of the run, the tiers to precompute, e.g. 0,4,10 (default: 0,4,10; every tier, 0 to 10, for pal-mnk-ber); it must "

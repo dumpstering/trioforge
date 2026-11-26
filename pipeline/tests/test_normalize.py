@@ -66,7 +66,7 @@ FIXTURE_TITLES = [
 
 # Written out here on purpose, so these tests do not trust the constants they check.
 ALL_CLASSES = "WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER".split()
-ALL_RACES = "HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG".split()
+ALL_RACES = "HUM BAR ERU ELF HIE DEF HEF DWF TRL OGR HFL GNM IKS KER FRG HDE".split()
 FORBIDDEN_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Zl", "Zp"}
 
 
@@ -429,6 +429,20 @@ def test_class_lists_come_out_in_class_id_order(block):
 def test_every_class_listed_is_all():
     assert item_from("Class: " + " ".join(ALL_CLASSES))["classes"] == ["ALL"]
     assert item_from("Race: " + " ".join(ALL_RACES))["races"] == ["ALL"]
+
+
+def test_a_race_list_of_the_fifteen_older_races_is_all_because_such_a_page_predates_the_sixteenth():
+    """F7: with the Half Dark Elf in the race codes, a page written before the race that names every other race would no longer be ALL, and the new race could wear none of its items.
+    A list that holds every race but HDE is ALL (a rule with a note: the pages predate the race, and whether the item is usable by it in the game is unverified); the rest is as it was."""
+    older = [code for code in ALL_RACES if code != "HDE"]
+    assert len(older) == 15
+    assert item_from("Race: " + " ".join(older))["races"] == ["ALL"]
+    assert item_from("Race: " + ", ".join(reversed(older)))["races"] == ["ALL"]  # (in any order)
+    assert item_from("Race: " + " ".join(ALL_RACES))["races"] == ["ALL"]  # (all sixteen, as before)
+    assert item_from("Race: ALL except HDE")["races"] == older  # (an exclusion the page makes itself is not a gap of its time)
+    assert item_from("Race: " + " ".join(older[1:]))["races"] == older[1:]  # (fourteen of the fifteen is a list)
+    assert item_from("Race: HDE")["races"] == ["HDE"]
+    assert item_from("Class: " + " ".join(ALL_CLASSES[1:]))["classes"] == ALL_CLASSES[1:]  # (the rule is the races')
 
 
 def test_missing_class_and_race_lines_mean_all():
@@ -1593,9 +1607,56 @@ def test_instrument_resonance(line):
 
 def test_several_instrument_families_and_a_repeat():
     item = item_from(lines("Stringed Resonance: 10", "Brass Resonance: 15", "Brass Resonance: 3", "Percussion Resonance: 0"))
-    assert item["instrument_mods"] == {"Brass": 15, "Stringed": 10}  # zero omitted; first wins
-    assert list(item["instrument_mods"]) == ["Brass", "Stringed"]  # sorted by name
+    assert item["instrument_mods"] == {"Brass": 15, "String": 10}  # zero omitted; first wins; the stringed family has the one key String (the catalog's, from "String Resonance")
+    assert list(item["instrument_mods"]) == ["Brass", "String"]  # sorted by name
     assert warnings_of(item) == [("duplicate-key", "resonance_brass")]
+
+
+@pytest.mark.parametrize(
+    "line,mods",
+    [
+        ("Brass Instrument: 10", {"Brass": 10}),
+        ("Stringed Instrument: 10", {"String": 10}),
+        ("Wind Instrument: 5", {"Wind": 5}),
+        ("Percussion Instruments: 7", {"Percussion": 7}),
+        ("brass instrument: +12", {"Brass": 12}),
+        ("PERCUSSION INSTRUMENT:3", {"Percussion": 3}),
+    ],
+)
+def test_instrument_modifier_written_as_an_instrument_family(line, mods):
+    """``Brass Instrument: 10`` is the modifier that ``Brass Resonance: 10`` is (a tooltip of an item with such a line had it unparsed, and the item no modifier)."""
+    item = item_from(lines("Slot: SECONDARY", line, "WT: 0.1  Size: TINY"))
+    assert item["instrument_mods"] == mods
+    assert item["parse_warnings"] == [] and item["weight"] == 0.1
+
+
+def test_the_two_spellings_of_an_instrument_modifier_are_one_family_and_the_first_wins():
+    item = item_from(lines("Brass Resonance: 15", "Brass Instrument: 3", "Wind Instrument: 4"))
+    assert item["instrument_mods"] == {"Brass": 15, "Wind": 4}
+    assert warnings_of(item) == [("duplicate-key", "resonance_brass")]
+
+
+@pytest.mark.parametrize("line", ["Skill: Brass Instruments", "Brass Instrument", "Brass Instrument 10", "Brass Instrument: ten", "Brass Instrument: 10000"])
+def test_what_only_looks_like_an_instrument_modifier_is_not_one(line):
+    assert item_from(lines("Slot: SECONDARY", line))["instrument_mods"] == {}
+
+
+@pytest.mark.parametrize("line", ["String Resonance: 7", "Stringed Resonance: 7", "String Instrument: 7", "Stringed Instruments: 7", "stringed instrument: +7"])
+def test_the_stringed_family_has_one_key_whatever_the_spelling(line):
+    """The catalog keys the family String (from "String Resonance"); "Stringed Instrument: 10" was a second key for the same family."""
+    assert item_from(lines("Slot: SECONDARY", line))["instrument_mods"] == {"String": 7}
+
+
+def test_the_stringed_spellings_together_are_one_family_and_the_first_wins():
+    item = item_from(lines("String Resonance: 9", "Stringed Instrument: 3", "Stringed Resonance: 4"))
+    assert item["instrument_mods"] == {"String": 9}
+    assert warnings_of(item) == [("duplicate-key", "resonance_string")] * 2
+
+
+def test_the_keys_of_the_instrument_families_are_the_four_of_the_catalog_and_any_other_word_as_it_is_written():
+    item = item_from(lines("Wind Resonance: 1", "Brass Instrument: 2", "Percussion Resonance: 3", "Stringed Instrument: 4", "Singing Resonance: 5"))
+    assert list(item["instrument_mods"]) == ["Brass", "Percussion", "Singing", "String", "Wind"]
+    assert item["instrument_mods"] == {"Brass": 2, "Percussion": 3, "Singing": 5, "String": 4, "Wind": 1}
 
 
 def test_no_resonance_no_mods():

@@ -1,8 +1,8 @@
 {
  "format": 1,
  "kind": "tiers",
- "data_release": "data-2026-10-27",
- "rules_version": "2026-10-13",
+ "data_release": "data-2026-11-24",
+ "rules_version": "2026-11-19",
  "exp_needed": "2^N - 1",
  "modes": [
   {"rule":"drop","mode":"ready4","D":0,"N":null,"tier":4},

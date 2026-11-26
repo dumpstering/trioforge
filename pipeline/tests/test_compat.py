@@ -725,6 +725,7 @@ def test_the_default_options_of_the_builder_are_untouched():
     assert fields == {
         "any_rule": "all", "haste_assumed": None, "haste_floor": None, "haste_exact": False, "mutation": None, "legacy": None,
         "owned_caps": None, "new_keys": frozenset(), "max_new": None, "upgrades": None,  # the owned-item options: all off
+        "procs": None,  # the table of weapon procs: none unless a run gives one
     }
     prof = eval_profile(weights={"HP": 1})
     a = build_milp(prof, [item("h", {"HEAD"}, stats={"STA": 5})], "stick", None, BuildOptions())

@@ -3,7 +3,7 @@
 ::
 
     python -m trioforge.precompute --trio pal-mnk-ber --out build/results [--seen PATH] [--processes N] [--limit K]
-        [--tiers 0,4,10] [--races OGR,TRL] [--roles balanced] [--evidence wiki] [--buffs own] [--no-robustness]
+        [--tiers 0,4,10] [--races OGR,TRL] [--roles tank] [--evidence wiki] [--buffs own] [--no-robustness]
 
 :func:`run` is the same thing as a function. **The tiers are the scope of the run** (``--tiers``, default +0, +4 and +10, and every
 tier for the milestone trio PAL/MNK/BER: :func:`default_tiers`, in :mod:`trioforge.scope`): the grid of the run is every race, role, weapon setup,
@@ -18,7 +18,7 @@ so does ``--limit``: the result files are then marked ``partial``. It does five 
    ``build/`` or outside the repository; anything else is refused before a file is read).
 2. **Solve chunks.** The grid (:func:`trioforge.precompute.grid.scenarios`) is cut into chunks, one for each view
    (evidence, buffs, role, setup, tier). The weapon setups follow the pool of each evidence level, so a strict pool with no
-   shield has no ``1h-shield`` view and the strict shards hold fewer scenarios than the wiki ones (4,620 scenarios, not 5,280,
+   shield has no ``1h-shield`` view and the strict shards hold fewer scenarios than the wiki ones (2,970 scenarios, not 3,300,
    for PAL/MNK/BER while no shield is strict). Each chunk solves the races of its view in one worker process, with the pool
    pruned for each set of race-only items a race can wear, a canonical solve for each race, and the checks of
    :func:`trioforge.precompute.grid.solve_chunk`: the objective re-check (the model's value and the evaluator's must agree,
@@ -80,7 +80,8 @@ from typing import Any
 
 from trioforge.model import tables as tables_module
 from trioforge.model import weapons as wp
-from trioforge.model.roles import roles_for
+from trioforge.model.roles import ROLES, opening_role, roles_for
+from trioforge.oldresults import current_rules_version, stale
 from trioforge.precompute import engine, grid, kitwhy, shards
 from trioforge.scope import GRID_TIERS, MILESTONE_TRIO, default_tiers
 from trioforge.solver.solve import ExactnessError
@@ -88,8 +89,7 @@ from trioforge.solver.solve import ExactnessError
 __all__ = ["GRID_TIERS", "MILESTONE_TRIO", "PrecomputeError", "RunSummary", "default_tiers", "grids", "layout_facts", "run"]
 
 ROBUST_TIERS = (4, 10)  # the tiers the robustness labels are made for
-DEFAULT_ROLE = "balanced"  # the default view: the role, the tier, the evidence level (default_evidence) and own buffs
-DEFAULT_TIER = 4
+DEFAULT_TIER = 4  # the default view: the trio's opening build (trioforge.model.roles.opening_role), this tier, the evidence level (default_evidence) and own buffs
 PROGRESS_SECONDS = 5.0  # the most often a progress line is given
 
 
@@ -328,7 +328,7 @@ def run(
     canonical: bool = True, races: Sequence[str] | None = None, roles: Sequence[str] | None = None,
     tiers: Sequence[int] | None = None, evidence: Sequence[str] | None = None, buffs: Sequence[str] | None = None,
     tables_root: str | os.PathLike[str] | None = None, robustness: Callable[..., Any] | bool | None = None,
-    progress: Callable[[str], None] | None = None, code_hash: str | None = None,
+    progress: Callable[[str], None] | None = None, code_hash: str | None = None, procs: bool = True,
 ) -> RunSummary:
     """Solve the grid of ``trio`` and write the result files under ``<out_dir>/<trio slug>/`` (see the module docstring).
 
@@ -338,7 +338,8 @@ def run(
     ``canonical`` False uses the plain solve instead of the tie stage (faster, and not canonical). ``tiers`` is the scope of the run
     (:func:`default_tiers` when None); ``races``, ``roles``, ``evidence`` and ``buffs`` narrow the grid of it (the result files are then
     marked ``partial``). ``robustness`` is a hook, ``False`` or None (look for the module). ``code_hash`` is the hash of the code the chunks are made under for a
-    caller that has hashed the source files already (the release build does, once, at its start); None, as for the command line, hashes them now.
+    caller that has hashed the source files already (the release build does, once, at its start); None, as for the command line, hashes them now. ``procs`` False
+    asks for a run with no weapon procs in the score (a test of something else); by default the run needs ``derived/client/effect-spells.json`` and stops, naming it, without it.
     Raises :class:`PrecomputeError`."""
     from trioforge.data import catalog as catalog_module  # not at the top: a worker process imports this package too
 
@@ -358,20 +359,23 @@ def run(
     except ValueError as error:
         raise PrecomputeError(str(error)) from error
     slug = grid.trio_slug(codes)
+    refused = stale(slug, out / slug, current_rules_version(tables_root))
+    if refused:  # results of an earlier release (the Balanced build, which no longer exists) or of other rules: they are not resumed, half read or overwritten in part
+        raise PrecomputeError(refused + " (or remove this trio's folder first)")
     catalog_path = Path(catalog) if catalog is not None else grid.find_catalog()
     if catalog_path is None or not catalog_path.is_file():
         raise PrecomputeError("the item catalog was not found: build derived/catalog.json or set TRIOFORGE_CATALOG")
     try:
         config, meta = grid.load_inputs(
-            codes, catalog_path=catalog_path, seen_path=seen_path, tables_root=tables_root, canonical=canonical, code_hash=code_hash
+            codes, catalog_path=catalog_path, seen_path=seen_path, tables_root=tables_root, canonical=canonical, code_hash=code_hash, procs=procs
         )
         tables = tables_module.load(config.tables_root)
         rules = tables.rules
-        # the solve pool of each evidence level decides whether that level has the shield setup: a strict pool without a
-        # shield must not get a 1h-shield view that is solved with an empty off hand
-        shields = {kind: grid.shield_pool(config, rules, kind) for kind in grid.EVIDENCE}
+        # the solve pool of each evidence level decides whether that level has the shield setup and the bow setup: a strict pool without a
+        # shield must not get a 1h-shield view that is solved with an empty off hand, nor one without a bow a ranged view that has no bow to shoot
+        pools = {kind: grid.setup_pool(config, rules, kind) for kind in grid.EVIDENCE}
         full, plan = grids(
-            codes, tables, rules, tiers=tiers, races=races, roles=roles, evidence=evidence, buffs=buffs, items=shields
+            codes, tables, rules, tiers=tiers, races=races, roles=roles, evidence=evidence, buffs=buffs, items=pools
         )  # the grid of the scope, whole, and the part of it this run works: only a narrowing of the rest makes a run partial
     except (OSError, ValueError, catalog_module.BuildError) as error:
         raise PrecomputeError(str(error)) from error
@@ -391,7 +395,7 @@ def run(
     except (OSError, ValueError, catalog_module.BuildError) as error:
         raise PrecomputeError(str(error)) from error
     chunk_map = grid.chunks(plan)
-    order = grid.run_order(chunk_map, roles_for(codes))
+    order = grid.run_order(chunk_map, roles_for(codes, bow=None))  # (every role a grid can have: whether a pool offers the Ranged role is for the grid to say)
     place_in_run = {key: n for n, key in enumerate(order)}  # where each view stands: it decides which race the view audits
     selected = order if limit is None else order[: max(0, limit)]
     stopped = len(selected) < len(order)
@@ -458,22 +462,31 @@ def run(
         # -- what the result files need
         mark = time.perf_counter()
         ctx = grid.Context(config)
-        plan_roles = [role for role in roles_for(codes) if role in {s.role for s in plan}]
+        plan_roles = [role for role in roles_for(codes, bow=None) if role in {s.role for s in plan}]
         # the setups of each role at each evidence level (the levels can differ: see grid.scenarios), and of the levels
-        # together; always in the order of wp.SETUPS, which breaks a tie between two setups of equal value
+        # together; always in the order of wp.setup_order of the role, which breaks a tie between two setups of equal value
         level_setups = engine.level_setups(plan)
         layout_setups = {
-            role: sorted({setup for by_role in level_setups.values() for setup in by_role.get(role, ())}, key=wp.SETUPS.index)
+            role: sorted({setup for by_role in level_setups.values() for setup in by_role.get(role, ())}, key=wp.setup_order(role).index)
             for role in plan_roles
         }
         default_setups = level_setups.get(config.default_evidence, {})  # the answer, the runner-ups and the seals are of this level
+        # the build the page opens on, and so the default view: decided from the builds that have a setup at the evidence level of the default view, in the whole grid of the
+        # scope (not the narrowed one: a narrowed run has the opening build of the trio all the same). The Archer has none where the pool of that level has no bow.
+        full_default_setups = engine.level_setups(full).get(config.default_evidence, {})
+        opening = opening_role(codes, [role for role in ROLES if full_default_setups.get(role)])
         tier_list = sorted({s.tier for s in plan})
         # the files give the caps and the assumptions once, from one sample profile: that is right only while no race or role has
         # its own (test_the_caps_and_the_assumptions_are_one_set_... says so for the real tables), and the run stops if one has
-        sample = ctx.profile(plan[0].race, plan_roles[0], "own", config.default_evidence)
+        def profile_level(role: str) -> str:
+            """An evidence level at which the plan has ``role``: the default one when it has it (the Archer has no profile at a level whose pool has no bow)."""
+            levels = sorted(kind for kind, by_role in level_setups.items() if by_role.get(role))
+            return config.default_evidence if config.default_evidence in levels else levels[0]
+
+        sample = ctx.profile(plan[0].race, plan_roles[0], "own", profile_level(plan_roles[0]))
         caps, assumptions = layout_facts(sample)
         for race, role in sorted({(s.race, s.role) for s in plan}):
-            if layout_facts(ctx.profile(race, role, "own", config.default_evidence)) != (caps, assumptions):
+            if layout_facts(ctx.profile(race, role, "own", profile_level(role))) != (caps, assumptions):
                 raise PrecomputeError(
                     f"the caps and assumptions of the result files are one set for the whole trio, but {race} {role} has other ones than "
                     f"{plan[0].race} {plan_roles[0]}, which they were taken from"
@@ -552,17 +565,18 @@ def run(
 
     # -- defaults, robustness and the files
     mark = time.perf_counter()
+    close_pct = rules.get("defaults.race_close_pct")
     out_docs: dict[str, Mapping[str, Any]] = {}
     for kind in sorted({s.evidence for s in plan}):
         for buff_set in sorted({s.buffs for s in plan if s.evidence == kind}):
             out_docs[f"{kind}-{buff_set}.json"] = shards.shard_doc(layout, kind, buff_set, docs, bases)
     out_docs.update(shards.runnerup_texts(layout, ru_docs))  # one file for each role (every tier of the scope in it), and an index
-    default_best = _best_setups(docs, config.default_evidence, "own", DEFAULT_ROLE, DEFAULT_TIER, default_setups.get(DEFAULT_ROLE, ()))
+    default_best = _best_setups(docs, config.default_evidence, "own", opening, DEFAULT_TIER, default_setups.get(opening, ()))
     flips: list[str] = []
     if default_best:
         per_race = {race: (value, setup) for race, (value, setup, _) in default_best.items()}
         choice = shards.default_race(
-            {race: value for race, (value, _) in per_race.items()}, layout.legal_races(), [c for c, _ in layout.races]
+            {race: value for race, (value, _) in per_race.items()}, layout.legal_races(), [c for c, _ in layout.races], close_pct
         )
         hook, why = _find_robustness(robustness)
         status = f"skipped: {why}" if hook is None else "skipped: no creation-legal race in the grid"
@@ -589,10 +603,10 @@ def run(
             try:
                 flips = seals.flip_notes(
                     seals.flip_variants(
-                        ctx, role=DEFAULT_ROLE, tier=DEFAULT_TIER, evidence=config.default_evidence,
-                        setups=default_setups[DEFAULT_ROLE], races=[code for code, ok in layout.races if ok and code in per_race],
+                        ctx, role=opening, tier=DEFAULT_TIER, evidence=config.default_evidence,
+                        setups=default_setups[opening], races=[code for code, ok in layout.races if ok and code in per_race],
                     ),
-                    {race: value for race, (value, _) in per_race.items()}, choice["race"], layout.legal_races(), [code for code, _ in layout.races],
+                    {race: value for race, (value, _) in per_race.items()}, choice["race"], layout.legal_races(), [code for code, _ in layout.races], close_pct,
                 )  # fmt: skip
             except Exception as error:
                 raise PrecomputeError(f"the flip check of the best race failed: {type(error).__name__}: {error}") from error
@@ -609,16 +623,16 @@ def run(
             sealed = time.perf_counter()
             _, best_setup, best_row = default_best[choice["race"]]
             try:
-                why = kitwhy.default_why(ctx, choice["race"], DEFAULT_ROLE, DEFAULT_TIER, best_setup, best_row)
+                why = kitwhy.default_why(ctx, choice["race"], opening, DEFAULT_TIER, best_setup, best_row)
             except Exception as error:
                 raise PrecomputeError(f"the why of the default kit failed: {type(error).__name__}: {error}") from error
             summary.phases["why"] = time.perf_counter() - sealed
         out_docs["defaults.json"] = shards.defaults_doc(
-            layout, view={"role": DEFAULT_ROLE, "tier": DEFAULT_TIER, "evidence": config.default_evidence, "buffs": "own"},
-            per_race=per_race, strict_empty=meta.pool_sizes["strict"] == 0, robustness=status, flip_notes=flips, why=why,
+            layout, view={"role": opening, "tier": DEFAULT_TIER, "evidence": config.default_evidence, "buffs": "own"},
+            per_race=per_race, strict_empty=meta.pool_sizes["strict"] == 0, robustness=status, flip_notes=flips, why=why, close_pct=close_pct,
         )
     else:
-        summary.notes.append(f"defaults skipped: the grid has no balanced, +{DEFAULT_TIER}, {config.default_evidence}, own-buffs view")
+        summary.notes.append(f"defaults skipped: the grid has no {opening} (the opening build), +{DEFAULT_TIER}, {config.default_evidence}, own-buffs view")
     if engine_texts.bundle is not None:
         out_docs[shards.engine_name(config.level)] = engine_texts.bundle
     summary.violations.extend(engine_texts.problems)

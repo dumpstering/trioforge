@@ -192,7 +192,7 @@ describe("the lines under the places of Wear this", () => {
   it("say which effect goes on the item, from which donor, how hard the donor is to get, and what to level", async () => {
     await shown();
     // the Back place: a click effect from a donor that has to be upgraded too
-    expect(hints("BACK")).toEqual(["Exalt: Alacrity (click, +2) from Harrowgate Shawl (Quest or crafted); level both to +2"]);
+    expect(hints("BACK")).toEqual(["Exalt: Superior Healing (click, +2) from Mossgrey Wrap (Vendor); level both to +2"]);
     // the Head: a donor that needs no tier
     expect(hints("HEAD")).toEqual(["Exalt: Spell Haste II (focus, +1) from Crown of the Vanguard (Vendor); level this item to +1"]);
     // the Neck: a donor that needs the tier too
@@ -219,11 +219,11 @@ describe("the lines under the places of Wear this", () => {
 
   it("say nothing when the effect is already on the item", async () => {
     await shown();
-    const onItem = EXALT.roles.balanced.plan.filter((row) => row.d === row.h);
+    const onItem = EXALT.roles.tank.plan.filter((row) => row.d === row.h);
     expect(onItem.length).toBeGreaterThan(3);
     for (const row of onItem) expect(hints(row.p).join(" ")).not.toContain(effectName.get(row.e));
     expect(hints("EAR1")).toEqual([]);
-    expect(allHints()).toHaveLength(EXALT.roles.balanced.plan.filter((row) => row.d !== row.h).length);
+    expect(allHints()).toHaveLength(EXALT.roles.tank.plan.filter((row) => row.d !== row.h).length);
   });
 
   it("are marked as secondary: a block of their own in the cell, readable in reading order, each with a link to the plan", async () => {
@@ -232,7 +232,7 @@ describe("the lines under the places of Wear this", () => {
     const link = line.querySelector("a.exalt-hint-plan");
     expect(link).not.toBeNull();
     expect(link.textContent).toBe("In the plan");
-    expect(link.getAttribute("aria-label")).toContain("Alacrity");
+    expect(link.getAttribute("aria-label")).toContain("Superior Healing");
     expect(link.getAttribute("href")).toMatch(/^#exalt/);
     expect(line.querySelectorAll("[aria-hidden]")).toHaveLength(0);
     expect(lineText(line).startsWith("Exalt: ")).toBe(true);
@@ -253,7 +253,7 @@ describe("the lines under the places of Wear this", () => {
     expect($("#exalt").open).toBe(true);
     await waitFor(() => expect(document.activeElement?.id).toBe(link.getAttribute("href").slice(1)));
     const target = document.activeElement;
-    expect(target.textContent).toContain("Alacrity");
+    expect(target.textContent).toContain("Superior Healing");
     expect(target.closest("#exalt-plan-table")).not.toBeNull();
   });
 });
@@ -271,10 +271,10 @@ describe("the lines follow the kit that is drawn", () => {
 
   it("change with the role: the plan of the other role, from the file", async () => {
     await shown();
-    chooseRole("tank");
-    await waitFor(() => expect(hints("BACK")).toEqual(["Exalt: Superior Healing (click, +2) from Mossgrey Wrap (Vendor); level both to +2"]));
-    const tank = EXALT.roles.tank.plan.filter((row) => row.d !== row.h);
-    expect(allHints()).toHaveLength(tank.length);
+    chooseRole("melee");
+    await waitFor(() => expect(hints("BACK")).toEqual(["Exalt: Alacrity (click, +2) from Harrowgate Shawl (Quest or crafted); level both to +2"]));
+    const melee = EXALT.roles.melee.plan.filter((row) => row.d !== row.h);
+    expect(allHints()).toHaveLength(melee.length);
   });
 
   it("are the matcher's lines for the kit of another tier, read from the item list once, and gone at a tier where no socket is open", async () => {
@@ -286,14 +286,14 @@ describe("the lines follow the kit that is drawn", () => {
     change("#sw-tier", "10");
     await waitFor(() => (runIdle(), expect(allHints().length).toBeGreaterThan(0)));
     const shard = read(resolve(CONTRACT, "data/strict-own.json"));
-    const row = shard.rows.find((r) => r[0] === "OGR" && r[1] === "balanced" && r[2] === 10 && r[3] === app.shown.scenario.setup);
+    const row = shard.rows.find((r) => r[0] === "OGR" && r[1] === "tank" && r[2] === 10 && r[3] === app.shown.scenario.setup);
     const kit = shard.kits[row[4]].map((index, place) => (index < 0 ? null : { place: PLACES[place], key: shard.items[index][0] })).filter(Boolean);
-    const want = matched("balanced", kit, 10).rows.filter((r) => r.d !== r.h);
+    const want = matched("tank", kit, 10).rows.filter((r) => r.d !== r.h);
     expect(want.length).toBeGreaterThan(0);
     expect(allHints().map((node) => node.querySelector(".exalt-eff button").textContent).sort()).toEqual(want.map((r) => effectName.get(r.e)).sort());
     for (const r of want) expect(hints(r.p).some((text) => text.includes(effectName.get(r.e)))).toBe(true);
     change("#sw-tier", "4");
-    await waitFor(() => (runIdle(), expect(hints("BACK")).toEqual(["Exalt: Alacrity (click, +2) from Harrowgate Shawl (Quest or crafted); level both to +2"])));
+    await waitFor(() => (runIdle(), expect(hints("BACK")).toEqual(["Exalt: Superior Healing (click, +2) from Mossgrey Wrap (Vendor); level both to +2"])));
     expect(calls.filter((c) => c === ITEM_PATH)).toHaveLength(1);
   });
 
@@ -336,11 +336,11 @@ describe("the lines follow the kit that is drawn", () => {
 
   it("are not there for a role the file has no plan for", async () => {
     const odd = structuredClone(EXALT);
-    delete odd.roles.tank;
+    delete odd.roles.melee;
     await shown({ effects: odd });
-    chooseRole("tank");
+    chooseRole("melee");
     await waitFor(() => expect(allHints()).toHaveLength(0));
-    chooseRole("balanced");
+    chooseRole("tank");
     await waitFor(() => expect(allHints().length).toBeGreaterThan(0));
   });
 
@@ -352,9 +352,9 @@ describe("the lines follow the kit that is drawn", () => {
     await made.app.whenIdle();
     await waitFor(() => expect(made.app.exaltShown.kit).not.toBeNull());
     const shard = read(resolve(CONTRACT, "data/strict-own.json"));
-    const row = shard.rows.find((r) => r[0] === "TRL" && r[1] === "balanced" && r[2] === 4 && r[3] === made.app.shown.scenario.setup);
+    const row = shard.rows.find((r) => r[0] === "TRL" && r[1] === "tank" && r[2] === 4 && r[3] === made.app.shown.scenario.setup);
     const kit = shard.kits[row[4]].map((index, place) => (index < 0 ? null : { place: PLACES[place], key: shard.items[index][0] })).filter(Boolean);
-    const want = matched("balanced", kit, 4).rows.filter((r) => r.d !== r.h);
+    const want = matched("tank", kit, 4).rows.filter((r) => r.d !== r.h);
     await waitFor(() => (runIdle(), expect(allHints()).toHaveLength(want.length)));
   });
 });
@@ -414,7 +414,7 @@ describe("the donor items to farm", () => {
     expect(donorsOf()).toEqual([
       "Crown of the Vanguard: Vendor, no level needed",
       "Mantle of the Faithful: Raid drop, no level needed",
-      "Harrowgate Shawl: Quest or crafted, needs +2",
+      "Mossgrey Wrap: Vendor, needs +2",
       "Pauldrons of the Vanguard: Drop, no level needed",
       "Choker of Seven Pebbles: Quest or crafted, needs +3",
       "Breastplate of Warding: Drop, no level needed",
@@ -428,7 +428,7 @@ describe("the donor items to farm", () => {
 
   it("has no duplicates and skips a donor that is in the kit, even when it is not the host", async () => {
     const odd = structuredClone(EXALT);
-    const plan = odd.roles.balanced.plan;
+    const plan = odd.roles.tank.plan;
     plan[1].d = plan[0].d; // (one donor for two effects: listed once)
     plan[2].d = "w80712"; // (an item that is in the kit, on another place than the host: not to be farmed)
     await shown({ effects: odd });
@@ -442,15 +442,15 @@ describe("the donor items to farm", () => {
 
   it("asks for the highest tier a donor needs when it serves two effects", async () => {
     const odd = structuredClone(EXALT);
-    const plan = odd.roles.balanced.plan;
+    const plan = odd.roles.tank.plan;
     const shawl = plan.find((row) => row.k === "click" && row.u === 1);
     const other = plan.find((row) => row.k === "click" && row.u === 0); // (after the shawl's row in the plan)
     other.d = shawl.d;
     other.u = 0;
     await shown({ effects: odd });
     await openSection();
-    const lines = donorsOf().filter((text) => text.startsWith("Harrowgate Shawl"));
-    expect(lines).toEqual(["Harrowgate Shawl: Quest or crafted, needs +2"]);
+    const lines = donorsOf().filter((text) => text.startsWith("Mossgrey Wrap"));
+    expect(lines).toEqual(["Mossgrey Wrap: Vendor, needs +2"]);
   });
 });
 
@@ -506,7 +506,7 @@ describe("the description of an effect", () => {
   it("is on every effect name of the table of the plan, in the cell of the effect, and the name stays the text of its own element", async () => {
     await plan();
     const rows = [...document.querySelectorAll("#exalt-plan-table tbody tr")];
-    expect(rows).toHaveLength(EXALT.roles.balanced.plan.length);
+    expect(rows).toHaveLength(EXALT.roles.tank.plan.length);
     for (const row of rows) {
       const wrap = eff(row.cells[1]);
       expect(wrap).not.toBeNull();
@@ -522,9 +522,9 @@ describe("the description of an effect", () => {
   it("is on the effects of the no-room line", async () => {
     await plan();
     const wraps = [...document.querySelectorAll("#exalt-noroom .exalt-eff")];
-    expect(wraps).toHaveLength(EXALT.roles.balanced.noroom.length);
+    expect(wraps).toHaveLength(EXALT.roles.tank.noroom.length);
     wraps.forEach((wrap, index) => {
-      const effect = EFFECTS.effects.find((e) => e.id === EXALT.roles.balanced.noroom[index].e);
+      const effect = EFFECTS.effects.find((e) => e.id === EXALT.roles.tank.noroom[index].e);
       expect(button(wrap).textContent).toBe(effect.n);
       expect(tip(wrap).querySelector(".exalt-tip-text").textContent).toBe(describeEffect(effect));
     });
@@ -622,8 +622,8 @@ describe("the description of an effect", () => {
     const wrap = eff(ROW("BACK").querySelector(".exalt-hint"));
     enter(wrap);
     expect(document.documentElement.classList.contains("exalt-tip-open")).toBe(true);
-    chooseRole("tank");
-    await waitFor(() => expect(hints("BACK")[0]).toContain("Superior Healing"));
+    chooseRole("melee");
+    await waitFor(() => expect(hints("BACK")[0]).toContain("Alacrity"));
     expect(wrap.isConnected).toBe(false);
     expect(document.documentElement.classList.contains("exalt-tip-open")).toBe(false);
     // and when the lines go away for good (a tier with no open socket)
@@ -638,8 +638,8 @@ describe("the description of an effect", () => {
   it("starts closed on a line drawn again for a new kit", async () => {
     await shown();
     button(eff(ROW("BACK").querySelector(".exalt-hint"))).click();
-    chooseRole("tank");
-    await waitFor(() => expect(hints("BACK")[0]).toContain("Superior Healing"));
+    chooseRole("melee");
+    await waitFor(() => expect(hints("BACK")[0]).toContain("Alacrity"));
     expect(tip(eff(ROW("BACK").querySelector(".exalt-hint"))).hidden).toBe(true);
   });
 });
@@ -716,7 +716,7 @@ describe("the link of a line when the section shows another kit", () => {
     const { app } = await shown();
     await openSection();
     const records = new Map(ITEMS.items.map((record) => [record.key ?? `w${record.id}`, record]));
-    const hosts = [...new Set(EXALT.roles.balanced.plan.map((row) => row.h))];
+    const hosts = [...new Set(EXALT.roles.tank.plan.map((row) => row.h))];
     const kit = Array.from({ length: 22 }, () => null);
     hosts.forEach((key, index) => (kit[index] = { key, name: `Mine ${index}`, tier: 4 }));
     app.setEquipKit({ kit, record: (key) => records.get(key) ?? null, defaults: ITEMS.defaults });
@@ -729,7 +729,7 @@ describe("the link of a line when the section shows another kit", () => {
     expect($('input[name="exalt-source"][value="wear"]').checked).toBe(true);
     await waitFor(() => expect(document.activeElement?.id).toBe(link.getAttribute("href").slice(1)));
     expect(document.activeElement.closest("#exalt-plan-table")).not.toBeNull();
-    expect(document.activeElement.textContent).toContain("Alacrity");
+    expect(document.activeElement.textContent).toContain("Superior Healing");
   });
 });
 
@@ -737,7 +737,7 @@ describe("the donor list when the item table could not be had", () => {
   it("is made against the kit the plan on show was made for, not the kit the visitor changed to", async () => {
     // the plan of the file (default kit) names an item as a donor that is not in the default kit but is in the kit the visitor changed to (the tier 10 kit has w90033)
     const odd = structuredClone(EXALT);
-    odd.roles.balanced.plan[1].d = "w90033";
+    odd.roles.tank.plan[1].d = "w90033";
     const { app } = await shown({ effects: odd, behaviour: { "/engine-manifest.json": "offline" } });
     await openSection();
     change("#sw-tier", "10");

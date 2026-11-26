@@ -764,8 +764,8 @@ describe("Every slot", () => {
     const idents = (row) => row.swaps.map((swap) => swap.ident);
 
     it("an owned item that is not worn and beats the worn one in its place is a swap with a gain: the +10 chest piece over the +4 one", async () => {
-      // (since Natural Durability the best kit wears the +4 chest piece in the chest place and the +10 one in the Any place 18, where it used to wear w80758@4: the visitor here wears those two and carries the +10 one)
-      expect(C0.kit[18]).toBe("w90029@10");
+      // (the visitor here wears the +4 chest piece in the chest place and the shield in the Any place 18, and carries the +10 chest piece, which the best kit of the case wears in the chest place)
+      expect(C0.kit.filter((name) => name === "w90029@10")).toHaveLength(1); // (the best kit of the case wears the +10 chest piece once: in the chest place 13 while the Monk bonus sat on top of the cap, in the Any place 18 now that it is inside it)
       const rows = await rowsOf(slots(C0, { kit: wearing({ 13: "w90029@4", 18: "w80758@4" }), limit: 10 }));
       expect(rows[13].current).toBe("w90029@4");
       const offer = rows[13].swaps.find((swap) => swap.ident === "w90029@10");
@@ -791,9 +791,9 @@ describe("Every slot", () => {
     it("an item that is owned and is a candidate at that tier is one swap, not two", async () => {
       const rows = await rowsOf(slots(C0, { limit: 10 }));
       for (const row of rows) expect(new Set(idents(row)).size, `place ${row.index}`).toBe(row.swaps.length);
-      expect(C0.owned.some(([name]) => name === "w90001@4")).toBe(true);
-      expect(C0.kit[0]).not.toBe("w90001@4"); // (C0 wears another helm now: this one is owned, not worn, and a ready4 candidate)
-      expect(idents(rows[0]).filter((name) => name === "w90001@4")).toHaveLength(1); // owned, and a ready4 candidate
+      expect(C0.owned.some(([name]) => name === "w90020@4")).toBe(true);
+      expect(C0.kit[8]).not.toBe("w90020@4"); // (C0 wears another bracer in the first wrist place: this one is owned, not worn, and a ready4 candidate)
+      expect(idents(rows[8]).filter((name) => name === "w90020@4")).toHaveLength(1); // owned, and a ready4 candidate
     });
 
     it("a hidden record the visitor owns is offered, though no search would offer it, while a copy of it is free", async () => {

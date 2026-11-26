@@ -26,7 +26,7 @@ const CASES = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/equip-now.jso
 const KIT_VALUES = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/kit-values.json"), "utf8"));
 const KITS = KIT_VALUES.kits;
 
-const AS_OF_THE_PAGE = { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki" };
+const AS_OF_THE_PAGE = { race: "OGR", role: "tank", buffs: "own", evidence: "wiki" };
 /** The heavy tests (every legal choice of buffs, the reference kits under every buff set) take 2.5 s alone and 5.4 to 6.0 s in a loaded full run, and vitest gives a test 5 s. */
 const HEAVY = 30_000;
 
@@ -53,11 +53,11 @@ const SECONDARY = 21;
 
 describe("a kit that Python's reference valued", () => {
   const rows = KIT_VALUES.values.map((row) => [`${KITS[row.kit].name} / ${row.role} / ${row.buffs}`, row]);
-  it("has values of 6 kits under the four buff sets and the three roles of the bundle", () => {
-    expect(KITS).toHaveLength(6);
+  it("has values of 8 kits under the four buff sets, their haste twins, and the two builds of the bundle", () => {
+    expect(KITS).toHaveLength(8);
     expect(KIT_VALUES.values.length).toBeGreaterThanOrEqual(60);
-    expect(new Set(KIT_VALUES.values.map((row) => row.buffs))).toEqual(new Set(["own", "group", "group+enchanter", "raid"]));
-    expect(new Set(KIT_VALUES.values.map((row) => row.role))).toEqual(new Set(["balanced", "tank", "melee"]));
+    expect(new Set(KIT_VALUES.values.map((row) => row.buffs))).toEqual(new Set(["own", "group", "group+enchanter", "raid", "own+haste", "group+haste", "group+enchanter+haste", "raid+haste"]));
+    expect(new Set(KIT_VALUES.values.map((row) => row.role))).toEqual(new Set(["tank", "melee"]));
   });
 
   it.each(rows)("is worth what the reference says, exactly, with the setup of its hands and the haste of the model's rule: %s", (_, row) => {
@@ -77,8 +77,8 @@ describe("the value follows the view, and nothing else", () => {
   it("changes with the role, the buffs and the race", () => {
     const base = run();
     const melee = run({ role: "melee" });
-    const tank = run({ role: "tank" });
-    expect(new Set([base.value, melee.value, tank.value]).size).toBe(3);
+    expect(run({ role: "tank" })).toEqual(base); // (the page's build is the Tank)
+    expect(melee.value).not.toBe(base.value);
     expect(run({ buffs: "group" }).value).toBeGreaterThan(base.value); // (a group has more to offer than one's own buffs)
     expect(run({ race: "HUM" }).value).not.toBe(run({ race: "OGR" }).value);
   });
@@ -227,57 +227,67 @@ describe("the haste the weapons are scored at", () => {
   const places = (key, tier = 0) => [{ slotIndex: 2, key, tier }];
   const hasteOf = (records, list, over) => valueOfKit({ bundle, records, ...AS_OF_THE_PAGE, ...over, places: list }).hasteAssumed;
   const spell = (buffs) => bundle.buffs[buffs].spell_haste;
+  const BASE_SETS = ["own", "group", "group+enchanter", "raid"];
+  const TWIN_SETS = BASE_SETS.map((key) => `${key}+haste`);
 
   it("is the spell haste of the buffs the value counts when the kit wears no haste: the best of the haste buffs it takes, with the 10 of the Monk's Unbound Alacrity", () => {
     const bonus = bundle.profile_common.haste_bonus;
-    for (const buffs of ["own", "group", "group+enchanter", "raid"]) {
+    for (const buffs of [...BASE_SETS, ...TWIN_SETS]) {
       const answer = run({ buffs, places: [] });
-      const { set, table: spells } = { set: bundle.buffs[buffs].set, table: bundle.buff_table };
+      const { set, table: spells } = { set: bundle.buffs[buffs].set, table: buffs.endsWith("+haste") ? bundle.buff_table_haste : bundle.buff_table };
       const taken = [...set.always_on, ...answer.buffs].map((id) => spells[String(id)].vec.HASTE ?? 0);
       expect(answer.hasteAssumed, buffs).toBe(Math.min(bundle.profile_common.haste_cap, Math.max(0, ...taken) + bonus));
-      expect(answer.hasteAssumed, buffs).toBeLessThanOrEqual(spell(buffs)); // (never more than the best spell haste on offer: what the fixture's bundle says is 25, 40, 60 and 60 and the 10 of the Monk)
+      expect(answer.hasteAssumed, buffs).toBeLessThanOrEqual(spell(buffs)); // (never more than the best spell haste on offer)
     }
-    expect([35, 50, 70, 70]).toEqual(["own", "group", "group+enchanter", "raid"].map(spell));
+    // the sets of the rule carry no spell haste: the 10 of the Monk's Unbound Alacrity alone; their twins keep the 25, 40, 60 and 60 of the spells (and the 10)
+    expect(BASE_SETS.map(spell)).toEqual([10, 10, 10, 10]);
+    expect(TWIN_SETS.map(spell)).toEqual([35, 50, 70, 70]);
+  });
+
+  it("is the haste of the kit and the Monk's 10 and nothing more under the sets of the rule: a haste spell is something the reader says they have", () => {
+    const records = tableWith(hoop);
+    for (const buffs of BASE_SETS) expect(hasteOf(records, places("w90703"), { buffs }), buffs).toBe(10 + 30);
+    for (const buffs of BASE_SETS) expect(hasteOf(records, [], { buffs }), buffs).toBe(10);
   });
 
   it("adds the best worn haste of the items the value counts", () => {
     const records = tableWith(hoop);
-    expect(hasteOf(records, places("w90703"), { buffs: "own" })).toBe(35 + 30);
-    expect(hasteOf(records, places("w90703"), { buffs: "group" })).toBe(50 + 30);
-    expect(hasteOf(records, [...places("w90703"), { slotIndex: 3, key: "w90008", tier: 0 }], { buffs: "own" }), "the best one counts, not the sum").toBe(35 + 30);
+    expect(hasteOf(records, places("w90703"), { buffs: "own+haste" })).toBe(35 + 30);
+    expect(hasteOf(records, places("w90703"), { buffs: "group+haste" })).toBe(50 + 30);
+    expect(hasteOf(records, [...places("w90703"), { slotIndex: 3, key: "w90008", tier: 0 }], { buffs: "own+haste" }), "the best one counts, not the sum").toBe(35 + 30);
     const read = readBundle(structuredClone(bundle));
     const worn = atTier(table.records.get("w90008"), 4, read).haste;
     expect(worn).toBeGreaterThan(15); // (a hoop of haste is scored by its tier)
-    expect(hasteOf(table.records, [{ slotIndex: 2, key: "w90008", tier: 4 }], { buffs: "own" })).toBe(35 + worn);
+    expect(hasteOf(table.records, [{ slotIndex: 2, key: "w90008", tier: 4 }], { buffs: "own+haste" })).toBe(35 + worn);
   });
 
   it("stops at the cap of the bundle", () => {
     const records = tableWith(swift);
     expect(bundle.profile_common.haste_cap).toBe(85);
-    expect(hasteOf(records, places("w90705"), { buffs: "own" })).toBe(85);
-    expect(hasteOf(records, places("w90705"), { buffs: "raid" })).toBe(85);
+    expect(hasteOf(records, places("w90705"), { buffs: "own+haste" })).toBe(85);
+    expect(hasteOf(records, places("w90705"), { buffs: "raid+haste" })).toBe(85);
   });
 
   it("does not count an item the value leaves out: one the trio cannot use, one in a place it does not fit, one the table does not have", () => {
     const records = tableWith(hoop, wizard);
-    expect(hasteOf(records, places("w90704"), { buffs: "own" })).toBe(35);
-    expect(hasteOf(records, [{ slotIndex: 0, key: "w90703", tier: 0 }], { buffs: "own" }), "an ear piece in the head place").toBe(35);
-    expect(hasteOf(records, places("w99999"), { buffs: "own" })).toBe(35);
-    expect(hasteOf(records, [...places("w90703"), { slotIndex: 0, key: "w90704", tier: 0 }], { buffs: "own" })).toBe(65);
+    expect(hasteOf(records, places("w90704"), { buffs: "own+haste" })).toBe(35);
+    expect(hasteOf(records, [{ slotIndex: 0, key: "w90703", tier: 0 }], { buffs: "own+haste" }), "an ear piece in the head place").toBe(35);
+    expect(hasteOf(records, places("w99999"), { buffs: "own+haste" })).toBe(35);
+    expect(hasteOf(records, [...places("w90703"), { slotIndex: 0, key: "w90704", tier: 0 }], { buffs: "own+haste" })).toBe(65);
   });
 
   it("is the haste the value is worked out at: the evaluator's value for the kit at that haste, with the setup and the buffs of the answer, is the answer's", () => {
     const records = tableWith(hoop);
     const worn = placesOf(CASES[0].kit).map((place) => (place.slotIndex === 3 ? { slotIndex: 3, key: "w90703", tier: 0 } : place));
-    const answer = valueOfKit({ bundle, records, ...AS_OF_THE_PAGE, places: worn });
+    const answer = valueOfKit({ bundle, records, ...AS_OF_THE_PAGE, buffs: "own+haste", places: worn });
     expect(answer.hasteAssumed).toBe(35 + 30);
     const read = readBundle(structuredClone(bundle));
-    const profile = assembleProfile(read, AS_OF_THE_PAGE);
+    const profile = assembleProfile(read, { ...AS_OF_THE_PAGE, buffs: "own+haste" });
     const kit = Array.from({ length: 22 }, (_, index) => {
       const place = worn.find((one) => one.slotIndex === index);
       return place === undefined ? null : atTier(records.get(place.key), place.tier, read);
     });
-    const direct = evaluate(profile, kit, answer.buffs, { setup: answer.setup, hasteAssumed: answer.hasteAssumed, monkBins: read.monk_bins ?? undefined, buffset: { set: read.buffs.own.set, table: read.buff_table } });
+    const direct = evaluate(profile, kit, answer.buffs, { setup: answer.setup, hasteAssumed: answer.hasteAssumed, monkBins: read.monk_bins ?? undefined, buffset: { set: read.buffs["own+haste"].set, table: read.buff_table_haste } });
     expect(answer.F).toBe(direct.F.toString());
     expect(Number.isInteger(answer.hasteAssumed)).toBe(true);
   });
@@ -310,7 +320,7 @@ describe("the optional buffs", () => {
     }
   });
 
-  it("are the best set there is for the kit: none of the (19 choose 15) and fewer choices of the group set is worth more", () => {
+  it("are the best set there is for the kit: none of the (18 choose 15) and fewer choices of the group set is worth more", () => {
     const read = readBundle(structuredClone(bundle));
     const profile = assembleProfile(read, { ...view, buffs: "group" });
     const items = kit.map((ident) => (ident === null ? null : atTier(table.records.get(ident.slice(0, ident.lastIndexOf("@"))), Number(ident.slice(ident.lastIndexOf("@") + 1)), read)));
@@ -319,7 +329,8 @@ describe("the optional buffs", () => {
     const optional = read.buffs.group.set.optional;
     let best = null;
     let tried = 0;
-    // every set of 13, 14 or 15 of the 19 (the sets of fewer would have to be worth more than all of these, which a buff that adds nothing never makes them)
+    // every set of 13, 14 or 15 of the 18 (the sets of fewer would have to be worth more than all of these, which a buff that adds nothing never makes them): the 19th of the group set was the haste spell, which the sets of the rule leave out
+    expect(optional).toHaveLength(18);
     const choose = (from, chosen) => {
       if (chosen.length >= 13) {
         tried += 1;
@@ -330,7 +341,7 @@ describe("the optional buffs", () => {
       for (let i = from; i < optional.length; i += 1) choose(i + 1, [...chosen, optional[i]]);
     };
     choose(0, []);
-    expect(tried).toBe(27132 + 11628 + 3876);
+    expect(tried).toBe(8568 + 3060 + 816);
     expect(answer.F).toBe(best.toString());
     expect(answer.exact).toBe(true);
   }, HEAVY);
@@ -385,9 +396,10 @@ describe("the bound of the search for the buffs", () => {
   const NEXT = Math.max(...OPTIONAL) + 1;
 
   /** Six optional buffs of different kinds (three of them at most, two that exclude each other) for the own set, and the buff `always` among the ones that are always on. */
-  function craft(always) {
+  function craft(always, key = "own") {
     const made = structuredClone(bundle);
-    const row = made.buffs.own;
+    const row = made.buffs[key];
+    const tableOf = (doc) => (key.endsWith("+haste") ? doc.buff_table_haste : doc.buff_table);
     const vecs = {
       1440: { STR: 35, HP: 100 },
       1441: { AC: 60 },
@@ -395,18 +407,18 @@ describe("the bound of the search for the buffs", () => {
       1443: { HPREG: 12, AC: 10 },
       1444: { STR: 20, AC: 20, HP: 60 },
     };
-    for (const [id, vec] of Object.entries(vecs)) made.buff_table[id] = { name: `Invented buff ${id}`, vec };
+    for (const [id, vec] of Object.entries(vecs)) tableOf(made)[id] = { name: `Invented buff ${id}`, vec };
     row.set.optional = [...OPTIONAL];
     row.set.conflicts = [[1440, 1444, ["the same line"]]];
     row.set.cliques = [[1440, 1444]];
     row.set.cardinality = 3;
-    made.buff_table[String(NEXT)] = { name: "Invented always-on buff", vec: always.vec };
+    tableOf(made)[String(NEXT)] = { name: "Invented always-on buff", vec: always.vec };
     row.set.always_on = [...row.set.always_on.filter((id) => !always.replaces?.includes(id)), NEXT];
     for (const [name, amount] of Object.entries(always.vec)) {
       row.buff_totals[name] = name === "HASTE" ? Math.max(row.buff_totals[name] ?? 0, amount) : (row.buff_totals[name] ?? 0) + amount; // (the profile's totals are those of the always-on buffs)
     }
     for (const id of always.replaces ?? []) {
-      for (const [name, amount] of Object.entries(bundle.buff_table[String(id)].vec)) {
+      for (const [name, amount] of Object.entries(tableOf(bundle)[String(id)].vec)) {
         if (name !== "HASTE") row.buff_totals[name] -= amount;
       }
     }
@@ -414,11 +426,11 @@ describe("the bound of the search for the buffs", () => {
   }
 
   /** The best value of every choice there is: at most three of the optional buffs, never both of the two that exclude each other, worked out with the buff set as the bundle has it. */
-  function bestOfEvery(made, answer) {
+  function bestOfEvery(made, answer, key = "own") {
     const read = readBundle(structuredClone(made));
-    const profile = assembleProfile(read, AS_OF_THE_PAGE);
+    const profile = assembleProfile(read, { ...AS_OF_THE_PAGE, buffs: key });
     const items = kit.map((ident) => (ident === null ? null : atTier(table.records.get(ident.slice(0, ident.lastIndexOf("@"))), Number(ident.slice(ident.lastIndexOf("@") + 1)), read)));
-    const options = { setup: answer.setup, hasteAssumed: answer.hasteAssumed, monkBins: read.monk_bins ?? undefined, buffset: { set: read.buffs.own.set, table: read.buff_table } };
+    const options = { setup: answer.setup, hasteAssumed: answer.hasteAssumed, monkBins: read.monk_bins ?? undefined, buffset: { set: read.buffs[key].set, table: key.endsWith("+haste") ? read.buff_table_haste : read.buff_table } };
     let best = null;
     let tried = 0;
     const choose = (from, chosen) => {
@@ -435,15 +447,16 @@ describe("the bound of the search for the buffs", () => {
 
   const CASES_OF_ALWAYS_ON = [
     ["with a large vector", { vec: { AC: 300, HP: 800, STR: 40 } }],
-    ["that is the haste buff of the set, moved next to the optional ids", { vec: { HASTE: 25 }, replaces: [2585] }],
+    ["that is the haste buff of the set (the twin of the own set keeps it), moved next to the optional ids", { vec: { HASTE: 25 }, replaces: [2585], key: "own+haste" }],
   ];
 
   it.each(CASES_OF_ALWAYS_ON)("is exact when a buff that is always on has the id next to the optional ones, %s", (_, always) => {
-    const made = craft(always);
-    expect(made.buffs.own.set.always_on).toContain(NEXT);
-    expect(Math.max(...made.buffs.own.set.optional) + 1).toBe(NEXT);
-    const answer = valueOfKit({ bundle: made, records: table.records, ...AS_OF_THE_PAGE, places: placesOf(kit) });
-    const { best, tried } = bestOfEvery(made, answer);
+    const key = always.key ?? "own";
+    const made = craft(always, key);
+    expect(made.buffs[key].set.always_on).toContain(NEXT);
+    expect(Math.max(...made.buffs[key].set.optional) + 1).toBe(NEXT);
+    const answer = valueOfKit({ bundle: made, records: table.records, ...AS_OF_THE_PAGE, buffs: key, places: placesOf(kit) });
+    const { best, tried } = bestOfEvery(made, answer, key);
     expect(tried).toBe(1 + 6 + 14 + 16); // (the empty choice, 6 of one, the 15 pairs less the 1 that names both buffs that exclude each other, the 20 triples less the 4 that do)
     expect(answer.F).toBe(best.toString());
     expect(answer.exact).toBe(true);
@@ -495,8 +508,10 @@ describe("what is left out of the value", () => {
   });
 
   it("is an item that the race cannot use", () => {
-    const answer = valued(placesOf(kit), { race: "HUM" }); // (the Sabatons of Might are for Ogres and Trolls)
-    expect(answer.left).toEqual([{ slotIndex: 15, reason: "race" }]);
+    // (the Sabatons of Might are for Ogres and Trolls: the Ogre's best kit no longer wears them, so they are put in the Feet place of it)
+    const wears = [...without(15), { slotIndex: 15, key: "w90033", tier: 4 }];
+    expect(valued(wears, { race: "OGR" }).left).toEqual([]);
+    expect(valued(wears, { race: "HUM" }).left).toEqual([{ slotIndex: 15, reason: "race" }]);
   });
 
   it("is an item that needs a deity when the page has none", () => {
@@ -597,7 +612,7 @@ describe("the bundle of the trio, fetched for the page", () => {
   });
 
   it("gives a bundle that the evaluator takes, and gets the value the reference gave", async () => {
-    const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "balanced" && one.buffs === "own");
+    const row = KIT_VALUES.values.find((one) => one.kit === 0 && one.role === "tank" && one.buffs === "own");
     const got = await ask(makeSite()).done;
     const kit = KITS[0];
     const answer = valueOfKit({ bundle: got, records: table.records, race: kit.race, role: row.role, buffs: row.buffs, evidence: kit.evidence, deity: kit.deity, places: placesOf(kit.kit) });

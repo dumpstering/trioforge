@@ -123,10 +123,13 @@ def test_the_frame_keeps_the_page_script_in_a_block_that_the_404_page_replaces_w
     notfound = (TEMPLATES / "notfound.html.j2").read_text(encoding="utf-8")
     assert re.search(r'{% block page_script %}\s*<script type="module" src="{{ assets\.app }}"></script>\s*{% endblock %}', base)
     assert re.search(r'{% block page_script %}\s*<script type="module" src="{{ assets\.notfound }}"></script>\s*{% endblock %}', notfound)
+    # the token of a build with page counts is data in the head (Part M), in a block that the 404 page empties: no script of any kind is in the frame for the counter, and the 404 page has no part of it
+    assert re.search(r'{% block counter_data %}\s*{% if analytics_token is defined and analytics_token %}\s*<meta name="trioforge-counter" content="{{ analytics_token }}">\s*{% endif %}\s*{% endblock %}', base)
+    assert re.search(r"{% block counter_data %}\s*{% endblock %}", notfound)
     assert "assets.app" not in notfound, "the 404 page has no part of the page script"
     # the one place for a script that is not the frame's: nothing else in the frame loads one after the block
     assert base.index("{% endblock %}", base.index("{% block page_script %}")) < base.index("</body>")
-    assert len(re.findall(r"<script\b", base)) == 2  # the boot script in the head, and the page script in the block
+    assert len(re.findall(r"<script\b", base)) == 2  # the boot script in the head and the page script in the block: the counter's script is added by the page script, not written into any page
 
 
 def test_the_script_of_the_404_page_is_one_file_that_imports_nothing(site):  # noqa: F811

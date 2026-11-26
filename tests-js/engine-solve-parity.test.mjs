@@ -28,7 +28,7 @@ beforeAll(async () => {
   highs = await loadHighs();
 });
 
-const sessionFor = (c, extra = {}) => createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, ...extra });
+const sessionFor = (c, extra = {}) => createSession({ highs, profile: c.profile, setup: c.setup, buffset: c.buffset, monkBins: c.bins, procs: c.procs, ...extra });
 
 /** The kit and the buffs are Python's: the very kit, place for place (the exact value is checked by the caller). */
 function expectPythonsKit(got, want, label) {
@@ -69,7 +69,7 @@ function canonicalTests(set, families) {
               expect(got.breakdown.F.equals(got.F)).toBe(true);
               expectPythonsKit(got, want, `${doc.id} ${recorded.label}`);
               // the value of the kit is the evaluator's, whatever the solver said
-              const options = { setup: c.setup, hasteAssumed: got.hasteAssumed, monkBins: c.bins, buffset: c.buffset ?? undefined };
+              const options = { setup: c.setup, hasteAssumed: got.hasteAssumed, monkBins: c.bins, buffset: c.buffset ?? undefined, procs: c.procs ?? undefined };
               expect(evaluate(c.profile, got.kit, c.buffset === null ? null : got.buffs, options).F.equals(got.F)).toBe(true);
             }
           } finally {

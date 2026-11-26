@@ -17,7 +17,8 @@
   {"race":"GNM","title":"Gnome","revid":153416,"url":"https://eqlwiki.com/index.php?title=Gnome&oldid=153416"},
   {"race":"IKS","title":"Iksar","revid":163965,"url":"https://eqlwiki.com/index.php?title=Iksar&oldid=163965"},
   {"race":"KER","title":"Kerra","revid":166736,"url":"https://eqlwiki.com/index.php?title=Kerra&oldid=166736"},
-  {"race":"FRG","title":"Froglok","revid":177928,"url":"https://eqlwiki.com/index.php?title=Froglok&oldid=177928"}
+  {"race":"FRG","title":"Froglok","revid":177928,"url":"https://eqlwiki.com/index.php?title=Froglok&oldid=177928"},
+  {"race":"HDE","title":"Half Dark Elf","revid":200325,"url":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325"}
  ],
  "racials": [
   {"race":"BAR","name":"Increased Consumption Rate","description":"Barbarians, Halflings, Ogres, and Trolls all consume food and drink slightly faster than other races.","source":"https://eqlwiki.com/index.php?title=Barbarian&oldid=153429","revid":153429},
@@ -64,9 +65,12 @@
   {"race":"KER","name":"Sneak","description":"Sneak","source":"https://eqlwiki.com/index.php?title=Kerra&oldid=166736","revid":166736},
   {"race":"KER","name":"Safe Fall","description":"Safe Fall","source":"https://eqlwiki.com/index.php?title=Kerra&oldid=166736","revid":166736},
   {"race":"FRG","name":"Increased Swimming","description":"Increased Swimming","source":"https://eqlwiki.com/index.php?title=Froglok&oldid=177928","revid":177928},
-  {"race":"FRG","name":"+15 Poison Resist","description":"+15 Poison Resist","source":"https://eqlwiki.com/index.php?title=Froglok&oldid=177928","revid":177928}
+  {"race":"FRG","name":"+15 Poison Resist","description":"+15 Poison Resist","source":"https://eqlwiki.com/index.php?title=Froglok&oldid=177928","revid":177928},
+  {"race":"HDE","name":"Hide","description":"Hide","source":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325","revid":200325},
+  {"race":"HDE","name":"Sneak","description":"Sneak","source":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325","revid":200325},
+  {"race":"HDE","name":"Ultravision","description":"Ultravision","source":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325","revid":200325},
+  {"race":"HDE","name":"Cursed Heritage","description":"10% increased effectiveness of lifetaps (such as Drain Soul or Life Leech) and runes (such as Diamondskin or Rune IV).","source":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325","revid":200325},
+  {"race":"HDE","name":"Life Tracking","description":"Increased sensory range for living NPCs on your map -- roughly double in radius.","source":"https://eqlwiki.com/index.php?title=Half_Dark_Elf&oldid=200325","revid":200325}
  ],
- "skipped": [
-  {"title":"Half Dark Elf","reason":"no-race-code"}
- ]
+ "skipped": []
 }

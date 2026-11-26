@@ -19,6 +19,10 @@ export const BASE = `${ORIGIN}/assets/engine/worker-BBBBBBBB.js`;
 
 export const ITEMS_BYTES = readFileSync(resolve(RESULTS, "items.json"));
 export const BUNDLE_BYTES = readFileSync(resolve(RESULTS, SLUG, "engine-l50.json"));
+/** The family of the fixture with a table of procs in its bundle (fixtures/site/results-procs, fixtures/site/procs-family.json, made by engine_fixture.py): the bundle and the item table (the fixture's and a Lore weapon), and Python's answers with the table. */
+export const PROCS_BUNDLE_BYTES = readFileSync(resolve(RESULTS, "../results-procs", SLUG, "engine-l50.json"));
+export const PROCS_ITEMS_BYTES = readFileSync(resolve(RESULTS, "../results-procs/items.json"));
+export const PROCS_FAMILY = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/procs-family.json"), "utf8"));
 export const EQUIP_NOW = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/equip-now.json"), "utf8"));
 /** Python's answers for the four Upgrade modes under weights (fixtures/site/weighted.json): cases `{name, seed, scenario, owned, weights, tierMode, equipNow, farmPath, bestSets, everySlot}`. */
 export const WEIGHTED = JSON.parse(readFileSync(resolve(ROOT, "fixtures/site/weighted.json"), "utf8"));

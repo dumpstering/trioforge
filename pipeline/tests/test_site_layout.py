@@ -68,12 +68,11 @@ def test_the_developer_and_the_model_markers_of_every_page_carry_a_title_that_sa
     out, _ = site
     meaning = {key: words for key, (_, words) in content.SEALS.items()}
     assert content.SEALS_TO_EXPLAIN == ("developer", "model")
-    names = [*PAGES.values(), NOT_FOUND, "item/w1/index.html"]
+    names = [*PAGES.values(), NOT_FOUND, "item/w90001/index.html"]  # (an item page of the fixture: the page must be there, or the test reads nothing of it)
     seen = titled = 0
     for name in names:
         path = out / name
-        if not path.is_file():
-            continue
+        assert path.is_file(), f"{name} is not in the build: the test would read nothing of it"
         for node in parse(path.read_text(encoding="utf-8")).find("body").find_all("span", cls="seal"):
             kind = seal_kind(node)
             if node.parent.get("id") == "seal-key":  # (the key says it in words beside its markers, and they have no title)

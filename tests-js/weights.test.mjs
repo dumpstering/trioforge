@@ -30,8 +30,9 @@ const LEGENDS = ["Armor class", "Mana", "Attack and haste", "Resists", "Regenera
 const WORKING = "Working out the kit for these settings…";
 const HEADING = "Solved for your settings";
 const BACK = "Back to the precomputed answer";
-/** The reference's view of the Ogre, balanced, own buffs, wiki evidence, dual wield at +4, with armor class x2 (Python's answer), and the one with attack and haste x2. */
+/** The reference's view of the Ogre, tank, own buffs, wiki evidence, dual wield at +4, with armor class x2 (Python's answer), and the one with attack and haste x2. (The page's own view of the Ogre Tank at the wiki level is 1H + shield: the canned answers say what the stand-in solver gives.) */
 const [AC2, , ATK2] = REFERENCE.cases;
+const AC2_SHOWN = Math.round(AC2.value).toLocaleString("en-US");
 
 const nameOf = (ident) => {
   const key = ident.split("@")[0];
@@ -258,7 +259,7 @@ describe("a request for the best kit", () => {
       trio: "pal-mnk-ber",
       level: 50,
       mode: "best-kit",
-      scenario: { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" },
+      scenario: { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "1h-shield" },
       tier: 4,
       weights: { multipliers: { AC: 2 } },
       budgetMs: 60_000,
@@ -278,7 +279,7 @@ describe("a request for the best kit", () => {
         const { request } = t.engine.runs[asked.length];
         asked.push(request);
         expect(request.weights, `${group} ${position}`).toEqual({ multipliers: { [group]: number } });
-        expect(request.scenario).toEqual({ race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" });
+        expect(request.scenario).toEqual({ race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "1h-shield" });
         expect(request.tier).toBe(4);
         choose(slider(index, "1"));
         await t.app.whenIdle(); // (back at x1: nothing is asked)
@@ -329,10 +330,10 @@ describe("a request for the best kit", () => {
     expect(await ask(() => { $("#sw-tier").value = "10"; change($("#sw-tier")); })).toEqual(["tier"]);
     expect(await ask(() => { $("#sw-tier").value = "4"; change($("#sw-tier")); })).toEqual([]);
     expect(await ask(() => choose("#setup-2h"))).toEqual(["scenario.setup"]);
-    expect(await ask(() => choose("#setup-dw"))).toEqual([]);
-    expect(await ask(() => choose("#buffs-group"))).toEqual(["scenario.buffs"]);
+    expect(await ask(() => choose("#setup-1h-shield"))).toEqual([]);
+    expect(await ask(() => choose("#buffs-group"))).toEqual(["scenario.buffs", "scenario.setup"]); // (the weapons follow the best of the shard of the common group buffs, which is dual wield at +4 where the own buffs say 1H + shield)
     expect(await ask(() => choose("#buffs-own"))).toEqual([]);
-    const role = await ask(() => choose("#role-tank"));
+    const role = await ask(() => choose("#role-melee"));
     expect(role).toContain("scenario.role");
     expect(role.every((field) => ["scenario.role", "scenario.setup"].includes(field)), "(the role's best weapons follow the role)").toBe(true);
   }, 30_000);
@@ -442,21 +443,21 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect(rowNames()).toEqual(AC2.kit.map((ident) => (ident === null ? "Leave empty" : nameOf(ident))));
     expect(rowNames()).not.toEqual(before);
     expect(text("#solve")).toContain(AC2.F);
-    expect(text("#solve")).toContain("20,007");
+    expect(text("#solve")).toContain(AC2_SHOWN);
     expect($$("#solve button").map((button) => button.textContent)).toEqual([BACK]);
     expect($("#main").classList.contains("solving")).toBe(false);
     expect($("#main").classList.contains("solved")).toBe(true);
     const tiers = $$('#kit-body [data-f="tier"]').filter((cell) => cell.textContent !== "—").map((cell) => cell.textContent);
     expect(new Set(tiers)).toEqual(new Set(["+4"]));
-    expect(text("#kit-caption")).toBe("For Ogre · Balanced · +4 · Dual wield");
+    expect(text("#kit-caption")).toBe("For Ogre · Tank · +4 · 1H + shield"); // (the words of the view the page asked for: the stand-in answers with the kit of the reference)
     expect(text('[data-f="assume-weights"]')).toBe("armor class x2");
-    expect(ANNOUNCED).toEqual(["Weights armor class x2. Solved for your settings. Showing Ogre, Balanced, +4, Dual wield. Kit value 20,007."]);
+    expect(ANNOUNCED).toEqual([`Weights armor class x2. Solved for your settings. Showing Ogre, Tank, +4, 1H + shield. Kit value ${AC2_SHOWN}.`]);
     // the rows are the shard's rows: a name that is a link where the page links its items, the deity badge and the seal of the item's level
     const row = $$("#kit-body tr")[0];
     expect(row.querySelector('[data-f="arrival"]').textContent).toBe("+4");
     expect(row.querySelector('[data-f="source"]').textContent).toBe("Plane of Fear");
     expect($$("#kit-body tr")[7].querySelector('[data-f="arrival"]').textContent).toBe("+0"); // (a crafted item arrives at +0)
-    expect($$("#kit-body tr")[16].querySelector('[data-f="source"]').textContent).toBe("quest: Lake Rathetear quest");
+    expect($$("#kit-body tr")[16].querySelector('[data-f="source"]').textContent).toBe("The Hole");
     expect($$("#kit-body tr")[3].querySelector('[data-f="name"]').textContent).toBe("Stud of the Fallen");
     // the figures that describe the shard's kit (the totals, the weapons block) are not shown for the answer, whose totals the page does not work out: the stylesheet hides them by this class
     expect($("#main").classList.contains("solved")).toBe(true);
@@ -572,7 +573,7 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect(positions()).toBe("11111");
     expect(checkedOf("buffs")).toBe("group");
     expect($("#buffs-ench").checked).toBe(false);
-    expect(rowNames()).toEqual(shardNames("wiki-group", "OGR", "balanced", 4, "dw")); // (the shard of the common group buffs, the wiki level)
+    expect(rowNames()).toEqual(shardNames("wiki-group", "OGR", "tank", 4, "dw")); // (the shard of the common group buffs, the wiki level)
     expect($("#solve").hidden).toBe(true);
     expect($("#main").classList.contains("solved")).toBe(false);
     expect(t.engine.runs).toHaveLength(1);
@@ -581,6 +582,46 @@ describe("the answer for settings that have no precomputed answer", () => {
     expect(query()).not.toHaveProperty("w");
     expect(ANNOUNCED).toHaveLength(1);
     expect(ANNOUNCED[0]).toMatch(/^Back at the precomputed answer\. Showing .+\. Kit value [\d,]+\.$/);
+  });
+});
+
+describe("the button back of an answer for a haste spell (F10)", () => {
+  it("goes back to the shard of the own buffs when the answer was for the own buffs with a haste spell: own stays own, and the spell is the part that goes", async () => {
+    const t = open();
+    await wikiView(t);
+    const shard = rowNames(); // (the wiki level's shard of the own buffs: the kit the page shows before the box is ticked)
+    $("#buffs-haste").checked = true;
+    change($("#buffs-haste"));
+    await sent(t, 1);
+    expect(t.engine.runs[0].request.scenario.buffs).toBe("own+haste");
+    t.engine.runs[0].finish(result());
+    await vi.waitFor(() => expect(text("#solve h3")).toBe(HEADING));
+    $$("#solve button")[0].click();
+    await t.app.whenIdle();
+    expect(checkedOf("buffs"), "the own buffs, not the group's").toBe("own");
+    expect($("#buffs-haste").checked).toBe(false);
+    expect(rowNames()).toEqual(shard);
+    expect(query()).toMatchObject({ buffs: "own" });
+    expect(query()).not.toHaveProperty("haste");
+    expect(t.engine.runs).toHaveLength(1);
+  });
+
+  it("goes back to the group's shard for the group's and the raid's buffs with a haste spell, as it did", async () => {
+    for (const [choice, buffs] of [["#buffs-group", "group+haste"], ["#buffs-raid", "raid+haste"]]) {
+      const t = open();
+      await wikiView(t);
+      choose(choice);
+      $("#buffs-haste").checked = true;
+      change($("#buffs-haste"));
+      await vi.waitFor(() => expect(t.engine.runs.at(-1)?.request.scenario.buffs).toBe(buffs));
+      t.engine.runs.at(-1).finish(result());
+      await vi.waitFor(() => expect(text("#solve h3")).toBe(HEADING));
+      $$("#solve button")[0].click();
+      await t.app.whenIdle();
+      expect(checkedOf("buffs"), choice).toBe("group");
+      expect($("#buffs-haste").checked, choice).toBe(false);
+      document.body.replaceChildren();
+    }
   });
 });
 
@@ -723,11 +764,11 @@ describe("the address", () => {
   it("carries the buff set, and the slider positions as w= with a character for each group in the bundle's order (h, 1 or 2), and leaves w out when every slider is at x1", async () => {
     const t = open();
     await wikiView(t);
-    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "4", buffs: "own" });
+    expect(query()).toEqual({ race: "OGR", role: "tank", tier: "4", buffs: "own" });
     choose(slider(0, "2"));
     choose(slider(3, "h"));
     await sent(t, 1);
-    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "4", buffs: "own", w: "211h1" });
+    expect(query()).toEqual({ race: "OGR", role: "tank", tier: "4", buffs: "own", w: "211h1" });
   });
 
   it("writes each buff set by its name, the Enchanter's group as enchanter: a word with no plus sign to be read as a space (G4)", async () => {
@@ -769,10 +810,10 @@ describe("the address", () => {
   });
 
   it("is read back when the page is opened with it: the sliders, the buffs (the old spelling of the Enchanter's group among them), and a request that is sent at once", async () => {
-    const t = open({ search: "?race=OGR&role=balanced&tier=4&ev=wiki&buffs=group%2Benchanter&w=2111h" });
+    const t = open({ search: "?race=OGR&role=tank&tier=4&ev=wiki&buffs=group%2Benchanter&w=2111h" });
     await sent(t, 1);
     expect(t.engine.runs[0].request).toMatchObject({
-      scenario: { race: "OGR", role: "balanced", buffs: "group+enchanter", evidence: "wiki", setup: "dw" },
+      scenario: { race: "OGR", role: "tank", buffs: "group+enchanter", evidence: "wiki", setup: "dw" },
       tier: 4,
       weights: { multipliers: { AC: 2, regen: 0.5 } },
     });
@@ -791,7 +832,7 @@ describe("the address", () => {
     expect(checkedOf("buffs")).toBe("group");
     expect($("#buffs-ench").checked).toBe(true);
     expect(text("#status"), "(it is a buff set, not a malformed address)").toBe("");
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=4&buffs=enchanter&w=2111h");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=4&buffs=enchanter&w=2111h");
   });
 
   it("goes round: what the page writes opens the same view", async () => {
@@ -820,7 +861,7 @@ describe("the address", () => {
       expect(t.chunk, bad).not.toHaveBeenCalled();
       expect(text("#status"), bad).toMatch(/weights in the address/i);
       expect(text("#status"), bad).toMatch(/role's own weights are shown/i);
-      expect(window.location.search, bad).toBe("?race=OGR&role=balanced&tier=4&buffs=own");
+      expect(window.location.search, bad).toBe("?race=OGR&role=tank&tier=4&buffs=own");
       // said once: the next change of the page clears it, and nothing says it again
       $("#sw-tier").value = "10";
       change($("#sw-tier"));
@@ -837,7 +878,7 @@ describe("the address", () => {
       expect(t.engine.runs, search).toHaveLength(0);
       expect(t.chunk, search).not.toHaveBeenCalled();
       expect(text("#status"), search).toMatch(/weights in the address/i);
-      expect(window.location.search, search).toBe("?race=OGR&role=balanced&tier=4&buffs=own");
+      expect(window.location.search, search).toBe("?race=OGR&role=tank&tier=4&buffs=own");
       document.body.innerHTML = "";
     }
   });
@@ -855,7 +896,7 @@ describe("the address", () => {
     await t.app.whenIdle();
     expect($("#sw-tier").value).toBe("10");
     expect(text("#status")).toMatch(/weights in the address/i);
-    expect(query()).toEqual({ race: "OGR", role: "balanced", tier: "10", buffs: "own" });
+    expect(query()).toEqual({ race: "OGR", role: "tank", tier: "10", buffs: "own" });
     expect(t.engine.runs).toHaveLength(0);
   });
 
@@ -866,7 +907,7 @@ describe("the address", () => {
     expect(t.engine.runs[0].request.weights).toEqual({ multipliers: { AC: 2, regen: 0.5 } });
     expect(checkedOf("buffs")).toBe("own");
     expect(positions()).toBe("2111h");
-    expect(window.location.search).toBe("?race=OGR&role=balanced&tier=4&buffs=own&w=2111h");
+    expect(window.location.search).toBe("?race=OGR&role=tank&tier=4&buffs=own&w=2111h");
   });
 
   it("takes w=11111 for the role's own weights: no request", async () => {
@@ -911,7 +952,7 @@ describe("the lines that say what is assumed", () => {
     choose(slider(0, "2"));
     await sent(t, 1);
     expect(text("#assume-weights summary")).toBe("Weights: armor class x2, resists x0.5 change");
-    expect(text('[data-f="s-assumes"]')).toBe("dual wield, your own buffs, armor class x2, resists x0.5");
+    expect(text('[data-f="s-assumes"]')).toBe("1H + shield, your own buffs, armor class x2, resists x0.5");
     choose("#buffs-group");
     $("#buffs-ench").checked = true;
     change($("#buffs-ench"));
@@ -1062,7 +1103,7 @@ describe("when the code of the sliders cannot be had", () => {
     expect(rowNames()).toHaveLength(22);
     // the line says what the table shows: the precomputed answer for the common group buffs, not the full raid the choice says
     expect(text("#status .status-text")).toBe("Couldn't load the weights. Reload the page to try again. The table shows the precomputed answer for common group buffs and the role's own weights, not for your settings.");
-    expect(rowNames()).toEqual(shardNames("strict-group", "OGR", "balanced", 4, "dw"));
+    expect(rowNames()).toEqual(shardNames("strict-group", "OGR", "tank", 4, "dw"));
   });
 
   it("says nothing of a table that is not for the settings when the settings are the shards' own", async () => {
@@ -1630,7 +1671,7 @@ describe("the notes of the runner-ups and of the robust core", () => {
     choose(slider(0, "2"));
     await t.app.whenIdle();
     await vi.waitFor(() => expect($("#robust-na").hidden).toBe(false));
-    expect(text("#robust-na")).toBe("Not computed for this view. The checks were made with dual wield, your own buffs and the role's own weights. Change the assumptions back to see them.");
+    expect(text("#robust-na")).toBe("Not computed for this view. The checks were made with 1H + shield, your own buffs and the role's own weights. Change the assumptions back to see them.");
     expect($("#runnerups-na").hidden).toBe(false);
     expect(text("#runnerups-na")).toMatch(/and the role's own weights\)\. Change the assumptions back to see them\.$/);
   }, 30_000);
@@ -1704,7 +1745,7 @@ describe("the role's own weights, however the sliders came to be at x1 (G8)", ()
     const own = () => [text('[data-f="assume-weights"]'), text('[data-f="s-assumes"]')];
     const t = open({ search: "?tier=10&w=11111" });
     await t.app.whenIdle();
-    expect(own()).toEqual(["role's own", "dual wield, your own buffs"]);
+    expect(own()).toEqual(["role's own", "1H + shield, your own buffs"]);
     expect(query()).not.toHaveProperty("w");
     await openWeights(t);
     choose(slider(0, "2"));
@@ -1712,7 +1753,7 @@ describe("the role's own weights, however the sliders came to be at x1 (G8)", ()
     expect(text('[data-f="s-assumes"]')).toContain("armor class x2");
     choose(slider(0, "1")); // put back by hand
     await t.app.whenIdle();
-    expect(own()).toEqual(["role's own", "dual wield, your own buffs"]);
+    expect(own()).toEqual(["role's own", "1H + shield, your own buffs"]);
     expect(query()).not.toHaveProperty("w");
     expect(t.engine.runs).toHaveLength(1);
   }, 30_000);
@@ -1757,4 +1798,132 @@ describe("the sliders' code that comes at a later use, after it could not be had
     expect(t.engine.runs[0].request.scenario.buffs).toBe("raid");
     expect(text("#solve")).toContain(WORKING);
   }, 30_000);
+});
+
+// ---- "I have a haste spell" ----------------------------------------------------------------------------------------------------------------------------
+
+describe("the haste spell box of the Buffs assumption", () => {
+  it("is a box that is off at the start, enabled with the other controls, and in the address only when it is on", async () => {
+    const t = open();
+    await t.app.whenIdle();
+    const box = $("#buffs-haste");
+    expect(box).not.toBeNull();
+    expect(box.type).toBe("checkbox");
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(false);
+    expect(document.querySelector('label[for="buffs-haste"]').textContent).toBe("I have a haste spell");
+    expect(query()).not.toHaveProperty("haste");
+    expect(window.location.search).not.toMatch(/haste/);
+  });
+
+  it("says the kit below is still the one without the spell while the solve is out, and that it is chosen with the spell only when the solved kit is drawn (R10)", async () => {
+    const t = open();
+    await wikiView(t);
+    const rowNote = () => text('[data-f="haste-note"]');
+    const boxNote = () => text("#haste-spell-note");
+    expect(boxNote()).toMatch(/Tick the box to see that kit\.$/);
+    const shard = rowNames();
+    $("#buffs-haste").checked = true;
+    change($("#buffs-haste"));
+    await sent(t, 1);
+    // the page still shows the shard's kit, the one without the spell: the notes say so
+    expect(rowNames()).toEqual(shard);
+    expect(boxNote()).toMatch(/The kit below is still the one without the spell\.$/);
+    expect(rowNote()).toMatch(/The kit below is still the one without the spell\.$/);
+    expect(boxNote() + rowNote()).not.toContain("chosen with the spell");
+    t.engine.runs[0].finish(result());
+    await vi.waitFor(() => expect(text("#solve h3")).toBe(HEADING));
+    // the solved kit is drawn: now they say it is the one with the spell
+    expect(boxNote()).toMatch(/The kit below is chosen with the spell\.$/);
+    expect(rowNote()).toMatch(/The kit below is chosen with the spell\.$/);
+    expect(boxNote() + rowNote()).not.toContain("still the one without");
+    // another view with the box ticked is a stand-in again until its kit is drawn
+    choose("#buffs-group");
+    await sent(t, 2);
+    expect(boxNote()).toMatch(/The kit below is still the one without the spell\.$/);
+  });
+
+  it("keeps saying the kit below is the one without the spell when the solve fails, and when the box is ticked again after the failure (R10)", async () => {
+    const t = open();
+    await wikiView(t);
+    $("#buffs-haste").checked = true;
+    change($("#buffs-haste"));
+    await sent(t, 1);
+    t.engine.runs[0].fail(Object.assign(new Error("The optimizer stopped working."), { code: "worker-failed" }));
+    await t.app.whenIdle();
+    await vi.waitFor(() => expect(text("#solve")).not.toContain(WORKING));
+    expect($("#kit-body")).not.toBeNull();
+    expect(text("#haste-spell-note")).toMatch(/The kit below is still the one without the spell\.$/);
+    expect(text('[data-f="haste-note"]')).toMatch(/The kit below is still the one without the spell\.$/);
+    expect(text("#haste-spell-note") + text('[data-f="haste-note"]')).not.toContain("chosen with the spell");
+  });
+
+  it("sends the buff set that keeps the haste of the spells, the twin of the set chosen, for every set, and nothing when it is off again (the shards answer that)", async () => {
+    const t = open();
+    await wikiView(t);
+    const buffsOf = (n) => t.engine.runs[n - 1].request.scenario.buffs;
+    $("#buffs-haste").checked = true;
+    change($("#buffs-haste"));
+    await sent(t, 1);
+    expect(buffsOf(1)).toBe("own+haste");
+    expect(t.engine.runs[0].request).not.toHaveProperty("weights"); // (the role's own weights: the box changes the buffs and nothing else)
+    expect(query()).toMatchObject({ buffs: "own", haste: "1" });
+    choose("#buffs-group");
+    await sent(t, 2);
+    expect(buffsOf(2)).toBe("group+haste");
+    $("#buffs-ench").checked = true;
+    change($("#buffs-ench"));
+    await sent(t, 3);
+    expect(buffsOf(3)).toBe("group+enchanter+haste");
+    expect(query()).toMatchObject({ buffs: "enchanter", haste: "1" });
+    choose("#buffs-raid");
+    await sent(t, 4);
+    expect(buffsOf(4)).toBe("raid+haste");
+    $("#buffs-haste").checked = false;
+    change($("#buffs-haste"));
+    await sent(t, 5);
+    expect(buffsOf(5)).toBe("raid"); // (the full raid is not precomputed either)
+    expect(query()).not.toHaveProperty("haste");
+    choose("#buffs-own");
+    await t.app.whenIdle(); // (the own buffs without a haste spell: the shard's answer, nothing is asked)
+    expect(t.engine.runs).toHaveLength(5);
+  }, 30_000);
+
+  it("says so in the lines that say what is assumed, in the words of the box", async () => {
+    const t = open();
+    await t.app.whenIdle();
+    expect(text('[data-f="assume-buffs"]')).toBe("your own buffs");
+    $("#buffs-haste").checked = true;
+    change($("#buffs-haste"));
+    await sent(t, 1);
+    expect(text('[data-f="assume-buffs"]')).toBe("your own buffs, with a haste spell");
+    expect(text('[data-f="s-assumes"]')).toContain("with a haste spell");
+  });
+
+  it("is read from the address: haste=1 ticks the box and asks for the twin of the set; any other value is off, and the address is written without it", async () => {
+    const on = open({ search: "?buffs=group&haste=1" });
+    await sent(on, 1);
+    expect(on.engine.runs[0].request.scenario.buffs).toBe("group+haste");
+    expect($("#buffs-haste").checked).toBe(true);
+    expect(checkedOf("buffs")).toBe("group");
+    expect(query()).toMatchObject({ buffs: "group", haste: "1" });
+    for (const spelled of ["0", "2", "true", ""]) {
+      const off = open({ search: `?buffs=group&haste=${spelled}` });
+      await off.app.whenIdle();
+      expect($("#buffs-haste").checked, spelled).toBe(false);
+      expect(off.engine.runs, spelled).toHaveLength(0);
+      expect(query(), spelled).not.toHaveProperty("haste");
+    }
+  });
+
+  it("is carried with the Enchanter's group in the address, and an old address with no haste opens as it did", async () => {
+    const t = open({ search: "?buffs=enchanter&haste=1" });
+    await sent(t, 1);
+    expect(t.engine.runs[0].request.scenario.buffs).toBe("group+enchanter+haste");
+    expect($("#buffs-ench").checked).toBe(true);
+    const old = open({ search: "?race=OGR&role=tank&tier=4&buffs=group" });
+    await old.app.whenIdle();
+    expect($("#buffs-haste").checked).toBe(false);
+    expect(old.engine.runs).toHaveLength(0);
+  });
 });

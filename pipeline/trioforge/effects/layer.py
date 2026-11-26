@@ -12,6 +12,7 @@ Each option is a dict with ``effect`` (the record's id), ``donor`` (the item key
 * **focus**: one for each stacking type (the effect id; the best family and tier wins); among donors within ``near_best`` of the best score the easiest to get wins.
 * **click**: only must-equip clicks (they use a click exaltation slot). **carry**: "Any Slot" clicks, which work from the bags and use no slot.
 * **worn** and **proc**: as the wiki lists them; a worn effect that is haste is an item stat and is never offered (it cannot be moved).
+  A proc is scored by the value the solver's table gives its record (:func:`trioforge.effects.value.effect_value`, one function for every kind of proc), over the value of a full proc, at most 1.
 
 Scores compare within one trio and role, and roughly across trios (casters score 5 to 10, tank-only trios about 1.5). They are a model: the constants are the
 ``effects.*`` rules of ``rules/rules.json``.
@@ -21,17 +22,24 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Any
 
 from trioforge.classes import CLASS_CODES
 from trioforge.effects import donors as dn
 from trioforge.effects import spells as sp
 from trioforge.effects.judgment import Judgment
+from trioforge.effects.value import damage_record_value, effect_value, fr, proc_per_minute
 from trioforge.model.roles import CASTER_CLASSES, MELEE_CLASSES, TANK_CLASSES
 
 __all__ = ["Context", "build_context", "cast_mass", "focus_coverage", "focus_gain", "focus_gains", "gain_possible", "layer", "role_weights"]
 
-ROLE_GROUPS = {"tank": TANK_CLASSES, "melee": MELEE_CLASSES, "caster": CASTER_CLASSES}
+#: the classes that weigh in full in a build's lists, by build: a Ranger is a melee class (the Archer), and the three casting builds (and the Shield caster, a tank class whose damage is spells)
+#: weigh the casting classes; ``tank``, ``melee`` and ``caster`` are also the names of the groups that a call with no build takes the mean over
+ROLE_GROUPS = {
+    "tank": TANK_CLASSES, "shield": CASTER_CLASSES, "melee": MELEE_CLASSES, "ranged": MELEE_CLASSES, "castertank": CASTER_CLASSES, "caster": CASTER_CLASSES,
+}
+_KINDS = {"tank": TANK_CLASSES, "melee": MELEE_CLASSES, "caster": CASTER_CLASSES}  # the three kinds of build a call with no build is the mean over
 SLOT_TIER = {"focus": 1, "click": 2, "worn": 3, "proc": 4}  # the tier at which each exaltation slot opens
 MAX_OTHERS = 3  # the alternate donors listed for an option
 
@@ -48,9 +56,10 @@ class Context:
     own_cats: dict[str, dict[str, int]]
     mass: dict[str, float]
     cat_max: dict[str, float]
-    proc_scale: float
+    proc_scale: Fraction
     haste_provider: dict[str, bool]
     profiles: dict[str, dict[str, Any]]
+    book: sp.SpellBook  # (the spells of the client, which the value of a proc that may be one of several spells reads)
 
 
 # ---- what a class needs --------------------------------------------------------------------------------------------
@@ -120,15 +129,24 @@ def build_context(effects: list[dict[str, Any]], book: sp.SpellBook, j: Judgment
     for effect in effects:  # (what the click scale is measured against: effects the lists can offer)
         if dn.kind_of(effect) in ("click", "worn") and effect.get("magnitude") and offerable(effect, j):
             cat_max[effect["category"]] = max(cat_max[effect["category"]], effect["magnitude"])
+    # the size of a damage proc is the value the solver gives it a minute (:func:`trioforge.effects.value.effect_value`: its Rate line, the share of a restricted target, the one copy up of its lasting
+    # part, the smallest value over the spells an ambiguous record may be, and 0 for a record whose marks the rule does not let count) over the value of one proc a minute with no Rate line and no cap: the
+    # unit of a magnitude, so a plain damage proc is its magnitude times its rate; a poison that lasts a quarter of an hour is worth its uptime and not its total. A record that is worth nothing to the
+    # solver is no measure of a full proc. The scale is exact (a Fraction): the lists compare a score with it for equality at its own proc, which one ulp of a float would move.
+    per_proc = proc_per_minute(j) * fr(j.proc_landing)
     power = sorted(
-        e["magnitude"] * (1 + (e.get("rate_pct") or 0) / 100) * _restricted(e, e["category"], j)  # (the size a proc score is given: restricted targets count a fraction)
-        for e in effects
-        if dn.kind_of(e) == "proc" and e.get("category") in ("damage", "dot", "lifetap") and e.get("magnitude") and offerable(e, j)
+        size
+        for size in (
+            damage_record_value(e, book, j) / per_proc
+            for e in effects
+            if dn.kind_of(e) == "proc" and e.get("category") in ("damage", "dot", "lifetap") and e.get("magnitude") and offerable(e, j)
+        )
+        if size > 0
     )
     cut = j.score_shape["proc_full_percentile"]
-    proc_scale = power[int(cut * (len(power) - 1))] if power else 1.0  # the 90th percentile of proc damage counts as a full score
+    proc_scale = power[int(cut * (len(power) - 1))] if power else Fraction(1)  # the 90th percentile of proc damage counts as a full score
     haste = {c: sp.has_haste_buff(spells, c, j) or c in j.haste_classes for c in CLASS_CODES}
-    return Context(j, effects, {e["id"]: e for e in effects}, cov, own, own_cats, mass, dict(cat_max), proc_scale, haste, profiles)
+    return Context(j, effects, {e["id"]: e for e in effects}, cov, own, own_cats, mass, dict(cat_max), proc_scale, haste, profiles, book)
 
 
 def offerable(effect: dict[str, Any], j: Judgment) -> bool:
@@ -140,22 +158,29 @@ def offerable(effect: dict[str, Any], j: Judgment) -> bool:
 
 
 def role_weights(role: str | None, classes: list[str], j: Judgment) -> dict[str, float]:
-    """Class weights for a role (judgment): balanced is equal; a role is 1 for the classes of its group and ``off_role_class`` for the rest."""
-    if role in ("balanced", None):
+    """Class weights for a build (judgment): no build is equal; a build is 1 for the classes of its group and ``off_role_class`` for the rest."""
+    if role is None:
         return {c: 1.0 for c in classes}
     off = j.score_shape["off_role_class"]
     return {c: (1.0 if c in ROLE_GROUPS[role] else off) for c in classes}
 
 
 def role_rel(role: str | None, classes: list[str], j: Judgment) -> tuple[float, float, float]:
-    """``(spell factor, mana weight, melee weight)`` of a role from the rules' templates (their MANA and ATK weights); a balanced role is the mean over the
-    templates the trio can play."""
-    if role in ("balanced", None):
-        names = [r for r in ("tank", "melee", "caster") if any(c in ROLE_GROUPS[r] for c in classes)]
+    """``(spell factor, mana weight, melee weight)`` of a build from the rules' templates (their MANA and ATK weights); a call with no build is the mean over the
+    kinds of build (tank, melee, caster) the trio can play."""
+    if role is None:
+        names = [r for r in ("tank", "melee", "caster") if any(c in _KINDS[r] for c in classes)]
     else:
         names = [role]
-    mana = sum(j.templates[n]["MANA"] / 4 for n in names) / len(names)
-    attack = sum(j.templates[n]["ATK"] / 3 for n in names) / len(names)
+    # a weight is a share of the largest in the templates of the rules (the Caster's mana weight, Melee damage's attack weight), so that a change to a template moves the shares and
+    # none is ever over 1: the constants these were once divided by were the largest of the first templates
+    most_mana = max(row["MANA"] for row in j.templates.values())
+    most_attack = max(row["ATK"] for row in j.templates.values())
+    for key, most in (("MANA", most_mana), ("ATK", most_attack)):
+        if not most > 0:
+            raise ValueError(f"the {key} weight of a build is a share of the largest in the templates of the rules, and no template has one above 0")
+    mana = sum(j.templates[n]["MANA"] / most_mana for n in names) / len(names)
+    attack = sum(j.templates[n]["ATK"] / most_attack for n in names) / len(names)
     shape = j.score_shape
     return shape["spell_floor"] + shape["spell_span"] * mana, mana, attack
 
@@ -232,19 +257,13 @@ def _click_score(effect: dict[str, Any], donor: dict[str, Any], role: str, class
     return rel * norm * _restricted(effect, category, j)
 
 
-def _proc_score(effect: dict[str, Any], melee_rel: float, classes: list[str], haste_cover: bool, ctx: Context) -> float:
-    j, shape = ctx.j, ctx.j.score_shape
-    category = effect["category"]
-    frac = max(shape["proc_melee_floor"], sum(c in MELEE_CLASSES for c in classes) / len(classes))
-    magnitude = effect.get("magnitude") or 0
-    rate = 1 + (effect.get("rate_pct") or 0) / 100
-    if category in ("damage", "lifetap", "dot"):
-        value = min(1.0, magnitude * rate / ctx.proc_scale) * _restricted(effect, category, j)
-    else:
-        value = j.proc_value.get(category, shape["unlisted_proc"])
-        if category == "haste" and haste_cover:
-            value *= j.haste_cut
-    return melee_rel * frac * value
+def _proc_score(effect: dict[str, Any], melee_rel: float, classes: list[str], ctx: Context) -> float:
+    """The score of a proc record in a list: the value the solver's table gives it (:func:`trioforge.effects.value.effect_value`, for every kind of proc) over the value of a full proc (a proc a minute of
+    the size ``ctx.proc_scale``, at no Rate line), at most 1; times the relevance of the build and the share of melee classes in the trio."""
+    j = ctx.j
+    frac = max(j.score_shape["proc_melee_floor"], sum(c in MELEE_CLASSES for c in classes) / len(classes))
+    full = proc_per_minute(j) * fr(j.proc_landing) * fr(ctx.proc_scale)
+    return melee_rel * frac * min(1.0, float(effect_value(effect, ctx, ctx.book, j, classes) / full))
 
 
 # ---- the lists -------------------------------------------------------------------------------------------------------------
@@ -255,7 +274,7 @@ def _by_ease(donor: dict[str, Any]) -> tuple[int, int]:
 
 
 def layer(classes: list[str], role: str, ctx: Context, *, top: bool = True) -> dict[str, list[dict[str, Any]]]:
-    """The ranked lists of effects for ``classes`` (class codes) and ``role`` (``balanced``, ``tank``, ``melee`` or ``caster``); see the module docstring.
+    """The ranked lists of effects for ``classes`` (class codes) and ``role`` (a build of :data:`trioforge.model.roles.ROLES`); see the module docstring.
 
     ``top`` keeps the ``rows_kept`` best of each list. A donor counts only when it can be worn (it has a slot) and one of the classes can use it."""
     j = ctx.j
@@ -314,7 +333,7 @@ def layer(classes: list[str], role: str, ctx: Context, *, top: bool = True) -> d
             if donor["req_level"] and donor["req_level"] > j.cap:
                 continue
             if kind == "proc":
-                score = _proc_score(effect, melee_rel, classes, haste_cover, ctx)
+                score = _proc_score(effect, melee_rel, classes, ctx)
             else:
                 score = _click_score(effect, donor, role, classes, has_mana, haste_cover, ctx)
                 if donor["instant"] and effect["category"] in j.instant_categories:

@@ -18,7 +18,8 @@
 // page's words for a place left empty) and a placeholder, "Unknown item (w<page id>) +<tier>", for every item the list does not have. A link of another trio than the page's, or of another
 // level than the bundle's, is said plainly, and its value is not worked out. Otherwise the kit is valued under the role, buffs and evidence level the page shows (`valueView()`; the race
 // and the level are the kit's) with the engine's own evaluator (engine/kitvalue.js, the script the manifest lists for it: it needs no worker, no download of the optimizer and no question
-// to the visitor), and again whenever the page's view changes (`onView`). The weapons are the kit's own, not the page's: the evaluator reads the weapon setup from the kit's hands and
+// to the visitor), and again whenever the page's view changes (`onView`). The weapons are the kit's own, not the page's: the evaluator reads the weapon setup from the kit's hands (or, when the link names the Bow setup, whose bow the hands do not show,
+// takes that setup: the line then says "as the link says") and
 // scores the weapons at the haste of the model's rule for the kit's items, so the page's weapon switch and tier switch change nothing, and the line says the setup and the haste the
 // value is for. The best buffs are searched out exactly; when the search ran out of its calls the value is "at least" what it says, and the line says that too. The value leaves out the
 // unknown items, and any item that cannot be worn where the link puts it (it says which, and why, in the row); the line says how many. The shared kit has a Share button
@@ -48,6 +49,7 @@ const SETUP_WORDS = new Map([
   ["2h", "two-hander"],
   ["dw", "dual wield"],
   ["stick", "stat stick"],
+  ["ranged", "bow"],
 ]);
 /** Why an item that is on the list is not worn where the link puts it (the reasons of valueOfKit). */
 const REASONS = new Map([
@@ -60,6 +62,7 @@ const REASONS = new Map([
 ]);
 const plural = (n, one, many) => (n === 1 ? one : many);
 const PLACES = 22;
+const BOW = "ranged"; // the one setup a link can name (upgrade-answer.js writes it, kitdecode.js reads it): any other is no marker, so it is neither valued nor shared again
 /** "pal-mnk-ber" -> "PAL/MNK/BER". */
 const trioWords = (code) => String(code).toUpperCase().split("-").join("/");
 
@@ -94,7 +97,7 @@ export function createSharedKit({ doc, win, announce, words, trio, level, payloa
     announce: (text) => say(text),
     id: "shared-kit-share",
     build: () =>
-      kit === null ? null : { kit: { v: 1, trio: kit.trio, race: kit.race, level: kit.level, slots: kit.slots.map((slot) => [slot.slotIndex, slot.pageId, slot.tier]) }, left: 0 },
+      kit === null ? null : { kit: { v: 1, trio: kit.trio, race: kit.race, level: kit.level, slots: kit.slots.map((slot) => [slot.slotIndex, slot.pageId, slot.tier]), ...(kit.setup === BOW ? { setup: BOW } : {}) }, left: 0 },
   });
   const heading = el("h2", { id: "shared-kit-h", tabindex: "-1" }, HEADING);
   const panel = el("section", { id: "shared-kit", class: "result shared", "aria-labelledby": "shared-kit-h" }, heading, el("p", { id: "shared-kit-lead", class: "note" }, LEAD), state, value, table, share.node);
@@ -202,7 +205,8 @@ export function createSharedKit({ doc, win, announce, words, trio, level, payloa
     const setup = (typeof words.setupText === "function" ? words.setupText(result.setup) : undefined) ?? SETUP_WORDS.get(result.setup) ?? result.setup;
     let line = `Kit value ${n} for ${race}${view === "" ? "" : `, ${view}`}.`;
     // a stat stick scores no weapon damage, so the haste of the weapons is nothing to say
-    line += ` Weapons: ${setup}, read from the kit's hands${result.setup === "stick" ? "" : `, at ${result.hasteAssumed}% haste`}.`;
+    // (a link that names the setup says it: the bow stands in the range place, which the hands do not show)
+    line += ` Weapons: ${setup}, ${result.named === true ? "as the link says" : "read from the kit's hands"}${result.setup === "stick" ? "" : `, at ${result.hasteAssumed}% haste`}.`;
     if (unknownCount > 0) line += ` Excludes ${unknownCount} unknown ${plural(unknownCount, "item", "items")}.`;
     const other = result.left.length;
     if (other > 0) line += ` ${other} ${plural(other, "item cannot", "items cannot")} be worn where the link puts ${plural(other, "it", "them")} and ${plural(other, "is", "are")} not counted.`;
@@ -231,7 +235,7 @@ export function createSharedKit({ doc, win, announce, words, trio, level, payloa
         const [bundle, engine] = await Promise.all([getBundle(), getEngine()]);
         if (mine !== run) return;
         const places = kit.slots.filter((slot) => slot.unknown !== true).map((slot) => ({ slotIndex: slot.slotIndex, key: slot.key, tier: slot.tier }));
-        const result = engine.valueOfKit({ bundle, records, race: kit.race, ...view, places });
+        const result = engine.valueOfKit({ bundle, records, race: kit.race, ...view, places, ...(kit.setup === BOW ? { madeFor: BOW } : {}) });
         if (mine !== run) return;
         shownKey = key;
         setState("");

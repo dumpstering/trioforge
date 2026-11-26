@@ -1,5 +1,6 @@
 """Tests for the effects of the catalog's items as records: the wiki's effect text, click modes, source cost, and the donors of an effect."""
 
+from trioforge.model.roles import roles_for
 from trioforge.effects import donors as dn
 from trioforge.effects import judgment
 from trioforge.effects import spells as sp
@@ -285,7 +286,7 @@ def test_an_effect_labelled_focus_with_no_focus_effect_stays_a_record_but_reache
     built = files.Built(J, effects, [], ctx, {"w60256": {"classes": ["ALL"], "slots": ["HEAD"], "name": "Scaredy Cap"}}, "data-x", "r", "CC BY-SA 4.0", "a", "0" * 64)
     assert files.shared_document(built)["effects"] == []
     for classes in (["PAL", "MNK", "BER"], ["CLR", "SHD", "SHM"]):
-        for role in ("balanced", "tank", "melee", "caster"):
+        for role in roles_for(classes, bow=None):
             assert not any(option["effect"] == effects[0]["id"] for options in layer.layer(classes, role, ctx).values() for option in options)
 
 
@@ -301,7 +302,7 @@ def test_a_list_of_a_trio_never_names_an_ammo_only_donor():
     ctx = layer.build_context(effects, spells, J)
     named = []
     for classes in (["PAL", "MNK", "BER"], ["CLR", "SHD", "SHM"], ["WIZ", "ENC", "MAG"]):
-        for role in ("balanced", "tank", "melee", "caster"):
+        for role in roles_for(classes, bow=None):
             for options in layer.layer(classes, role, ctx, top=False).values():
                 for option in options:
                     named.extend([option["donor"], *option["others"]])

@@ -4,6 +4,13 @@ The wiki is a volunteer-run site, so the client is built to be a good guest:
 
 * one request at a time, and never two request *starts* less than ``min_interval`` seconds
   apart (default 1.0), retries included;
+* the ``robots.txt`` of a host is read before the first request to it in a run (through the same paced
+  transport, and counted as a request), honoured by the rules of RFC 9309 for this program's name and for ``*``
+  (``trioforge.sources.robots``, the reading the scheduled checks use too), and its ``Crawl-delay`` is obeyed when it is
+  longer than ``min_interval`` (a delay of more than a minute stops the run). A robots.txt that is missing (404 and the
+  other 4xx but 429) forbids nothing and one that is forbidden (401, 403) allows nothing; one that cannot be read (a server
+  error, a timeout, a redirect) stops the run with a :class:`FetchError`, because nobody knows what the site forbids, and the
+  site is not asked again in the run. An address that it disallows is refused, nothing sent;
 * ``maxlag=5`` on every request, so the wiki can tell us to wait when its database is behind;
 * ``Retry-After`` is honoured exactly (a number of seconds or an HTTP date; default 5 s when
   the header is missing or unreadable), for HTTP 429 and 503 and for an API ``maxlag`` error. It
@@ -13,7 +20,10 @@ The wiki is a volunteer-run site, so the client is built to be a good guest:
 * a network failure, a timeout, a server error (5xx) or an unreadable body backs off
   2, 4, 8, 16, 32 seconds, and a request is tried at most ``max_retries`` + 1 times;
 * a request that can never succeed (any other 4xx, an API error other than ``maxlag``, a body
-  over the size limit, a redirect) is not retried: it raises :class:`FetchError` at once.
+  over the size limit, a redirect) is not retried: it raises :class:`FetchError` at once. The body of such an answer
+  is never read (a 403 or a redirect is refused as it is, and a 429 or 503 keeps its ``Retry-After`` whatever happens to the body);
+* a body that stops before its ``Content-Length`` is a network failure (an incomplete read) and is retried: ``read`` of
+  an answer with a length returns what came and raises nothing when the server closes the connection early.
 
 Redirects are never followed: every request goes through one opener whose redirect handler
 refuses (a 3xx reply is a :class:`FetchError`), so the client only ever talks to
@@ -48,6 +58,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from functools import partial
 from typing import Any
+
+from .robots import MAX_CRAWL_DELAY, Robots, check_complete, limit_robots, parse_robots, product_of
 
 __all__ = ["API_URL", "FetchError", "PoliteClient"]
 
@@ -121,17 +133,22 @@ _OPENER = _build_opener()
 
 
 def _urllib_transport(url: str, headers: Mapping[str, str], *, timeout: float):
-    """GET ``url`` with urllib, through the opener that refuses redirects. An HTTP error status is a reply."""
+    """GET ``url`` with urllib, through the opener that refuses redirects. An HTTP error status is a reply, with no body: it is never read (the client never uses it, and a
+    connection that fails while it is read would hide the status, and with it a ``Retry-After``). A body that stops before its ``Content-Length`` raises
+    :class:`http.client.IncompleteRead`, which the client retries."""
     request = urllib.request.Request(url, headers=dict(headers), method="GET")
     try:
         with _OPENER.open(request, timeout=timeout) as response:
-            return response.status, dict(response.headers.items()), response.read(MAX_BODY_BYTES + 1)
+            reply_headers = dict(response.headers.items())
+            body = response.read(MAX_BODY_BYTES + 1)
+            check_complete(response.status, reply_headers, body, MAX_BODY_BYTES)
+            return response.status, reply_headers, body
     except urllib.error.HTTPError as error:
         try:
-            body = error.read(MAX_BODY_BYTES + 1) if error.fp is not None else b""
+            reply_headers = dict(error.headers.items()) if error.headers else {}
         finally:
             error.close()
-        return error.code, dict(error.headers.items()) if error.headers else {}, body
+        return error.code, reply_headers, b""
 
 
 def _retry_after(value: str | None) -> float:
@@ -228,6 +245,7 @@ class PoliteClient:
         transport: Transport | None = None,
         clock: Callable[[], float] | None = None,
         sleep: Callable[[float], None] | None = None,
+        honour_robots: bool = True,
     ) -> None:
         if not isinstance(user_agent, str) or not user_agent.strip():
             raise ValueError("a user agent is required")
@@ -243,6 +261,9 @@ class PoliteClient:
         self._clock = clock or time.perf_counter
         self._sleep = sleep or time.sleep
         self._last_start: float | None = None
+        self.honour_robots = honour_robots
+        self.requests = 0  # the requests started, the retries and the robots.txt ones included
+        self._robots: dict[str, Robots | tuple[str, int | None, str | None]] = {}  # by origin: its rules, or why they cannot be had (kept: not asked again in the run)
 
     def get_json(self, params: Mapping[str, Any]) -> dict:
         """GET the API with ``params`` plus format=json, formatversion=2 and maxlag=5.
@@ -253,6 +274,7 @@ class PoliteClient:
         query = {**params, **FIXED_PARAMS}
         url = f"{API_URL}?{urllib.parse.urlencode(query)}"
         headers = {"User-Agent": self.user_agent, "Accept-Encoding": "gzip"}
+        self._honour_robots(url)
         return self._request(url, headers, self._try)
 
     def get_text(self, url: str, allow: Callable[[str], bool]) -> str:
@@ -266,6 +288,7 @@ class PoliteClient:
         if not allow(url):
             raise FetchError(url, None, "address not allowed")
         headers = {"User-Agent": self.user_agent, "Accept-Encoding": "gzip", "Accept": "text/html"}
+        self._honour_robots(url)
         return self._request(url, headers, self._try_text)
 
     def _request(self, url: str, headers: Mapping[str, str], attempt: Callable[[str, Mapping[str, str]], Any]) -> Any:
@@ -290,9 +313,63 @@ class PoliteClient:
             while (remaining := self._last_start + self.min_interval - self._clock()) > 0:
                 self._sleep(remaining)
         self._last_start = self._clock()
+        self.requests += 1
 
-    def _answer(self, url: str, headers: Mapping[str, str]) -> tuple[int, dict[str, Any], bytes] | _Retry:
-        """One request, up to the checks every reply gets: ``(status, lowered headers, body)`` of a 200, or a _Retry, or FetchError if it can never work."""
+    def _honour_robots(self, url: str) -> None:
+        """Before the first request to a host in this run, read its robots.txt (once: what it says, or why it could not be read, is kept), and refuse an address that it
+        disallows for this program or for ``*``. Raises :class:`FetchError`."""
+        if not self.honour_robots:
+            return
+        parts = urllib.parse.urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        key = origin.lower()  # (a host has one name whatever the case it is written in: one robots.txt, asked for once)
+        if key not in self._robots:
+            robots_url = origin + "/robots.txt"
+            try:
+                self._robots[key] = self._request(
+                    robots_url, {"User-Agent": self.user_agent, "Accept-Encoding": "gzip", "Accept": "text/plain"}, self._try_robots
+                )
+            except FetchError as error:
+                self._robots[key] = (robots_url, error.status, f"robots.txt of {parts.netloc} could not be read ({error.detail or 'no reason'}); the site is not asked")
+        rules = self._robots[key]
+        if isinstance(rules, tuple):
+            raise FetchError(*rules)
+        if rules.crawl_delay is not None and rules.crawl_delay > MAX_CRAWL_DELAY:
+            raise FetchError(
+                origin + "/robots.txt", None,
+                f"robots.txt of {parts.netloc} asks for a delay of {rules.crawl_delay:g} s between requests, longer than the {MAX_CRAWL_DELAY:g} s this client waits",
+            )
+        target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+        if not rules.allows(target):
+            raise FetchError(url, None, "robots.txt does not allow this address")
+
+    def _try_robots(self, url: str, headers: Mapping[str, str]) -> Robots | _Retry:
+        """One request for a robots.txt: its rules, or a _Retry (a busy or failing server, no answer), or FetchError (a redirect, which is not followed)."""
+        answer = self._reply(url, headers)
+        if isinstance(answer, _Retry):
+            return answer
+        status, _lowered, body = answer
+        if status == 200:
+            try:
+                text = _gunzip(body) if body[:2] == _GZIP_MAGIC else body
+            except _TooLarge:
+                raise FetchError(url, status, "response too large") from None
+            except (ValueError, zlib.error):
+                return _Retry(status, "unreadable body")
+            rules = parse_robots(limit_robots(text).decode("utf-8", "replace"), product_of(self.user_agent))  # (a longer file is cut at the limit, and at its last line end, not refused: what is past it is not read)
+            if rules.crawl_delay is not None and rules.crawl_delay <= MAX_CRAWL_DELAY:
+                self.min_interval = max(self.min_interval, rules.crawl_delay)  # (a delay longer than a request a second is kept to; one over the limit stops the run, in the caller)
+            return rules
+        if 300 <= status < 400:
+            raise FetchError(url, status, "redirect refused")
+        if status in (401, 403):
+            return Robots(disallow_all=True)
+        if 400 <= status < 500:
+            return Robots()  # (no robots.txt: nothing is forbidden)
+        raise FetchError(url, status, "unexpected status")
+
+    def _reply(self, url: str, headers: Mapping[str, str]) -> tuple[int, dict[str, Any], bytes] | _Retry:
+        """One request, up to what every reply gets: ``(status, lowered headers, body)``, or a _Retry for a network failure, a busy or a failing server."""
         try:
             status, reply_headers, body = self._transport(url, headers)
         except _NETWORK_ERRORS as error:
@@ -302,6 +379,14 @@ class PoliteClient:
             return _Retry(status, "busy", _wait_asked(lowered.get("retry-after"), url, status))
         if status >= 500:
             return _Retry(status, "server error")
+        return status, lowered, body
+
+    def _answer(self, url: str, headers: Mapping[str, str]) -> tuple[int, dict[str, Any], bytes] | _Retry:
+        """One request, up to the checks every reply gets: ``(status, lowered headers, body)`` of a 200, or a _Retry, or FetchError if it can never work."""
+        reply = self._reply(url, headers)
+        if isinstance(reply, _Retry):
+            return reply
+        status, lowered, body = reply
         if 300 <= status < 400:
             raise FetchError(url, status, "redirect refused")
         if status != 200:

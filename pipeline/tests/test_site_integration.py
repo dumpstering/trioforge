@@ -3,7 +3,7 @@
 The site generator was written against fixtures (``fixtures/site/results``) while the precompute was written against the plan;
 these tests are where the two meet. The first compares the keys of the fixtures with the keys a real run writes, so that a
 change to the files can no longer leave the fixtures behind. The others run the real solver on a small grid (two races, the
-balanced role, the tiers the page needs) and build the whole site from the result files: the invented catalog of
+Tank build, the tiers the page needs) and build the whole site from the result files: the invented catalog of
 ``test_precompute.py`` with and without seen flags (so that the default answer comes from the strict level and from the wiki
 level), and, when the catalog is built, the real catalog.
 
@@ -32,7 +32,7 @@ from trioforge.site import build, data
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "fixtures" / "site" / "results" / SLUG
-GRID = dict(races=("OGR", "TRL"), roles=("balanced",), tiers=(0, 4, 10))  # the page needs +4, the seals +4 and +10
+GRID = dict(races=("OGR", "TRL"), roles=("tank",), tiers=(0, 4, 10))  # the page needs +4, the seals +4 and +10
 # a strict level that wears things, and holds an item that needs a deity (the crown), so that the runner-ups have a badge to show
 SEEN = {"w9001", "w9002", "w9003", "w9006", "w9007", "w9009", "w9011", "w9012", "w9014", "w9015", "w9021"}
 
@@ -86,7 +86,7 @@ def keys_of(path: Path) -> list[str]:
 
 def test_the_fixtures_have_the_keys_a_real_run_writes_in_the_same_order(real):
     _, folder, _ = real
-    for name in (*shards.SHARD_NAMES, "defaults.json", "robust.json", "runnerups/index.json", "runnerups/balanced.json"):
+    for name in (*shards.SHARD_NAMES, "defaults.json", "robust.json", "runnerups/index.json", "runnerups/tank.json"):
         assert keys_of(FIXTURES / name) == keys_of(folder / name), name
     for name in shards.SHARD_NAMES:
         fixture, run = (json.loads((root / name).read_text(encoding="utf-8")) for root in (FIXTURES, folder))
@@ -101,10 +101,10 @@ def test_the_fixtures_have_the_keys_a_real_run_writes_in_the_same_order(real):
     assert list(fixture["view"]) == list(run["view"]) and list(fixture["races"][0]) == list(run["races"][0])
     fixture, run = (json.loads((root / "robust.json").read_text(encoding="utf-8")) for root in (FIXTURES, folder))
     role = next(iter(run["roles"]))
-    assert list(fixture["roles"]["balanced"]["4"]) == list(run["roles"][role]["4"]) == list(shards.PLACES)
+    assert list(fixture["roles"]["tank"]["4"]) == list(run["roles"][role]["4"]) == list(shards.PLACES)
     fixture, run = (json.loads((root / "runnerups" / "index.json").read_text(encoding="utf-8")) for root in (FIXTURES, folder))
     assert list(fixture["files"][0]) == list(run["files"][0])
-    fixture, run = (json.loads((root / "runnerups" / "balanced.json").read_text(encoding="utf-8")) for root in (FIXTURES, folder))
+    fixture, run = (json.loads((root / "runnerups" / "tank.json").read_text(encoding="utf-8")) for root in (FIXTURES, folder))
     assert fixture["places"] == run["places"] and fixture["items_keys"] == run["items_keys"]
     assert fixture["tiers"] == run["tiers"] == [0, 4, 10]  # the tiers of the run, every one of them in the file of the role
     assert len(fixture["views"][0]) == len(run["views"][0]) == 4 and len(fixture["views"][0][3]) == len(run["views"][0][3]) == 22
@@ -117,12 +117,12 @@ def test_the_reader_reads_every_file_a_real_run_writes(real):
     assert results.meta.slug == SLUG and results.meta.partial is True and results.meta.data_tag == "data-2030-01-02"
     assert sorted(results.shards) == [("strict", "group"), ("strict", "own"), ("wiki", "group"), ("wiki", "own")]
     assert results.defaults.evidence == "strict" and results.defaults.strict_empty is False and results.defaults.robustness == "done"
-    assert results.robust.race == results.defaults.race and results.robust.view("balanced", 4) and results.robust.view("balanced", 10)
-    assert results.robust.view("balanced", 0) is None  # the seals are for +4 and +10
-    assert results.runnerups.pairs() == (("balanced", 0), ("balanced", 4), ("balanced", 10))
+    assert results.robust.race == results.defaults.race and results.robust.view("tank", 4) and results.robust.view("tank", 10)
+    assert results.robust.view("tank", 0) is None  # the seals are for +4 and +10
+    assert results.runnerups.pairs() == (("tank", 0), ("tank", 4), ("tank", 10))
     wiki = read(folder / "wiki-own.json")
-    scenario = results.shards[("wiki", "own")].scenario("OGR", "balanced", 4, "dw")
-    row = expand(wiki)[("OGR", "balanced", 4, "dw")]
+    scenario = results.shards[("wiki", "own")].scenario("OGR", "tank", 4, "dw")
+    row = expand(wiki)[("OGR", "tank", 4, "dw")]
     assert [item.key if item else None for item in scenario.kit] == row["kit"] and scenario.value == pytest.approx(row["F"], abs=0.0006)
     assert scenario.totals.ac == row["totals"]["ac"] and scenario.totals.resists[1] == row["totals"]["fire"]  # MAGIC FIRE COLD ...
     assert scenario.totals.regen == (row["totals"]["hpreg"], row["totals"]["manareg"], row["totals"]["endreg"])
@@ -141,7 +141,7 @@ def test_the_site_built_from_a_tiny_run_bakes_the_kit_the_precompute_solved(real
     html = parse((out / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
     defaults = read(folder / "defaults.json")
     rows = expand(read(folder / "strict-own.json"))
-    wanted = rows[(defaults["race"], "balanced", 4, defaults["setup"])]["kit"]
+    wanted = rows[(defaults["race"], "tank", 4, defaults["setup"])]["kit"]
     names = {item["key"]: item["name"] for item in CATALOG}
     baked = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
     assert baked == [names[key] if key else "Leave empty" for key in wanted]
@@ -159,8 +159,8 @@ def test_the_site_built_from_a_tiny_run_bakes_the_kit_the_precompute_solved(real
     assert re.fullmatch(r"All 22 picks hold in every check\.|\d+ of 22 picks hold in every check\. The other \d+ depends? on an assumption:", summary_text), summary_text
     for name, version in (("strict-own", 1), ("strict-group", 1), ("wiki-own", 1), ("wiki-group", 1), ("robust", 2)):
         assert json.loads((out / "data" / SLUG / f"{name}.json").read_text(encoding="utf-8"))["v"] == version  # robust: 2 names the sealed view
-    assert sorted(p.name for p in (out / "data" / SLUG / "runnerups").iterdir()) == ["balanced.json"]  # a file for the role, and the three tiers are in it
-    assert json.loads((out / "data" / SLUG / "runnerups" / "balanced.json").read_text(encoding="utf-8"))["tiers"] == [0, 4, 10]
+    assert sorted(p.name for p in (out / "data" / SLUG / "runnerups").iterdir()) == ["tank.json"]  # a file for the role, and the three tiers are in it
+    assert json.loads((out / "data" / SLUG / "runnerups" / "tank.json").read_text(encoding="utf-8"))["tiers"] == [0, 4, 10]
 
 
 def test_with_no_seen_flags_the_site_is_built_from_the_wiki_level_and_says_nothing_of_it(tmp_path):
@@ -174,7 +174,7 @@ def test_with_no_seen_flags_the_site_is_built_from_the_wiki_level_and_says_nothi
     site, _ = site_from(out, tmp_path, manifest_for(tmp_path / "manifest.json", CATALOG))
     html = parse((site / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
     names = {item["key"]: item["name"] for item in CATALOG}
-    wanted = expand(read(folder / "wiki-own.json"))[(defaults["race"], "balanced", 4, defaults["setup"])]["kit"]
+    wanted = expand(read(folder / "wiki-own.json"))[(defaults["race"], "tank", 4, defaults["setup"])]["kit"]
     baked = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
     assert baked == [names[key] if key else "Leave empty" for key in wanted] and any(name != "Leave empty" for name in baked)
     assert html.find_all("input", name="ev") == [] and html.find_all("p", id_="evidence-note") == []  # no evidence picker, no note: wiki is the one level
@@ -194,12 +194,12 @@ def test_with_nothing_seen_the_strict_level_has_no_shield_setup_and_the_wiki_pag
     pc.run(SLUG, out, catalog=write_catalog(tmp_path / "catalog.json"), processes=1, **GRID)
     folder = out / SLUG
     for buffs in ("own", "group"):
-        assert read(folder / f"strict-{buffs}.json")["setups"] == {"balanced": ["2h", "dw"]}
-        assert read(folder / f"wiki-{buffs}.json")["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}
+        assert read(folder / f"strict-{buffs}.json")["setups"] == {"tank": ["2h", "dw"]}
+        assert read(folder / f"wiki-{buffs}.json")["setups"] == {"tank": ["1h-shield", "2h", "dw"]}
     site, _ = site_from(out, tmp_path, manifest_for(tmp_path / "manifest.json", CATALOG))
     html = parse((site / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
     assert html.find_all("input", name="ev") == []
-    assert html.by_id("role-balanced").get("data-setups") == "1h-shield 2h dw"  # what the wiki level offers the default role
+    assert html.by_id("role-tank").get("data-setups") == "1h-shield 2h dw"  # what the wiki level offers the default role
     radios = {r.get("value"): r for r in html.find_all("input", name="setup")}
     assert sorted(radios) == ["1h-shield", "2h", "dw"] and not any(r.has("hidden") for r in radios.values())
     rows = {name: json.loads((site / "data" / SLUG / f"{name}.json").read_text(encoding="utf-8"))["rows"] for name in ("strict-own", "wiki-own")}
@@ -214,14 +214,14 @@ def test_a_strict_level_with_items_but_no_shield_does_not_offer_the_shield_setup
     seen = write_seen(tmp_path / "seen.json", {"w9001", "w9006", "w9011"})
     pc.run(SLUG, out, seen_path=seen, catalog=write_catalog(tmp_path / "catalog.json"), processes=1, **GRID)
     folder = out / SLUG
-    assert read(folder / "strict-own.json")["pool"] == 3 and read(folder / "strict-own.json")["setups"] == {"balanced": ["2h", "dw"]}
-    assert read(folder / "wiki-own.json")["setups"] == {"balanced": ["1h-shield", "2h", "dw"]}
+    assert read(folder / "strict-own.json")["pool"] == 3 and read(folder / "strict-own.json")["setups"] == {"tank": ["2h", "dw"]}
+    assert read(folder / "wiki-own.json")["setups"] == {"tank": ["1h-shield", "2h", "dw"]}
     defaults = read(folder / "defaults.json")
     assert defaults["view"]["evidence"] == "strict" and defaults["setup"] in ("2h", "dw")
     site, _ = site_from(out, tmp_path, manifest_for(tmp_path / "manifest.json", CATALOG))
     html = parse((site / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
     assert html.find_all("input", name="ev") == []
-    assert html.by_id("role-balanced").get("data-setups") == "2h dw"
+    assert html.by_id("role-tank").get("data-setups") == "2h dw"
     radios = {r.get("value"): r for r in html.find_all("input", name="setup")}
     assert sorted(radios) == ["1h-shield", "2h", "dw"]
     assert radios["1h-shield"].has("hidden") and radios["1h-shield"].has("disabled")  # there, for the wiki level, and out of reach
@@ -330,7 +330,7 @@ def test_a_small_run_on_the_real_catalog_builds_into_a_site(tmp_path):
     started = time.perf_counter()
     out = tmp_path / "results"
     summary = pc.run(
-        SLUG, out, catalog=catalog, processes=min(8, os.cpu_count() or 2), races=("OGR", "TRL"), roles=("balanced",), tiers=(4,)
+        SLUG, out, catalog=catalog, processes=min(8, os.cpu_count() or 2), races=("OGR", "TRL"), roles=("tank",), tiers=(4,)
     )
     assert summary.partial and not summary.violations and "done" == read(out / SLUG / "defaults.json")["robustness"]
     defaults = read(out / SLUG / "defaults.json")
@@ -340,7 +340,7 @@ def test_a_small_run_on_the_real_catalog_builds_into_a_site(tmp_path):
     html = parse((site / "trio" / SLUG / "index.html").read_text(encoding="utf-8"))
     wiki = read(out / SLUG / "wiki-own.json")
     keys = {row[0]: row[1] for row in wiki["items"]}
-    wanted = expand(wiki)[(defaults["race"], "balanced", 4, defaults["setup"])]["kit"]
+    wanted = expand(wiki)[(defaults["race"], "tank", 4, defaults["setup"])]["kit"]
     baked = [row.find(data_f="name").text() for row in html.by_id("kit-body").find_all("tr")]
     assert baked == [keys[key] if key else "Leave empty" for key in wanted]
     assert result.partial == (SLUG,) and result.sizes["trio_html"] < build.LIMITS["trio_html"]

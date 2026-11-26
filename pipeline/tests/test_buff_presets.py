@@ -20,6 +20,7 @@ import pytest
 
 from trioforge.classes import CLASS_CODES
 from trioforge.model import buffs as bf
+from trioforge.model import roles
 from trioforge.model.buffs import Buff, enchanter_preset, group_preset, own_buffs, raid_preset, resolve
 from trioforge.model.items import at_tier
 from trioforge.model.profile import make_profile
@@ -354,8 +355,8 @@ def best_values(trio, pool, buffsets):
     options = BuildOptions()
     values = {}
     for key, buffset in buffsets.items():
-        profile = make_profile(race, trio, 50, "balanced", buffset, None, TABLES)
-        setup = make_profile(race, trio, 50, "balanced", None, None, TABLES).setups[0]
+        profile = make_profile(race, trio, 50, roles.roles_for(trio)[0], buffset, None, TABLES)
+        setup = make_profile(race, trio, 50, roles.roles_for(trio)[0], None, None, TABLES).setups[0]
         items = [at_tier(item, 4, RULES) for item in pool]
         kept = prune(items, profile, 4, setup, buffset, options)
         solution = solve(build_milp(profile, kept, setup, buffset, options))

@@ -14,7 +14,7 @@ the tests are not part of the package: a test holds the two copies to each other
 and the same exact maximum), so a change to one that is not made to the other is reported. Every name here is invented;
 item keys are plain labels (``it00``), never keys of the catalog.
 
-An instance carries a real :class:`~trioforge.model.profile.Profile` (labelled ``balanced``, evidence ``wiki``, with
+An instance carries a real :class:`~trioforge.model.profile.Profile` (labelled ``melee``, evidence ``wiki``, with
 placeholder AA choices: the instance gives the percents the choices would have made), so a fixture can store it as
 ``Profile.to_dict()`` and the browser can read it as it reads any other profile.
 """
@@ -36,7 +36,7 @@ from trioforge.model import formulas as fm
 from trioforge.model.buffs import COMPONENTS, Buff, BuffSet
 from trioforge.model.formulas import evaluate
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, ItemVec, WeaponVec
-from trioforge.model.profile import Profile
+from trioforge.model.profile import Profile, placements
 from trioforge.model.tables import Tables, load
 
 __all__ = [
@@ -167,10 +167,25 @@ def is_weapon(item):
     return item.weapon is not None and item.weapon.dmg > 0 and item.weapon.delay > 0
 
 
+def is_bow(item):
+    """A weapon of the archery skill that fits the range place."""
+    return is_weapon(item) and item.weapon.skill.casefold() == "archery" and "RANGE" in item.slots
+
+
+def is_ranged_skill(item):
+    """A weapon of the archery skill or of a throwing skill (``Throwing``, ``Throwingv1``, ``Throwingv2``), in any case: it is no melee weapon."""
+    skill = ((item.weapon.skill if item.weapon is not None else None) or "").casefold()
+    return skill == "archery" or skill.startswith("throwing")
+
+
 def hand_ok(item, group, setup):
+    if group == "RANGE":
+        return is_bow(item) if setup == "ranged" else True  # the range place takes a bow in the bow setup, anything that fits it in the others
+    if is_ranged_skill(item):
+        return False  # a bow or a thrown weapon is in no hand, in every setup, whatever slots the item lists: the range place is the one for it
     if group == "SECONDARY" and item.weapon is not None and item.weapon.two_handed:
         return False  # a two-hander needs both hands: never in the off hand, whatever the setup
-    if setup in (None, "stick"):
+    if setup in (None, "stick", "ranged"):
         return True
     if setup == "1h-shield":
         return item.is_shield if group == "SECONDARY" else is_weapon(item) and not item.weapon.two_handed
@@ -187,7 +202,7 @@ def fits(item, group, setup, any_rule="all"):
         return "ANY" in item.slots or (any_rule == "all" and any(s in MODEL_SLOTS for s in item.slots))
     if group not in item.slots:
         return False
-    return hand_ok(item, group, setup) if group in HANDS else True
+    return hand_ok(item, group, setup) if group in HANDS or group == "RANGE" else True
 
 
 def candidates(items, group, setup, any_rule="all"):
@@ -231,13 +246,19 @@ class Instance:
     race: str = ""
     level: int = 50
     notes: dict = field(default_factory=dict)
+    procs: Any = None  # the :class:`~trioforge.model.procs.ProcTable` the weapon term counts (None: no proc), which the evaluator, the builder and the pruning are given
 
     def options_kwargs(self):
-        return {"any_rule": self.any_rule, "haste_assumed": self.haste_assumed}
+        return {"any_rule": self.any_rule, "haste_assumed": self.haste_assumed, "procs": self.procs}
 
 
 def best_softcap(trio, level=50):
-    return max((tables().softcap[(c, level)] for c in trio), key=lambda t: t[0])
+    """The softcap of a trio as the profile makes it: the larger of the floor and the best class cap, and the larger of the floor and the best class rate (``ac.softcap.base_floor``, ``rate_floor``)."""
+    rules = tables().rules
+    return (
+        max(rules.get("ac.softcap.base_floor", level), *(tables().softcap[(c, level)][0] for c in trio)),
+        max(rules.get("ac.softcap.rate_floor", level), *(tables().softcap[(c, level)][1] for c in trio)),
+    )
 
 
 def make_profile(trio, race, weights, *, level=50, buff_totals=None, spell_haste=None, setup=None, **changes) -> Profile:
@@ -248,14 +269,14 @@ def make_profile(trio, race, weights, *, level=50, buff_totals=None, spell_haste
     totals = buff_totals or {}
     base: dict[str, Any] = dict(
         level=level, naked=fm.naked(race, trio, tables()), weights=weights, pools=fm.pools_for(trio, level, tables()),
-        buff_totals=totals, haste_cap=85 if "MNK" in trio else 75, softcap=(cap, rate),
+        buff_totals=totals, haste_cap=fm.haste_cap_at(level) + (10 if "MNK" in trio else 0), softcap=(cap, rate),
         monk=fm.monk_curve(tables().rules, level) if "MNK" in trio else None, cs_pct=0, pe_pct=0, defense_cap=0,
-        iksar_ac=0, placement={"monk": "top", "iksar": "top"}, bands=None, dw_factor=1,
-    )
+        iksar_ac=0, placement=placements(tables().rules, level), bands=None, dw_factor=1,
+    )  # (the placement is the rules', which is the game client's: the Monk bonus inside the sheet value, so the brute force and the solver meet it with the Monk curve)
     base.update(changes)
     caps = {"regen": dict(fm.STANDARD_CAPS["regen"]), "resist": fm.STANDARD_CAPS["resist"]}
     return Profile(
-        race=race, trio=tuple(trio), level=base.pop("level"), role="balanced", evidence="wiki",
+        race=race, trio=tuple(trio), level=base.pop("level"), role="melee", evidence="wiki",
         aa={"combat_stability": 0, "natural_durability": 0, "physical_enhancement": False},  # a placeholder: the percents are given below (the pools are the client's own)
         spell_haste=totals.get("HASTE", 0) if spell_haste is None else spell_haste, caps=caps,
         setups=() if setup is None else (setup,), deity=None, **base,
@@ -315,6 +336,10 @@ def random_item(rng, key, group, monk, power=1.0):
     haste = rng.randint(5, 45) if rng.random() < 0.25 else 0
     weight10 = rng.randint(0, 400) if monk else rng.randint(0, 120)
     weapon, shield = None, False
+    if group == "RANGE":  # (only an instance of the bow setup has this group: no other draws from here)
+        kind = rng.choice(("bow", "bow", "bow", "charm", "thrown"))
+        if kind != "charm":
+            weapon = WeaponVec("Archery" if kind == "bow" else "Throwing", rng.randint(6, 45), rng.choice((20, 25, 30, 36, 40, 50, 60)), rng.choice((None, None, rng.randint(3, 25))), False)
     if group in HANDS:
         kind = rng.choice(("one", "one", "two", "shield", "held")) if group == "PRIMARY" else rng.choice(
             ("one", "shield", "shield", "held")
@@ -399,11 +424,15 @@ def random_instance(rng, *, trio_index=None, with_buffs=None, any_rule=None, mon
         groups, per_group = rng.sample(menu, rng.randint(2, 3)), (2, 2)
     else:
         groups, per_group = rng.sample(menu, rng.randint(4, 6)), (2, 4)
+    if setup == "ranged":  # the bow setup: the range place is one of the groups
+        groups[-1] = "RANGE"
     power = rng.choice((1.0, 1.0, 2.0, 3.5))
     items = []
     for g in groups:
         for _ in range(rng.randint(*per_group)):
             items.append(random_item(rng, f"it{len(items):02d}", g, monk, power))
+    if setup == "ranged" and not any(is_bow(item) for item in items):
+        items.append(make_item(f"it{len(items):02d}", {"RANGE"}, stats={"HP": rng.randint(10, 80)}, weapon=WeaponVec("Archery", rng.randint(10, 40), rng.choice((30, 40, 50)), None, False)))
     if any_rule == "explicit":
         for _ in range(rng.randint(0, 3)):
             items.append(make_item(
@@ -429,7 +458,9 @@ def random_instance(rng, *, trio_index=None, with_buffs=None, any_rule=None, mon
     if rng.random() < 0.3:
         for school in rng.sample(SCHOOLS, 2):
             weights[f"SV_{school}"] = round(rng.uniform(0.01, 3.0), 3)
-    haste_cap = 85 if monk else 75
+    if setup == "ranged":  # the bow is what the setup scores
+        weights["DMG"] = round(rng.uniform(50.0, 600.0), 2)
+    haste_cap = fm.haste_cap_at(level) + (10 if monk else 0)  # (T7: the cap of the level, and the 10 of Unbound Alacrity with a Monk, as the profile has it)
     spell_const = rng.choice((0, 0, 0, 20, haste_cap - 5, haste_cap + 6, 40))
 
     want_buffs = (rng.random() < 0.6 if with_buffs is None else with_buffs) or haste_buffs
@@ -451,6 +482,8 @@ def random_instance(rng, *, trio_index=None, with_buffs=None, any_rule=None, mon
         dw_factor=rng.choice((Fraction(4, 5), Fraction(1, 2), 1)),
         bands=rng.choice((None, None, {"breaks": [100, 200, 510], "slopes": [1, 2.5, 0.654, 0]})),
     )
+    if setup == "ranged":
+        profile_args["ranged_factor"] = rng.choice((1, Fraction(3, 4), Fraction(3, 2)))
     if monk:
         profile_args["monk"] = fm.monk_curve(tables().rules, level, full_until=34 if curve_kind == "full_until_34" else None)
     synthetic = rng.random() < 0.3
@@ -468,6 +501,58 @@ def random_instance(rng, *, trio_index=None, with_buffs=None, any_rule=None, mon
         items=items, setup=setup, buffset=buffset, haste_assumed=rng.choice((0, 25, 50, haste_cap)), any_rule=any_rule,
         trio=tuple(trio), race=race, level=level,
     )
+
+
+def ranged_instance(rng, *, trio_index=None, truthful=False):
+    """A random instance of the bow setup: a range place with bows (and a charm and a thrown weapon that the setup keeps out of it), hands that are stat sticks, a
+    damage weight that makes the bow matter and a bow factor that is not always 1. With ``truthful`` the instance is for the truthful solve as
+    :func:`truthful_instance` makes one (worn haste in the pool, optional haste buffs that exclude each other, ``haste_assumed`` None). Drawn again (the same stream)
+    until the pool has a bow (and a haste item)."""
+    for _ in range(400):
+        inst = random_instance(rng, trio_index=trio_index, haste_buffs=truthful, setup="ranged")
+        if not any(is_bow(item) for item in inst.items):
+            continue
+        if not truthful:
+            return inst
+        if any(item.haste > 0 for item in inst.items):
+            bonus = 10 if "MNK" in inst.trio else 0
+            profile = dataclasses.replace(inst.profile, weights={**dict(inst.profile.weights), "DMG": 200.0}, haste_bonus=bonus)
+            return dataclasses.replace(inst, profile=profile, haste_assumed=None, label=f"{inst.label} truthful")
+    raise ValueError("no instance of the bow setup with a bow (and a haste item)")
+
+
+def procs_instance(rng, *, trio_index=None):
+    """A random instance of a weapon setup (dual wield, one hand and a shield, or a two-hander) with a table of procs: invented effects, each carried by one or two weapons of the pool, some of them
+    Lore items, with every item hosting (the socket tier is 0). Drawn again (the same stream) until the pool has three weapons that fit the hands and a damage weight that makes a proc matter."""
+    from trioforge.model import procs as procs_module
+
+    for _ in range(400):
+        setup = rng.choice(("dw", "dw", "1h-shield", "2h"))
+        inst = random_instance(rng, trio_index=trio_index, setup=setup, any_rule="explicit")
+        weapons = [item for item in inst.items if item.weapon is not None and item.weapon.dmg > 0 and item.slots & set(HANDS) and not is_bow(item)]
+        if len(weapons) < 3:
+            continue
+        profile = dataclasses.replace(inst.profile, weights={**dict(inst.profile.weights), "DMG": 300.0})
+        chosen = rng.sample(weapons, min(len(weapons), rng.randint(2, 3)))
+        values = [Fraction(rng.randint(60, 900)) / rng.choice((1, 1, 3, 7)) for _ in chosen]
+        effects = [procs_module.ProcEffect(f"p{n}", f"Proc {n}", value) for n, value in enumerate(values)]
+        donors = []
+        for n, effect in enumerate(effects):
+            carriers = {chosen[n].key, *(item.key for item in rng.sample(weapons, rng.randint(0, 1)))}
+            for item in weapons:
+                if item.key in carriers:
+                    donors.append(
+                        procs_module.ProcDonor(
+                            effect.id, item.key, frozenset(item.slots), frozenset(c for c in inst.trio if c in item.classes), item.weapon.two_handed or item.slots == {"PRIMARY"}, bool(item.lore),
+                        )
+                    )
+        donors = [d for d in donors if d.classes]
+        if not donors:
+            continue
+        keep = {d.effect for d in donors}
+        table = procs_module.ProcTable(tuple(inst.trio), 0, tuple(e for e in effects if e.id in keep), tuple(donors))
+        return dataclasses.replace(inst, profile=profile, procs=table, label=f"{inst.label} procs")
+    raise ValueError("no instance of a weapon setup with weapons that can carry a proc")
 
 
 def truthful_instance(rng, *, trio_index=None):
@@ -498,11 +583,17 @@ class Space:
         self.options = []
         for g, size in SLOT_GROUPS:
             cands = candidates(inst.items, g, inst.setup, inst.any_rule)
-            if cands:
+            if g == "RANGE" and inst.setup == "ranged":  # the bow setup fills the range place: every kit has a bow in it
+                if not cands:
+                    raise ValueError("the ranged setup needs a bow for the range place, and the items have none that fits it")
+                self.group_names.append(g)
+                self.options.append([option for option in group_options(cands, size) if option])
+            elif cands:
                 self.group_names.append(g)
                 self.options.append(group_options(cands, size))
         self.kits = self._enumerate()
         self._features()
+        self.proc_part = self._procs()
         buffset = inst.buffset
         self.buff_sets = list(buffset.iter_legal()) if buffset is not None else [()]
 
@@ -540,6 +631,17 @@ class Space:
     def kit_of(self, combo):
         return kit_from_groups(self.groups_of(combo))
 
+    # -- the procs: the part of the weapon term the table adds to each kit (it has no haste factor and does not depend on the buffs)
+    def _procs(self):
+        """The proc part of every kit as a float (zero for every kit when the instance has no table): the exact evaluator's, which the float values add to their own."""
+        if self.inst.procs is None:
+            return np.zeros(len(self.kits))
+        out = np.zeros(len(self.kits))
+        for index, combo in enumerate(self.kits):
+            found = fm.evaluate(self.inst.profile, self.kit_of(combo), None, setup=self.inst.setup, haste_assumed=0, procs=self.inst.procs).totals.get("procs")
+            out[index] = 0.0 if found is None else float(found["part"])
+        return out
+
     # -- features of every option, summed over the kits
     def _features(self):
         p, inst = self.p, self.inst
@@ -559,9 +661,10 @@ class Space:
                             table[f"SV_{school}"][oi] += value
                     table["W10"][oi] += item.weight10
                     table["HASTE"][oi] = max(table["HASTE"][oi], item.haste)
-                    if g in HANDS and item.weapon is not None:
+                    if (g in HANDS or g == "RANGE") and item.weapon is not None:
                         table["WEAPON"][oi] += float(
-                            fm.weapon_index(item.weapon, g, inst.setup, inst.haste_assumed or 0, p.dw_factor)
+                            fm.weapon_index(item.weapon, g, inst.setup, inst.haste_assumed or 0, p.dw_factor, p.ranged_factor, p.level)
+                            * (p.stance["swing_factor"] if p.stance is not None and g in HANDS else 1)
                         )
             idx = self.kits[:, gi]
             for n in names:
@@ -619,17 +722,18 @@ class Space:
         iksar = float(p.iksar_ac)
         inside = (monk if p.placement["monk"] == "inside" else 0.0) + (iksar if p.placement["iksar"] == "inside" else 0.0)
         cap, rate = float(p.softcap[0]), float(p.softcap[1])
-        x = (4 / 3) * (f["ACW"] + f["ACS"]) + float(p.defense_cap) / 3 + float(b.get("AC", 0)) / 4 + np.minimum(T["AGI"], 510) / 20 + inside
+        agi_share = float(p.stance["agi_share"]) if p.stance is not None else 1.0  # (the Berserker stance: no agility in the armor class and the evasion)
+        x = (4 / 3) * (f["ACW"] + f["ACS"]) + float(p.defense_cap) / 3 + float(b.get("AC", 0)) / 4 + agi_share * np.minimum(T["AGI"], 510) / 20 + inside
         y = math.floor(cap * (100 + float(p.cs_pct) + float(p.pe_pct)) / 100) + f["ACS"]
         sheet = np.minimum(x, rate * x + (1 - rate) * y)
         per_point = W("AC") / (4 / 3)
         total += per_point * sheet
         total += per_point * (monk if p.placement["monk"] == "top" else 0.0)
         total += per_point * (iksar if p.placement["iksar"] == "top" else 0.0)
-        total += W("AC") * 0.2222 * np.clip(T["AGI"], 0, 510)
+        total += W("AC") * 0.2222 * np.clip(T["AGI"], 0, 510) * agi_share
         # ATK, DEX, CHA
         total += W("ATK") * (0.666667 * np.clip(T["STR"], 0, 510) + f["ATK"] + float(b.get("ATK", 0)))
-        total += W("DEX") * pwl(T["DEX"], (255, 510), (1, 0.1, 0))
+        total += W("DEX") * pwl(T["DEX"], (255, 510), (1, 1, 0))
         total += W("CHA") * np.clip(T["CHA"], 0, 510)
         # HASTE (the spell haste is the buffs' and the flat haste of Unbound Alacrity)
         spell, hc = float(b.get("HASTE", 0)) + float(p.haste_bonus), float(p.haste_cap)
@@ -645,15 +749,15 @@ class Space:
         if self.inst.haste_assumed is None:  # a truthful instance: the weapon index (built at 0) takes the haste the kit counts
             total += W("DMG") * f["WEAPON"] * (min(spell, hc) + worn) / 100
         total += W("DMG") * f["WEAPON"]
-        return total
+        return total + self.proc_part
 
     # -- the exact maximum
     def exact(self, combo, chosen):
         kit = self.kit_of(combo)
         totals = eval_totals(self.inst.buffset, chosen) if self.inst.buffset else None
         if self.inst.haste_assumed is None:
-            return fm.evaluate_truthful(self.inst.profile, kit, totals, setup=self.inst.setup).F
-        return evaluate(self.inst.profile, kit, totals, setup=self.inst.setup, haste_assumed=self.inst.haste_assumed).F
+            return fm.evaluate_truthful(self.inst.profile, kit, totals, setup=self.inst.setup, procs=self.inst.procs).F
+        return evaluate(self.inst.profile, kit, totals, setup=self.inst.setup, haste_assumed=self.inst.haste_assumed, procs=self.inst.procs).F
 
     def best(self):
         """(exact maximum F as a Fraction, the (kit, buff set) pairs that reach it within 1e-9 relative)."""

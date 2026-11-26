@@ -34,20 +34,11 @@ from typing import Any
 from trioforge import bench, upgrade
 from trioforge.data.jsonio import load_strict
 from trioforge.export import brute, browser, milp_json
-from trioforge.export.fixture_plan import BuffKeys, ScenarioSpec, UpgradeSpec
+from trioforge.export.fixture_plan import PROCS_BASE, RANGED_BASE, BuffKeys, ScenarioSpec, UpgradeSpec
 from trioforge.model import formulas as fm
+from trioforge.model import procs as procs_module
 from trioforge.model import roles
-from trioforge.model.buffs import (
-    COMPONENTS,
-    Buff,
-    BuffSet,
-    Dropped,
-    enchanter_preset,
-    group_preset,
-    own_buffs,
-    raid_preset,
-    resolve,
-)
+from trioforge.model.buffs import COMPONENTS, Buff, BuffSet, Dropped, buffsets
 from trioforge.model.items import SLOT_INSTANCES, ItemVec, at_tier
 from trioforge.model.profile import Profile, make_profile
 from trioforge.model.tables import REPO
@@ -120,7 +111,13 @@ def exact_json(value: Any) -> Any:
 def breakdown_json(breakdown: fm.Breakdown) -> dict[str, Any]:
     """A :class:`~trioforge.model.formulas.Breakdown` with every number as a ``"p/q"`` string (the classes whose pools
     count stay lists of class codes)."""
-    return {"F": browser.rat(breakdown.F), "parts": exact_json(breakdown.parts), "totals": exact_json(breakdown.totals)}
+    totals = dict(breakdown.totals)
+    counted = totals.get("procs")
+    if counted is not None:  # (what each hand counts: the value of its proc, 0 for none, and the index and the part the procs add: names and donors are not exact numbers, and the program says the rest)
+        totals["procs"] = {
+            hand: 0 if counted[hand] is None else counted[hand].value for hand in ("PRIMARY", "SECONDARY")
+        } | {"index": counted["index"], "part": counted["part"]}
+    return {"F": browser.rat(breakdown.F), "parts": exact_json(breakdown.parts), "totals": exact_json(totals)}
 
 
 def kit_json(kit: Sequence[ItemVec | None]) -> list[list[Any] | None]:
@@ -250,7 +247,8 @@ def _ladder_without_reports(root: Path, items: Sequence[Mapping[str, Any]]) -> A
 class Inputs:
     """The tables, the catalog and everything derived from them that the cases share.
 
-    ``catalog_path`` defaults to the catalog of this checkout (or of the main checkout of a worktree). A catalog with a
+    ``catalog_path`` defaults to the catalog of ``root`` (:func:`trioforge.precompute.grid.find_catalog`: ``$TRIOFORGE_CATALOG``, else ``derived/catalog.json`` of
+    ``root``, this checkout by default, else the one of the main checkout of a worktree). A catalog with a
     strict item, or with an item whose reasons name a sighting, is refused: the fixtures come from the public catalog only,
     and "strict" in a fixture means the hash proxy of :func:`trioforge.bench.strict_proxy`. The one exception is a strict item
     that players' reports alone made (the first accepted report makes one): community reports are public, but the strict record
@@ -263,7 +261,7 @@ class Inputs:
         self.root = Path(root)
         self.tables = load_tables(self.root)
         self.rules = self.tables.rules
-        path = catalog_path if catalog_path is not None else grid.find_catalog()
+        path = catalog_path if catalog_path is not None else grid.find_catalog(self.root)
         if path is None:
             raise FixtureError("no catalog found; build one or pass --catalog")
         document = load_strict(path)
@@ -303,7 +301,7 @@ class Inputs:
         self.position = {key: number for number, key in enumerate(self.records)}
         self.weapon_pct = self.rules.get("tier.weapon_damage_pct")
         self._spells: dict[int, Any] = {}
-        self._buffsets: dict[tuple[tuple[str, ...], int], dict[str, BuffSet]] = {}
+        self._buffsets: dict[tuple[tuple[str, ...], int, bool | None], dict[str, BuffSet]] = {}
         self._selection: dict[tuple[str, ...], grid.Selection] = {}
         self._pools: dict[tuple[tuple[str, ...], str, bool], list[dict[str, Any]]] = {}
         self._solve_pools: dict[tuple[tuple[str, ...], str], list[ItemVec]] = {}
@@ -315,19 +313,12 @@ class Inputs:
             self._spells[level] = load_strict(self.root / "derived" / "client" / f"spells-l{level}.json")
         return self._spells[level]
 
-    def buffsets(self, codes: Sequence[str], level: int) -> dict[str, BuffSet]:
-        """The four buff sets of a trio at a level, written as :func:`trioforge.export.browser.bundle` writes them."""
-        key = (tuple(codes), level)
+    def buffsets(self, codes: Sequence[str], level: int, spell_haste: bool | None = None) -> dict[str, BuffSet]:
+        """The four buff sets of a trio at a level, written as :func:`trioforge.export.browser.bundle` writes them. ``spell_haste`` None follows the rule ``haste.assume_spell``
+        (no spell haste in them while it is false); True gives the sets the haste of the spells, which only the scenarios of the stratum ``spell-haste`` ask for."""
+        key = (tuple(codes), level, spell_haste)
         if key not in self._buffsets:
-            spells, rules = self.spells(level), self.rules
-            own = own_buffs(codes, level, spells, rules)
-            group = group_preset(spells, level=level)
-            self._buffsets[key] = {
-                "own": resolve(own, rules),
-                "group": resolve([*own, *group], rules),
-                "group+enchanter": resolve([*own, *group, *enchanter_preset(spells, level, rules=rules)], rules),
-                "raid": resolve([*own, *raid_preset(spells, level, rules=rules)], rules),
-            }
+            self._buffsets[key] = buffsets(codes, level, self.spells(level), self.rules, BuffKeys, spell_haste=spell_haste)
             assert tuple(self._buffsets[key]) == BuffKeys
         return self._buffsets[key]
 
@@ -371,16 +362,18 @@ class Inputs:
 
     def profile(
         self, codes: Sequence[str], level: int, race: str, role: str, buffs: str, *, evidence: str, deity: str | None,
-        pool: str | None = None,
+        pool: str | None = None, spell_haste: bool | None = None,
     ) -> Profile:
         """The profile of a scenario (``evidence`` is its label, ``strict`` or ``wiki``). With ``pool`` (an evidence level of
         the bundle) it is made as the precompute makes it, given the solve pool of that level, so that its weapon setups follow
         the pool: this is the profile that ``assemble`` of the bundle gives at that evidence level. Without one there is no pool
-        to read and a shield is assumed: the profile that ``assemble`` gives with no evidence level."""
-        key = (tuple(codes), level, race, role, buffs, evidence, deity, pool)
+        to read and a shield is assumed: the profile that ``assemble`` gives with no evidence level. ``buffs`` may be the key of a twin of a buff set of the bundle
+        (``group+haste``): the set with the haste of the spells in it, whatever the rule says."""
+        key = (tuple(codes), level, race, role, buffs, evidence, deity, pool, spell_haste)
         if key not in self._profiles:
+            twin = buffs.endswith(browser.HASTE_SUFFIX)
             self._profiles[key] = make_profile(
-                race, codes, level, role, self.buffsets(codes, level)[buffs], None, self.tables, self.rules,
+                race, codes, level, role, self.buffsets(codes, level, True if twin else spell_haste)[buffs.removesuffix(browser.HASTE_SUFFIX)], None, self.tables, self.rules,
                 evidence=evidence, deity=deity, items=None if pool is None else self.solve_pool(codes, pool),
             )
         return self._profiles[key]
@@ -488,8 +481,11 @@ class Scenario:
 def make_scenario(inputs: Inputs, spec: ScenarioSpec) -> Scenario:
     """The profile, the buff set and the pool of a scenario spec (see :class:`~trioforge.export.fixture_plan.ScenarioSpec`)."""
     label = "strict" if spec.evidence == "strict-proxy" else "wiki"
+    # (the profile is the one the precompute makes for the evidence level, given its solve pool, which is what assemble of the bundle gives at that level; the bow
+    # setup is named by the pool alone)
+    haste = True if spec.spell_haste else None  # (the stratum spell-haste: the buff sets carry the haste of the spells whatever the rule says)
     profile = inputs.profile(
-        spec.trio, spec.level, spec.race, spec.role, spec.buffs, evidence=label, deity=spec.deity
+        spec.trio, spec.level, spec.race, spec.role, spec.buffs, evidence=label, deity=spec.deity, pool=label, spell_haste=haste
     )
     if spec.setup not in profile.setups:
         plays = ", ".join(profile.setups)
@@ -508,7 +504,7 @@ def make_scenario(inputs: Inputs, spec: ScenarioSpec) -> Scenario:
         profile = dataclasses.replace(profile, weights=composed)
     items = inputs.pool(spec.trio, spec.evidence, with_deity=spec.deity is not None)
     return Scenario(
-        spec, profile, inputs.buffsets(spec.trio, spec.level)[spec.buffs], weights, inputs.vecs(items, spec.tier), items,
+        spec, profile, inputs.buffsets(spec.trio, spec.level, haste)[spec.buffs], weights, inputs.vecs(items, spec.tier), items,
         BuildOptions(),
     )
 
@@ -567,6 +563,11 @@ def brute_seed(seed: int, number: int) -> str:
 def brute_instance(seed: int, number: int) -> brute.Instance:
     """The instance of a number: a real trio of the menu in turn, optional haste buffs on every eighth."""
     rng = random.Random(brute_seed(seed, number))
+    if number >= PROCS_BASE:  # an instance with a table of procs: numbered after the bow ones
+        return brute.procs_instance(rng, trio_index=(number - PROCS_BASE) % len(brute.TRIO_MENU))
+    if number >= RANGED_BASE:  # a bow instance: numbered after the plain ones, which are drawn as they always were
+        n = number - RANGED_BASE
+        return brute.ranged_instance(rng, trio_index=n % len(brute.TRIO_MENU), truthful=n % 2 == 1)
     if number % TRUTHFUL_EVERY == TRUTHFUL_EVERY - 1:  # some instances are for the truthful solve (weapons and haste in the pool)
         return brute.truthful_instance(rng, trio_index=number % len(brute.TRIO_MENU))
     return brute.random_instance(rng, trio_index=number % len(brute.TRIO_MENU), haste_buffs=number % 8 == 5)
@@ -598,13 +599,17 @@ def brute_case(inputs: Inputs, seed: int, number: int) -> dict[str, Any]:
         tags.append("buffs")
     if "synthetic-pools" in inst.label:
         tags.append("synthetic-pools")
+    if inst.procs is not None:
+        tags.append("procs")
     doc = _case_header(inputs, "brute", case_id, inst.label, tags, True)
     doc["inputs"] = {
-        "trio": list(inst.trio), "level": inst.level, "race": inst.race, "role": "balanced", "buffs": None,
+        "trio": list(inst.trio), "level": inst.level, "race": inst.race, "role": "melee", "buffs": None,
         "evidence": "synthetic", "deity": None, "setup": inst.setup, "tier": 0, "weapon_pct": inputs.weapon_pct,
         "profile": inst.profile.to_dict(), "weights": None, "buffset": buffset_doc(inst.buffset),
         "seed": brute_seed(seed, number), "note": "an invented instance: its items are not in the catalog",
     }  # fmt: skip
+    if inst.procs is not None:
+        doc["inputs"]["procs"] = procs_module.to_doc(inst.procs)  # (the table the builder, the pruning and the evaluator were given: the browser reads the same)
     doc["records"] = [records[key] for key in sorted(records)]
     doc["solves"] = [solve_doc("solve", milp, solution, options, inst.items, None, None if found is None else haste_doc(found))]
     doc["expected"] = {"brute_F": browser.rat(best), "kits": int(len(space.kits)), "buff_sets": len(space.buff_sets)}
@@ -801,8 +806,11 @@ def upgrade_case(inputs: Inputs, session: Session) -> dict[str, Any]:
                 prune_event = events[position]
             position += 1
         _, build_args, found = events[position]
-        milp = found.milp
         position += 1
+        while position < len(events) and events[position][0] == "build":  # (R14: a step whose first equal addition is not the one the solve gave has a second solve, of that addition alone: the step is made from that one)
+            _, build_args, found = events[position]
+            position += 1
+        milp = found.milp
         pruning = None
         if prune_event is not None:
             _, prune_args, kept = prune_event
@@ -886,7 +894,7 @@ def _slot_session(
 ) -> Session:
     records = _invented(*owned, *candidates)
     header = {
-        "trio": list(profile.trio), "level": profile.level, "race": profile.race, "role": "balanced", "buffs": None,
+        "trio": list(profile.trio), "level": profile.level, "race": profile.race, "role": "melee", "buffs": None,
         "evidence": "synthetic", "deity": None, "setup": setup,
     }  # fmt: skip
     return Session(

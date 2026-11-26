@@ -41,7 +41,7 @@ __all__ = [
 SEALS: dict[str, tuple[str, str]] = {
     "client": ("Client file", "read from a text file that ships with the game client"),
     "developer": ("Developer", "a developer statement or patch note"),
-    "measured": ("Measured", "our own in-game test or a reproduced stat window"),
+    "measured": ("Measured", "our own in-game test, a reproduced stat window or the game client's own calculation"),
     "player": ("Player reports", "several independent players"),
     "model": ("Model", "our or EQEmu's formula, or a judgment constant"),
 }
@@ -156,6 +156,8 @@ def _sources(entries: list[dict[str, str]]) -> tuple[SourceView, ...]:
             shown.append(SourceView(ref, ref))
         elif kind == "client-file":
             shown.append(SourceView(f"Client file: {ref}", None))
+        elif kind == "game-client":
+            shown.append(SourceView(ref, None))  # (the one fixed label: the rule comes from the game client's own calculation)
         elif kind == "private-measured":
             shown.append(SourceView(f"{PRIVATE_LABEL} (measured)", None))
         elif kind == "private-player":

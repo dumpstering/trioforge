@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { candidatesFor } from "../pipeline/trioforge/site/static/engine/candidates.js";
 import { atTier, readItemTable } from "../pipeline/trioforge/site/static/engine/items.js";
@@ -15,7 +18,7 @@ import { expectWithin, stopwatch } from "./timing.mjs";
 
 const TABLE = readItemTable(JSON.parse(ITEMS_BYTES.toString("utf8")));
 const BUNDLE = readBundle(JSON.parse(BUNDLE_BYTES.toString("utf8")));
-const profileOf = (over = {}) => assembleProfile(BUNDLE, { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", ...over });
+const profileOf = (over = {}) => assembleProfile(BUNDLE, { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", ...over });
 const READY4 = { mode: "ready4" };
 const make = (over = {}, { evidence = "wiki", tierMode = READY4, records = TABLE.records } = {}) => candidatesFor(records, BUNDLE, profileOf({ evidence, ...over }), { evidence, tierMode });
 const keysOf = (list) => list.map((item) => item.key);
@@ -122,6 +125,32 @@ describe("a record that is not for best in slot", () => {
     expect(TABLE.records.get("w90004").deity).toEqual(["The Tribunal"]);
     expect(keysOf(make({ deity: "The Tribunal" }))).toContain("w90004");
     expect(keysOf(make({ deity: "The Tribunal" }, { records: tableWith(marked("w90004")) }))).not.toContain("w90004");
+  });
+
+  it("is never a candidate on the real catalog: every item that carries the note, w60572 and w73494 by name, in every tier mode, while the same records without the code all are", () => {
+    // The records are made of the items of the real catalog (derived/catalog.json) the way the table writes the mark (the codes of the reasons in evidence.codes; pipeline/tests/test_precompute.py
+    // holds that the exporter does so for every marked wearable), as eligible as they can be otherwise: the level of the scenario's set, open to every class and race, no deity, no stats. So the code alone is
+    // what keeps them out, and the records without it are the proof that nothing else does.
+    const catalog = JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../derived/catalog.json"), "utf8"));
+    const noted = catalog.items.filter((item) => item.evidence.reasons.some((reason) => reason.code === "not-for-bis"));
+    const keys = new Set(noted.map((item) => item.key));
+    expect(keys.has("w60572") && keys.has("w73494") && keys.size > 1000).toBe(true);
+    const recordOf = (item, codes, level) => ({
+      id: item.wiki.pageid, name: item.name, slots: item.slots, classes: ["ALL"], races: ["ALL"], deity: null, stats: {}, weight10: item.weight === null ? null : Math.round(item.weight * 10), tier_rule: item.tier_rule,
+      evidence: { level, codes },
+    });
+    const codesOf = (item) => item.evidence.reasons.map((reason) => reason.code);
+    for (const tierMode of MODES) {
+      for (const evidence of ["strict", "wiki"]) {
+        const label = `${evidence}, ${JSON.stringify(tierMode)}`;
+        const withCode = noted.map((item) => recordOf(item, codesOf(item), evidence)); // (the level of the scenario's set: a candidate for it but for the code)
+        const without = noted.map((item) => recordOf(item, codesOf(item).filter((code) => code !== "not-for-bis"), evidence));
+        const bare = keysOf(make({}, { evidence, tierMode, records: without }));
+        expect(bare.length, `${label}: without the code, every record`).toBe(noted.length);
+        expect(bare, `${label}: without the code, the two by name`).toEqual(expect.arrayContaining(["w60572", "w73494"]));
+        expect(keysOf(make({}, { evidence, tierMode, records: withCode })), `${label}: with the code`).toEqual([]);
+      }
+    }
   });
 
   it("is a record that has exactly the code: another code, a code that only looks like it and an empty list are not it", () => {

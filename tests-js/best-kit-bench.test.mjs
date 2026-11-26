@@ -39,24 +39,24 @@ describe("the summary", () => {
 });
 
 describe("the views it looks through", () => {
-  const base = { evidence: "wiki", buffs: "own", roles: ["tank", "balanced"], setup: "1h-shield", races: ["OGR", "IKS"] };
+  const base = { evidence: "wiki", buffs: "own", roles: ["tank", "melee"], setup: "dw", races: ["OGR", "IKS"] };
 
   it("are each role that plays the setup, each race of the bundle and every tier 0 to 10", () => {
     const views = viewsOf(bundle, base);
     expect(views).toHaveLength(2 * 2 * 11);
     expect(new Set(views.map((view) => view.tier))).toEqual(new Set(Array.from({ length: 11 }, (_, tier) => tier)));
-    expect(views[0]).toEqual({ scenario: { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "1h-shield" }, tier: 0 });
+    expect(views[0]).toEqual({ scenario: { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" }, tier: 0 });
   });
 
   it("leave out a role that does not play the setup, a role the trio is not offered and a race the bundle does not have", () => {
-    expect(viewsOf(bundle, { ...base, roles: ["melee"] })).toEqual([]);
-    expect(viewsOf(bundle, { ...base, roles: ["caster", "balanced"], races: ["OGR", "ZZZ"] })).toHaveLength(11);
+    expect(viewsOf(bundle, { ...base, setup: "1h-shield", roles: ["melee"] })).toEqual([]); // (Melee damage does not play 1H + shield)
+    expect(viewsOf(bundle, { ...base, roles: ["caster", "tank"], races: ["OGR", "ZZZ"] })).toHaveLength(11);
   });
 });
 
 describe("a timed view", () => {
   it("has the weights it was given: a slider at x2 moves the value, and the parts of the time add up to no more than the whole", () => {
-    const view = { scenario: { race: "OGR", role: "balanced", buffs: "own", evidence: "wiki", setup: "dw" }, tier: 4 };
+    const view = { scenario: { race: "OGR", role: "tank", buffs: "own", evidence: "wiki", setup: "dw" }, tier: 4 };
     const own = timeView({ highs, records, bundle, view, weights: undefined, canonical: false });
     const heavier = timeView({ highs, records, bundle, view, weights: { multipliers: { AC: 2 } }, canonical: false });
     expect(heavier.F).not.toBe(own.F);
@@ -68,7 +68,7 @@ describe("a timed view", () => {
 
 describe("the measure", () => {
   it("picks the heavy views by their time with the tie stage, and times each of them at the role's own weights and at x2 on each group, with and without the tie stage", () => {
-    const views = viewsOf(bundle, { evidence: "wiki", buffs: "own", roles: ["tank", "balanced"], setup: "1h-shield", races: ["OGR", "IKS"], tiers: [0, 4, 10] });
+    const views = viewsOf(bundle, { evidence: "wiki", buffs: "own", roles: ["tank", "melee"], setup: "2h", races: ["OGR", "IKS"], tiers: [0, 4, 10] });
     const lines = [];
     const found = measure({ highs, records, bundle, views, heavy: 3, groups: GROUPS, progress: (text) => lines.push(text) });
     expect(found.heavy).toHaveLength(3);
@@ -92,7 +92,7 @@ describe("the command", () => {
     const scratch = mkdtempSync(join(tmpdir(), "best-kit-bench-"));
     try {
       const json = join(scratch, "bench.json");
-      const out = execFileSync(process.execPath, [SCRIPT, RESULTS, "--races", "OGR", "--roles", "balanced", "--setup", "dw", "--heavy", "2", "--json", json], { encoding: "utf8" });
+      const out = execFileSync(process.execPath, [SCRIPT, RESULTS, "--races", "OGR", "--roles", "tank", "--setup", "dw", "--heavy", "2", "--json", json], { encoding: "utf8" });
       expect(out).toMatch(/the heavy views/);
       for (const label of ["own", ...GROUPS.map((group) => `${group} x2`)]) expect(out).toContain(label);
       expect(out).toMatch(/median\s+\d+\s+p95\s+\d+\s+max\s+\d+\s+\(n=2\)/);
@@ -109,11 +109,11 @@ describe("the command", () => {
 describe("the command for a heavy buff set, over all the races, with no tie stage", () => {
   // The browser's answer has no tie stage, and the buff sets that are not precomputed (group+enchanter, raid) and the group set are the heavy ones to time: every race of the bundle, the role's own
   // weights and each slider group at x2, with the plain solve alone. The command says which buff set it timed and names the slowest view of it.
-  const NAME = /^pal-mnk-ber [A-Z]{3} (?:tank|balanced) \+\d+ [0-9a-z-]+ (?:strict|wiki) (?:own|group|group\+enchanter|raid)$/;
+  const NAME = /^pal-mnk-ber [A-Z]{3} (?:tank|melee) \+\d+ [0-9a-z-]+ (?:strict|wiki) (?:own|group|group\+enchanter|raid)$/;
   const run = (...args) => execFileSync(process.execPath, [SCRIPT, RESULTS, ...args], { encoding: "utf8" });
 
   it("takes every race of the bundle for races all, and the tiers it is told", () => {
-    const every = viewsOf(bundle, { evidence: "wiki", buffs: "raid", roles: ["balanced"], setup: "dw", races: bundle.races.map((row) => row.code), tiers: [0, 4] });
+    const every = viewsOf(bundle, { evidence: "wiki", buffs: "raid", roles: ["tank"], setup: "dw", races: bundle.races.map((row) => row.code), tiers: [0, 4] });
     expect(every).toHaveLength(bundle.races.length * 2);
     expect(new Set(every.map((view) => view.scenario.race)).size).toBe(bundle.races.length);
     expect(bundle.races.length).toBeGreaterThanOrEqual(15);
@@ -123,7 +123,7 @@ describe("the command for a heavy buff set, over all the races, with no tie stag
     const scratch = mkdtempSync(join(tmpdir(), "best-kit-bench-"));
     try {
       const json = join(scratch, "raid.json");
-      const out = run("--buffs", "raid", "--races", "all", "--tiers", "0,4", "--roles", "balanced", "--setup", "dw", "--heavy", "all", "--tie", "no", "--json", json);
+      const out = run("--buffs", "raid", "--races", "all", "--tiers", "0,4", "--roles", "tank", "--setup", "dw", "--heavy", "all", "--tie", "no", "--json", json);
       expect(out).toMatch(/^buff set: raid\b/m);
       const written = JSON.parse(readFileSync(json, "utf8"));
       expect(written).toMatchObject({ buffs: "raid", trio: "pal-mnk-ber", evidence: "wiki", races: "all" });
@@ -153,7 +153,7 @@ describe("the command for a heavy buff set, over all the races, with no tie stag
     const scratch = mkdtempSync(join(tmpdir(), "best-kit-bench-"));
     try {
       const json = join(scratch, "group.json");
-      const out = run("--buffs", "group", "--races", "OGR", "--tiers", "4", "--roles", "balanced", "--setup", "dw", "--heavy", "all", "--tie", "no", "--json", json);
+      const out = run("--buffs", "group", "--races", "OGR", "--tiers", "4", "--roles", "tank", "--setup", "dw", "--heavy", "all", "--tie", "no", "--json", json);
       expect(out).toMatch(/^buff set: group\b/m);
       const written = JSON.parse(readFileSync(json, "utf8"));
       expect(written.buffs).toBe("group");
@@ -166,7 +166,7 @@ describe("the command for a heavy buff set, over all the races, with no tie stag
 
   it("refuses a buff set the bundle does not have, and a tie option or a tier that is not one", () => {
     for (const args of [["--buffs", "everything"], ["--tie", "maybe"], ["--tiers", "11"], ["--tiers", "a"], ["--heavy", "0"], ["--heavy", "some"]]) {
-      expect(() => execFileSync(process.execPath, [SCRIPT, RESULTS, "--races", "OGR", "--roles", "balanced", "--setup", "dw", ...args], { encoding: "utf8", stdio: "pipe" }), args.join(" ")).toThrow();
+      expect(() => execFileSync(process.execPath, [SCRIPT, RESULTS, "--races", "OGR", "--roles", "tank", "--setup", "dw", ...args], { encoding: "utf8", stdio: "pipe" }), args.join(" ")).toThrow();
     }
   });
 });

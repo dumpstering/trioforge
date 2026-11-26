@@ -296,7 +296,7 @@ def real_session(owned_count=60, seed=7):
     tables, rules = H.TABLES, H.TABLES.rules
     spells = json.loads((REPO / "derived" / "client" / "spells-l50.json").read_text(encoding="utf-8"))
     buffset = resolve([*own_buffs(REAL_TRIO, 50, spells, rules), *group_preset(spells)], rules)
-    profile = make_profile("OGR", REAL_TRIO, 50, "balanced", buffset, None, tables, evidence="wiki")
+    profile = make_profile("OGR", REAL_TRIO, 50, "tank", buffset, None, tables, evidence="wiki")
     pool = grid.pool_dicts(grid.select_items(H.catalog_items(), REAL_TRIO), "wiki")
     rng = random.Random(seed)
     owned = {at_tier(r, rng.choice((0, 0, 0, 2, 4, 4, 6)), rules): rng.choice((1, 1, 1, 2)) for r in rng.sample(pool, owned_count)}

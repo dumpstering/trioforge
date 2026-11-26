@@ -30,7 +30,7 @@ def snapshot(root: Path) -> Path:
     def transport(url, headers):
         return 200, {}, gzip.compress(pages[url].encode("utf-8"))
 
-    client = PoliteClient(eqlt.USER_AGENT, transport=transport, sleep=lambda s: None, clock=lambda: 0.0, min_interval=0)
+    client = PoliteClient(eqlt.USER_AGENT, transport=transport, sleep=lambda s: None, clock=lambda: 0.0, min_interval=0, honour_robots=False)
     out = root / "2026-10-25"
     eqlt.run_fetch(client, out, date(2026, 10, 25), say=lambda text: None)
     return out
@@ -52,7 +52,7 @@ def test_the_site_item_overrides_the_wiki_copy_and_the_other_is_added_and_both_a
     checkmate, blade = items["w73036"], items["rlt-worn-great-blade"]
     assert checkmate["stats"]["WIS"] == 5 and checkmate["stats"]["MANA"] == 5  # the site's numbers, not the wiki's 8 and 10
     assert checkmate["origin"]["overrides_wiki"] is True and blade["origin"]["overrides_wiki"] is False and blade["wiki"] is None
-    # Nektropos Castle is a zone of EQL (rules/hand-lists.json, exists_unflagged_zones), so both are live, and both say where they were read from
+    # Nektropos Castle is a zone of EQL (the client flags it, zone 28, since the zone names of 2026-11-09), so both are live, and both say where they were read from
     assert level_and_codes(checkmate) == ("wiki", ["live-source:Nektropos Castle", "source-eql-tools"])
     assert level_and_codes(blade) == ("wiki", ["live-source:Nektropos Castle", "source-eql-tools"])
     reason = next(r for r in blade["evidence"]["reasons"] if r["code"] == "source-eql-tools")
@@ -159,3 +159,20 @@ def test_a_name_on_two_wiki_pages_stops_the_build_and_names_the_item(tmp_path, q
     )
     with pytest.raises(BuildError, match=r"EQ Legends Tools items.*checkmate.*w73036.*w73037"):
         build(tmp_path, [WIKI_CHECKMATE, twin], quests_file, eqlegendstools_dir=snapshot(tmp_path))
+
+
+@pytest.mark.skipif(not (REPO / "derived" / "catalog.json").is_file(), reason="derived/catalog.json is not built")
+def test_the_committed_catalog_keeps_the_tools_items_and_none_of_its_reasons_says_the_client_does_not_flag_their_zone():
+    """The client flags Nektropos Castle since the zone names of 2026-11-09 and the hand list no longer says the zone is unflagged: the 46 items of the zone page are live by the client's flag, at the wiki level,
+    and no public reason of any item says that the client does not flag that zone."""
+    items = read_json(REPO / "derived" / "catalog.json")["items"]
+    tools = [item for item in items if (item.get("origin") or {}).get("source") == "eqlegendstools"]
+    assert len(tools) == 46
+    assert not [item["key"] for item in items if item["evidence"]["level"] == "strict"]
+    for item in items:
+        for reason in item["evidence"]["reasons"]:
+            assert not ("Nektropos Castle" in reason["text"] and "does not flag" in reason["text"]), item["key"]
+    for item in tools:
+        live = [reason for reason in item["evidence"]["reasons"] if reason["code"] == "live-source:Nektropos Castle"]
+        assert item["evidence"]["level"] == "wiki" and [reason["seal"] for reason in live] == ["client"], item["key"]
+        assert "source-eql-tools" in [reason["code"] for reason in item["evidence"]["reasons"]], item["key"]

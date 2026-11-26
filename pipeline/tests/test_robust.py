@@ -3,7 +3,7 @@
 A kit is only as good as the judgment constants and the open rules behind it. ``perturbations(profile, rules)`` lists
 the variants of a scenario that the robustness seal re-solves: each key weight group (AC, MANA, ATK+HASTE, SV, regen)
 at x0.5 and x2, and each open rule switched to the alternative that ``rules/rules.json`` lists (the WIS band above 200,
-the Monk curve "full until 34", the Monk placement inside the cap, the Iksar placement inside the cap, the weapon
+the Monk curve "full until 34", the Monk placement on top of the cap, the Iksar placement on top of the cap, the weapon
 damage rate of 10 percent a tier). ``robustness(scenario)`` solves the base scenario and every variant and marks each
 slot ``"robust"`` when all of them pick the same items there, else with the label of the variant that changed it.
 
@@ -32,6 +32,7 @@ from trioforge.model import profile as profile_module
 from trioforge.model import weapons as wp
 from trioforge.model.items import SLOT_GROUPS, SLOT_INSTANCES, at_tier
 from trioforge.model.profile import Profile, make_profile
+from trioforge.model.roles import roles_for
 from trioforge.model.tables import load
 from trioforge.solver import robust
 from trioforge.solver.model import BuildOptions, build_milp
@@ -54,14 +55,15 @@ OPTIONS = BuildOptions(any_rule="explicit", haste_assumed=0)
 
 FULL_LABELS = [
     "AC x0.5", "AC x2", "MANA x0.5", "MANA x2", "ATK+HASTE x0.5", "ATK+HASTE x2", "SV x0.5", "SV x2",
-    "regen x0.5", "regen x2", "Monk curve full until 34", "Monk placement inside",
-    "Iksar placement inside", "Weapon damage +5%",
+    "regen x0.5", "regen x2", "Monk curve full until 34", "Monk placement top",
+    "Iksar placement top", "Weapon damage +5%",
 ]  # fmt: skip
 
 
 @cache
-def profile_of(race, trio, role="balanced"):
-    return make_profile(race, trio, 50, role, None, None, TABLES)
+def profile_of(race, trio, role=None):
+    """The profile of a race and a trio in a build it is offered (the first one, unless one is named)."""
+    return make_profile(race, trio, 50, role or roles_for(trio)[0], None, None, TABLES)
 
 
 def with_weights(profile, **weights):
@@ -195,8 +197,8 @@ def test_the_weapon_variant_needs_a_damage_weight_and_a_setup_that_scores_it():
 
 def test_a_variant_that_the_profile_already_is_at_is_left_out():
     p = full()
-    inside = dataclasses.replace(p, placement={"monk": "inside", "iksar": "inside"})
-    assert "Monk placement inside" not in labels(inside) and "Iksar placement inside" not in labels(inside)
+    top = dataclasses.replace(p, placement={"monk": "top", "iksar": "top"})  # (T3: the rules put both inside, so the variant is the old reading, on top)
+    assert "Monk placement top" not in labels(top) and "Iksar placement top" not in labels(top)
     alt_monk = dataclasses.replace(p, monk={**p.monk, "full_until_stones": 34})
     assert "Monk curve full until 34" not in labels(alt_monk)
     banded = rules_with_band_alternative(BAND_654)
@@ -217,8 +219,8 @@ CHANGED = {
     "AC x0.5": {"weights"}, "AC x2": {"weights"}, "MANA x0.5": {"weights"}, "MANA x2": {"weights"},
     "ATK+HASTE x0.5": {"weights"}, "ATK+HASTE x2": {"weights"}, "SV x0.5": {"weights"}, "SV x2": {"weights"},
     "regen x0.5": {"weights"}, "regen x2": {"weights"},
-    "Monk curve full until 34": {"monk"}, "Monk placement inside": {"placement"},
-    "Iksar placement inside": {"placement"}, "Weapon damage +5%": set(),
+    "Monk curve full until 34": {"monk"}, "Monk placement top": {"placement"},
+    "Iksar placement top": {"placement"}, "Weapon damage +5%": set(),
 }  # fmt: skip
 
 
@@ -261,9 +263,9 @@ def test_the_rule_variants_carry_the_values_of_the_rules_file():
     base = full()
     pairs = dict(describe_pairs(base))
     assert pairs["Monk curve full until 34"].monk == {**base.monk, "full_until_stones": 34}
-    assert dict(pairs["Monk placement inside"].placement) == {"monk": "inside", "iksar": base.placement["iksar"]}
-    assert dict(pairs["Iksar placement inside"].placement) == {"monk": base.placement["monk"], "iksar": "inside"}
-    assert base.placement["monk"] == base.placement["iksar"] == "top" and base.iksar_ac == 35
+    assert dict(pairs["Monk placement top"].placement) == {"monk": "top", "iksar": base.placement["iksar"]}
+    assert dict(pairs["Iksar placement top"].placement) == {"monk": base.placement["monk"], "iksar": "top"}
+    assert base.placement["monk"] == base.placement["iksar"] == "inside" and base.iksar_ac == 35
 
 
 def test_the_weapon_variant_changes_the_items_not_the_profile():
@@ -278,8 +280,8 @@ def test_every_variant_names_the_test_that_settles_it():
     tests = {label: p.test for label, p in described.items()}
     assert not any(label.startswith("WIS band") for label in tests)  # mana.wis_bands is settled
     assert tests["Weapon damage +5%"] == "B5"
-    assert tests["Monk curve full until 34"] == tests["Monk placement inside"] == "B9"
-    assert tests["Iksar placement inside"] == "B17"
+    assert tests["Monk curve full until 34"] == "B9"
+    assert tests["Monk placement top"] is None and tests["Iksar placement top"] is None  # (T3: the placements are settled by the client's own calculation)
     assert all(tests[label] is None for label in FULL_LABELS[:10])
     assert {label: p.kind for label, p in described.items()} == {
         **dict.fromkeys(FULL_LABELS[:10], "weight"), **dict.fromkeys(FULL_LABELS[10:], "rule"),
@@ -296,8 +298,8 @@ def test_a_rules_file_with_another_alternative_gives_another_variant():
     assert list(dict(pairs)["WIS band 0.7"].bands["slopes"]) == [1, 2.5, 0.7, 0]
     other = rules_with_alternative("monk.weight_curve", {"full_until_stones": 30})
     assert dict(describe_pairs(full(), other))["Monk curve full until 30"].monk["full_until_stones"] == 30
-    other = rules_with_alternative("monk.bonus_placement", "on top of the capped sheet AC")
-    assert "Monk placement inside" not in labels(full(), other)  # this alternative is the placement the profile has
+    other = rules_with_alternative("monk.bonus_placement", "inside X before the cap")
+    assert "Monk placement top" not in labels(full(), other)  # this alternative is the placement the profile has
     other = rules_with_alternative("monk.bonus_placement", "somewhere else")
     with pytest.raises(ValueError, match="placement"):
         describe_perturbations(full(), other)
@@ -306,7 +308,8 @@ def test_a_rules_file_with_another_alternative_gives_another_variant():
 def test_the_placement_texts_are_the_ones_the_profile_generator_reads():
     assert robust.INSIDE_PLACEMENT in profile_module._PLACEMENT_TEXT
     assert profile_module._PLACEMENT_TEXT[robust.INSIDE_PLACEMENT] == "inside"
-    assert RULES.alternatives("monk.bonus_placement")[0]["value"].startswith(robust.INSIDE_PLACEMENT)
+    assert RULES.get("monk.bonus_placement").startswith(robust.INSIDE_PLACEMENT)  # (T3: the rule is the client's reading, and its alternative the old one)
+    assert RULES.alternatives("monk.bonus_placement")[0]["value"].startswith(robust.TOP_PLACEMENT)
 
 
 # ---- the accessors of Rules ----------------------------------------------------------------------------------------
@@ -327,7 +330,8 @@ def test_rules_lists_the_alternatives_of_a_rule_as_copies():
 
 def test_rules_names_the_test_that_settles_an_open_rule():
     assert RULES.settled_by("mana.wis_bands") is None  # settled: B4 was done
-    assert RULES.settled_by("race.iksar_ac_placement") == "B17"
+    assert RULES.settled_by("monk.weight_curve") == "B9"  # (the thresholds of the Monk bonus are still open)
+    assert RULES.settled_by("race.iksar_ac_placement") is None  # (T3: the placement is the client's)
     assert RULES.settled_by("hp.sta_curve") is None
     with pytest.raises(KeyError):
         RULES.settled_by("no.such.rule")
@@ -400,7 +404,7 @@ def test_a_slot_that_flips_under_the_monk_curve_gets_that_label():
         raw_item("chest-heavy", ["CHEST"], stats={"AC": 30}, weight=22.0),
         raw_item("chest-light", ["CHEST"], stats={"AC": 24}, weight=5.0),
     ]
-    assert labels(p) == ["AC x0.5", "AC x2", "Monk curve full until 34", "Monk placement inside"]
+    assert labels(p) == ["AC x0.5", "AC x2", "Monk curve full until 34", "Monk placement top"]
     report = robustness_report(scenario(p, raws))
     assert report.picks["CHEST"] == ("chest-light",)
     assert report.flips["CHEST"] == ("Monk curve full until 34",)

@@ -134,7 +134,9 @@ def generate(client_dir: str | Path, out_dir: str | Path, catalog: str | Path, g
     if len(rows) < floor:
         raise ValueError(f"{cs.SPELLS_FILE}: only {len(rows)} spells for the effects layer, fewer than the {floor} a whole file has")
     texts = {
-        FILE: tables.render_json({"provenance": tables.provenance([record], generated, GENERATOR), "cap": CAP, "spells": rows}),
+        FILE: tables.render_json(
+            {"provenance": tables.provenance([record], generated, GENERATOR), "cap": CAP, "catalog_names": sorted(names), "spells": rows}
+        ),  # (the effect names of the catalog the spells were looked for by: a catalog with a name that is not here has an effect that this file has no spell for)
     }
     outputs = [{"file": FILE, "inputs": [cs.SPELLS_FILE], "generated": generated}]
     texts[tables.MANIFEST_FILE] = tables.render_json(tables.merge_manifest(known, [record], outputs, generated))

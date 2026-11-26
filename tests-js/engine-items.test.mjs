@@ -129,19 +129,39 @@ describe("the stat rule", () => {
     expect(atTier(record({ stats: { AC: 3 } }), 4, RULES).stats).toEqual({ AC: 7 });
   });
 
+  it("does not scale attack at all (T1, the game client's own calculation): ATK is its +0 value at every tier, and a stat beside it is scaled", () => {
+    for (const tier of [0, 1, 2, 4, 10]) {
+      const item = atTier(record({ stats: { ATK: 10, STR: 10, AC: 3 } }), tier, RULES);
+      expect(item.stats.ATK, `+${tier}`).toBe(10);
+      expect(item.stats.STR, `+${tier}`).toBe(10 + Math.max(tier, Math.floor((10 * tier) / 10)));
+      expect(item.stats.AC, `+${tier}`).toBe(3 + tier);
+      expect(atTier(record({ stats: { ATK: 100 } }), tier, RULES).stats).toEqual({ ATK: 100 });
+    }
+  });
+
+  it("takes the stats that do not tier from the rules (tier_rules.unscaled_stats), as the Python model does", () => {
+    const none = rulesWith((raw) => (raw.tier_rules.unscaled_stats = []));
+    expect(atTier(record({ stats: { ATK: 10 } }), 4, none).stats).toEqual({ ATK: 14 });
+    const both = rulesWith((raw) => (raw.tier_rules.unscaled_stats = ["ATK", "STR"]));
+    expect(atTier(record({ stats: { ATK: 10, STR: 10 } }), 4, both).stats).toEqual({ ATK: 10, STR: 10 });
+  });
+
   it("rounds the tenth of the base down", () => {
     // 19 * 4 // 10 = 7 is above the +4 minimum; 9 * 4 // 10 = 3 is below it
     expect(atTier(record({ stats: { AC: 19 } }), 4, RULES).stats.AC).toBe(19 + 7);
     expect(atTier(record({ stats: { AC: 9 } }), 4, RULES).stats.AC).toBe(9 + 4);
   });
 
-  it("does not scale a negative stat, and drops a zero stat", () => {
-    expect(atTier(record({ stats: { STR: -3, STA: 10 } }), 10, RULES).stats).toEqual({ STR: -3, STA: 20 });
+  it("moves a negative stat toward zero by the amount a positive one would grow and never past zero (T6), and drops a zero stat", () => {
+    expect(atTier(record({ stats: { STR: -3, STA: 10 } }), 10, RULES).stats).toEqual({ STA: 20 }); // (-3 is gone at +10)
     expect(atTier(record({ stats: { AC: 0, STR: 5 } }), 1, RULES).stats).toEqual({ STR: 6 });
+    for (const [base, tier, want] of [[-2, 0, -2], [-2, 1, -1], [-2, 2, 0], [-2, 4, 0], [-20, 4, -12], [-5, 4, -1], [-1, 1, 0], [-100, 10, 0], [-30, 1, -27], [-9, 3, -6], [-15, 3, -11], [-40, 10, 0]]) {
+      expect(atTier(record({ stats: { STR: base } }), tier, RULES).stats.STR ?? 0, `${base} at +${tier}`).toBe(want);
+    }
   });
 
   it("applies to the resists as well", () => {
-    expect(atTier(record({ sv: { FIRE: 20, COLD: 3, MAGIC: -4 } }), 4, RULES).sv).toEqual({ FIRE: 28, COLD: 7, MAGIC: -4 });
+    expect(atTier(record({ sv: { FIRE: 20, COLD: 3, MAGIC: -4, POISON: -20 } }), 4, RULES).sv).toEqual({ FIRE: 28, COLD: 7, POISON: -12 }); // (T6: -4 is gone at +4, -20 is -12)
   });
 
   it("adds a flat point a tier of worn haste and of each regen, when the base is above zero", () => {
@@ -456,6 +476,11 @@ describe("what is refused", () => {
     for (const [change, word] of [
       [(raw) => (raw.tier_rules.stat_rule = "base + n"), /stat_rule/],
       [(raw) => (raw.tier_rules.negatives_scale = true), /negatives_scale/],
+      [(raw) => (raw.tier_rules.negatives_scale = "grow"), /negatives_scale/],
+      [(raw) => (raw.tier_rules.negatives_scale = false), /negatives_scale/],
+      [(raw) => (raw.tier_rules.unscaled_stats = ["HASTE"]), /unscaled_stats/],
+      [(raw) => (raw.tier_rules.unscaled_stats = "ATK"), /unscaled_stats/],
+      [(raw) => delete raw.tier_rules.unscaled_stats, /unscaled_stats/],
       [(raw) => (raw.tier_rules.weight_floor10 = "0/1"), /weight_floor10/],
       [(raw) => (raw.tier_rules.weight_floor10 = "3/2"), /weight_floor10/],
       [(raw) => (raw.tier_rules.haste_per_tier = "-1/1"), /haste_per_tier/],
@@ -499,7 +524,8 @@ describe("exactness", () => {
       const [b, n, w, d, p] = [BigInt(base), BigInt(tier), BigInt(weight10), BigInt(dmg), BigInt(pct)];
       const max = (x, y) => (x > y ? x : y);
       expect(BigInt(item.stats.AC)).toBe(b + max(n, (b * n) / 10n));
-      expect(item.stats.STR).toBe(negative);
+      const m = BigInt(-negative);
+      expect(BigInt(item.stats.STR ?? 0)).toBe(-m + (m < max(n, (m * n) / 10n) ? m : max(n, (m * n) / 10n))); // (T6: toward zero by max(n, |b| n // 10), never past it)
       expect(BigInt(item.weight10)).toBe(max(1n, w - (w * 9n * n) / 100n)); // 9 percent of the base a tier, no minimum step
       expect(BigInt(item.weapon.dmg)).toBe(d + (d * n * p) / 100n); // and none for the damage either
       checked += 1;

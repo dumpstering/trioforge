@@ -7,8 +7,10 @@ comes after all items), so ties between different kits resolve the same way on e
 Every name, race and item here is invented.
 """
 
+import dataclasses
 import random
 from fractions import Fraction
+from types import SimpleNamespace
 
 import pytest
 
@@ -142,7 +144,7 @@ def assert_a_legal_kit(solution, milp):
 def big_milp():
     """About a thousand invented items for a Barbarian Berserker/Monk/Warrior in dual wield: HiGHS needs seconds to
     prove the optimum, and a limit of a fraction of a second stops it at the first incumbent it found."""
-    prof = real_profile("BAR", ("BER", "MNK", "WAR"), 50, "balanced", None, None, H.TABLES)
+    prof = real_profile("BAR", ("BER", "MNK", "WAR"), 50, "tank", None, None, H.TABLES)
     return build_milp(prof, H.invented_pool(60, seed=1), "dw")
 
 
@@ -318,23 +320,154 @@ def test_a_tie_that_involves_two_copies_of_one_non_lore_ring():
 
 
 def test_kits_of_equal_total_rank_still_give_one_of_them_and_the_same_one_every_run():
-    # a (fire) and b (cold) for the head, c (fire) and d (cold) for the neck; resists stop at 200, so only a fire piece
-    # with a cold one is worth 300: {a, d} and {b, c} are the best, and both cost 1 + 4 = 2 + 3 = 5. The rule alone
+    # a (fire) and b (cold) for the head, c (fire) and d (cold) for the neck; resists stop at 1000 (T4: it was 200, and the items were a fifth of these), so only a fire piece
+    # with a cold one is worth 1500: {a, d} and {b, c} are the best, and both cost 1 + 4 = 2 + 3 = 5. The rule alone
     # cannot choose between them; the answer is one of them and it is the same on every run.
     prof = profile(weights={"SV": 1})
     pool = [
-        make_item("a", {"HEAD"}, sv={"FIRE": 150}), make_item("b", {"HEAD"}, sv={"COLD": 150}),
-        make_item("c", {"NECK"}, sv={"FIRE": 150}), make_item("d", {"NECK"}, sv={"COLD": 150}),
+        make_item("a", {"HEAD"}, sv={"FIRE": 750}), make_item("b", {"HEAD"}, sv={"COLD": 750}),
+        make_item("c", {"NECK"}, sv={"FIRE": 750}), make_item("d", {"NECK"}, sv={"COLD": 750}),
     ]
     seen = set()
     for run in range(10):
         order = list(pool)
         random.Random(run).shuffle(order)
         solution = solve_canonical(build(prof, order))
-        assert solution.F == 300.0
+        assert solution.F == 1500.0
         seen.add(tuple(sorted(worn(solution).items())))
     assert len(seen) == 1
     assert next(iter(seen)) in {(("HEAD", "a"), ("NECK", "d")), (("HEAD", "b"), ("NECK", "c"))}
+
+
+# ---- the last stage: kits of the same value and the same total rank ------------------------------------------------------------------
+#
+# The order of the kits that the last stage settles (the head of solver/solve.py and of engine/solve.js say the same): among the kits of the exact value of the best and the
+# least total rank, the one whose canonical kit is first, place by place in the order of the 22 places, an item before an empty place and the lower (key, tier) before the higher;
+# when every place is alike, the chosen buffs, by their ids, the lower list first.
+
+
+def tied_pool(names):
+    """Fire and cold pieces for the head and the neck, each worth 750 of one resist, with a cap of 1000 a school: only a fire piece with a cold one reaches 1500, so with the names
+    of ``names`` (head fire, head cold, neck fire, neck cold) the two best kits are {head fire, neck cold} and {head cold, neck fire}."""
+    head_fire, head_cold, neck_fire, neck_cold = names
+    return [
+        make_item(head_fire, {"HEAD"}, sv={"FIRE": 750}), make_item(head_cold, {"HEAD"}, sv={"COLD": 750}),
+        make_item(neck_fire, {"NECK"}, sv={"FIRE": 750}), make_item(neck_cold, {"NECK"}, sv={"COLD": 750}),
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("names", "first"),
+    [
+        (("b", "a", "d", "c"), {"HEAD": "a", "NECK": "d"}),  # {b, c} and {a, d} cost 2 + 3 = 1 + 4: the head comes first, and a is before b
+        (("c", "a", "d", "b"), {"HEAD": "a", "NECK": "d"}),  # {c, b} and {a, d}: 3 + 2 = 1 + 4
+        (("d", "b", "c", "a"), {"HEAD": "b", "NECK": "c"}),  # {d, a} and {b, c}: 4 + 1 = 2 + 3
+        (("a", "b", "c", "d"), {"HEAD": "a", "NECK": "d"}),  # {a, d} and {b, c}: 1 + 4 = 2 + 3
+    ],
+)
+def test_kits_of_the_same_value_and_total_rank_come_out_as_the_first_in_the_order_of_the_kits(names, first):
+    prof = profile(weights={"SV": 1})
+    pool = tied_pool(names)
+    for run in range(12):
+        order = list(pool)
+        random.Random(run).shuffle(order)
+        result = solve_canonical(build(prof, order))
+        assert result.F == 1500.0 and result.canonical and result.tie_stage == "applied"
+        assert worn(result) == first, (names, run)
+
+
+def test_equal_buff_subsets_of_the_same_total_rank_come_out_as_the_lower_list_of_ids():
+    prof = profile()
+    # four buffs worth 15 each; the pairs {1, 2}, {1, 3}, {4, 2} and {4, 3} are refused, so the best are {1, 4} and {2, 3}: 1 + 4 = 2 + 3 in rank
+    pairs = make_buffset(
+        optional=[make_buff(1, HP=15), make_buff(2, HP=15), make_buff(3, HP=15), make_buff(4, HP=15)],
+        conflicts=[(1, 2), (1, 3), (4, 2), (4, 3)], cardinality=2,
+    )
+    assert solve(build(prof, [], buffset=pairs)).F == 3800.0  # (the naked 3770 and two buffs of 15)
+    assert solve_canonical(build(prof, [], buffset=pairs)).buffs == (1, 4)
+    renamed = make_buffset(
+        optional=[make_buff(5, HP=15), make_buff(6, HP=15), make_buff(7, HP=15), make_buff(8, HP=15)],
+        conflicts=[(5, 6), (5, 7), (8, 6), (8, 7)], cardinality=2,
+    )  # the same with other ids: {5, 8} before {6, 7}
+    assert solve_canonical(build(prof, [], buffset=renamed)).buffs == (5, 8)
+
+
+def test_the_order_of_the_kits_is_total_on_random_instances_with_twins():
+    rng = random.Random(33)
+    checked = tied = 0
+    for _ in range(160):
+        inst = H.random_instance(rng)
+        extra = [
+            make_item(f"{item.key}-twin", set(item.slots), stats=dict(item.stats), sv=dict(item.sv), haste=item.haste,
+                      weight10=item.weight10, lore=item.lore, weapon=item.weapon, shield=item.is_shield)
+            for item in rng.sample(inst.items, min(3, len(inst.items)))
+        ]
+        inst.items = inst.items + extra
+        if H.option_product(inst.items, inst.setup, inst.any_rule) > 4 * H.KIT_LIMIT:
+            continue
+        milp = build_milp(inst.profile, inst.items, inst.setup, inst.buffset, BuildOptions(**inst.options_kwargs()))
+        want = expected_first_in_order(inst, milp)
+        if want is None:
+            continue
+        solution = solve_canonical(milp)
+        assert solution.canonical, inst.label
+        assert (solution.kit, solution.buffs) == want[:2], inst.label
+        checked += 1
+        tied += want[2] > 1
+    assert checked >= 40 and tied >= 3
+
+
+def expected_first_in_order(inst, milp):
+    """The canonical answer worked out by brute force with the whole order: among the (kit, buff set) pairs within the tolerance of the best value, the least total rank, and of
+    those the first in the order of the kits. ``(kit, buffs, how many tied on the rank)``; None for an instance with a kit in the band where the tolerance decides."""
+    space = H.Space(inst)
+    grid = [space.values(chosen) for chosen in space.buff_sets]
+    top = max(float(g.max()) for g in grid)
+    scale = 1e-7 * max(1.0, abs(top))
+    floor = top - 0.5 * scale
+    if any(((g >= top - scale) & (g < floor)).any() for g in grid):
+        return None
+    rank = {(item.key, item.tier): n + 1 for n, item in enumerate(sorted(milp.items, key=lambda i: (i.key, i.tier)))}
+    optional = sorted(milp.buffset.optional, key=lambda b: b.id) if milp.buffset else []
+    buff_rank = {b.id: len(milp.items) + 1 + n for n, b in enumerate(optional)}
+    candidates = []
+    for chosen, values in zip(space.buff_sets, grid):
+        for ki in (values >= floor).nonzero()[0]:
+            groups = space.groups_of(tuple(space.kits[ki]))
+            total = sum(rank[(i.key, i.tier)] for placed in groups.values() for i in placed) + sum(buff_rank[b] for b in chosen)
+            kit = canonical_kit(groups)
+            places = tuple((0, item.key, item.tier) if item is not None else (1, "", 0) for item in kit)
+            candidates.append((total, places, tuple(chosen), kit))
+    best = min(c[0] for c in candidates)
+    tied = sorted((c for c in candidates if c[0] == best), key=lambda c: (c[1], c[2]))
+    return tied[0][3], tied[0][2], len(tied)
+
+
+def test_a_last_stage_that_does_not_finish_says_so_and_keeps_the_best_kit_it_has():
+    prof = profile(weights={"SV": 1})
+    milp = build(prof, tied_pool(("b", "a", "d", "c")))
+    original, calls = solve_module.run_arrays, []
+
+    def second_call_runs_out(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs) if len(calls) == 1 else RawResult("time_limit", None, None, None, 0, None)
+
+    solve_module.run_arrays = second_call_runs_out
+    try:
+        result = solve_canonical(milp, time_limit=30.0)
+    finally:
+        solve_module.run_arrays = original
+    assert len(calls) == 2 and result.tie_stage == "applied" and not result.canonical and result.F == 1500.0
+
+
+def test_a_tie_of_more_kits_than_the_last_stage_separates_is_not_called_canonical(monkeypatch):
+    prof = profile(weights={"SV": 1})
+    milp = build(prof, tied_pool(("b", "a", "d", "c")))
+    monkeypatch.setattr(solve_module, "MAX_TIED_KITS", 1)
+    result = solve_canonical(milp)
+    assert result.tie_stage == "applied" and not result.canonical and result.F == 1500.0
+    monkeypatch.setattr(solve_module, "MAX_TIED_KITS", 2)
+    assert solve_canonical(milp).canonical
 
 
 def test_the_canonical_solution_is_flagged_and_a_failed_tie_stage_falls_back_to_the_proven_answer():
@@ -382,6 +515,33 @@ def test_a_lower_ranked_kit_inside_the_tie_band_that_is_worth_a_little_less_is_n
     result = solve_canonical(milp)
     assert keys_in(result, "HEAD") == ["b-circlet"] and result.breakdown.F == first.breakdown.F
     assert result.tie_stage == "kept-first" and not result.canonical and result.status == "optimal"
+
+
+@pytest.mark.parametrize(("shift", "taken"), [(F(1), True), (F(0), True), (F(-1), False)])
+def test_the_second_stage_kit_is_taken_unless_it_is_worth_less_than_the_first(monkeypatch, shift, taken):
+    """F4: one rule in Python and in the browser (solve.js ``secondIsTaken``): the tie stage's kit is applied when it is exactly as good or better, and the first answer is kept when it is worse.
+    A better second kit can only come from a first stage that stopped inside its gap, so the case is made by handing the second stage's solution a value of its own."""
+    prof = profile(weights={"HP": 1, "END": 1})
+    milp = build(prof, [make_item("h1", {"HEAD"}, stats={"STA": 10}), make_item("h2", {"HEAD"}, stats={"STA": 30})])
+    real = solve_module._solution
+    seen = []
+
+    def stage(m, raw):
+        solution = real(m, raw)
+        seen.append(solution)
+        if len(seen) == 2:
+            return dataclasses.replace(solution, breakdown=SimpleNamespace(F=seen[0].breakdown.F + shift))
+        return solution
+
+    monkeypatch.setattr(solve_module, "_solution", stage)
+    result = solve_canonical(milp)
+    assert len(seen) == 2
+    assert (result.tie_stage, result.canonical) == (("applied", True) if taken else ("kept-first", False))
+    assert result.breakdown.F == seen[0].breakdown.F + (shift if taken else 0)
+
+
+def test_the_rule_of_the_second_stage_is_a_function_of_the_two_exact_values():
+    assert solve_module.second_is_taken(F(5), F(5)) and solve_module.second_is_taken(F(5), F(6)) and not solve_module.second_is_taken(F(5), F(4))
 
 
 def test_large_and_small_weights_the_canonical_answer_keeps_the_small_value_it_would_have_traded_for_rank():
@@ -460,7 +620,7 @@ def test_the_tie_stage_is_given_the_time_limit_too():
         solve_canonical(milp, time_limit=30.0)
     finally:
         solve_module.run_arrays = original
-    assert limits == [30.0]
+    assert limits == [30.0, 30.0]  # (the tie stage, and the last stage that proves nothing more ties: each solve has the limit)
 
 
 def test_a_useless_item_is_never_worn_by_the_canonical_stage():
@@ -592,7 +752,7 @@ def test_ranks_put_items_before_buffs_and_start_above_zero():
 def test_a_time_limited_solve_on_the_real_pool_of_a_barbarian_trio_is_a_lower_bound_of_the_optimum():
     trio = ("BER", "MNK", "WAR")
     pool = H.catalog_pool(trio, 4)
-    prof = real_profile("BAR", trio, 50, "balanced", None, None, H.TABLES)
+    prof = real_profile("BAR", trio, 50, "tank", None, None, H.TABLES)
     milp = build_milp(prof, pool, "dw")
     limited = None
     for limit in TINY_LIMITS:
@@ -618,7 +778,7 @@ def test_the_one_hander_and_shield_kit_of_a_caster_trio_wears_a_real_shield_neve
     typed = {raw["key"] for raw in H.catalog_items() if (raw["item_type"] or "").lower() == "shield"}
     held = {raw["key"] for raw in H.catalog_items() if set(raw["categories"]) & {"Focus Items", "Bard Instrument"}}
     assert held and typed
-    prof = real_profile("ERU", trio, 50, "balanced", None, None, H.TABLES, items=pool)
+    prof = real_profile("ERU", trio, 50, "caster", None, None, H.TABLES, items=pool)
     assert "1h-shield" in prof.setups  # a shield in the pool admits one of the three classes
     solution = solve(build_milp(prof, pool, "1h-shield"))
     off_hand = solution.kit[SLOT_INSTANCES.index("SECONDARY")]

@@ -1449,6 +1449,31 @@ def test_the_not_for_bis_text_names_race_none_and_class_none():
     assert "(class NONE and race NONE)" in not_for_bis_text(nobody)
 
 
+def test_the_not_for_bis_text_says_left_blank_for_a_class_or_race_line_with_nothing_on_it_and_not_none():
+    """A line `Class:` or `Race:` with nothing after it is not a stated NONE: the lists are empty (nobody may use or wear the item, as for NONE) but the note says what the page shows."""
+    blank = make_item()
+    blank["classes"], blank["races"] = [], []
+    blank["parse_warnings"] = [{"code": "bad-value", "field": "class"}, {"code": "bad-value", "field": "race"}]
+    assert not_for_bis_text(blank) == "Open to no class or race (class left blank and race left blank): kept in the catalog, not used for best-in-slot."
+    assert "NONE" not in not_for_bis_text(blank)
+    one = make_item()
+    one["races"] = []
+    one["parse_warnings"] = [{"code": "bad-value", "field": "race"}]
+    assert not_for_bis_text(one) == "Open to no class or race (race left blank): kept in the catalog, not used for best-in-slot."
+    mixed = make_item()  # each list says its own: a stated NONE beside a blank line
+    mixed["classes"], mixed["races"] = [], []
+    mixed["parse_warnings"] = [{"code": "no-classes", "field": "class"}, {"code": "bad-value", "field": "race"}]
+    assert "(class NONE and race left blank)" in not_for_bis_text(mixed)
+    words = make_item()  # words that no class code or race code is: not blank, not NONE
+    words["races"] = []
+    words["parse_warnings"] = [{"code": "unknown-code", "field": "race"}, {"code": "bad-value", "field": "race"}]
+    assert "(race not understood)" in not_for_bis_text(words)
+    stated = make_item()  # a stated NONE stays NONE even when another warning is on the field
+    stated["classes"] = []
+    stated["parse_warnings"] = [{"code": "no-classes", "field": "class"}, {"code": "bad-value", "field": "class"}]
+    assert "(class NONE)" in not_for_bis_text(stated)
+
+
 def test_the_not_for_bis_text_names_only_the_causes_that_apply():
     assert not_for_bis_text(make_item(flags=["temporary"])) == "Temporary: kept in the catalog, not used for best-in-slot."
     handed_in = not_for_bis_text(make_item(name="Zorblax Token"))  # the quest table has a quest that takes one

@@ -3,8 +3,9 @@
 ``at_tier(item, tier, rules)`` turns a catalog item (a dict that validates against the catalog
 schema) into an ``ItemVec`` at one upgrade tier. The tier rules are read from rules/rules.json:
 
-* each stat is ``base + max(n, floor(base * n / 10))`` when the base is above zero;
-* a negative stat is not scaled (``tier.negatives_scale`` is false);
+* each stat is ``base + max(n, floor(base * n / 10))`` when the base is above zero (attack is the one stat that is
+  not scaled: ``tier.unscaled_stats``, the game client's own calculation);
+* a negative stat shrinks toward zero by the same amount a positive one grows, and never passes zero (``tier.negatives_scale``, the game client's own calculation);
 * worn haste and the three regens add a flat amount per tier when the base is above zero;
 * resists follow the stat rule;
 * the weight, in tenths of a stone, falls by ``tier.weight_pct`` percent of the base a tier, rounded down, to a floor of
@@ -18,7 +19,9 @@ trust the module they check.
 import copy
 import dataclasses
 import json
+import math
 import re
+import struct
 
 import pytest
 from hypothesis import given, settings
@@ -34,7 +37,8 @@ RULES = rules_module.load()
 
 CLASS_CODES = "WAR CLR PAL RNG SHD DRU MNK BRD ROG SHM NEC WIZ MAG ENC BST BER".split()
 STAT_KEYS = "AC STR STA AGI DEX WIS INT CHA HP MANA END ATK HPREG MANAREG ENDREG".split()
-SCALED_KEYS = "AC STR STA AGI DEX WIS INT CHA HP MANA END ATK".split()
+SCALED_KEYS = "AC STR STA AGI DEX WIS INT CHA HP MANA END".split()  # (ATK does not tier: T1)
+UNSCALED_KEYS = ["ATK"]
 REGEN_KEYS = "HPREG MANAREG ENDREG".split()
 
 
@@ -111,8 +115,58 @@ def test_the_rounding_of_ten_percent_goes_down():
     assert at_tier(item(stats={"AC": 9}), 4, RULES).stats["AC"] == 9 + 4
 
 
-def test_a_negative_stat_is_not_scaled():
-    assert at_tier(item(stats={"STR": -3, "STA": 10}), 10, RULES).stats == {"STR": -3, "STA": 20}
+@pytest.mark.parametrize("tier", [0, 1, 2, 4, 10])
+def test_item_attack_does_not_tier_whatever_the_tier(tier):
+    """T1: the game client's own calculation never scales the attack of an item: a +4 or a +10 item's attack is its +0 value, while a stat beside it is scaled."""
+    vec = at_tier(item(stats={"ATK": 10, "STR": 10, "AC": 3}), tier, RULES)
+    assert vec.stats["ATK"] == 10
+    assert vec.stats["STR"] == 10 + max(tier, 10 * tier // 10)
+    assert vec.stats["AC"] == 3 + tier
+    assert at_tier(item(stats={"ATK": 100}), tier, RULES).stats == {"ATK": 100}
+
+
+def test_the_stats_that_do_not_tier_are_a_rule_and_the_model_refuses_one_it_does_not_know():
+    assert RULES.get("tier.unscaled_stats") == ["ATK"]
+    scaled_like_the_others = rules_with({"tier.unscaled_stats": []})
+    assert at_tier(item(stats={"ATK": 10}), 4, scaled_like_the_others).stats == {"ATK": 14}  # (the rule is what keeps it still)
+    both = rules_with({"tier.unscaled_stats": ["ATK", "STR"]})
+    assert at_tier(item(stats={"ATK": 10, "STR": 10}), 4, both).stats == {"ATK": 10, "STR": 10}
+    for bad in (["HASTE"], ["atk"], "ATK", [5]):
+        with pytest.raises(ValueError, match="tier.unscaled_stats"):
+            at_tier(item(stats={"ATK": 10}), 4, rules_with({"tier.unscaled_stats": bad}))
+
+
+@pytest.mark.parametrize(
+    "base, tier, expected",
+    [(-2, 0, -2), (-2, 1, -1), (-2, 2, 0), (-2, 4, 0), (-20, 4, -12), (-5, 4, -1), (-1, 1, 0), (-100, 10, 0), (-30, 1, -27), (-9, 3, -6), (-15, 3, -11), (-40, 10, 0)],
+)
+def test_a_negative_stat_shrinks_toward_zero_by_the_amount_a_positive_one_grows_and_never_passes_zero(base, tier, expected):
+    """T6: the client moves a negative stat toward zero by max(n, floor(|base| x n / 10)), never past zero: -2 is -1 at +1 and gone at +2, -20 is -12 at +4. Zero is dropped like any zero stat."""
+    stats = at_tier(item(stats={"STR": base}), tier, RULES).stats
+    assert stats.get("STR", 0) == expected and ("STR" in stats) == (expected != 0)
+    assert at_tier(item(stats={"STR": -3, "STA": 10}), 10, RULES).stats == {"STA": 20}  # (the negative stat is gone at +10, the positive one has doubled)
+
+
+def f32(x):
+    """A number rounded to float32, as the client's arithmetic does it (the one rule, copied from the game client's own calculation: no program is imported)."""
+    return struct.unpack("<f", struct.pack("<f", float(x)))[0]
+
+
+def client_stat(base, tier):
+    """The client's value of a stat at the start of tier ``tier`` (experience 2^tier): ``base + (int)max(t, 0.1 t b)`` above zero, ``base + (int)min(-b, max(t, -0.1 t b))`` below it, in float32."""
+    if tier == 0 or base == 0:
+        return base
+    t = f32(f32(math.log(2**tier)) / f32(math.log(2.0)))
+    if base > 0:
+        return base + int(max(f32(f32(t * f32(0.1)) * f32(base)), t))
+    return base + int(min(f32(f32(base) * f32(-1.0)), max(f32(f32(t * f32(-0.1)) * f32(base)), t)))
+
+
+def test_the_stat_rule_for_positive_and_negative_stats_is_the_clients_arithmetic_at_every_whole_tier():
+    for base in range(-400, 401):
+        for tier in range(11):
+            assert at_tier(item(stats={"STR": base}), tier, RULES).stats.get("STR", 0) == client_stat(base, tier), (base, tier)
+            assert at_tier(item(sv={"FIRE": base}), tier, RULES).sv.get("FIRE", 0) == client_stat(base, tier), (base, tier)
 
 
 def test_worn_haste_rises_one_point_per_tier_and_is_not_among_the_stats():
@@ -142,8 +196,8 @@ def test_a_non_positive_haste_is_left_alone():
 
 
 def test_resists_follow_the_stat_rule():
-    vec = at_tier(item(sv={"FIRE": 20, "COLD": 3, "MAGIC": -4}), 4, RULES)
-    assert vec.sv == {"FIRE": 28, "COLD": 7, "MAGIC": -4}
+    vec = at_tier(item(sv={"FIRE": 20, "COLD": 3, "MAGIC": -4, "POISON": -20}), 4, RULES)
+    assert vec.sv == {"FIRE": 28, "COLD": 7, "POISON": -12}  # (T6: the resist of -4 is gone at +4, the one of -20 is -12)
 
 
 @pytest.mark.parametrize("weight, tier, expected", [(10.0, 0, 100), (10.0, 4, 64), (10.0, 10, 10), (3.0, 10, 3), (0.1, 10, 1)])
@@ -391,9 +445,10 @@ def test_a_tier_must_be_a_whole_number_from_zero_to_ten(tier):
         at_tier(item(stats={"AC": 1}), tier, RULES)
 
 
-def test_a_rules_file_that_scales_negative_stats_is_refused_not_guessed():
+@pytest.mark.parametrize("value", [True, False, "grow", "toward zero by n, never past zero"])
+def test_a_rules_file_that_scales_negative_stats_another_way_is_refused_not_guessed(value):
     with pytest.raises(ValueError, match="negatives_scale"):
-        at_tier(item(), 1, rules_with({"tier.negatives_scale": True}))
+        at_tier(item(), 1, rules_with({"tier.negatives_scale": value}))
 
 
 def test_a_weapon_rate_other_than_five_or_ten_is_refused():
@@ -416,7 +471,7 @@ def test_an_unknown_stat_is_refused_rather_than_dropped():
 def test_the_tier_rules_on_disk_say_what_the_module_implements():
     # The same facts, read straight from the file: if one changes, this fails before a pick does.
     assert RULES.get("tier.stat_rule") == "base + max(n, floor(base*n/10))"
-    assert RULES.get("tier.negatives_scale") is False
+    assert RULES.get("tier.negatives_scale") == "toward zero by max(n, floor(|base|*n/10)), never past zero"
     assert RULES.get("tier.weapon_damage_pct") == 10
     assert RULES.get("haste.worn_per_tier") == 1 and RULES.get("regen.per_tier") == 1
     assert RULES.get("tier.weight_floor") == 0.1 and RULES.get("tier.weight_pct") == 9
@@ -485,6 +540,8 @@ def test_a_scaled_stat_never_loses_value_and_gains_at_least_the_tier(stats, tier
         if key in SCALED_KEYS:
             assert vec.stats[key] >= base + tier
             assert vec.stats[key] >= base + base * tier // 10
+        elif key in UNSCALED_KEYS:
+            assert vec.stats[key] == base
         else:
             assert vec.stats[key] == base + tier
 

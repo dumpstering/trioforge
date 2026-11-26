@@ -1,6 +1,8 @@
 // The compact data files the page fetches (written by pipeline/trioforge/site/data.py) and the questions the page asks of them.
 
-export const SETUP_ORDER = ["1h-shield", "2h", "dw", "stick"];
+export const SETUP_ORDER = ["1h-shield", "2h", "dw", "stick", "ranged"];
+/** The setup a build lists first where that is not the first of `SETUP_ORDER` (`_LISTED_FIRST` of model/weapons.py, which a test holds this to): the first of two setups of equal value wins a tie, and for the Caster that is the stat stick. */
+export const LISTED_FIRST = { caster: "stick" };
 const KIT_SIZE = 22;
 const TOTALS_FIELDS = ["ac", "hp", "mana", "end", "haste", "atk", "mr", "fr", "cr", "dr", "pr", "hpreg", "manareg", "endreg"];
 
@@ -134,7 +136,9 @@ export class Shard {
   /** The setups this role has scenarios for. A setup not listed is never offered. */
   setupsFor(role) {
     const have = this.roleSetups.get(role) ?? new Set();
-    return SETUP_ORDER.filter((setup) => have.has(setup));
+    const first = LISTED_FIRST[role];
+    const order = first === undefined ? SETUP_ORDER : [first, ...SETUP_ORDER.filter((setup) => setup !== first)];
+    return order.filter((setup) => have.has(setup));
   }
 
   scenario(race, role, tier, setup) {

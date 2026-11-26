@@ -1,42 +1,52 @@
-"""The roles a trio is offered, and the weights of each role.
+"""The builds a trio is offered, and the weights of each build.
 
-Which roles (:func:`roles_for`)
-===============================
+A **build** is a way a trio plays: who stands in front, and where the damage comes from. Its id is the word of the code and
+of the page's ``role=`` link (the code keeps the word "role"; a reader sees "Build"). The ids, in the order the page shows them:
+``tank`` ("Tank"), ``shield`` ("Shield caster"), ``melee`` ("Melee damage"), ``ranged`` ("Archer"), ``castertank`` ("Caster tank")
+and ``caster`` ("Caster"). There is no Balanced build: a blend of builds is no way to play.
 
-* **Balanced** is offered to every trio.
-* **Tank** when the trio has a Warrior, a Paladin or a Shadow Knight.
-* **Melee** when a class has the Offensive stance (Berserker, Bard, Beastlord, Monk, Paladin, Ranger, Rogue, Shadow
-  Knight, Warrior).
-* **Caster** when a class casts (Cleric, Druid, Shaman, Necromancer, Wizard, Magician, Enchanter): healing and nuking
-  want the same stats, so they share this one role.
+Class groups (:data:`TANK_CLASSES`, :data:`CASTER_CLASSES`, :data:`MELEE_CLASSES`, :data:`PET_CLASSES`): **TK** = Warrior, Paladin,
+Shadow Knight (a taunt and the Defensive stance); **SPELL** = Cleric, Druid, Shaman, Wizard, Necromancer, Magician, Enchanter;
+**MELEE** = Warrior, Paladin, Shadow Knight, Monk, Rogue, Berserker, Bard, Beastlord, Ranger (the Offensive stance); **PETC** =
+Magician, Necromancer, Beastlord, Enchanter (a pet is the front or the damage).
 
-Every class is in exactly one of the last two groups, so every trio can play at least one template. A trio with
-only **one** of the three keeps Balanced alone, and Balanced then carries that role's weights (the page shows
-Balanced only); asking such a trio for the role itself is an error.
+Which builds (:func:`roles_for`)
+================================
+
+* **tank** when the trio has a TK class;
+* **shield** when it has a TK class and at least one SPELL class (a tank class whose damage is spells);
+* **melee** when it has a MELEE class;
+* **ranged** when it has a Ranger and, with a pool, the pool has a bow a class of the trio can shoot (``bow``, below);
+* **castertank** when it has no TK class and at least two SPELL classes (a caster who tanks with no tank class);
+* **caster** when it has at least one SPELL class and either no MELEE class or at least two SPELL classes.
+
+Every trio is offered at least one build and at most four (a test runs all 560 trios). The weapon setups of each build are in
+:mod:`trioforge.model.weapons`.
+
+The opening build (:func:`opening_role`) is the build the trio's page opens on, the first rule that matches: a Ranger with no TK class
+and the Archer build offered, ``ranged``; a TK class, ``shield`` for a Shadow Knight or a Paladin with two SPELL classes and for a
+Warrior with a Wizard and another SPELL class, else ``tank``; no TK class and either a Monk or at most one SPELL class, ``melee``
+(a Monk is the front of its trio); no TK class and two or three SPELL classes, ``caster`` when a PETC class is present, else
+``castertank``. The function raises for a trio that no rule matches, and a test runs all 560 trios.
 
 The weights (:func:`weights_for`)
 =================================
 
-The templates are ``roles.templates`` in ``rules/rules.json``: for each of ``tank``, ``melee`` and ``caster`` a
-weight in HP-equivalents for HP, AC, MANA, ATK, DEX, HASTE, END, SV (per school) and CHA. The result of
-:func:`weights_for` has the keys the evaluator reads:
+The templates are ``roles.templates`` in ``rules/rules.json``: for each of ``tank``, ``shield``, ``melee``, ``castertank`` and
+``caster`` a weight in HP-equivalents for HP, AC, MANA, ATK, DEX, HASTE, END, SV (per school) and CHA. The ``ranged`` build's is the
+Melee template with the factors of the rule ``roles.ranged_template`` on some of its weights. The result of :func:`weights_for` has
+the keys the evaluator reads:
 
-* **Balanced** is the arithmetic mean of the templates the trio can play (all three for a Shadow Knight, Cleric
-  and Shaman; Tank and Melee for a Paladin, Monk and Berserker; the one template of a pure caster). The mean is
-  taken in exact fractions and rounded once.
 * ``SV`` becomes the five schools, ``SV_FIRE`` ... ``SV_DISEASE`` (Corruption is never scored).
-* The regen weights are ``HPREG``, ``MANAREG`` and ``ENDREG`` = ``10 ticks a minute x regen.value_minutes x`` the
-  weight of the resource they return (HP, MANA, END).
+* The regen weights are ``10 ticks a minute x regen.value_minutes x`` the weight of the resource they return (HP, MANA, END).
 * **Only reachable currencies are weighted.** A trio with no class that has a mana pool has no mana to gain, so its
   ``MANA`` and ``MANAREG`` weights are 0. (``mana_reachable`` says so explicitly; the default looks at
   ``mana.stat_by_class``.)
-* The weapon damage weight ``DMG`` is set only when the rule ``weapons.damage_weight`` has a number. The rule is
-  HP-equivalents per damage-index point *per unit of the role's ATK weight*, so the ``DMG`` of the Tank and Melee
-  templates is that number times the template's own ``ATK`` weight, and the ``DMG`` of the Caster template is 0
-  (its stick scores no damage, whatever its ATK weight is). Balanced averages those template weights like every
-  other weight, the Caster's 0 included; it is not the rule times Balanced's own mean ``ATK``. A rules file whose
-  value is null (the schema allows that while the rule is open, until test B18) sets no ``DMG`` weight, and weapons
-  are then chosen for their stats alone.
+* The weapon damage weight ``DMG`` is set only when the rule ``weapons.damage_weight`` has a number. It is that number times the
+  build's own ``ATK`` weight times the build's **weapon factor** (the rule ``roles.weapon_factor``: a multiplier for each build,
+  0 for a build whose weapon is a stick that carries stats). One mechanism for every build: a build that scores no weapon damage
+  has the factor 0. A rules file whose damage weight is null (the schema allows that while the rule is open, until test B18)
+  sets no ``DMG`` weight, and weapons are then chosen for their stats alone.
 
 Every weight is a non-negative number: a template that has a negative, missing, unknown or non-numeric entry is
 refused, because the exactness proofs of the solver need non-negative weights.
@@ -54,8 +64,8 @@ it is exact arithmetic on the decimals the weights are written as, rounded once 
 1. **The weight in effect.** For each of the nine settable weights (HP AC MANA ATK DEX HASTE END CHA and SV, which sets
    the five schools; a school of its own beats SV) it is the custom value when there is one, else the role's own.
 2. **Derived weights follow.** DMG is the role's own DMG times (ATK in effect / the role's own ATK): the rule
-   ``weapons.damage_weight`` (600) times the ATK weight for Tank and Melee, 0 for Caster, the mean of the templates for
-   Balanced. The regen weights are ``TICKS_PER_MINUTE x T x`` the weight in effect of the resource they return (HP,
+   ``weapons.damage_weight`` (450) times the ATK weight and the weapon factor of the build (0 for a build that scores no
+   weapon damage). The regen weights are ``TICKS_PER_MINUTE x T x`` the weight in effect of the resource they return (HP,
    MANA, END); when ``regen_T`` is None, or equal to the T the role's weights were made with (to one part in
    :data:`REGEN_T_MATCH`, which is float noise), the role's own regen weights are kept to the last digit and only follow
    the resource weight in effect, so that nothing moves unless something was asked.
@@ -89,32 +99,41 @@ __all__ = [
     "MANA_KEYS",
     "MELEE_CLASSES",
     "MULTIPLIERS",
+    "PET_CLASSES",
     "REGEN_SOURCES",
     "REGEN_T_MATCH",
     "REGEN_T_MAX",
+    "REMOVED_ROLES",
     "ROLES",
     "TANK_CLASSES",
+    "TEMPLATES",
     "TEMPLATE_KEYS",
     "TICKS_PER_MINUTE",
     "WEIGHT_GROUPS",
     "check_trio",
+    "opening_role",
     "roles_for",
+    "weapon_factor",
     "weights_for",
     "weights_override",
 ]
 
-ROLES = ("balanced", "tank", "melee", "caster")
-TEMPLATES = ("tank", "melee", "caster")
+ROLES = ("tank", "shield", "melee", "ranged", "castertank", "caster")
+TEMPLATES = ("tank", "shield", "melee", "castertank", "caster")  # the builds that have a template of their own in roles.templates ("ranged" is derived from "melee")
+RANGER = "RNG"
+#: the builds that only a pool offers: no setup is assumed for them with no pool to read (a bow is never assumed, as a shield is), so they have no profile without an evidence level
+POOL_ROLES = frozenset({"ranged"})
+#: the roles of an earlier release that no results folder of this one holds: Balanced blended the others (a reader of results refuses a folder that has one)
+REMOVED_ROLES = frozenset({"balanced"})
 
-TANK_CLASSES = frozenset({"WAR", "PAL", "SHD"})
+TANK_CLASSES = frozenset({"WAR", "PAL", "SHD"})  # TK: a taunt and the Defensive stance
 MELEE_CLASSES = frozenset({"BER", "BRD", "BST", "MNK", "PAL", "RNG", "ROG", "SHD", "WAR"})  # the Offensive stance
-CASTER_CLASSES = frozenset({"CLR", "DRU", "SHM", "NEC", "WIZ", "MAG", "ENC"})
-_GROUPS = (("tank", TANK_CLASSES), ("melee", MELEE_CLASSES), ("caster", CASTER_CLASSES))
+CASTER_CLASSES = frozenset({"CLR", "DRU", "SHM", "NEC", "WIZ", "MAG", "ENC"})  # SPELL
+PET_CLASSES = frozenset({"MAG", "NEC", "BST", "ENC"})  # PETC: a pet is the front or the damage
 
 #: the entries of a template in ``roles.templates``
 TEMPLATE_KEYS = ("HP", "AC", "MANA", "ATK", "DEX", "HASTE", "END", "SV", "CHA")
 TICKS_PER_MINUTE = 10  # one regen tick every six seconds
-_DAMAGE_TEMPLATES = frozenset({"tank", "melee"})  # the templates that score weapon damage
 
 #: the positions of a reweight slider: half, as it is, double
 MULTIPLIERS = (0.5, 1, 2)
@@ -152,19 +171,54 @@ def check_trio(trio: Any) -> tuple[str, ...]:
     return codes
 
 
-def _templates(codes: Sequence[str]) -> list[str]:
-    """The templates a trio can play: ``tank``, ``melee`` and ``caster`` where it has such a class."""
-    members = set(codes)
-    return [name for name, group in _GROUPS if members & group]
+def roles_for(trio: Sequence[str], bow: bool | None = False) -> list[str]:
+    """The builds offered to ``trio``, in the fixed order of :data:`ROLES` (the module docstring has the rules).
 
-
-def roles_for(trio: Sequence[str]) -> list[str]:
-    """The roles offered to ``trio``, in the fixed order of :data:`ROLES`.
-
-    ``balanced`` always; ``tank``, ``melee`` and ``caster`` as well when the trio can play more than one template.
+    ``bow`` says whether the pool the trio is solved with has a bow that a class of it can shoot
+    (:func:`trioforge.model.weapons.bow_available`): True leaves ``ranged`` in for a trio with a Ranger and False (the default: no pool to
+    read, and a bow is never assumed) leaves it out, for the Archer build plays the bow and nothing else; None, for a caller that asks about
+    the builds of the trio before any pool is in question (the weights of a build, the effects layer, the order of the chunks of a run),
+    leaves it in.
     """
-    templates = _templates(check_trio(trio))
-    return ["balanced", *(templates if len(templates) > 1 else [])]
+    members = set(check_trio(trio))
+    tank, spell, melee = members & TANK_CLASSES, members & CASTER_CLASSES, members & MELEE_CLASSES
+    offered = {
+        "tank": bool(tank),
+        "shield": bool(tank) and bool(spell),
+        "melee": bool(melee),
+        "ranged": RANGER in members and bow is not False,
+        "castertank": not tank and len(spell) >= 2,
+        "caster": bool(spell) and (not melee or len(spell) >= 2),
+    }
+    return [role for role in ROLES if offered[role]]
+
+
+def opening_role(trio: Sequence[str], offered: Sequence[str] | None = None) -> str:
+    """The build a trio's page opens on (the module docstring has the rules, in order; the first that matches wins).
+
+    ``offered`` is the builds the trio is offered (:func:`roles_for`; None: every build it can have, the Archer build included for a
+    Ranger, as a caller with no pool asks). The Archer rule is skipped when the Archer build is not offered. The answer is always one of
+    ``offered``; ``ValueError`` for a trio that no rule matches, or whose rule names a build that is not offered (neither happens for any of
+    the 560 trios: a test runs them all).
+    """
+    codes = check_trio(trio)
+    members = set(codes)
+    available = list(roles_for(codes, bow=None) if offered is None else offered)
+    tank, spell = members & TANK_CLASSES, members & CASTER_CLASSES
+    if RANGER in members and not tank and "ranged" in available:
+        found = "ranged"
+    elif tank:
+        spell_knight = len(spell) >= 2 and (bool({"SHD", "PAL"} & members) or ("WAR" in members and "WIZ" in members))
+        found = "shield" if spell_knight else "tank"
+    elif "MNK" in members or len(spell) <= 1:
+        found = "melee"  # (a Monk is the front of its trio)
+    elif len(spell) >= 2:
+        found = "caster" if members & PET_CLASSES else "castertank"
+    else:  # (unreachable: every class is a SPELL class or a MELEE class, so the rules above cover every trio)
+        raise ValueError(f"no opening build matches the trio {' '.join(codes)}")
+    if found not in available:
+        raise ValueError(f"the opening build of {' '.join(codes)} is {found!r}, which it is not offered ({', '.join(available)})")
+    return found
 
 
 def _number(name: str, value: Any) -> Fraction:
@@ -183,22 +237,37 @@ def _template(templates: Any, name: str) -> dict[str, Fraction]:
     return {key: _number(f"roles.templates {name} {key}", row[key]) for key in TEMPLATE_KEYS}
 
 
+def weapon_factor(rules: Any, role: str) -> Fraction:
+    """The weapon damage factor of ``role`` (the rule ``roles.weapon_factor``: a multiplier on the weapon damage weight, 0 for a build whose weapon only carries stats)."""
+    table = rules.get("roles.weapon_factor")
+    if not isinstance(table, Mapping) or set(table) != set(ROLES):
+        raise ValueError(f"roles.weapon_factor is a factor for each of {', '.join(ROLES)}, not {table!r}")
+    return _number(f"roles.weapon_factor {role}", table[role])
+
+
+def _ranged_template(rules: Any) -> dict[str, Fraction]:
+    """The Archer template: the Melee template as the rules have it now, each weight named in ``roles.ranged_template`` times its factor."""
+    base = _template(rules.get("roles.templates"), "melee")
+    factors = rules.get("roles.ranged_template")
+    if not isinstance(factors, Mapping) or not factors or set(factors) - set(TEMPLATE_KEYS):
+        raise ValueError(f"roles.ranged_template is a factor for each of some of {', '.join(TEMPLATE_KEYS)}, not {factors!r}")
+    return {key: base[key] * _number(f"roles.ranged_template {key}", factors[key]) if key in factors else base[key] for key in TEMPLATE_KEYS}
+
+
 def weights_for(
     trio: Sequence[str], role: str, rules: Any, *, mana_reachable: bool | None = None
 ) -> dict[str, float]:
-    """The weights of ``role`` for ``trio`` (see the module docstring), as a new dict of floats.
+    """The weights of the build ``role`` for ``trio`` (see the module docstring), as a new dict of floats.
 
-    Raises ``ValueError`` for a trio that is not three class codes, for a role the trio is not offered
+    Raises ``ValueError`` for a trio that is not three class codes, for a build the trio is not offered
     (:func:`roles_for`) and for a template or rule value that is not a usable weight. ``mana_reachable`` says
     whether the trio has a mana pool; when it is None, a class in ``mana.stat_by_class`` decides.
     """
     codes = check_trio(trio)
-    offered = roles_for(codes)
+    offered = roles_for(codes, bow=None)  # (the weights of a role do not depend on a pool)
     if role not in offered:
         raise ValueError(f"role {role!r} is not offered to {' '.join(codes)}; its roles are {', '.join(offered)}")
-    names = _templates(codes) if role == "balanced" else [role]
-    rows = [_template(rules.get("roles.templates"), name) for name in names]
-    mean = {key: sum((row[key] for row in rows), Fraction(0)) / len(rows) for key in TEMPLATE_KEYS}
+    row = _ranged_template(rules) if role == "ranged" else _template(rules.get("roles.templates"), role)
 
     minutes = _number("regen.value_minutes", rules.get("regen.value_minutes"))
     damage = rules.get("weapons.damage_weight")
@@ -208,22 +277,18 @@ def weights_for(
         mana_classes = {code for classes in rules.get("mana.stat_by_class").values() for code in classes}
         mana_reachable = any(code in mana_classes for code in codes)
 
-    weights = {key: mean[key] for key in TEMPLATE_KEYS if key != "SV"}
+    weights = {key: row[key] for key in TEMPLATE_KEYS if key != "SV"}
     if not mana_reachable:
         weights["MANA"] = Fraction(0)
     for school in SCHOOLS:
-        weights[f"SV_{school}"] = mean["SV"]
+        weights[f"SV_{school}"] = row["SV"]
     per_point = TICKS_PER_MINUTE * minutes
     weights["HPREG"] = per_point * weights["HP"]
     weights["MANAREG"] = per_point * weights["MANA"]
     weights["ENDREG"] = per_point * weights["END"]
     if damage is not None:
-        # the rule is per unit of ATK weight: each template that scores damage is worth the rule times its own ATK
-        scored = sum(
-            (damage * row["ATK"] for name, row in zip(names, rows, strict=True) if name in _DAMAGE_TEMPLATES),
-            Fraction(0),
-        )
-        weights["DMG"] = scored / len(names)
+        # the rule is per unit of ATK weight: the build is worth the rule times its own ATK times its weapon factor (0: no weapon damage)
+        weights["DMG"] = damage * row["ATK"] * weapon_factor(rules, role)
     return {key: float(value) for key, value in weights.items()}
 
 
